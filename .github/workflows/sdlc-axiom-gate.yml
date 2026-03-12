@@ -5,7 +5,7 @@ on:
     types: [submitted]
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
   issues: write
 
@@ -42,17 +42,22 @@ jobs:
           OVERALL=$(echo "$OUTPUT" | jq -r '.overall')
           echo "overall=$OVERALL" >> "$GITHUB_OUTPUT"
 
-      - name: Mark ready for human
-        if: steps.gate.outputs.overall == 'pass' || steps.gate.outputs.overall == 'advisory'
+      - name: Mark ready and auto-merge on pass
+        if: steps.gate.outputs.overall == 'pass'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           PR=${{ github.event.pull_request.number }}
           gh pr edit "$PR" --add-label "sdlc:ready-for-human"
+          gh pr merge "$PR" --auto --squash
 
-          if [ "${{ steps.gate.outputs.overall }}" = "advisory" ]; then
-            gh pr edit "$PR" --add-label "axiom:precedent-review"
-          fi
+      - name: Mark advisory for human review
+        if: steps.gate.outputs.overall == 'advisory'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR=${{ github.event.pull_request.number }}
+          gh pr edit "$PR" --add-label "sdlc:ready-for-human" --add-label "axiom:precedent-review"
 
       - name: Block on T0 violation
         if: steps.gate.outputs.overall == 'block'
