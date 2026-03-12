@@ -303,3 +303,149 @@ class TestComputeInterruptibility:
             operator_present=True,
         )
         assert score >= 0.0
+
+
+class TestBackendTickIntegration:
+    """Prove that tick() polls registered backends and merges Behaviors."""
+
+    def test_tick_calls_backend_contribute(self):
+        """After registration, tick() calls contribute() on each backend."""
+        engine = PerceptionEngine(
+            presence=_make_mock_presence(),
+            workspace_monitor=_make_mock_workspace_monitor(),
+        )
+        contributed = []
+
+        class TrackingBackend(StubBackend):
+            def contribute(self, behaviors: dict[str, Behavior]) -> None:
+                contributed.append(True)
+                behaviors["test_signal"] = Behavior(42.0)
+
+        backend = TrackingBackend(name="tracker", provides=frozenset({"test_signal"}))
+        engine.register_backend(backend)
+
+        engine.tick()
+        assert len(contributed) == 1
+        assert "test_signal" in engine.behaviors
+        assert engine.behaviors["test_signal"].value == 42.0
+
+    def test_tick_survives_backend_error(self):
+        """A failing backend doesn't crash the tick loop."""
+        engine = PerceptionEngine(
+            presence=_make_mock_presence(),
+            workspace_monitor=_make_mock_workspace_monitor(),
+        )
+
+        class FailingBackend(StubBackend):
+            def contribute(self, behaviors: dict[str, Behavior]) -> None:
+                raise RuntimeError("broken sensor")
+
+        engine.register_backend(
+            FailingBackend(name="broken", provides=frozenset({"bad_signal"}))
+        )
+        # Should not raise
+        state = engine.tick()
+        assert state is not None
+
+    def test_multiple_backends_all_polled(self):
+        """All registered backends get polled each tick."""
+        engine = PerceptionEngine(
+            presence=_make_mock_presence(),
+            workspace_monitor=_make_mock_workspace_monitor(),
+        )
+        call_counts = {"a": 0, "b": 0}
+
+        class CountingBackend(StubBackend):
+            def contribute(self, behaviors: dict[str, Behavior]) -> None:
+                call_counts[self.name] += 1
+
+        engine.register_backend(
+            CountingBackend(name="a", provides=frozenset({"sig_a"}))
+        )
+        engine.register_backend(
+            CountingBackend(name="b", provides=frozenset({"sig_b"}))
+        )
+
+        engine.tick()
+        engine.tick()
+        assert call_counts == {"a": 2, "b": 2}
+
+
+class TestSessionInterruptibility:
+    """H4/H3: tick() populates in_voice_session and interruptibility_score."""
+
+    def test_tick_default_no_session(self):
+        engine = PerceptionEngine(
+            presence=_make_mock_presence(),
+            workspace_monitor=_make_mock_workspace_monitor(),
+        )
+        state = engine.tick()
+        assert state.in_voice_session is False
+        assert state.interruptibility_score == 1.0
+
+    def test_tick_with_voice_session(self):
+        engine = PerceptionEngine(
+            presence=_make_mock_presence(),
+            workspace_monitor=_make_mock_workspace_monitor(),
+        )
+        engine.set_voice_session_active(True)
+        state = engine.tick()
+        assert state.in_voice_session is True
+        assert state.interruptibility_score == 0.1
+
+    def test_tick_session_cleared(self):
+        engine = PerceptionEngine(
+            presence=_make_mock_presence(),
+            workspace_monitor=_make_mock_workspace_monitor(),
+        )
+        engine.set_voice_session_active(True)
+        engine.tick()
+        engine.set_voice_session_active(False)
+        state = engine.tick()
+        assert state.in_voice_session is False
+        assert state.interruptibility_score == 1.0
+
+    def test_tick_absent_operator_zero_interruptibility(self):
+        engine = PerceptionEngine(
+            presence=_make_mock_presence(face_detected=False),
+            workspace_monitor=_make_mock_workspace_monitor(),
+        )
+        state = engine.tick()
+        assert state.interruptibility_score == 0.0
+
+    def test_tick_production_reduces_interruptibility(self):
+        engine = PerceptionEngine(
+            presence=_make_mock_presence(),
+            workspace_monitor=_make_mock_workspace_monitor(),
+        )
+        engine.update_slow_fields(activity_mode="production")
+        state = engine.tick()
+        assert state.interruptibility_score == 0.5
+
+    def test_tick_many_windows_reduces_interruptibility(self):
+        engine = PerceptionEngine(
+            presence=_make_mock_presence(),
+            workspace_monitor=_make_mock_workspace_monitor(),
+        )
+        engine.update_desktop_state(window_count=12)
+        state = engine.tick()
+        assert state.interruptibility_score == 0.8  # 1.0 - 0.2 penalty
+
+    def test_tick_few_windows_no_penalty(self):
+        engine = PerceptionEngine(
+            presence=_make_mock_presence(),
+            workspace_monitor=_make_mock_workspace_monitor(),
+        )
+        engine.update_desktop_state(window_count=5)
+        state = engine.tick()
+        assert state.interruptibility_score == 1.0
+
+    def test_tick_windows_plus_production_stacks(self):
+        engine = PerceptionEngine(
+            presence=_make_mock_presence(),
+            workspace_monitor=_make_mock_workspace_monitor(),
+        )
+        engine.update_slow_fields(activity_mode="production")
+        engine.update_desktop_state(window_count=10)
+        state = engine.tick()
+        assert state.interruptibility_score == 0.3  # 1.0 - 0.5 - 0.2

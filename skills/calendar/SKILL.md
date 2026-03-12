@@ -8,7 +8,7 @@ Show calendar context and meeting prep status.
 **Default (no args):** Show today's meetings and prep status:
 
 ```bash
-cd ~/projects/ai-agents && eval "$(<.envrc)" && uv run python -c "
+cd ~/projects/hapax-council && eval "$(<.envrc)" && uv run python -c "
 from shared.calendar_context import CalendarContext
 ctx = CalendarContext()
 print(f'Meetings today: {ctx.meeting_count_today()}')

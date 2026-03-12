@@ -109,13 +109,16 @@ class TestGovernorWakeWordOverride:
         assert gov.wake_word_active is False
 
     def test_wake_word_only_active_once(self):
-        """Second evaluation without re-setting returns normal directive."""
+        """After wake word + grace period, returns normal directive."""
         gov = PipelineGovernor()
         gov.wake_word_active = True
         state_prod = _make_state(activity_mode="production")
         # First call: override → process
         assert gov.evaluate(state_prod) == "process"
-        # Second call: wake_word_active is False → normal pause
+        # Exhaust grace period (3 ticks)
+        for _ in range(3):
+            assert gov.evaluate(state_prod) == "process"
+        # Grace expired: normal evaluation → pause (production mode)
         assert gov.evaluate(state_prod) == "pause"
 
 

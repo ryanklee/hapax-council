@@ -77,6 +77,7 @@ def compute_interruptibility(
     activity_mode: str,
     in_voice_session: bool,
     operator_present: bool,
+    window_count: int = 0,
 ) -> float:
     """Compute an interruptibility score from perception signals.
 
@@ -96,6 +97,10 @@ def compute_interruptibility(
     # Production activity reduces interruptibility
     activity_penalties = {"production": 0.5, "meeting": 0.6, "coding": 0.3}
     score -= activity_penalties.get(activity_mode, 0.0)
+
+    # Many open windows = deep multitasking context
+    if window_count > 8:
+        score -= 0.2
 
     return max(0.0, min(1.0, score))
 
@@ -196,6 +201,9 @@ class PerceptionEngine:
             "face_count": self._b_face_count,
         }
 
+        # Voice session flag (set by daemon each tick)
+        self._in_voice_session: bool = False
+
         # Backend registry
         self._backends: dict[str, PerceptionBackend] = {}
         self._provided_by: dict[str, str] = {}  # behavior_name → backend_name
@@ -209,6 +217,10 @@ class PerceptionEngine:
     def subscribe(self, callback: Callable[[EnvironmentState], None]) -> None:
         """Register a callback for each new EnvironmentState."""
         self._subscribers.append(callback)
+
+    def set_voice_session_active(self, active: bool) -> None:
+        """Update voice session flag. Called by daemon before each tick."""
+        self._in_voice_session = active
 
     def register_backend(self, backend: PerceptionBackend) -> None:
         """Register a perception backend. Raises ValueError on name or provides conflicts."""
@@ -235,8 +247,8 @@ class PerceptionEngine:
     def tick(self) -> EnvironmentState:
         """Produce a fast-tick EnvironmentState from current sensor readings.
 
-        Reads from presence detector (VAD + face) and carries forward
-        slow-tick enrichment fields.
+        Reads from presence detector (VAD + face), polls registered backends,
+        and carries forward slow-tick enrichment fields.
         """
         now = time.monotonic()
         vad_conf = getattr(self._presence, "latest_vad_confidence", 0.0)
@@ -247,6 +259,21 @@ class PerceptionEngine:
         self._b_vad_confidence.update(vad_conf, now)
         self._b_operator_present.update(face_detected, now)
         self._b_face_count.update(face_count, now)
+
+        # Poll registered backends — each merges its Behaviors into self.behaviors
+        for name, backend in self._backends.items():
+            try:
+                backend.contribute(self.behaviors)
+            except Exception:
+                log.exception("Backend %s contribute failed", name)
+
+        interruptibility = compute_interruptibility(
+            vad_confidence=self._b_vad_confidence.value,
+            activity_mode=self._b_activity_mode.value,
+            in_voice_session=self._in_voice_session,
+            operator_present=self._b_operator_present.value,
+            window_count=self._b_window_count.value,
+        )
 
         state = EnvironmentState(
             timestamp=now,
@@ -262,6 +289,8 @@ class PerceptionEngine:
             active_window=self._b_active_window.value,
             window_count=self._b_window_count.value,
             active_workspace_id=self._b_active_workspace_id.value,
+            in_voice_session=self._in_voice_session,
+            interruptibility_score=interruptibility,
         )
 
         self.latest = state

@@ -14,6 +14,7 @@ from agents.hapax_voice.watch_signals import (
     is_stress_elevated,
     is_watch_connected,
     is_watch_bt_nearby,
+    is_phone_connected,
     WatchSignalReader,
 )
 from agents.hapax_voice.presence import PresenceDetector
@@ -143,6 +144,36 @@ class TestWatchPresence:
     def test_watch_disconnected_when_bt_unavailable(self, mock_bt, tmp_path):
         """Disconnected when WiFi stale and BT adapter unavailable."""
         assert is_watch_connected(watch_dir=tmp_path) is False
+
+
+class TestPhoneConnected:
+    """Phone connectivity check via phone_connection.json."""
+
+    def test_connected_when_fresh(self, tmp_path):
+        """Returns True when phone_connection.json is fresh."""
+        conn = tmp_path / "phone_connection.json"
+        conn.write_text(json.dumps({
+            "last_seen_epoch": time.time(),
+            "device_id": "pixel10",
+            "battery_pct": 85,
+        }))
+        assert is_phone_connected(watch_dir=tmp_path) is True
+
+    def test_disconnected_when_stale(self, tmp_path):
+        """Returns False when phone_connection.json is stale (>120s)."""
+        conn = tmp_path / "phone_connection.json"
+        conn.write_text(json.dumps({
+            "last_seen_epoch": time.time() - 300,
+            "device_id": "pixel10",
+            "battery_pct": 85,
+        }))
+        old_time = time.time() - 300
+        os.utime(conn, (old_time, old_time))
+        assert is_phone_connected(watch_dir=tmp_path) is False
+
+    def test_disconnected_when_missing(self, tmp_path):
+        """Returns False when no phone_connection.json exists."""
+        assert is_phone_connected(watch_dir=tmp_path) is False
 
 
 class TestBluetoothPresence:
