@@ -5,6 +5,8 @@
 agents/health_monitor.py     @ryanklee
 shared/alert_state.py        @ryanklee
 shared/axiom_enforcement.py  @ryanklee
+shared/axiom_registry.py     @ryanklee
+shared/axiom_tools.py        @ryanklee
 shared/config.py             @ryanklee
 
 # Governance
