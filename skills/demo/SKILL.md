@@ -18,7 +18,7 @@ Prerequisites for video format:
 Run the demo agent:
 
 ```bash
-cd ~/projects/hapax-council && eval "$(<.envrc)" && uv run python -m agents.demo "{user_request}"
+cd ~/projects/hapax-council && LITELLM_API_KEY=$(pass show litellm/master-key) uv run python -m agents.demo "{user_request}"
 ```
 
 After generation, report the output directory and list generated files. If format is video, note the MP4 path. If format is slides, note the PDF path.

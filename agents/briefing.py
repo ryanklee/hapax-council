@@ -146,7 +146,7 @@ GUIDELINES:
 - Action items: only include things that NEED doing. Don't suggest routine checks if everything is healthy
 - Use specific numbers (calls, costs, uptime %, error counts)
 - If everything is nominal, say so briefly — don't pad
-- For commands, give the exact shell command (the operator uses bash)
+- For commands, give the exact shell command (the operator uses fish shell, but POSIX-compatible commands are fine)
 - Priority levels: high = needs attention today, medium = this week, low = when convenient
 - If a Scout Report section is present, surface any "adopt" or "evaluate" recommendations as action items
 - If a Content Digest section is present, briefly note notable new content and any suggested triage actions

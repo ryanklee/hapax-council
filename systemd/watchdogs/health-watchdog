@@ -6,8 +6,10 @@ set -euo pipefail
 
 cd /home/hapax/projects/hapax-council
 
-# Load environment
-eval "$(<.envrc)"
+# Load credentials from pass store (systemd sets PASSWORD_STORE_DIR + GNUPGHOME)
+export LITELLM_API_KEY=$(pass show litellm/master-key 2>/dev/null || echo "changeme")
+export LANGFUSE_PUBLIC_KEY=$(pass show langfuse/public-key 2>/dev/null || true)
+export LANGFUSE_SECRET_KEY=$(pass show langfuse/secret-key 2>/dev/null || true)
 
 UV="/home/hapax/.local/bin/uv"
 
@@ -47,26 +49,32 @@ send_notification('Auto-Fixed', f\"{r['summary']} -> All healthy\nLLM-evaluated 
     fi
 fi
 
-# Notify via alert state machine — dedup, escalation, grouping, recovery
+# Notify based on final status — pass JSON via stdin to avoid shell injection
 FINAL_REPORT="${REPORT2:-$REPORT}"
-if [[ "$STATUS" != "healthy" ]]; then
-    echo "$FINAL_REPORT" | $UV run python -c "
-import sys, json
-from shared.alert_state import process_report
-from shared.notify import send_notification, nudges_uri
+case "$STATUS" in
+    healthy)
+        # Silent on healthy — no notification spam
+        ;;
+    degraded|failed)
+        echo "$FINAL_REPORT" | $UV run python -c "
+import sys, json, os
+from shared.notify import send_notification, send_webhook, nudges_uri
+r = json.load(sys.stdin)
+status = r['overall_status']
+summary = r['summary']
+failed = r['failed_count']
 
-report = json.load(sys.stdin)
-actions = process_report(report, state_path='profiles/alert-state.json')
-for action in actions:
-    send_notification(
-        action['title'],
-        action['message'],
-        priority=action['priority'],
-        tags=action['tags'],
-        click_url=nudges_uri(),
-    )
+if status == 'failed':
+    send_notification('Stack Failed', f'{summary}\nRun: uv run python -m agents.health_monitor --verbose', priority='high', tags=['rotating_light'], click_url=nudges_uri())
+else:
+    send_notification('Stack Degraded', summary, priority='default', tags=['warning'], click_url=nudges_uri())
+
+webhook = os.environ.get('N8N_HEALTH_WEBHOOK_URL', '')
+if webhook:
+    send_webhook(webhook, {'status': status, 'summary': summary, 'failed': failed})
 " 2>/dev/null || true
-fi
+        ;;
+esac
 
 # Append to health history
 HISTORY_FILE="/home/hapax/projects/hapax-council/profiles/health-history.jsonl"
