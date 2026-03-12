@@ -61,6 +61,35 @@ class TestQueryRun:
         resp = await client.post("/api/query/run", json={"query": ""})
         assert resp.status_code == 422 or resp.status_code == 400
 
+    async def test_run_query_too_long_rejected(self, client):
+        resp = await client.post("/api/query/run", json={"query": "x" * 2001})
+        assert resp.status_code == 422
+
+    async def test_run_whitespace_only_rejected(self, client):
+        resp = await client.post("/api/query/run", json={"query": "   \n\t  "})
+        assert resp.status_code == 422
+
+    @patch("cockpit.api.routes.query.run_query")
+    @patch("cockpit.api.routes.query.classify_query", return_value="dev_story")
+    async def test_run_timeout_returns_error_event(self, mock_classify, mock_run, client):
+        mock_run.side_effect = TimeoutError()
+        resp = await client.post("/api/query/run", json={"query": "slow query"})
+        assert resp.status_code == 200
+        assert "event: error" in resp.text
+        assert "timed out" in resp.text
+
+    @patch("cockpit.api.routes.query.run_query")
+    @patch("cockpit.api.routes.query.classify_query", return_value="dev_story")
+    async def test_run_exception_does_not_leak_details(self, mock_classify, mock_run, client):
+        mock_run.side_effect = RuntimeError("secret internal path /home/user/.keys/api.key")
+        resp = await client.post("/api/query/run", json={"query": "bad query"})
+        assert resp.status_code == 200
+        body = resp.text
+        assert "event: error" in body
+        assert "/home/user" not in body
+        assert "api.key" not in body
+        assert "Check server logs" in body
+
 
 class TestQueryRefine:
     @patch("cockpit.api.routes.query.run_query")

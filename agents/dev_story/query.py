@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import sqlite3
 from dataclasses import dataclass
 
@@ -13,6 +14,7 @@ from shared.config import get_model
 log = logging.getLogger(__name__)
 
 _READ_ONLY_PREFIXES = ("select", "with", "explain", "pragma")
+_COMMIT_HASH_RE = re.compile(r"^[0-9a-f]{4,40}$")
 
 
 def build_system_prompt() -> str:
@@ -281,6 +283,9 @@ def create_agent() -> Agent:
     async def git_diff(ctx, commit_hash: str) -> str:
         """Show the actual diff for a git commit."""
         import subprocess
+
+        if not _COMMIT_HASH_RE.match(commit_hash):
+            return f"Invalid commit hash: {commit_hash!r}. Must be 4-40 hex characters."
 
         conn = sqlite3.connect(ctx.deps.db_path)
         cursor = conn.execute(

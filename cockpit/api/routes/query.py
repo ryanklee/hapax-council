@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 
@@ -15,6 +16,12 @@ log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/query", tags=["query"])
 
+_QUERY_TIMEOUT_S = 120
+
+
+_MAX_QUERY_LENGTH = 2000
+_MAX_PRIOR_RESULT_LENGTH = 8000
+
 
 class QueryRunRequest(BaseModel):
     query: str
@@ -22,9 +29,12 @@ class QueryRunRequest(BaseModel):
     @field_validator("query")
     @classmethod
     def query_not_empty(cls, v: str) -> str:
-        if not v.strip():
+        v = v.strip()
+        if not v:
             raise ValueError("Query must not be empty")
-        return v.strip()
+        if len(v) > _MAX_QUERY_LENGTH:
+            raise ValueError(f"Query exceeds maximum length of {_MAX_QUERY_LENGTH} characters")
+        return v
 
 
 class QueryRefineRequest(BaseModel):
@@ -35,9 +45,19 @@ class QueryRefineRequest(BaseModel):
     @field_validator("query")
     @classmethod
     def query_not_empty(cls, v: str) -> str:
-        if not v.strip():
+        v = v.strip()
+        if not v:
             raise ValueError("Query must not be empty")
-        return v.strip()
+        if len(v) > _MAX_QUERY_LENGTH:
+            raise ValueError(f"Query exceeds maximum length of {_MAX_QUERY_LENGTH} characters")
+        return v
+
+    @field_validator("prior_result")
+    @classmethod
+    def prior_result_length(cls, v: str) -> str:
+        if len(v) > _MAX_PRIOR_RESULT_LENGTH:
+            return v[:_MAX_PRIOR_RESULT_LENGTH]
+        return v
 
 
 @router.get("/agents")
@@ -69,7 +89,10 @@ async def run_query_endpoint(req: QueryRunRequest):
                 "data": json.dumps({"phase": "querying", "agent": agent_type}),
             }
 
-            result = await run_query(agent_type, req.query)
+            result = await asyncio.wait_for(
+                run_query(agent_type, req.query),
+                timeout=_QUERY_TIMEOUT_S,
+            )
 
             yield {
                 "event": "text_delta",
@@ -86,11 +109,17 @@ async def run_query_endpoint(req: QueryRunRequest):
                     }
                 ),
             }
-        except Exception as e:
+        except TimeoutError:
+            log.error("Query timed out after %ds", _QUERY_TIMEOUT_S)
+            yield {
+                "event": "error",
+                "data": json.dumps({"message": "Query timed out. Try a simpler question."}),
+            }
+        except Exception:
             log.exception("Query failed")
             yield {
                 "event": "error",
-                "data": json.dumps({"message": str(e)}),
+                "data": json.dumps({"message": "Query failed. Check server logs for details."}),
             }
 
     return EventSourceResponse(event_generator())
@@ -109,10 +138,9 @@ async def refine_query_endpoint(req: QueryRefineRequest):
                 "data": json.dumps({"phase": "querying", "agent": req.agent_type}),
             }
 
-            result = await run_query(
-                req.agent_type,
-                req.query,
-                prior_context=req.prior_result,
+            result = await asyncio.wait_for(
+                run_query(req.agent_type, req.query, prior_context=req.prior_result),
+                timeout=_QUERY_TIMEOUT_S,
             )
 
             yield {
@@ -130,11 +158,17 @@ async def refine_query_endpoint(req: QueryRefineRequest):
                     }
                 ),
             }
-        except Exception as e:
+        except TimeoutError:
+            log.error("Refine query timed out after %ds", _QUERY_TIMEOUT_S)
+            yield {
+                "event": "error",
+                "data": json.dumps({"message": "Query timed out. Try a simpler question."}),
+            }
+        except Exception:
             log.exception("Refine query failed")
             yield {
                 "event": "error",
-                "data": json.dumps({"message": str(e)}),
+                "data": json.dumps({"message": "Query failed. Check server logs for details."}),
             }
 
     return EventSourceResponse(event_generator())

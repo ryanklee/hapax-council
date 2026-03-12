@@ -90,6 +90,38 @@ def test_build_system_prompt_contains_schema():
     assert "tool_calls" in prompt
 
 
+class TestCommitHashValidation:
+    def test_valid_full_hash(self):
+        from agents.dev_story.query import _COMMIT_HASH_RE
+
+        assert _COMMIT_HASH_RE.match("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2")
+
+    def test_valid_short_hash(self):
+        from agents.dev_story.query import _COMMIT_HASH_RE
+
+        assert _COMMIT_HASH_RE.match("a1b2c3d")
+
+    def test_rejects_semicolon_injection(self):
+        from agents.dev_story.query import _COMMIT_HASH_RE
+
+        assert not _COMMIT_HASH_RE.match("abc123; rm -rf /")
+
+    def test_rejects_uppercase(self):
+        from agents.dev_story.query import _COMMIT_HASH_RE
+
+        assert not _COMMIT_HASH_RE.match("ABC123")
+
+    def test_rejects_too_short(self):
+        from agents.dev_story.query import _COMMIT_HASH_RE
+
+        assert not _COMMIT_HASH_RE.match("abc")
+
+    def test_rejects_empty(self):
+        from agents.dev_story.query import _COMMIT_HASH_RE
+
+        assert not _COMMIT_HASH_RE.match("")
+
+
 class TestSqlQueryEmpty:
     def test_select_empty_sessions_returns_no_results(self):
         conn = _make_db()
