@@ -43,11 +43,14 @@ PROTECTED_PATHS = [
     r"^agents/health_monitor\.py$",
     r"^shared/alert_state\.py$",
     r"^shared/axiom_enforcement\.py$",
+    r"^shared/axiom_registry\.py$",
+    r"^shared/axiom_tools\.py$",
     r"^shared/config\.py$",
     r"^axioms/",
     r"^hooks/",
     r"^systemd/",
     r"^hapax-backup-.*\.sh$",
+    r"^\.github/",
 ]
 
 # Conventional commit pattern.

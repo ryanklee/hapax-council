@@ -91,6 +91,30 @@ class TestProtectedPathDetection:
         )
         assert not result.passed
 
+    def test_axiom_registry_blocked(self):
+        result = _check_structural(
+            ["shared/axiom_registry.py"],
+            "diff",
+            "[agent] update registry",
+        )
+        assert not result.passed
+
+    def test_axiom_tools_blocked(self):
+        result = _check_structural(
+            ["shared/axiom_tools.py"],
+            "diff",
+            "[agent] update tools",
+        )
+        assert not result.passed
+
+    def test_github_workflows_blocked(self):
+        result = _check_structural(
+            [".github/workflows/ci.yml"],
+            "diff",
+            "[agent] update CI",
+        )
+        assert not result.passed
+
 
 class TestDiffSizeCheck:
     """Structural gate: diff size bounds."""
