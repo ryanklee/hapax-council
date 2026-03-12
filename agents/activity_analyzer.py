@@ -123,6 +123,9 @@ class SdlcTrend(BaseModel):
     review_approve_rate: float = 0.0
     gate_pass_rate: float = 0.0
     avg_duration_ms: float = 0.0
+    axiom_violations_by_tier: dict[str, int] = Field(default_factory=dict)  # {"T0": 2, "T1": 3}
+    top_violated_axioms: dict[str, int] = Field(default_factory=dict)  # {"single_user": 3, "executive_function": 1}
+    triage_reject_reasons: dict[str, int] = Field(default_factory=dict)  # {"too_complex": 2, "protected_paths": 1}
 
 
 class DataSourceStatus(BaseModel):
@@ -465,6 +468,9 @@ def collect_sdlc_trend(hours: int) -> SdlcTrend:
     triage_total = triage_rejected = 0
     review_total = review_approved = 0
     gate_total = gate_passed = 0
+    tier_counts: dict[str, int] = {}
+    axiom_counts: dict[str, int] = {}
+    reject_reasons: dict[str, int] = {}
 
     for e in entries:
         stage = e.get("stage", "")
@@ -481,6 +487,8 @@ def collect_sdlc_trend(hours: int) -> SdlcTrend:
                 complexity_counts[c] += 1
             if result.get("reject_reason"):
                 triage_rejected += 1
+            if rr := result.get("reject_reason"):
+                reject_reasons[rr] = reject_reasons.get(rr, 0) + 1
         elif stage == "review":
             review_total += 1
             if result.get("verdict") == "approve":
@@ -489,6 +497,16 @@ def collect_sdlc_trend(hours: int) -> SdlcTrend:
             gate_total += 1
             if result.get("overall") == "pass":
                 gate_passed += 1
+            # Extract axiom violation details
+            t0 = result.get("t0_violations", 0)
+            t1 = result.get("t1_violations", 0)
+            if t0:
+                tier_counts["T0"] = tier_counts.get("T0", 0) + t0
+            if t1:
+                tier_counts["T1"] = tier_counts.get("T1", 0) + t1
+            for sv in result.get("semantic_violations", []):
+                axiom_id = sv.get("axiom_id", "unknown")
+                axiom_counts[axiom_id] = axiom_counts.get(axiom_id, 0) + 1
 
     trend.by_stage = dict(stage_counts)
     trend.triage_types = dict(type_counts)
@@ -499,6 +517,9 @@ def collect_sdlc_trend(hours: int) -> SdlcTrend:
         round(review_approved / review_total * 100, 1) if review_total else 0
     )
     trend.gate_pass_rate = round(gate_passed / gate_total * 100, 1) if gate_total else 0
+    trend.axiom_violations_by_tier = tier_counts
+    trend.top_violated_axioms = axiom_counts
+    trend.triage_reject_reasons = reject_reasons
 
     return trend
 
@@ -773,6 +794,12 @@ def format_human(report: ActivityReport) -> str:
             rates.append(f"gate pass: {sc.gate_pass_rate}%")
         if rates:
             lines.append(f"  Rates: {', '.join(rates)}")
+        if sc.top_violated_axioms:
+            axioms = ", ".join(f"{k}: {v}" for k, v in sc.top_violated_axioms.items())
+            lines.append(f"  Axiom violations: {axioms}")
+        if sc.triage_reject_reasons:
+            reasons = ", ".join(f"{k}: {v}" for k, v in sc.triage_reject_reasons.items())
+            lines.append(f"  Triage rejections: {reasons}")
         if sc.avg_duration_ms:
             lines.append(f"  Avg duration: {sc.avg_duration_ms:.0f}ms")
     else:

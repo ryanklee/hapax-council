@@ -183,10 +183,32 @@ def run_review(pr_number: int, *, dry_run: bool = False) -> ReviewResult:
         log_sdlc_event(
             "review",
             pr_number=pr_number,
-            result={"verdict": result.verdict, "findings_count": len(result.findings)},
+            result={
+                "verdict": result.verdict,
+                "findings_count": len(result.findings),
+                "high_findings": sum(1 for f in result.findings if getattr(f, 'severity', '') == "HIGH"),
+                "medium_findings": sum(1 for f in result.findings if getattr(f, 'severity', '') == "MEDIUM"),
+                "axiom_concerns_count": len(result.axiom_concerns),
+                "axiom_concerns": [{"axiom_id": c.axiom_id, "severity": c.severity} for c in result.axiom_concerns][:5] if result.axiom_concerns else [],
+            },
             duration_ms=duration_ms,
             model_used=model,
             dry_run=dry_run,
+            metadata={"trace_id": f"sdlc-review-{pr_number}"},
+        )
+    except Exception:
+        pass
+
+    try:
+        from shared.audit import log_audit
+        log_audit(
+            action="sdlc_review",
+            actor="sdlc_pipeline",
+            check_name=f"review-pr-{pr_number}",
+            outcome=result.verdict,
+            pr_number=pr_number,
+            duration_ms=duration_ms,
+            metadata={"findings_count": len(result.findings)},
         )
     except Exception:
         pass

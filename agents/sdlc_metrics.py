@@ -45,6 +45,8 @@ class QualityMetrics(BaseModel):
     review_approve_rate: float = 0.0
     axiom_gate_pass_rate: float = 0.0
     review_round_distribution: dict[str, int] = Field(default_factory=dict)
+    axiom_violations_by_tier: dict[str, int] = Field(default_factory=dict)
+    top_violated_axioms: dict[str, int] = Field(default_factory=dict)
 
 
 class LatencyMetrics(BaseModel):
@@ -175,6 +177,25 @@ def compute_quality(events: list[dict]) -> QualityMetrics:
     q.triage_reject_rate = round(triage_rejected / triage_total * 100, 1) if triage_total else 0
     q.review_approve_rate = round(review_approved / review_total * 100, 1) if review_total else 0
     q.axiom_gate_pass_rate = round(gate_passed / gate_total * 100, 1) if gate_total else 0
+
+    # Extract axiom violation details
+    tier_counts: dict[str, int] = {}
+    axiom_counts: dict[str, int] = {}
+    for e in events:
+        if e.get("stage") == "axiom-gate":
+            result = e.get("result", {})
+            t0 = result.get("t0_violations", 0)
+            t1 = result.get("t1_violations", 0)
+            if t0:
+                tier_counts["T0"] = tier_counts.get("T0", 0) + t0
+            if t1:
+                tier_counts["T1"] = tier_counts.get("T1", 0) + t1
+            for sv in result.get("semantic_violations", []):
+                aid = sv.get("axiom_id", "unknown")
+                axiom_counts[aid] = axiom_counts.get(aid, 0) + 1
+    q.axiom_violations_by_tier = tier_counts
+    q.top_violated_axioms = axiom_counts
+
     return q
 
 
@@ -260,6 +281,17 @@ def detect_anomalies(events: list[dict], quality: QualityMetrics) -> list[Anomal
                     threshold=avg_findings * 3,
                 ))
 
+    # Repeated axiom violations
+    if quality.top_violated_axioms:
+        for axiom_id, count in quality.top_violated_axioms.items():
+            if count >= 3:
+                anomalies.append(Anomaly(
+                    metric="axiom_repeat_violation",
+                    description=f"Axiom '{axiom_id}' violated {count} times in window",
+                    value=float(count),
+                    threshold=3.0,
+                ))
+
     # High axiom block rate
     if quality.axiom_gate_pass_rate > 0 and quality.axiom_gate_pass_rate < 50:
         anomalies.append(Anomaly(
@@ -333,6 +365,13 @@ def format_markdown(report: SDLCMetricsReport) -> str:
         f"- Review approve rate: {report.quality.review_approve_rate}%",
         f"- Axiom gate pass rate: {report.quality.axiom_gate_pass_rate}%",
     ])
+
+    if report.quality.axiom_violations_by_tier:
+        tiers = ", ".join(f"{k}: {v}" for k, v in report.quality.axiom_violations_by_tier.items())
+        lines.append(f"- Axiom violations by tier: {tiers}")
+    if report.quality.top_violated_axioms:
+        axioms = ", ".join(f"{k}: {v}" for k, v in report.quality.top_violated_axioms.items())
+        lines.append(f"- Top violated axioms: {axioms}")
 
     lines.extend([
         "",

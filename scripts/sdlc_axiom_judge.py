@@ -282,10 +282,39 @@ def run_axiom_gate(pr_number: int, *, dry_run: bool = False) -> AxiomGateResult:
         log_sdlc_event(
             "axiom-gate",
             pr_number=pr_number,
-            result={"overall": result.overall, "structural_passed": result.structural.passed},
+            result={
+                "overall": result.overall,
+                "structural_passed": result.structural.passed,
+                "structural_violations": [v for v in result.structural.violations] if result.structural.violations else [],
+                "semantic_violations": [
+                    {"axiom_id": v.axiom_id, "tier": v.tier_violated, "compliant": v.compliant}
+                    for v in result.semantic if not v.compliant
+                ],
+                "t0_violations": sum(1 for v in result.semantic if not v.compliant and v.tier_violated == "T0"),
+                "t1_violations": sum(1 for v in result.semantic if not v.compliant and v.tier_violated == "T1"),
+                "precedent_compliant": result.precedent_compliant,
+                "precedent_violations": result.precedent_violations if hasattr(result, 'precedent_violations') else [],
+            },
             duration_ms=duration_ms,
             model_used=model,
             dry_run=dry_run,
+            metadata={"trace_id": f"sdlc-axiom-gate-{pr_number}"},
+        )
+    except Exception:
+        pass
+
+    try:
+        from shared.audit import log_audit
+        log_audit(
+            action="sdlc_axiom_gate",
+            actor="sdlc_pipeline",
+            check_name=f"axiom-gate-pr-{pr_number}",
+            outcome=result.overall,
+            pr_number=pr_number,
+            metadata={
+                "t0_violations": sum(1 for v in result.semantic if not v.compliant and v.tier_violated == "T0"),
+                "structural_passed": result.structural.passed,
+            },
         )
     except Exception:
         pass

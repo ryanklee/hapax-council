@@ -244,10 +244,31 @@ def run_triage(issue_number: int, *, dry_run: bool = False, skip_similar: bool =
         log_sdlc_event(
             "triage",
             issue_number=issue_number,
-            result={"type": result.type, "complexity": result.complexity, "reject_reason": result.reject_reason},
+            result={
+                "type": result.type,
+                "complexity": result.complexity,
+                "reject_reason": result.reject_reason,
+                "axiom_relevance": result.axiom_relevance,
+                "file_hints": result.file_hints[:10],  # cap to avoid huge entries
+            },
             duration_ms=duration_ms,
             model_used=model,
             dry_run=dry_run,
+            metadata={"trace_id": f"sdlc-triage-{issue_number}"},
+        )
+    except Exception:
+        pass
+
+    try:
+        from shared.audit import log_audit
+        log_audit(
+            action="sdlc_triage",
+            actor="sdlc_pipeline",
+            check_name=f"triage-issue-{issue_number}",
+            outcome="rejected" if result.reject_reason else "accepted",
+            classification=f"{result.type}/{result.complexity}",
+            duration_ms=duration_ms,
+            metadata={"axiom_relevance": result.axiom_relevance},
         )
     except Exception:
         pass
