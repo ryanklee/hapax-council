@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
-from cockpit.api.demo_jobs import DemoJob, DemoJobManager
+from cockpit.api.demo_jobs import DemoJobManager
 
 
 @pytest.fixture

@@ -56,7 +56,7 @@ class TestDemoJobManager:
         # Make the mock never complete so the task stays "running"
         never_done = asyncio.get_event_loop().create_future()
         mock_run.return_value = never_done
-        job1 = manager.submit("first demo")
+        manager.submit("first demo")
         # Second submit should fail
         with pytest.raises(RuntimeError, match="already in progress"):
             manager.submit("second demo")
@@ -127,8 +127,6 @@ class TestDemoJobManager:
 
     @pytest.mark.asyncio
     async def test_run_demo_progress_events(self, manager):
-        progress_messages = []
-
         async def mock_generate(request, format, on_progress):
             on_progress("Parsing request...")
             on_progress("Gathering research...")

@@ -47,7 +47,7 @@ async def generate_demo(body: GenerateRequest, request: Request):
     try:
         job = manager.submit(body.request, format=body.format)
     except RuntimeError as e:
-        raise HTTPException(status_code=409, detail=str(e))
+        raise HTTPException(status_code=409, detail=str(e)) from None
     return {"job_id": job.id, "status": job.status}
 
 
