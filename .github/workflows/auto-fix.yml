@@ -9,7 +9,6 @@ permissions:
   contents: write
   pull-requests: write
   actions: read
-  id-token: write
 
 concurrency:
   group: auto-fix-${{ github.event.workflow_run.head_branch }}
@@ -104,29 +103,31 @@ jobs:
         if: steps.guard.outputs.should_fix == 'true' && steps.scope.outputs.fixable == 'true'
         run: uv sync --extra ci
 
+      # Run Claude Code CLI directly (claude-code-action doesn't support workflow_run)
       - name: Run Claude Code auto-fix
         if: steps.guard.outputs.should_fix == 'true' && steps.scope.outputs.fixable == 'true'
-        uses: anthropics/claude-code-action@beta
-        with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          claude_args: "--model claude-sonnet-4-6 --max-turns 5 --allowedTools Bash,Read,Edit,Write"
-          prompt: |
-            The CI pipeline failed on this branch. Fix ONLY lint, typecheck, and format errors.
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          npx -y @anthropic-ai/claude-code@latest --print \
+            --model claude-sonnet-4-6 \
+            --max-turns 5 \
+            --allowedTools Bash,Read,Edit,Write,Glob,Grep \
+            "The CI pipeline failed on this branch. Fix ONLY lint, typecheck, and format errors.
 
-            Steps:
-            1. Run `uv run ruff check .` and fix any lint errors with `uv run ruff check --fix .`
-            2. Run `uv run ruff format .` to fix formatting
-            3. Run `uv run pyright` and fix any type errors
-            4. Do NOT change test files, test logic, or behavior
-            5. Do NOT change any files in: axioms/, hooks/, systemd/, shared/config.py,
-               shared/axiom_enforcement.py, shared/alert_state.py, agents/health_monitor.py
-            6. Make minimal changes — fix only what is broken
+          Steps:
+          1. Run \`uv run ruff check .\` and fix any lint errors with \`uv run ruff check --fix .\`
+          2. Run \`uv run ruff format .\` to fix formatting
+          3. Run \`uv run pyright\` and fix any type errors
+          4. Do NOT change test files, test logic, or behavior
+          5. Do NOT change any files in: axioms/, hooks/, systemd/, shared/config.py,
+             shared/axiom_enforcement.py, shared/alert_state.py, agents/health_monitor.py
+          6. Make minimal changes — fix only what is broken
 
-            After fixing, verify all three pass:
-            - `uv run ruff check .`
-            - `uv run ruff format --check .`
-            - `uv run pyright`
+          After fixing, verify all three pass:
+          - \`uv run ruff check .\`
+          - \`uv run ruff format --check .\`
+          - \`uv run pyright\`"
 
       # Commit and push the fix
       - name: Commit auto-fix
