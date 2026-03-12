@@ -181,6 +181,37 @@ def _sample_day_data(date: str = "2026-03-12") -> dict:
     }
 
 
+class TestPhoneSkipLogic:
+    """Skips dates already covered by phone-posted data."""
+
+    def test_skips_phone_posted_dates(self, tmp_path):
+        """Does not overwrite files posted by phone (device: pixel_10)."""
+        # Write a phone-posted file
+        phone_content = "---\ndevice: pixel_10\n---\n# Health\nPhone data"
+        (tmp_path / "health-2026-03-12.md").write_text(phone_content)
+        days = [_sample_day_data()]
+        write_rag_documents(days, tmp_path)
+        # File should still contain phone data
+        content = (tmp_path / "health-2026-03-12.md").read_text()
+        assert "device: pixel_10" in content
+
+    def test_writes_when_no_phone_data(self, tmp_path):
+        """Writes normally when no phone-posted file exists."""
+        days = [_sample_day_data()]
+        write_rag_documents(days, tmp_path)
+        content = (tmp_path / "health-2026-03-12.md").read_text()
+        assert "device: pixel_watch_4" in content
+
+    def test_force_overrides_phone_skip(self, tmp_path):
+        """--force flag overrides phone skip for backfill."""
+        phone_content = "---\ndevice: pixel_10\n---\n# Health\nPhone data"
+        (tmp_path / "health-2026-03-12.md").write_text(phone_content)
+        days = [_sample_day_data()]
+        write_rag_documents(days, tmp_path, force=True)
+        content = (tmp_path / "health-2026-03-12.md").read_text()
+        assert "device: pixel_watch_4" in content
+
+
 class TestRagIntegration:
     """Verify health-connect documents are recognized by ingest pipeline."""
 

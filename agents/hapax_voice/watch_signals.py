@@ -192,6 +192,22 @@ def is_watch_bt_nearby(
         return None
 
 
+def is_phone_connected(watch_dir: Path | None = None) -> bool:
+    """Check if the phone is currently connected via heartbeat.
+
+    Reads phone_connection.json, considers stale after 120s.
+
+    Args:
+        watch_dir: Override path to watch state directory.
+
+    Returns:
+        True if phone heartbeat is fresh (within 120s).
+    """
+    watch_dir = watch_dir or WATCH_STATE_DIR
+    conn_data = read_watch_signal(watch_dir / "phone_connection.json", max_age_seconds=120)
+    return conn_data is not None
+
+
 class WatchSignalReader:
     """Cached reader for watch state files.
 

@@ -43,6 +43,49 @@ class TestWatchSourceReader:
             assert fact["authority"] == "observation"
 
 
+class TestPhoneSummaryPreference:
+    """Phone daily aggregates preferred over watch when available."""
+
+    def test_phone_summary_preferred(self, watch_state_dir):
+        """Phone facts used for daily totals when phone summary exists."""
+        from datetime import date
+        from agents.profiler_sources import read_watch_facts
+        (watch_state_dir / "phone_health_summary.json").write_text(json.dumps({
+            "date": date.today().isoformat(),
+            "resting_hr": 60,
+            "steps": 9000,
+            "active_minutes": 50,
+            "sleep_duration_min": 480,
+            "source": "pixel_10",
+        }))
+        facts = read_watch_facts(watch_state_dir)
+        hr_facts = [f for f in facts if f["key"] == "health.resting_hr"]
+        assert len(hr_facts) == 1
+        assert hr_facts[0]["source"] == "phone:pixel_10"
+        assert hr_facts[0]["value"] == 60
+
+    def test_watch_fallback_when_no_phone(self, watch_state_dir):
+        """Falls back to watch data when phone summary is absent."""
+        from agents.profiler_sources import read_watch_facts
+        facts = read_watch_facts(watch_state_dir)
+        hr_facts = [f for f in facts if f["key"] == "health.resting_hr"]
+        assert len(hr_facts) == 1
+        assert hr_facts[0]["source"] == "watch:pixel_watch_4"
+
+    def test_phone_steps_fact(self, watch_state_dir):
+        """Phone summary produces steps fact."""
+        from datetime import date
+        from agents.profiler_sources import read_watch_facts
+        (watch_state_dir / "phone_health_summary.json").write_text(json.dumps({
+            "date": date.today().isoformat(),
+            "steps": 12000,
+        }))
+        facts = read_watch_facts(watch_state_dir)
+        steps = [f for f in facts if f["key"] == "health.steps"]
+        assert len(steps) == 1
+        assert steps[0]["value"] == 12000
+
+
 @pytest.fixture
 def watch_state_dir(tmp_path):
     """Create a watch state directory with sample data."""

@@ -25,7 +25,8 @@ from pydantic import BaseModel
 from shared.config import HAPAX_HOME
 
 WATCH_STATE_DIR: Path = HAPAX_HOME / "hapax-state" / "watch"
-ALLOWED_DEVICE_IDS: set[str] = {"pw4"}
+ALLOWED_DEVICE_IDS: set[str] = {"pw4", "pixel10"}
+DEVICE_NAMES: dict[str, str] = {"pw4": "pixel_watch_4", "pixel10": "pixel_10"}
 
 # Rolling windows — in-memory, 1 hour max
 _WINDOW_MAX_AGE_S = 3600
@@ -61,6 +62,26 @@ class SensorPayload(BaseModel):
     battery_pct: int | None = None
 
 
+class HealthSummaryPayload(BaseModel):
+    device_id: str
+    date: str  # YYYY-MM-DD
+    resting_hr: float | None = None
+    hr_min: float | None = None
+    hr_max: float | None = None
+    hr_mean: float | None = None
+    hrv_mean_ms: float | None = None
+    steps: int | None = None
+    active_minutes: int | None = None
+    sleep_start: str | None = None
+    sleep_end: str | None = None
+    sleep_duration_min: int | None = None
+    deep_min: int | None = None
+    rem_min: int | None = None
+    spo2_mean: float | None = None
+    skin_temp_deviation_c: float | None = None
+    eda_events: int | None = None
+
+
 class VoiceTriggerPayload(BaseModel):
     device_id: str
 
@@ -76,6 +97,24 @@ def _atomic_write(path: Path, data: dict[str, Any]) -> None:
     try:
         with os.fdopen(fd, "w") as f:
             json.dump(data, f, indent=2)
+        os.rename(tmp_path, str(path))
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    """Write text atomically via tmp file + rename."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(
+        dir=str(path.parent), suffix=".tmp", prefix=f".{path.stem}_"
+    )
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(text)
         os.rename(tmp_path, str(path))
     except Exception:
         try:
@@ -107,14 +146,14 @@ def _window_stats(window: deque[tuple[float, float]]) -> dict[str, Any]:
 
 # ── Handlers ─────────────────────────────────────────────────────────────
 
-def _handle_heart_rate(reading: SensorReading, now: float) -> None:
+def _handle_heart_rate(reading: SensorReading, now: float, source: str = "pixel_watch_4") -> None:
     """Process heart rate reading, update rolling window, write file."""
     if reading.bpm is None:
         return
     _prune_window(_hr_window, now)
     _hr_window.append((now, reading.bpm))
     _atomic_write(_get_watch_state_dir() / "heartrate.json", {
-        "source": "pixel_watch_4",
+        "source": source,
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "current": {
             "bpm": reading.bpm,
@@ -124,24 +163,24 @@ def _handle_heart_rate(reading: SensorReading, now: float) -> None:
     })
 
 
-def _handle_hrv(reading: SensorReading, now: float) -> None:
+def _handle_hrv(reading: SensorReading, now: float, source: str = "pixel_watch_4") -> None:
     """Process HRV reading."""
     if reading.rmssd_ms is None:
         return
     _prune_window(_hrv_window, now)
     _hrv_window.append((now, reading.rmssd_ms))
     _atomic_write(_get_watch_state_dir() / "hrv.json", {
-        "source": "pixel_watch_4",
+        "source": source,
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "current": {"rmssd_ms": reading.rmssd_ms},
         "window_1h": _window_stats(_hrv_window),
     })
 
 
-def _handle_eda(reading: SensorReading) -> None:
+def _handle_eda(reading: SensorReading, source: str = "pixel_watch_4") -> None:
     """Process EDA reading."""
     _atomic_write(_get_watch_state_dir() / "eda.json", {
-        "source": "pixel_watch_4",
+        "source": source,
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "current": {
             "eda_event": reading.eda_event or False,
@@ -150,36 +189,37 @@ def _handle_eda(reading: SensorReading) -> None:
     })
 
 
-def _handle_skin_temp(reading: SensorReading) -> None:
+def _handle_skin_temp(reading: SensorReading, source: str = "pixel_watch_4") -> None:
     """Process skin temperature reading."""
     _atomic_write(_get_watch_state_dir() / "skin_temp.json", {
-        "source": "pixel_watch_4",
+        "source": source,
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "current": {"temp_c": reading.temp_c},
     })
 
 
-def _handle_activity(reading: SensorReading) -> None:
+def _handle_activity(reading: SensorReading, source: str = "pixel_watch_4") -> None:
     """Process activity state reading."""
     _atomic_write(_get_watch_state_dir() / "activity.json", {
-        "source": "pixel_watch_4",
+        "source": source,
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "state": reading.state or "UNKNOWN",
     })
 
 
 _HANDLERS: dict[str, Any] = {
-    "heart_rate": lambda r, now: _handle_heart_rate(r, now),
-    "hrv": lambda r, now: _handle_hrv(r, now),
-    "eda": lambda r, now: _handle_eda(r),
-    "skin_temp": lambda r, now: _handle_skin_temp(r),
-    "activity": lambda r, now: _handle_activity(r),
+    "heart_rate": lambda r, now, src: _handle_heart_rate(r, now, src),
+    "hrv": lambda r, now, src: _handle_hrv(r, now, src),
+    "eda": lambda r, now, src: _handle_eda(r, src),
+    "skin_temp": lambda r, now, src: _handle_skin_temp(r, src),
+    "activity": lambda r, now, src: _handle_activity(r, src),
 }
 
 
 def _update_connection(payload: SensorPayload) -> None:
-    """Update connection.json on every POST."""
-    _atomic_write(_get_watch_state_dir() / "connection.json", {
+    """Update connection file on every POST. Phone writes phone_connection.json."""
+    filename = "phone_connection.json" if payload.device_id == "pixel10" else "connection.json"
+    _atomic_write(_get_watch_state_dir() / filename, {
         "last_seen_epoch": time.time(),
         "device_id": payload.device_id,
         "battery_pct": payload.battery_pct,
@@ -197,11 +237,12 @@ def create_app() -> FastAPI:
         if payload.device_id not in ALLOWED_DEVICE_IDS:
             raise HTTPException(status_code=403, detail="Unknown device")
         now = time.time()
+        source = DEVICE_NAMES.get(payload.device_id, payload.device_id)
         _update_connection(payload)
         for reading in payload.readings:
             handler = _HANDLERS.get(reading.type)
             if handler:
-                handler(reading, now)
+                handler(reading, now, source)
         return {"status": "ok", "readings_processed": str(len(payload.readings))}
 
     @_app.get("/watch/status")
@@ -211,6 +252,30 @@ def create_app() -> FastAPI:
         if conn_file.exists():
             conn = json.loads(conn_file.read_text())
         return {"status": "ok", "connection": conn}
+
+    @_app.post("/phone/health-summary")
+    async def phone_health_summary(payload: HealthSummaryPayload) -> dict[str, str]:
+        if payload.device_id not in ALLOWED_DEVICE_IDS:
+            raise HTTPException(status_code=403, detail="Unknown device")
+        # Write phone_health_summary.json atomically
+        summary_data = payload.model_dump()
+        summary_data["source"] = DEVICE_NAMES.get(payload.device_id, payload.device_id)
+        summary_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+        _atomic_write(_get_watch_state_dir() / "phone_health_summary.json", summary_data)
+
+        # Write RAG markdown using health_connect_parser formatter
+        from agents.health_connect_parser import format_daily_summary
+
+        day_data = {k: v for k, v in payload.model_dump().items() if v is not None and k != "device_id"}
+        md_content = format_daily_summary(day_data)
+        # Override device in frontmatter to reflect phone source
+        md_content = md_content.replace("device: pixel_watch_4", f"device: {DEVICE_NAMES.get(payload.device_id, payload.device_id)}")
+        md_content = md_content.replace(f"source_device: pixel_watch_4", f"source_device: {DEVICE_NAMES.get(payload.device_id, payload.device_id)}")
+        rag_dir = HAPAX_HOME / "documents" / "rag-sources" / "health-connect"
+        rag_dir.mkdir(parents=True, exist_ok=True)
+        rag_file = rag_dir / f"health-{payload.date}.md"
+        _atomic_write_text(rag_file, md_content)
+        return {"status": "ok", "date": payload.date}
 
     @_app.post("/watch/voice-trigger")
     async def voice_trigger(payload: VoiceTriggerPayload) -> dict[str, str]:

@@ -172,8 +172,24 @@ def format_daily_summary(day_data: dict) -> str:
     return "\n".join(lines)
 
 
-def write_rag_documents(days: list[dict], output_dir: Path | str) -> None:
-    """Write health-YYYY-MM-DD.md files, skip if content unchanged."""
+def _is_phone_posted(filepath: Path) -> bool:
+    """Check if a health markdown file was posted by the phone (has device: pixel_10)."""
+    if not filepath.exists():
+        return False
+    try:
+        content = filepath.read_text()
+        # Check frontmatter for phone device marker
+        return "device: pixel_10" in content
+    except OSError:
+        return False
+
+
+def write_rag_documents(days: list[dict], output_dir: Path | str, *, force: bool = False) -> None:
+    """Write health-YYYY-MM-DD.md files, skip if content unchanged.
+
+    Skips dates already covered by phone-posted data (device: pixel_10 in
+    frontmatter) unless force=True.
+    """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -181,6 +197,10 @@ def write_rag_documents(days: list[dict], output_dir: Path | str) -> None:
         content = format_daily_summary(day_data)
         filename = f"health-{day_data['date']}.md"
         filepath = output_dir / filename
+
+        # Skip if phone already posted this date (phone data is fresher)
+        if not force and _is_phone_posted(filepath):
+            continue
 
         content_hash = hashlib.sha256(content.encode()).hexdigest()
 
@@ -192,7 +212,7 @@ def write_rag_documents(days: list[dict], output_dir: Path | str) -> None:
         filepath.write_text(content)
 
 
-def run_parse(zip_path: Path | str, output_dir: Path | str | None = None) -> list[dict]:
+def run_parse(zip_path: Path | str, output_dir: Path | str | None = None, *, force: bool = False) -> list[dict]:
     """Orchestrate: extract -> parse -> format -> write."""
     zip_path = Path(zip_path)
     out = Path(output_dir) if output_dir else OUTPUT_DIR
@@ -204,7 +224,7 @@ def run_parse(zip_path: Path | str, output_dir: Path | str | None = None) -> lis
             return []
         days = parse_health_db(db_path)
 
-    write_rag_documents(days, out)
+    write_rag_documents(days, out, force=force)
     return days
 
 
@@ -246,10 +266,15 @@ def main() -> None:
         action="store_true",
         help="Scan gdrive directory for Health Connect zips",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Override skip for phone-covered dates (backfill mode)",
+    )
     args = parser.parse_args()
 
     if args.parse:
-        days = run_parse(args.parse)
+        days = run_parse(args.parse, force=args.force)
         print(f"Wrote {len(days)} daily summaries to {OUTPUT_DIR}")
     elif args.watch:
         _watch()
