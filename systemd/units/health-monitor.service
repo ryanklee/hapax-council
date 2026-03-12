@@ -5,7 +5,7 @@ OnFailure=notify-failure@%n.service
 
 [Service]
 Type=oneshot
-SuccessExitStatus=1
+SuccessExitStatus=1 2
 ExecStart=/home/operator/.local/bin/health-watchdog
 Environment=PATH=/home/operator/.local/bin:/home/operator/.cargo/bin:/usr/local/bin:/usr/bin:/bin
 Environment=HOME=/home/hapax
