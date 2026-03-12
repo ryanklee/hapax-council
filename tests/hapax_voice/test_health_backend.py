@@ -66,27 +66,58 @@ class TestHealthBackend:
         backend.contribute(behaviors)
         assert behaviors["system_health_status"].value == "failed"
 
-    def test_failed_triggers_governor_pause(self, tmp_path):
-        """Verify failed health → governor system_health veto denies."""
-        from agents.hapax_voice.perception import EnvironmentState
+    def test_failed_blocks_context_gate(self, tmp_path):
+        """Verify failed health → ContextGate system_health veto denies."""
+        from unittest.mock import MagicMock
 
-        state = EnvironmentState(
-            timestamp=0.0,
-            system_health="failed",
-            operator_present=True,
-        )
-        assert state.system_health == "failed"
+        from agents.hapax_voice.context_gate import ContextGate
 
-    def test_degraded_is_fail_open(self, tmp_path):
-        """Degraded health should NOT trigger governor pause."""
-        from agents.hapax_voice.governor import PipelineGovernor
-        from agents.hapax_voice.perception import EnvironmentState
+        import time
 
-        gov = PipelineGovernor()
-        state = EnvironmentState(
-            timestamp=0.0,
-            system_health="degraded",
-            operator_present=True,
-        )
-        directive = gov.evaluate(state)
-        assert directive == "process"
+        path = tmp_path / "health-history.jsonl"
+        path.write_text(json.dumps({"healthy": 0, "total": 80}) + "\n")
+        backend = HealthBackend(history_path=path)
+        behaviors: dict[str, Behavior] = {}
+        backend.contribute(behaviors)
+
+        session = MagicMock()
+        session.is_active = False
+        gate = ContextGate(session=session, ambient_classification=False)
+        gate._activity_mode = "idle"
+        now = time.monotonic()
+        gate.set_behaviors({
+            "sink_volume": Behavior(0.3, watermark=now),
+            "midi_active": Behavior(False, watermark=now),
+            "system_health_status": behaviors["system_health_status"],
+        })
+        result = gate.check()
+        assert result.eligible is False
+        assert "system health" in result.reason.lower()
+
+    def test_degraded_blocks_context_gate(self, tmp_path):
+        """Degraded health blocks ContextGate (not fail-open)."""
+        from unittest.mock import MagicMock
+
+        from agents.hapax_voice.context_gate import ContextGate
+
+        import time
+
+        path = tmp_path / "health-history.jsonl"
+        path.write_text(json.dumps({"healthy": 70, "total": 80}) + "\n")
+        backend = HealthBackend(history_path=path)
+        behaviors: dict[str, Behavior] = {}
+        backend.contribute(behaviors)
+
+        session = MagicMock()
+        session.is_active = False
+        gate = ContextGate(session=session, ambient_classification=False)
+        gate._activity_mode = "idle"
+        now = time.monotonic()
+        gate.set_behaviors({
+            "sink_volume": Behavior(0.3, watermark=now),
+            "midi_active": Behavior(False, watermark=now),
+            "system_health_status": behaviors["system_health_status"],
+        })
+        result = gate.check()
+        assert result.eligible is False
+        assert "degraded" in result.reason.lower()

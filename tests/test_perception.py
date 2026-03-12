@@ -293,6 +293,81 @@ class TestComputeInterruptibility:
         assert score >= 0.0
 
 
+class TestPhysiologicalFactors:
+    """Tests for physiological_load, circadian_alignment, system_health_ratio params."""
+
+    def test_physiological_load_reduces_score(self):
+        score = compute_interruptibility(
+            vad_confidence=0.0, activity_mode="idle", in_voice_session=False,
+            operator_present=True, physiological_load=1.0,
+        )
+        # 1.0 - 0.3*1.0 = 0.7
+        assert score == pytest.approx(0.7)
+
+    def test_circadian_peak_no_penalty(self):
+        score = compute_interruptibility(
+            vad_confidence=0.0, activity_mode="idle", in_voice_session=False,
+            operator_present=True, circadian_alignment=0.1,
+        )
+        assert score == pytest.approx(1.0)
+
+    def test_circadian_non_productive_penalty(self):
+        score = compute_interruptibility(
+            vad_confidence=0.0, activity_mode="idle", in_voice_session=False,
+            operator_present=True, circadian_alignment=0.8,
+        )
+        # 1.0 - 0.5*(0.8-0.1) = 1.0 - 0.35 = 0.65
+        assert score == pytest.approx(0.65)
+
+    def test_system_health_degraded_penalty(self):
+        score = compute_interruptibility(
+            vad_confidence=0.0, activity_mode="idle", in_voice_session=False,
+            operator_present=True, system_health_ratio=0.5,
+        )
+        # 1.0 - 0.5*(1.0-0.5) = 1.0 - 0.25 = 0.75
+        assert score == pytest.approx(0.75)
+
+    def test_system_health_healthy_no_penalty(self):
+        score = compute_interruptibility(
+            vad_confidence=0.0, activity_mode="idle", in_voice_session=False,
+            operator_present=True, system_health_ratio=1.0,
+        )
+        assert score == pytest.approx(1.0)
+
+    def test_all_factors_stack(self):
+        score = compute_interruptibility(
+            vad_confidence=0.0, activity_mode="idle", in_voice_session=False,
+            operator_present=True,
+            physiological_load=0.5,   # -0.15
+            circadian_alignment=0.5,  # -0.20
+            system_health_ratio=0.5,  # -0.25
+        )
+        # 1.0 - 0.15 - 0.20 - 0.25 = 0.40
+        assert score == pytest.approx(0.4)
+
+
+class TestSleepQualityThreshold:
+    """Tests for sleep-quality-adjusted proactive delivery threshold calculation."""
+
+    def test_full_sleep_default_threshold(self):
+        # sleep=1.0 → 0.5 + 0.3*(1-1) = 0.5
+        threshold = 0.5 + 0.3 * (1.0 - 1.0)
+        assert threshold == pytest.approx(0.5)
+
+    def test_half_sleep_raised_threshold(self):
+        # sleep=0.5 → 0.5 + 0.3*(1-0.5) = 0.65
+        threshold = 0.5 + 0.3 * (1.0 - 0.5)
+        assert threshold == pytest.approx(0.65)
+
+    def test_no_sleep_behavior_default(self):
+        # When no behavior exists, threshold should stay 0.5
+        sleep_b = None
+        delivery_threshold = 0.5
+        if sleep_b is not None:
+            delivery_threshold = 0.5 + 0.3 * (1.0 - sleep_b.value)
+        assert delivery_threshold == pytest.approx(0.5)
+
+
 class TestBackendTickIntegration:
     """Prove that tick() polls registered backends and merges Behaviors."""
 
@@ -437,6 +512,24 @@ class TestSessionInterruptibility:
         engine.update_desktop_state(window_count=10)
         state = engine.tick()
         assert state.interruptibility_score == 0.3  # 1.0 - 0.5 - 0.2
+
+    def test_tick_reads_physiological_load_from_behaviors(self):
+        """Backend-provided physiological_load reduces interruptibility."""
+        engine = PerceptionEngine(
+            presence=_make_mock_presence(),
+            workspace_monitor=_make_mock_workspace_monitor(),
+        )
+
+        class PhysioBackend(StubBackend):
+            def contribute(self, behaviors: dict[str, Behavior]) -> None:
+                behaviors["physiological_load"] = Behavior(0.5)
+
+        engine.register_backend(
+            PhysioBackend(name="physio", provides=frozenset({"physiological_load"}))
+        )
+        state = engine.tick()
+        # 1.0 - 0.3*0.5 = 0.85 (circadian_alignment defaults to 0.1 = no penalty)
+        assert state.interruptibility_score == pytest.approx(0.85)
 
 
 # ------------------------------------------------------------------

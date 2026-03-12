@@ -129,7 +129,6 @@ def test_gate_respects_environment_state_conversation():
         timestamp=time.monotonic(),
         activity_mode="conversation",
     )
-    gate.set_environment_state(state)
     gate.set_activity_mode("conversation")
     result = gate.check()
     assert not result.eligible

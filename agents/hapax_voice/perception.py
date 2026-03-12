@@ -78,6 +78,9 @@ def compute_interruptibility(
     in_voice_session: bool,
     operator_present: bool,
     window_count: int = 0,
+    physiological_load: float = 0.0,
+    circadian_alignment: float = 0.1,
+    system_health_ratio: float = 1.0,
 ) -> float:
     """Compute an interruptibility score from perception signals.
 
@@ -101,6 +104,16 @@ def compute_interruptibility(
     # Many open windows = deep multitasking context
     if window_count > 8:
         score -= 0.2
+
+    # Physiological load (0.0=resting, 1.0=max stress → -0.3)
+    score -= 0.3 * physiological_load
+
+    # Circadian alignment (0.1=peak→+0, 0.5=neutral→-0.2, 0.8=non-prod→-0.35)
+    score -= 0.5 * max(0.0, circadian_alignment - 0.1)
+
+    # System health (1.0=healthy→+0, 0.5=degraded→-0.25)
+    if system_health_ratio < 1.0:
+        score -= 0.5 * (1.0 - system_health_ratio)
 
     return max(0.0, min(1.0, score))
 
@@ -209,6 +222,11 @@ class PerceptionEngine:
         # Latest state
         self.latest: EnvironmentState | None = None
 
+    def _bval(self, name: str, default: float) -> float:
+        """Read an optional Behavior value with a safe default."""
+        b = self.behaviors.get(name)
+        return b.value if b is not None else default
+
     def subscribe(self, callback: Callable[[EnvironmentState], None]) -> None:
         """Register a callback for each new EnvironmentState."""
         self._subscribers.append(callback)
@@ -268,6 +286,9 @@ class PerceptionEngine:
             in_voice_session=self._in_voice_session,
             operator_present=self._b_operator_present.value,
             window_count=self._b_window_count.value,
+            physiological_load=self._bval("physiological_load", 0.0),
+            circadian_alignment=self._bval("circadian_alignment", 0.1),
+            system_health_ratio=self._bval("system_health_ratio", 1.0),
         )
 
         presence_score = getattr(self._presence, "score", "likely_absent")

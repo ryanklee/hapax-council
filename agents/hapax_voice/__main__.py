@@ -248,6 +248,27 @@ class VoiceDaemon:
         except Exception:
             log.info("HyprlandBackend not available, skipping")
 
+        try:
+            from agents.hapax_voice.backends.watch import WatchBackend
+
+            self.perception.register_backend(WatchBackend())
+        except Exception:
+            log.info("WatchBackend not available, skipping")
+
+        try:
+            from agents.hapax_voice.backends.health import HealthBackend
+
+            self.perception.register_backend(HealthBackend())
+        except Exception:
+            log.info("HealthBackend not available, skipping")
+
+        try:
+            from agents.hapax_voice.backends.circadian import CircadianBackend
+
+            self.perception.register_backend(CircadianBackend())
+        except Exception:
+            log.info("CircadianBackend not available, skipping")
+
     # ------------------------------------------------------------------
     # Wake word engine selection
     # ------------------------------------------------------------------
@@ -617,12 +638,17 @@ class VoiceDaemon:
                     log.debug("Proactive delivery blocked: %s", gate_result.reason)
                     continue
 
-                # Check interruptibility — only deliver when score is high enough
+                # Check interruptibility — adjust threshold based on sleep quality
                 latest = self.perception.latest
-                if latest is not None and latest.interruptibility_score < 0.5:
+                sleep_b = self.perception.behaviors.get("sleep_quality")
+                delivery_threshold = 0.5
+                if sleep_b is not None:
+                    delivery_threshold = 0.5 + 0.3 * (1.0 - sleep_b.value)
+                if latest is not None and latest.interruptibility_score < delivery_threshold:
                     log.debug(
-                        "Proactive delivery deferred: interruptibility %.2f < 0.5",
+                        "Proactive delivery deferred: interruptibility %.2f < %.2f",
                         latest.interruptibility_score,
+                        delivery_threshold,
                     )
                     continue
 
@@ -690,8 +716,7 @@ class VoiceDaemon:
                 elif directive == "withdraw" and self.session.is_active:
                     await self._close_session(reason="operator_absent")
 
-                # Update context gate with latest state + backend Behaviors
-                self.gate.set_environment_state(state)
+                # Update context gate with backend Behaviors
                 self.gate.set_behaviors(self.perception.behaviors)
 
             except asyncio.CancelledError:
