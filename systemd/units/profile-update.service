@@ -5,7 +5,7 @@ OnFailure=notify-failure@%n.service
 
 [Service]
 Type=oneshot
-WorkingDirectory=/home/operator/projects/ai-agents
+WorkingDirectory=/home/operator/projects/hapax-council
 Environment=PATH=/home/operator/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=HOME=/home/hapax
 Environment=GNUPGHOME=/home/operator/.gnupg
