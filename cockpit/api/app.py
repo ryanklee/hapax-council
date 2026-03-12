@@ -12,11 +12,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from cockpit.api.cache import start_refresh_loop
+from cockpit.api.demo_jobs import DemoJobManager
 from cockpit.api.sessions import agent_run_manager
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    app.state.demo_jobs = DemoJobManager()
     await start_refresh_loop()
     yield
     await agent_run_manager.shutdown()
