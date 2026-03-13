@@ -250,9 +250,7 @@ class _EmotionInference:
                     log.exception("Emotion inference error")
             time.sleep(INFERENCE_INTERVAL_S)
 
-    def _extract_crops(
-        self, frame: np.ndarray, face_landmarks_list: list
-    ) -> list[np.ndarray]:
+    def _extract_crops(self, frame: np.ndarray, face_landmarks_list: list) -> list[np.ndarray]:
         """Extract face crops from frame for each detected face."""
         h, w = frame.shape[:2]
         crops: list[np.ndarray] = []
