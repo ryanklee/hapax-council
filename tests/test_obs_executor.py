@@ -5,9 +5,12 @@ from __future__ import annotations
 import unittest
 from unittest.mock import MagicMock
 
-from agents.hapax_voice.commands import Command
-from agents.hapax_voice.executor import Executor
-from agents.hapax_voice.obs_executor import OBSExecutor
+pytest = __import__("pytest")
+pytest.importorskip("agents.hapax_voice.executor", reason="hapax_voice.executor not installed")
+
+from agents.hapax_voice.commands import Command  # noqa: E402
+from agents.hapax_voice.executor import Executor  # noqa: E402
+from agents.hapax_voice.obs_executor import OBSExecutor  # noqa: E402
 
 
 class TestOBSExecutor(unittest.TestCase):
