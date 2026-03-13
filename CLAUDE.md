@@ -156,6 +156,18 @@ Two containers via `docker-compose.yml` (`--network host`):
 
 `audio_processor` stays on host (requires GPU/CUDA).
 
+## Query Subsystem
+
+Three specialized query agents behind a keyword-based dispatcher (`cockpit/query_dispatch.py`), served as SSE streams via `/api/query/run` and `/api/query/refine`.
+
+**dev_story** (`agents/dev_story/`): Development archaeology. 9-stage indexer populates a 15-table SQLite DB (`profiles/dev-story.db`): sessions, messages, tool_calls, file_changes, commits, commit_files, correlations, session_metrics, session_tags, critical_moments, hotspots, code_survival. Query agent has 4 tools: `sql_query`, `session_content`, `file_history`, `git_diff`. Run indexer: `uv run python -m agents.dev_story.indexer`.
+
+**system_ops** (`agents/system_ops/`): Infrastructure queries. Historical SQL (health_runs, drift_items, digest_runs, knowledge_maint in `profiles/system-ops.db`) + live tools (infra_snapshot, manifest_section, langfuse_cost, qdrant_stats).
+
+**knowledge** (`agents/knowledge/`): Semantic search across Qdrant collections (documents, profile-facts, claude-memory) + structured reads (briefing, digest, scout report, operator goals).
+
+Dispatch: `classify_query()` scores keywords per agent, highest wins. Queries auto-classify; refinement passes prior result as context.
+
 ## Ingest Agent
 
 `agents/ingest.py` auto-detects `source_service` from `rag-sources` path patterns when not set by frontmatter. Recognized patterns: `gdrive`, `gcalendar`, `gmail`, `youtube`, `takeout`, `proton`, `claude-code`, `obsidian`, `chrome`, `ambient-audio`.

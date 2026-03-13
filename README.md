@@ -18,8 +18,8 @@ The system is constrained by four constitutional axioms defined in [hapax-consti
 Coordination:  Markdown files with YAML frontmatter on disk (filesystem-as-bus)
 Agents:        Pydantic AI, invoked by CLI/API/timer (stateless per-invocation)
 Scheduling:    systemd timers (autonomous) + CLI (on-demand) + Claude Code (interactive)
-API:           FastAPI cockpit (30+ endpoints, SSE for live updates)
-Dashboard:     React SPA (council-web/)
+API:           FastAPI cockpit (30+ endpoints, SSE for live updates and query streaming)
+Dashboard:     React SPA (council-web/) — health, agents, chat, insight queries, demos
 Knowledge:     Qdrant (768d nomic-embed-text-v2-moe, 4 collections)
 Inference:     LiteLLM proxy → Anthropic Claude / Google Gemini / Ollama (local RTX 3090)
 Voice:         Always-on daemon (wake word, speaker ID, ambient perception, Gemini Live)
@@ -52,7 +52,13 @@ The MC governance layer composes these primitives into a domain-specific pipelin
 
 **Operator profiler.** Extracts and maintains a structured model of the operator across 13 dimensions (goals, constraints, work patterns, communication style, cognitive patterns, creative preferences) from 6 source types (config files, Claude Code transcripts, git repos, Langfuse traces, Obsidian vault, calendar data). The profile is injected into every agent's system prompt, so agent outputs are contextualized to this specific operator's priorities, knowledge, and working style. The profile updates continuously from source data; the operator does not configure it.
 
-**Dev narrative.** Correlates git commits with Claude Code conversation transcripts to reconstruct why decisions were made, not just what changed.
+**Query subsystem.** Natural language introspection across three specialized agents, auto-routed by keyword classification and served as SSE streams through the cockpit API. Queries refine iteratively — prior results inject as context for follow-up questions.
+
+- **dev_story** (Development Archaeology) — Correlates git commits with Claude Code conversation transcripts to reconstruct why decisions were made, not just what changed. A 9-stage indexer builds a 15-table SQLite database: sessions, messages, tool calls, file changes, commits, commit files, correlations (with confidence scoring), session metrics (tool diversity, steering ratio, phase sequences), session tags (work type, interaction mode, environment topology, session scale), critical moments (churn, wrong-path edit loops, token waste), file hotspots (change frequency, churn rate), and code survival (file lifecycle from introduction to deletion). The query agent has 4 tools: SQL against the full schema, session content retrieval, per-file commit history with correlation tracing, and git diff stats.
+
+- **system_ops** (System Operations) — Queries infrastructure health history, Docker containers, systemd timers, GPU state, Langfuse LLM costs, Qdrant collection stats, and drift reports. Combines historical SQL (health runs, drift items, digest runs, knowledge maintenance) with live tools that read the current infrastructure manifest.
+
+- **knowledge** (Knowledge & Context) — Semantic search across three Qdrant collections (documents, profile-facts, claude-memory) plus structured reads of the daily briefing, knowledge digest, scout report, and operator goals. Document search filters by source service (10 sync agents) and content type.
 
 | Category | Agents | LLM calls |
 |----------|--------|-----------|
@@ -60,10 +66,10 @@ The MC governance layer composes these primitives into a domain-specific pipelin
 | Sync/RAG | `gdrive_sync`, `gcalendar_sync`, `gmail_sync`, `youtube_sync`, `chrome_sync`, `claude_code_sync`, `obsidian_sync` | No |
 | Analysis | `digest`, `scout`, `drift_detector`, `research`, `code_review` | Yes |
 | System | `health_monitor`, `introspect`, `knowledge_maint` | No |
-| Knowledge | `ingest`, `query` | Mixed |
+| Knowledge | `ingest` | No |
+| Query | `query` (dispatches to `dev_story/`, `system_ops/`, `knowledge/`) | Yes |
 | Voice | `hapax_voice`, `audio_processor` | Mixed |
 | Demo | `demo`, `demo_eval` + `demo_pipeline/` | Yes |
-| Dev narrative | `dev_story/` | Yes |
 
 ### Reactive engine
 

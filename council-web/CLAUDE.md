@@ -42,12 +42,13 @@ src/
     chat/         Chat UI (messages, input, streaming, tool calls)
     dashboard/    Agent grid, nudge list, output pane, copilot banner
     demos/        Demo list and detail views
+    insight/      Query input, result rendering, result list, refinement input
     layout/       App layout shell, manual drawer, health toast watcher
     shared/       Reusable: command palette, error boundary, modals, markdown, toasts
     sidebar/      15 sidebar panels (health, VRAM, containers, timers, briefing,
                   goals, scout, cost, drift, management, accommodations, freshness)
   hooks/          useHealthToasts, useInputHistory, useKeyboardShortcuts, useSSE
-  pages/          DashboardPage, ChatPage, DemosPage
+  pages/          DashboardPage, ChatPage, InsightPage, DemosPage
   utils.ts        Shared utilities
 ```
 
@@ -57,6 +58,7 @@ src/
 |------|------|---------|
 | `/` | DashboardPage | Health, agents, nudges, sidebar panels |
 | `/chat` | ChatPage | Streaming chat with cockpit backend |
+| `/insight` | InsightPage | Natural language queries with SSE streaming and refinement |
 | `/demos` | DemosPage | Browse and view generated demos |
 
 ## API Layer
@@ -91,7 +93,7 @@ All backend calls go through `src/api/client.ts` which hits `/api/*` (proxied to
 - markdown rendering via react-markdown + remark-gfm plugin
 
 ### Architecture Notes
-- Single-page app with 3 main routes: dashboard, chat, demos
+- Single-page app with 4 main routes: dashboard, chat, insight, demos
 - Layout shell in `components/layout/` manages app chrome and drawer
 - Error boundaries in shared components for resilience
 - Command palette in shared components for navigation
