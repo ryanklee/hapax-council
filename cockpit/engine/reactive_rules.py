@@ -1,9 +1,12 @@
-"""cockpit/engine/reactive_rules.py — Phase B infrastructure rules (Phase 0 only).
+"""cockpit/engine/reactive_rules.py — Reactive engine rules.
 
-Three deterministic rules that fire on filesystem changes:
+Phase 0 (deterministic):
 - collector-refresh: refresh cockpit cache tier on profiles/ changes
 - config-changed: log axiom registry reload on axioms/registry.yaml change
 - sdlc-event-logged: notify + cache refresh on SDLC event append
+
+Phase 1 (local GPU):
+- rag-source-landed: ingest new RAG source files via Ollama embeddings
 """
 
 from __future__ import annotations
@@ -120,9 +123,57 @@ def _sdlc_event_produce(event: ChangeEvent) -> list[Action]:
     ]
 
 
+# ── Phase 1: Sync rules (local GPU) ─────────────────────────────────────
+
+
+async def _handle_rag_ingest(*, path: str) -> str:
+    """Ingest a new RAG source file. Runs in thread (sync function)."""
+    from pathlib import Path
+
+    from agents.ingest import ingest_file
+
+    file_path = Path(path)
+    success, error = await asyncio.to_thread(ingest_file, file_path)
+    if success:
+        _log.info("Ingested RAG source: %s", file_path.name)
+        return f"ingested:{file_path.name}"
+    else:
+        _log.warning("Ingest failed for %s: %s", file_path.name, error)
+        raise RuntimeError(f"Ingest failed: {error}")
+
+
+def _rag_source_filter(event: ChangeEvent) -> bool:
+    """Match new files in RAG_SOURCES_DIR."""
+    if event.event_type != "created":
+        return False
+    return event.source_service is not None
+
+
+def _rag_source_produce(event: ChangeEvent) -> list[Action]:
+    return [
+        Action(
+            name=f"rag-ingest:{event.path}",
+            handler=_handle_rag_ingest,
+            args={"path": str(event.path)},
+            phase=1,
+            priority=50,
+        )
+    ]
+
+
+RAG_SOURCE_RULE = Rule(
+    name="rag-source-landed",
+    description="Ingest new RAG source files via local GPU embeddings",
+    trigger_filter=_rag_source_filter,
+    produce=_rag_source_produce,
+    phase=1,
+    cooldown_s=0,
+)
+
+
 # ── Registration ────────────────────────────────────────────────────────────
 
-INFRASTRUCTURE_RULES: list[Rule] = [
+ALL_RULES: list[Rule] = [
     Rule(
         name="collector-refresh",
         description="Refresh cockpit cache tier when profiles/ data changes",
@@ -145,11 +196,19 @@ INFRASTRUCTURE_RULES: list[Rule] = [
         phase=0,
         cooldown_s=30,
     ),
+    RAG_SOURCE_RULE,
 ]
 
+# Backwards compat alias
+INFRASTRUCTURE_RULES = ALL_RULES
 
-def register_infrastructure_rules(registry) -> None:
-    """Register all Phase B infrastructure rules on a RuleRegistry."""
-    for rule in INFRASTRUCTURE_RULES:
+
+def register_rules(registry) -> None:
+    """Register all reactive rules on a RuleRegistry."""
+    for rule in ALL_RULES:
         registry.register(rule)
-    _log.info("Registered %d infrastructure rules", len(INFRASTRUCTURE_RULES))
+    _log.info("Registered %d reactive rules", len(ALL_RULES))
+
+
+# Backwards compat alias
+register_infrastructure_rules = register_rules

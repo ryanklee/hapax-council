@@ -1,4 +1,4 @@
-"""Tests for cockpit/engine/reactive_rules.py — Phase B infrastructure rules.
+"""Tests for cockpit/engine/reactive_rules.py — reactive engine rules.
 
 Self-contained, asyncio_mode="auto", unittest.mock only.
 """
@@ -14,10 +14,12 @@ import pytest
 from cockpit.engine.models import ChangeEvent
 from cockpit.engine.rules import RuleRegistry, evaluate_rules
 from cockpit.engine.reactive_rules import (
+    ALL_RULES,
     INFRASTRUCTURE_RULES,
     register_infrastructure_rules,
     _handle_collector_refresh,
     _handle_config_changed,
+    _handle_rag_ingest,
     _handle_sdlc_event,
 )
 
@@ -45,18 +47,28 @@ def _registry() -> RuleRegistry:
 
 
 class TestRegistration:
-    def test_registers_three_rules(self):
+    def test_registers_four_rules(self):
         reg = _registry()
-        assert len(reg) == 3
+        assert len(reg) == 4
 
     def test_rule_names(self):
         reg = _registry()
         names = {r.name for r in reg}
-        assert names == {"collector-refresh", "config-changed", "sdlc-event-logged"}
+        assert names == {
+            "collector-refresh",
+            "config-changed",
+            "sdlc-event-logged",
+            "rag-source-landed",
+        }
 
-    def test_all_phase_zero(self):
-        for rule in INFRASTRUCTURE_RULES:
-            assert rule.phase == 0
+    def test_phase_zero_rules(self):
+        phase0 = [r for r in ALL_RULES if r.phase == 0]
+        assert len(phase0) == 3
+
+    def test_phase_one_rules(self):
+        phase1 = [r for r in ALL_RULES if r.phase == 1]
+        assert len(phase1) == 1
+        assert phase1[0].name == "rag-source-landed"
 
 
 # ── TestCollectorRefreshRule ────────────────────────────────────────────────
@@ -209,3 +221,71 @@ class TestEdgeCases:
             reg,
         )
         assert len(plan.actions) == 1
+
+
+# ── TestRagSourceRule ───────────────────────────────────────────────────────
+
+
+class TestRagSourceRule:
+    def test_created_file_in_rag_sources_triggers(self):
+        reg = _registry()
+        plan = evaluate_rules(
+            _event("/home/user/documents/rag-sources/gmail/inbox/msg.md", event_type="created"),
+            reg,
+        )
+        rag_actions = [a for a in plan.actions if a.name.startswith("rag-ingest:")]
+        assert len(rag_actions) == 1
+        assert rag_actions[0].phase == 1
+
+    def test_modified_file_does_not_trigger(self):
+        """Only created events trigger — avoids re-ingest on file touch."""
+        reg = _registry()
+        plan = evaluate_rules(
+            _event("/home/user/documents/rag-sources/gmail/inbox/msg.md", event_type="modified"),
+            reg,
+        )
+        rag_actions = [a for a in plan.actions if a.name.startswith("rag-ingest:")]
+        assert len(rag_actions) == 0
+
+    def test_non_rag_source_path_no_match(self):
+        reg = _registry()
+        plan = evaluate_rules(
+            _event("/data/profiles/health-history.jsonl", event_type="created"),
+            reg,
+        )
+        rag_actions = [a for a in plan.actions if a.name.startswith("rag-ingest:")]
+        assert len(rag_actions) == 0
+
+    def test_action_name_includes_path(self):
+        """Action name includes file path to prevent cross-file dedup."""
+        reg = _registry()
+        path = "/home/user/documents/rag-sources/gdrive/doc.pdf"
+        plan = evaluate_rules(_event(path, event_type="created"), reg)
+        rag_actions = [a for a in plan.actions if a.name.startswith("rag-ingest:")]
+        assert len(rag_actions) == 1
+        assert path in rag_actions[0].name
+
+    def test_multiple_services_detected(self):
+        """Different rag-sources subdirs all trigger."""
+        reg = _registry()
+        for service_path in ["rag-sources/gdrive", "rag-sources/obsidian", "rag-sources/chrome"]:
+            for r in reg:
+                r._last_fired = 0.0
+            plan = evaluate_rules(
+                _event(f"/home/user/documents/{service_path}/file.md", event_type="created"),
+                reg,
+            )
+            rag_actions = [a for a in plan.actions if a.name.startswith("rag-ingest:")]
+            assert len(rag_actions) == 1, f"Failed for {service_path}"
+
+    @patch("agents.ingest.ingest_file", return_value=(True, ""))
+    async def test_handler_success(self, mock_ingest):
+        with patch("asyncio.to_thread", new=AsyncMock(return_value=(True, ""))) as mock_thread:
+            result = await _handle_rag_ingest(path="/rag-sources/gmail/msg.md")
+        assert "ingested:" in result
+
+    @patch("agents.ingest.ingest_file", return_value=(False, "qdrant down"))
+    async def test_handler_failure_raises(self, mock_ingest):
+        with patch("asyncio.to_thread", new=AsyncMock(return_value=(False, "qdrant down"))):
+            with pytest.raises(RuntimeError, match="Ingest failed"):
+                await _handle_rag_ingest(path="/rag-sources/gmail/msg.md")
