@@ -136,7 +136,14 @@ def embed(text: str, model: str | None = None, prefix: str = "search_query") -> 
         RuntimeError: If the Ollama embed call fails.
     """
     model_name = model or EMBEDDING_MODEL
+    # Capture calling agent name from parent span before entering new span
+    _parent = trace.get_current_span()
+    _caller_agent = ""
+    if _parent and hasattr(_parent, "attributes") and _parent.attributes:
+        _caller_agent = _parent.attributes.get("agent.name", "")
     with _rag_tracer.start_as_current_span("rag.embed") as span:
+        if _caller_agent:
+            span.set_attribute("agent.name", _caller_agent)
         span.set_attribute("rag.embed.model", model_name)
         span.set_attribute("rag.embed.prefix", prefix)
         span.set_attribute("rag.embed.text_length", len(text))
@@ -155,6 +162,21 @@ def embed(text: str, model: str | None = None, prefix: str = "search_query") -> 
             )
         span.set_attribute("rag.embed.dimensions", len(vec))
         return vec
+
+
+def embed_safe(
+    text: str, model: str | None = None, prefix: str = "search_query"
+) -> list[float] | None:
+    """Generate embedding via Ollama with graceful degradation (cb-degrade-001).
+
+    Returns None instead of raising when Ollama is unavailable. Callers
+    decide how to handle: skip, cache, or notify.
+    """
+    try:
+        return embed(text, model=model, prefix=prefix)
+    except RuntimeError:
+        _log.warning("embed_safe: Ollama unavailable, returning None")
+        return None
 
 
 def embed_batch(
@@ -178,7 +200,14 @@ def embed_batch(
     if not texts:
         return []
     model_name = model or EMBEDDING_MODEL
+    # Capture calling agent name from parent span before entering new span
+    _parent = trace.get_current_span()
+    _caller_agent = ""
+    if _parent and hasattr(_parent, "attributes") and _parent.attributes:
+        _caller_agent = _parent.attributes.get("agent.name", "")
     with _rag_tracer.start_as_current_span("rag.embed_batch") as span:
+        if _caller_agent:
+            span.set_attribute("agent.name", _caller_agent)
         span.set_attribute("rag.embed_batch.model", model_name)
         span.set_attribute("rag.embed_batch.prefix", prefix)
         span.set_attribute("rag.embed_batch.count", len(texts))
@@ -199,6 +228,22 @@ def embed_batch(
                 )
         span.set_attribute("rag.embed_batch.dimensions", len(embeddings[0]) if embeddings else 0)
         return embeddings
+
+
+def embed_batch_safe(
+    texts: list[str],
+    model: str | None = None,
+    prefix: str = "search_document",
+) -> list[list[float]] | None:
+    """Generate batch embeddings with graceful degradation (cb-degrade-001).
+
+    Returns None instead of raising when Ollama is unavailable.
+    """
+    try:
+        return embed_batch(texts, model=model, prefix=prefix)
+    except RuntimeError:
+        _log.warning("embed_batch_safe: Ollama unavailable, returning None")
+        return None
 
 
 _expected_timers: dict[str, str] | None = None

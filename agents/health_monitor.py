@@ -678,7 +678,7 @@ async def check_systemd_drift() -> list[CheckResult]:
                 group="systemd",
                 status=Status.DEGRADED,
                 message=f"Systemd drift: {', '.join(drifted[:3])}{'...' if len(drifted) > 3 else ''}",
-                remediation="cd ~/projects/ai-agents && make install-systemd",
+                remediation="bash ~/projects/hapax-council/systemd/scripts/install-units.sh",
                 duration_ms=_timed(t),
             )
         ]
@@ -2084,7 +2084,7 @@ async def check_axiom_registry() -> list[CheckResult]:
                     group="axioms",
                     status=Status.DEGRADED,
                     message="axiom-precedents collection not found in Qdrant",
-                    remediation="Run: uv run python -c 'from shared.axiom_precedents import PrecedentStore; PrecedentStore().ensure_collection()'",
+                    remediation="cd ~/projects/hapax-council && uv run python -c 'from shared.axiom_precedents import PrecedentStore; PrecedentStore().ensure_collection()'",
                     duration_ms=_timed(t2),
                 )
             )
@@ -2126,7 +2126,7 @@ async def check_axiom_registry() -> list[CheckResult]:
                         group="axioms",
                         status=Status.DEGRADED,
                         message=f"Missing implications for: {', '.join(missing)}",
-                        remediation=f"Run: uv run python -m shared.axiom_derivation --axiom {missing[0]}",
+                        remediation=f"cd ~/projects/hapax-council && uv run python -m shared.axiom_derivation --axiom {missing[0]}",
                         duration_ms=_timed(t3),
                     )
                 )
@@ -2199,7 +2199,7 @@ async def check_axiom_hooks_active() -> list[CheckResult]:
                 group="axioms",
                 status=Status.DEGRADED,
                 message="Audit directory missing — hooks may never have fired",
-                remediation="Run: cd ~/projects/hapax-system && ./install.sh",
+                remediation="Check axiom hooks in ~/.claude/settings.json (PreToolUse/PostToolUse)",
                 duration_ms=_timed(t),
             )
         )
@@ -2256,7 +2256,7 @@ async def check_axiom_hooks_active() -> list[CheckResult]:
                     group="axioms",
                     status=Status.DEGRADED,
                     message="No audit trail entries found",
-                    remediation="Run: cd ~/projects/hapax-system && ./install.sh && restart Claude Code",
+                    remediation="Check axiom hooks in ~/.claude/settings.json and restart Claude Code",
                     duration_ms=_timed(t),
                 )
             )
@@ -2278,7 +2278,7 @@ async def check_axiom_settings() -> list[CheckResult]:
                 group="axioms",
                 status=Status.DEGRADED,
                 message="Claude Code settings.json not found",
-                remediation="Run: cd ~/projects/hapax-system && ./install.sh",
+                remediation="Check axiom hooks in ~/.claude/settings.json (PreToolUse/PostToolUse)",
                 duration_ms=_timed(t),
             )
         )
@@ -2326,7 +2326,7 @@ async def check_axiom_settings() -> list[CheckResult]:
                     group="axioms",
                     status=Status.DEGRADED,
                     message=f"Missing hooks: {', '.join(missing)}",
-                    remediation="Run: cd ~/projects/hapax-system && ./install.sh",
+                    remediation="Check axiom hooks in ~/.claude/settings.json (PreToolUse/PostToolUse)",
                     duration_ms=_timed(t),
                 )
             )
@@ -2957,6 +2957,17 @@ async def run_checks(
     groups: list[str] | None = None,
 ) -> HealthReport:
     """Run all (or selected) check groups and build a HealthReport."""
+    with _tracer.start_as_current_span(
+        "health_monitor.check",
+        attributes={"agent.name": "health_monitor", "agent.repo": "hapax-council"},
+    ):
+        return await _run_checks_inner(groups)
+
+
+async def _run_checks_inner(
+    groups: list[str] | None = None,
+) -> HealthReport:
+    """Inner implementation of run_checks (wrapped by OTel span)."""
     start = time.monotonic()
     target_groups = groups or list(CHECK_REGISTRY.keys())
 
@@ -3269,10 +3280,10 @@ async def run_fixes_v2(report: HealthReport, mode: str = "apply") -> int:
 
     load_builtin_capabilities()
     try:
-        result = await asyncio.wait_for(run_fix_pipeline(report, mode=mode), timeout=120.0)
+        result = await asyncio.wait_for(run_fix_pipeline(report, mode=mode), timeout=240.0)
     except TimeoutError:
-        log.error("Fix pipeline timed out after 120s")
-        print("Fix pipeline timed out after 120s")
+        log.error("Fix pipeline timed out after 240s")
+        print("Fix pipeline timed out after 240s")
         return 0
 
     if result.total == 0:
@@ -3654,39 +3665,35 @@ async def main() -> None:
             print(f"Available: {', '.join(sorted(CHECK_REGISTRY.keys()))}", file=sys.stderr)
             sys.exit(1)
 
-    with _tracer.start_as_current_span(
-        "health_monitor.check",
-        attributes={"agent.name": "health_monitor", "agent.repo": "hapax-council"},
-    ):
-        report = await run_checks(groups)
+    report = await run_checks(groups)
 
-        # Write infra snapshot for cockpit-api container (full runs only)
-        if groups is None:
-            write_infra_snapshot(report)
+    # Write infra snapshot for cockpit-api container (full runs only)
+    if groups is None:
+        write_infra_snapshot(report)
 
-        if args.json:
-            print(report.model_dump_json(indent=2))
-        else:
-            color = sys.stdout.isatty()
-            print(format_human(report, verbose=args.verbose, color=color))
+    if args.json:
+        print(report.model_dump_json(indent=2))
+    else:
+        color = sys.stdout.isatty()
+        print(format_human(report, verbose=args.verbose, color=color))
 
-        if args.apply or args.dry_run:
-            mode = "dry_run" if args.dry_run else "apply"
-            await run_fixes_v2(report, mode=mode)
-        elif args.fix:
-            await run_fixes(report, yes=args.yes)
+    if args.apply or args.dry_run:
+        mode = "dry_run" if args.dry_run else "apply"
+        await run_fixes_v2(report, mode=mode)
+    elif args.fix:
+        await run_fixes(report, yes=args.yes)
 
-        # Rotate history if needed
-        try:
-            rotate_history()
-        except Exception as e:
-            log.warning("History rotation failed: %s", e)
+    # Rotate history if needed
+    try:
+        rotate_history()
+    except Exception as e:
+        log.warning("History rotation failed: %s", e)
 
-        # Exit code reflects overall status
-        if report.overall_status == Status.FAILED:
-            sys.exit(2)
-        elif report.overall_status == Status.DEGRADED:
-            sys.exit(1)
+    # Exit code reflects overall status
+    if report.overall_status == Status.FAILED:
+        sys.exit(2)
+    elif report.overall_status == Status.DEGRADED:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
