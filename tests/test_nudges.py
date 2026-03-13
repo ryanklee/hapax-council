@@ -602,36 +602,54 @@ def test_scout_none_produces_nothing(mock_scout):
 
 @patch("cockpit.data.nudges.collect_drift")
 def test_drift_items_high_priority(mock_drift):
+    """Review-required items produce per-file nudges."""
     mock_drift.return_value = DriftSummary(
         drift_count=3,
         docs_analyzed=10,
         summary="3 items drifted",
         latest_timestamp=_fresh_ts(),
+        items=[
+            DriftItem(
+                severity="medium", description="a", doc_file="a.md", remediability="review_required"
+            ),
+            DriftItem(
+                severity="medium", description="b", doc_file="a.md", remediability="review_required"
+            ),
+            DriftItem(
+                severity="medium", description="c", doc_file="b.md", remediability="review_required"
+            ),
+        ],
     )
     nudges: list[Nudge] = []
     _collect_drift_nudges(nudges)
-    assert any(n.priority_score == 85 for n in nudges)
-    assert any(n.priority_label == "high" for n in nudges)
-    assert any("3 drift items" in n.title for n in nudges)
+    assert len(nudges) == 2  # grouped by doc_file
+    assert any(n.priority_label in ("high", "medium") for n in nudges)
 
 
 @patch("cockpit.data.nudges.collect_drift")
 def test_drift_with_high_severity_items_critical(mock_drift):
+    """Operator-judgment items with high severity produce critical nudges."""
     mock_drift.return_value = DriftSummary(
         drift_count=2,
         docs_analyzed=5,
         summary="2 items",
         latest_timestamp=_fresh_ts(),
         items=[
-            DriftItem(severity="high", description="bad"),
-            DriftItem(severity="medium", description="ok"),
+            DriftItem(
+                severity="high",
+                description="bad",
+                doc_file="x.py",
+                remediability="operator_judgment",
+            ),
+            DriftItem(
+                severity="medium", description="ok", doc_file="y.md", remediability="auto_fix"
+            ),
         ],
     )
     nudges: list[Nudge] = []
     _collect_drift_nudges(nudges)
     assert any(n.priority_score == 90 for n in nudges)
     assert any(n.priority_label == "critical" for n in nudges)
-    assert any("1 high" in n.title for n in nudges)
 
 
 @patch("cockpit.data.nudges.collect_drift")
@@ -650,15 +668,22 @@ def test_drift_stale_score_25(mock_drift):
 
 @patch("cockpit.data.nudges.collect_drift")
 def test_drift_single_item_singular(mock_drift):
+    """Single auto-fix item produces singular title."""
     mock_drift.return_value = DriftSummary(
         drift_count=1,
         docs_analyzed=5,
         summary="1 item drifted",
         latest_timestamp=_fresh_ts(),
+        items=[
+            DriftItem(
+                severity="low", description="stale", doc_file="a.md", remediability="auto_fix"
+            ),
+        ],
     )
     nudges: list[Nudge] = []
     _collect_drift_nudges(nudges)
-    assert "1 drift item" in nudges[0].title
+    assert len(nudges) == 1
+    assert "1 auto-fixable drift item" in nudges[0].title
     assert "items" not in nudges[0].title
 
 
@@ -763,12 +788,22 @@ def test_collect_nudges_max_nudges_truncates(
         ],
     )
     mock_drift.return_value = DriftSummary(
-        drift_count=2, docs_analyzed=5, latest_timestamp=_fresh_ts()
+        drift_count=2,
+        docs_analyzed=5,
+        latest_timestamp=_fresh_ts(),
+        items=[
+            DriftItem(
+                severity="medium", description="a", doc_file="a.md", remediability="auto_fix"
+            ),
+            DriftItem(
+                severity="medium", description="b", doc_file="b.md", remediability="auto_fix"
+            ),
+        ],
     )
 
     nudges = collect_nudges(max_nudges=2)
     assert len(nudges) == 3  # 2 visible + 1 meta overflow nudge
-    # First should be health (100), second drift (85), third is meta
+    # First should be health (100), second drift auto-fix (85), third is meta
     assert nudges[0].priority_score == 100
     assert nudges[1].priority_score == 85
     assert nudges[2].category == "meta"

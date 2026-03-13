@@ -51,6 +51,61 @@ from opentelemetry import trace
 _tracer = trace.get_tracer(__name__)
 
 from agents.introspect import InfrastructureManifest, generate_manifest
+from shared.modification_classifier import ModificationClass, classify_path
+
+# ── Remediability classification ─────────────────────────────────────────────
+
+# Categories where the drift targets a doc file and can use classify_path()
+_DOC_TARGETED_CATEGORIES = frozenset(
+    {
+        "stale_doc",
+        "missing_project_memory",
+        "extra_service",
+        "missing_service",
+        "wrong_port",
+        "stale_reference",
+        "missing-required-doc",
+        "missing-section",
+        "coverage-gap",
+        "repo-awareness-gap",
+        "spec-reference-gap",
+        "boundary-mismatch",
+    }
+)
+
+# Categories that always require operator judgment
+_OPERATOR_JUDGMENT_CATEGORIES = frozenset(
+    {
+        "axiom-violation",
+        "axiom-sufficiency-gap",
+        "goal-gap",
+    }
+)
+
+
+def _remediability_from_class(cls: ModificationClass) -> str:
+    """Map ModificationClass to remediability string."""
+    if cls == ModificationClass.AUTO_FIX:
+        return "auto_fix"
+    if cls == ModificationClass.NEVER_MODIFY:
+        return "operator_judgment"
+    return "review_required"
+
+
+def _classify_item(item: DriftItem) -> DriftItem:
+    """Set remediability, confidence, and source on a DriftItem in-place."""
+    if item.category in _OPERATOR_JUDGMENT_CATEGORIES:
+        item.remediability = "operator_judgment"
+    elif item.category == "missing_doc":
+        # Screen context missing doc — deterministic, auto-fixable
+        item.remediability = "auto_fix"
+    elif item.category in _DOC_TARGETED_CATEGORIES:
+        item.remediability = _remediability_from_class(classify_path(item.doc_file))
+    else:
+        # config_mismatch and other categories default to review_required
+        item.remediability = "review_required"
+    return item
+
 
 # ── Schemas ──────────────────────────────────────────────────────────────────
 
@@ -66,6 +121,12 @@ class DriftItem(BaseModel):
     doc_claim: str = Field(description="What the documentation says")
     reality: str = Field(description="What the actual system state is")
     suggestion: str = Field(description="Suggested fix — either a doc edit or a system change")
+    remediability: str = Field(
+        default="review_required",
+        description="auto_fix | review_required | operator_judgment",
+    )
+    confidence: float = Field(default=1.0, description="0.0-1.0 detection confidence")
+    source: str = Field(default="llm", description="deterministic | llm")
 
 
 class DriftReport(BaseModel):
@@ -222,6 +283,9 @@ def scan_axiom_violations() -> list[DriftItem]:
                         doc_claim=f"T0 pattern match at line {match.line}",
                         reality=f"Code contains: {match.content}",
                         suggestion=f"Remove or refactor: {rel_path}:{match.line}",
+                        remediability="operator_judgment",
+                        confidence=1.0,
+                        source="deterministic",
                     )
                 )
 
@@ -269,6 +333,9 @@ def scan_sufficiency_gaps() -> list[DriftItem]:
                     doc_claim=probe.question if probe else r.probe_id,
                     reality=r.evidence,
                     suggestion=f"Address sufficiency gap: {r.evidence}",
+                    remediability="operator_judgment",
+                    confidence=1.0,
+                    source="deterministic",
                 )
             )
 
@@ -311,30 +378,34 @@ def check_project_memory() -> list[DriftItem]:
             short_path = str(repo_dir).replace(home, "~")
 
             if not claude_md.is_file():
-                items.append(
-                    DriftItem(
-                        severity="medium",
-                        category="missing_project_memory",
-                        doc_file=f"{short_path}/CLAUDE.md",
-                        doc_claim="File does not exist",
-                        reality="All hapax repos must have a CLAUDE.md with ## Project Memory section",
-                        suggestion=f"Create {short_path}/CLAUDE.md with a ## Project Memory section",
-                    )
+                item = DriftItem(
+                    severity="medium",
+                    category="missing_project_memory",
+                    doc_file=f"{short_path}/CLAUDE.md",
+                    doc_claim="File does not exist",
+                    reality="All hapax repos must have a CLAUDE.md with ## Project Memory section",
+                    suggestion=f"Create {short_path}/CLAUDE.md with a ## Project Memory section",
+                    confidence=1.0,
+                    source="deterministic",
                 )
+                _classify_item(item)
+                items.append(item)
                 continue
 
             content = claude_md.read_text(errors="replace")
             if "## Project Memory" not in content:
-                items.append(
-                    DriftItem(
-                        severity="medium",
-                        category="missing_project_memory",
-                        doc_file=f"{short_path}/CLAUDE.md",
-                        doc_claim="No ## Project Memory section found",
-                        reality="All hapax repos must have a ## Project Memory section for cross-session learning",
-                        suggestion=f"Add a ## Project Memory section to {short_path}/CLAUDE.md with stable patterns and conventions",
-                    )
+                item = DriftItem(
+                    severity="medium",
+                    category="missing_project_memory",
+                    doc_file=f"{short_path}/CLAUDE.md",
+                    doc_claim="No ## Project Memory section found",
+                    reality="All hapax repos must have a ## Project Memory section for cross-session learning",
+                    suggestion=f"Add a ## Project Memory section to {short_path}/CLAUDE.md with stable patterns and conventions",
+                    confidence=1.0,
+                    source="deterministic",
                 )
+                _classify_item(item)
+                items.append(item)
 
         return items
 
@@ -441,16 +512,18 @@ def check_doc_freshness() -> list[DriftItem]:
             if age > stale_threshold and latest_system_change > doc_last_modified:
                 short_path = str(path).replace(home, "~")
                 days_old = age.days
-                items.append(
-                    DriftItem(
-                        severity="low",
-                        category="stale_doc",
-                        doc_file=short_path,
-                        doc_claim=f"Last updated {days_old} days ago ({doc_last_modified.strftime('%Y-%m-%d')})",
-                        reality=f"System state changed more recently ({latest_system_change.strftime('%Y-%m-%d')})",
-                        suggestion=f"Review {short_path} for accuracy — not updated in {days_old} days",
-                    )
+                item = DriftItem(
+                    severity="low",
+                    category="stale_doc",
+                    doc_file=short_path,
+                    doc_claim=f"Last updated {days_old} days ago ({doc_last_modified.strftime('%Y-%m-%d')})",
+                    reality=f"System state changed more recently ({latest_system_change.strftime('%Y-%m-%d')})",
+                    suggestion=f"Review {short_path} for accuracy — not updated in {days_old} days",
+                    confidence=1.0,
+                    source="deterministic",
                 )
+                _classify_item(item)
+                items.append(item)
 
         return items
 
@@ -478,6 +551,9 @@ def check_screen_context_drift() -> list[DriftItem]:
                 doc_claim="Screen analyzer context file should exist",
                 reality="File not found",
                 suggestion="Run: uv run python scripts/generate_screen_context.py",
+                remediability="auto_fix",
+                confidence=1.0,
+                source="deterministic",
             )
         )
         return items
@@ -486,16 +562,18 @@ def check_screen_context_drift() -> list[DriftItem]:
     file_mtime = datetime.datetime.fromtimestamp(context_path.stat().st_mtime, tz=datetime.UTC)
     age_days = (datetime.datetime.now(tz=datetime.UTC) - file_mtime).days
     if age_days > 7:
-        items.append(
-            DriftItem(
-                severity="low",
-                category="stale_doc",
-                doc_file=str(context_path).replace(str(Path.home()), "~"),
-                doc_claim=f"Screen context last generated {age_days} days ago",
-                reality="Context may not reflect current system state",
-                suggestion="Regenerate: uv run python scripts/generate_screen_context.py",
-            )
+        item = DriftItem(
+            severity="low",
+            category="stale_doc",
+            doc_file=str(context_path).replace(str(Path.home()), "~"),
+            doc_claim=f"Screen context last generated {age_days} days ago",
+            reality="Context may not reflect current system state",
+            suggestion="Regenerate: uv run python scripts/generate_screen_context.py",
+            confidence=1.0,
+            source="deterministic",
         )
+        _classify_item(item)
+        items.append(item)
 
     # Quick drift check: compare Docker service count in file vs live
     content = context_path.read_text()
@@ -522,6 +600,9 @@ def check_screen_context_drift() -> list[DriftItem]:
                     doc_claim="Screen context should list all running services",
                     reality=f"Services not in context: {', '.join(sorted(missing_from_doc)[:5])}",
                     suggestion="Regenerate: uv run python scripts/generate_screen_context.py",
+                    remediability="review_required",
+                    confidence=1.0,
+                    source="deterministic",
                 )
             )
     except Exception as exc:
@@ -538,10 +619,31 @@ def check_screen_context_drift() -> list[DriftItem]:
                     doc_claim=f"{label} should be available at {dev_path}",
                     reality=f"{label} not detected at expected device path",
                     suggestion=f"Check USB connection for {label}, or update EXPECTED_DEVICES in drift_detector.py",
+                    remediability="operator_judgment",
+                    confidence=1.0,
+                    source="deterministic",
                 )
             )
 
     return items
+
+
+def _deduplicate(items: list[DriftItem]) -> list[DriftItem]:
+    """Deduplicate drift items by (doc_file, category).
+
+    When deterministic and LLM items share a key, keep the deterministic
+    item (higher confidence, more precise). For items with the same source,
+    keep the first occurrence.
+    """
+    seen: dict[tuple[str, str], DriftItem] = {}
+    for item in items:
+        key = (item.doc_file, item.category)
+        existing = seen.get(key)
+        if existing is None:
+            seen[key] = item
+        elif item.source == "deterministic" and existing.source == "llm":
+            seen[key] = item  # deterministic wins
+    return list(seen.values())
 
 
 async def detect_drift(manifest: InfrastructureManifest | None = None) -> DriftReport:
@@ -661,6 +763,11 @@ string differences and wildcard model expansions."""
                 + memory_drift
                 + registry_drift
             )
+            for item in deterministic:
+                if item.source != "deterministic":
+                    item.source = "deterministic"
+                    item.confidence = 1.0
+                    _classify_item(item)
             return DriftReport(
                 drift_items=deterministic,
                 docs_analyzed=list(docs.keys()),
@@ -674,6 +781,12 @@ string differences and wildcard model expansions."""
         report = result.output
         report.docs_analyzed = list(docs.keys())
 
+        # Classify LLM-sourced items (confidence=0.7, source=llm)
+        for item in report.drift_items:
+            item.source = "llm"
+            item.confidence = 0.7
+            _classify_item(item)
+
         # Merge deterministic findings into the report
         deterministic_items = (
             axiom_violations
@@ -683,6 +796,12 @@ string differences and wildcard model expansions."""
             + memory_drift
             + registry_drift
         )
+        # Ensure all deterministic items are tagged and classified
+        for item in deterministic_items:
+            if item.source != "deterministic":
+                item.source = "deterministic"
+                item.confidence = 1.0
+                _classify_item(item)
         if deterministic_items:
             report.drift_items = deterministic_items + report.drift_items
             parts = []
@@ -699,6 +818,9 @@ string differences and wildcard model expansions."""
             if registry_drift:
                 parts.append(f"{len(registry_drift)} registry enforcement finding(s)")
             report.summary = f"{', '.join(parts)} found in codebase. " + report.summary
+
+        # Deduplicate: deterministic items win over LLM items on (doc_file, category)
+        report.drift_items = _deduplicate(report.drift_items)
 
         return report
 
@@ -1149,6 +1271,326 @@ def _notify_fixes(apply_result: ApplyResult, committed: bool) -> None:
         log.debug("Notification send failed (non-critical)")
 
 
+# ── Reconciliation mode ──────────────────────────────────────────────────────
+
+
+class RemediationRecord(BaseModel):
+    """Audit trail entry for a single remediation action."""
+
+    timestamp: str
+    item_category: str
+    item_doc_file: str
+    action: str  # auto_fixed | escalated | deferred
+    fix_applied: bool
+    fix_persisted: bool | None = None  # verified on next scan
+    error: str = ""
+
+
+_DEFAULT_CONFIDENCE_THRESHOLD = 0.9
+_REMEDIATION_TRAIL = "drift-remediation.jsonl"
+_DRIFT_METRICS = "drift-metrics.json"
+
+
+def _load_confidence_threshold() -> float:
+    """Load adaptive confidence threshold from metrics, or return default."""
+    from shared.config import PROFILES_DIR
+
+    metrics_path = PROFILES_DIR / _DRIFT_METRICS
+    if not metrics_path.exists():
+        return _DEFAULT_CONFIDENCE_THRESHOLD
+    try:
+        data = json.loads(metrics_path.read_text())
+        return float(data.get("confidence_threshold", _DEFAULT_CONFIDENCE_THRESHOLD))
+    except (json.JSONDecodeError, OSError, ValueError):
+        return _DEFAULT_CONFIDENCE_THRESHOLD
+
+
+def _verify_previous_fixes(report: DriftReport) -> list[RemediationRecord]:
+    """Phase 4: Check if previous auto-fixes persisted or regressed.
+
+    Reads remediation trail entries where fix_applied=True and
+    fix_persisted is None. Cross-references against current drift
+    items to determine if fixes held.
+    """
+    from shared.config import PROFILES_DIR
+
+    trail_path = PROFILES_DIR / _REMEDIATION_TRAIL
+    if not trail_path.exists():
+        return []
+
+    # Current drift keys
+    current_drift_keys = {(item.doc_file, item.category) for item in report.drift_items}
+
+    # Read and update unverified records
+    updated: list[RemediationRecord] = []
+    remaining_lines: list[str] = []
+    modified = False
+
+    for line in trail_path.read_text().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            record = RemediationRecord.model_validate_json(line)
+        except Exception:
+            remaining_lines.append(line)
+            continue
+
+        if record.fix_applied and record.fix_persisted is None:
+            key = (record.item_doc_file, record.item_category)
+            record.fix_persisted = key not in current_drift_keys
+            modified = True
+            updated.append(record)
+
+        remaining_lines.append(record.model_dump_json())
+
+    if modified:
+        trail_path.write_text("\n".join(remaining_lines) + "\n")
+
+    return updated
+
+
+def _update_metrics(verified_records: list[RemediationRecord]) -> float:
+    """Compute rolling fix success rate and update metrics. Returns threshold."""
+    from datetime import datetime, timedelta
+
+    from shared.config import PROFILES_DIR
+
+    trail_path = PROFILES_DIR / _REMEDIATION_TRAIL
+    metrics_path = PROFILES_DIR / _DRIFT_METRICS
+
+    # Compute rolling stats from last 30 days
+    cutoff = (datetime.now(UTC) - timedelta(days=30)).isoformat()
+    total_applied = 0
+    persisted_true = 0
+
+    if trail_path.exists():
+        for line in trail_path.read_text().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                record = RemediationRecord.model_validate_json(line)
+                if record.timestamp < cutoff:
+                    continue
+                if record.fix_applied and record.fix_persisted is not None:
+                    total_applied += 1
+                    if record.fix_persisted:
+                        persisted_true += 1
+            except Exception:
+                continue
+
+    fix_success_rate = persisted_true / total_applied if total_applied > 0 else 1.0
+
+    # Adaptive threshold
+    if fix_success_rate < 0.8:
+        threshold = 0.95
+    elif fix_success_rate > 0.95:
+        threshold = 0.85
+    else:
+        threshold = _DEFAULT_CONFIDENCE_THRESHOLD
+
+    # Save metrics
+    metrics = {
+        "fix_success_rate": round(fix_success_rate, 3),
+        "total_applied_30d": total_applied,
+        "persisted_true_30d": persisted_true,
+        "confidence_threshold": threshold,
+        "updated": datetime.now(UTC).isoformat(),
+    }
+    metrics_path.write_text(json.dumps(metrics, indent=2))
+
+    return threshold
+
+
+def _write_remediation_records(
+    records: list[RemediationRecord],
+) -> None:
+    """Append remediation records to the audit trail."""
+    from shared.config import PROFILES_DIR
+
+    trail_path = PROFILES_DIR / _REMEDIATION_TRAIL
+    lines = [r.model_dump_json() for r in records]
+    with open(trail_path, "a") as f:
+        f.write("\n".join(lines) + "\n")
+
+
+async def reconcile(
+    *,
+    from_report: DriftReport | None = None,
+) -> DriftReport:
+    """Run tiered autonomous remediation.
+
+    1. Detect drift (or use provided report for --reconcile-reactive)
+    2. Verify previous fixes (Phase 4 feedback loop)
+    3. Filter to auto_fix items above confidence threshold
+    4. Generate and apply fixes
+    5. Git commit, notify, write audit trail
+    6. Return post-remediation report
+    """
+    from datetime import datetime
+
+    from shared.config import PROFILES_DIR
+
+    # Step 1: Detection
+    if from_report is not None:
+        report = from_report
+        manifest = None
+    else:
+        manifest = await generate_manifest()
+        report = await detect_drift(manifest)
+
+    # Step 2: Verify previous fixes and update metrics
+    verified = _verify_previous_fixes(report)
+    threshold = _update_metrics(verified)
+
+    log.info(
+        "Reconcile: %d items, threshold=%.2f, %d previous fixes verified",
+        len(report.drift_items),
+        threshold,
+        len(verified),
+    )
+
+    # Step 3: Filter to auto-fixable items above threshold
+    auto_fixable = [
+        item
+        for item in report.drift_items
+        if item.remediability == "auto_fix" and item.confidence >= threshold
+    ]
+    remaining = [item for item in report.drift_items if item not in auto_fixable]
+
+    records: list[RemediationRecord] = []
+    now_ts = datetime.now(UTC).isoformat()
+
+    if not auto_fixable:
+        log.info("No auto-fixable items above threshold — nothing to reconcile")
+        # Record escalations for non-auto items
+        for item in report.drift_items:
+            records.append(
+                RemediationRecord(
+                    timestamp=now_ts,
+                    item_category=item.category,
+                    item_doc_file=item.doc_file,
+                    action="escalated" if item.remediability == "operator_judgment" else "deferred",
+                    fix_applied=False,
+                )
+            )
+        if records:
+            _write_remediation_records(records)
+        # Save report
+        report_path = PROFILES_DIR / "drift-report.json"
+        report_path.write_text(report.model_dump_json(indent=2))
+        return report
+
+    # Step 4: Generate fixes only for auto-fixable items
+    auto_report = DriftReport(
+        drift_items=auto_fixable,
+        docs_analyzed=report.docs_analyzed,
+        summary=f"{len(auto_fixable)} auto-fixable items",
+    )
+    docs = load_docs()
+    fix_report = await generate_fixes(auto_report, docs)
+
+    # Step 5: Apply fixes
+    apply_result = apply_fixes(fix_report)
+
+    # Auto-regenerate screen context if needed
+    screen_drift = [i for i in auto_fixable if "screen_context.md" in i.doc_file]
+    if screen_drift:
+        try:
+            import subprocess
+
+            subprocess.run(
+                ["uv", "run", "python", "scripts/generate_screen_context.py"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                cwd=str(AI_AGENTS_DIR),
+            )
+        except Exception as exc:
+            log.warning("Failed to auto-regenerate screen context: %s", exc)
+
+    # Git commit
+    if apply_result.changed_files:
+        _git_commit_fixes(apply_result.changed_files, apply_result.applied)
+
+    # Step 6: Write audit trail
+    for item in auto_fixable:
+        was_applied = any(item.doc_file in f for f in apply_result.changed_files)
+        records.append(
+            RemediationRecord(
+                timestamp=now_ts,
+                item_category=item.category,
+                item_doc_file=item.doc_file,
+                action="auto_fixed" if was_applied else "deferred",
+                fix_applied=was_applied,
+                error="" if was_applied else "fix not applied (no matching change)",
+            )
+        )
+    for item in remaining:
+        records.append(
+            RemediationRecord(
+                timestamp=now_ts,
+                item_category=item.category,
+                item_doc_file=item.doc_file,
+                action="escalated" if item.remediability == "operator_judgment" else "deferred",
+                fix_applied=False,
+            )
+        )
+    _write_remediation_records(records)
+
+    # Notify
+    try:
+        from shared.notify import send_notification
+
+        if apply_result.applied > 0:
+            send_notification(
+                title=f"Drift reconcile: {apply_result.applied} auto-fixed",
+                body=f"{len(remaining)} items remaining (escalated/deferred)",
+                priority="default",
+                tags=["gear"],
+            )
+        for item in report.drift_items:
+            if item.remediability == "operator_judgment":
+                send_notification(
+                    title=f"Drift: operator judgment needed — {item.category}",
+                    body=f"{item.doc_file}: {item.suggestion[:120]}",
+                    priority="high",
+                    tags=["warning"],
+                )
+    except Exception:
+        log.debug("Notification send failed (non-critical)")
+
+    # Re-scan after fixes to get accurate post-remediation report
+    if apply_result.applied > 0:
+        log.info("Re-scanning after %d fixes...", apply_result.applied)
+        report = await detect_drift(manifest)
+
+    # Save final report
+    report_path = PROFILES_DIR / "drift-report.json"
+    report_path.write_text(report.model_dump_json(indent=2))
+
+    # Append to history
+    history_entry = {
+        "timestamp": now_ts,
+        "drift_count": len(report.drift_items),
+        "docs_analyzed": len(report.docs_analyzed),
+        "summary": report.summary[:120],
+        "auto_fixed": apply_result.applied,
+        "escalated": sum(1 for r in records if r.action == "escalated"),
+    }
+    history_path = PROFILES_DIR / "drift-history.jsonl"
+    with open(history_path, "a") as f:
+        f.write(json.dumps(history_entry) + "\n")
+
+    log.info(
+        "Reconcile complete: %d auto-fixed, %d remaining",
+        apply_result.applied,
+        len(report.drift_items),
+    )
+    return report
+
+
 # ── CLI ──────────────────────────────────────────────────────────────────────
 
 
@@ -1173,11 +1615,50 @@ async def _main_impl() -> None:
     parser.add_argument(
         "--apply", action="store_true", help="Apply fixes directly to files (requires --fix)"
     )
+    parser.add_argument(
+        "--reconcile",
+        action="store_true",
+        help="Tiered autonomous remediation: auto-fix high-confidence doc drift, escalate the rest",
+    )
+    parser.add_argument(
+        "--reconcile-reactive",
+        action="store_true",
+        help="Reactive reconciliation: read existing drift-report.json instead of fresh detection",
+    )
     args = parser.parse_args()
 
     if args.apply and not args.fix:
         print("--apply requires --fix", file=sys.stderr)
         sys.exit(1)
+
+    # ── Reconcile modes ──
+    if args.reconcile or args.reconcile_reactive:
+        from_report = None
+        if args.reconcile_reactive:
+            from shared.config import PROFILES_DIR
+
+            report_path = PROFILES_DIR / "drift-report.json"
+            if report_path.exists():
+                try:
+                    data = json.loads(report_path.read_text())
+                    from_report = DriftReport.model_validate(data)
+                    print(
+                        f"Loaded existing report: {len(from_report.drift_items)} items",
+                        file=sys.stderr,
+                    )
+                except Exception as exc:
+                    print(f"Failed to load existing report: {exc}", file=sys.stderr)
+                    sys.exit(1)
+            else:
+                print("No existing drift-report.json — running fresh detection", file=sys.stderr)
+
+        print("Running reconciliation...", file=sys.stderr)
+        report = await reconcile(from_report=from_report)
+        if args.json:
+            print(report.model_dump_json(indent=2))
+        else:
+            print(format_human(report))
+        return
 
     print("Collecting infrastructure manifest...", file=sys.stderr)
     manifest = await generate_manifest()

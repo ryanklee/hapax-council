@@ -16,6 +16,9 @@ class DriftItem:
     doc_file: str = ""
     description: str = ""
     suggestion: str = ""
+    remediability: str = "review_required"
+    confidence: float = 1.0
+    source: str = "llm"
 
 
 @dataclass
@@ -26,6 +29,9 @@ class DriftSummary:
     latest_timestamp: str = ""
     items: list[DriftItem] = field(default_factory=list)
     report_age_h: float = 0.0
+    fix_success_rate: float | None = None
+    auto_fixed_count: int = 0
+    fixes_verified: int = 0
 
 
 def collect_drift() -> DriftSummary | None:
@@ -69,8 +75,25 @@ def collect_drift() -> DriftSummary | None:
                 doc_file=raw.get("doc_file", ""),
                 description=description,
                 suggestion=raw.get("suggestion", ""),
+                remediability=raw.get("remediability", "review_required"),
+                confidence=float(raw.get("confidence", 1.0)),
+                source=raw.get("source", "llm"),
             )
         )
+
+    # Load remediation metrics if available
+    fix_success_rate = None
+    auto_fixed_count = 0
+    fixes_verified = 0
+    metrics_path = PROFILES_DIR / "drift-metrics.json"
+    if metrics_path.exists():
+        try:
+            mdata = json.loads(metrics_path.read_text())
+            fix_success_rate = mdata.get("fix_success_rate")
+            auto_fixed_count = mdata.get("total_applied_30d", 0)
+            fixes_verified = mdata.get("persisted_true_30d", 0)
+        except (json.JSONDecodeError, OSError):
+            pass
 
     # Compute report age
     report_age_h = 0.0
@@ -90,4 +113,7 @@ def collect_drift() -> DriftSummary | None:
         latest_timestamp=timestamp,
         items=items,
         report_age_h=round(report_age_h, 1),
+        fix_success_rate=fix_success_rate,
+        auto_fixed_count=auto_fixed_count,
+        fixes_verified=fixes_verified,
     )

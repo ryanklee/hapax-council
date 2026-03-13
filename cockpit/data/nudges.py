@@ -554,29 +554,83 @@ def _collect_emergence_nudges(nudges: list[Nudge]) -> None:
 
 
 def _collect_drift_nudges(nudges: list[Nudge]) -> None:
-    """Check drift report for items and staleness."""
+    """Check drift report for items and staleness.
+
+    Groups nudges by remediability:
+    - auto_fix items → single nudge with --reconcile hint
+    - operator_judgment items → one nudge per item with full context
+    - review_required items → one nudge per doc_file
+    """
     try:
         drift = collect_drift()
         if drift is None:
             return
 
         if drift.drift_count > 0:
-            high_count = sum(1 for d in drift.items if d.severity == "high")
-            score = 90 if high_count > 0 else 85
-            label = "critical" if high_count > 0 else "high"
-            nudges.append(
-                Nudge(
-                    category="drift",
-                    priority_score=score,
-                    priority_label=label,
-                    title=f"{drift.drift_count} drift item{'s' if drift.drift_count != 1 else ''}"
-                    + (f" ({high_count} high)" if high_count else ""),
-                    detail=drift.summary or "Documentation out of sync with reality",
-                    suggested_action="Scan docs vs reality, generate and apply corrections",
-                    command_hint="uv run python -m agents.drift_detector --fix --apply",
-                    source_id="drift:items",
+            # Group items by remediability
+            auto_fix = [d for d in drift.items if d.remediability == "auto_fix"]
+            operator_judgment = [d for d in drift.items if d.remediability == "operator_judgment"]
+            review_required = [d for d in drift.items if d.remediability == "review_required"]
+
+            # Auto-fixable items → single nudge with --reconcile
+            if auto_fix:
+                high = sum(1 for d in auto_fix if d.severity == "high")
+                nudges.append(
+                    Nudge(
+                        category="drift",
+                        priority_score=85,
+                        priority_label="high",
+                        title=f"{len(auto_fix)} auto-fixable drift item{'s' if len(auto_fix) != 1 else ''}"
+                        + (f" ({high} high)" if high else ""),
+                        detail="Documentation drift that can be auto-remediated",
+                        suggested_action="Run reconciliation to auto-fix documentation drift",
+                        command_hint="uv run python -m agents.drift_detector --reconcile",
+                        source_id="drift:auto-fix",
+                    )
                 )
-            )
+
+            # Operator judgment items → one nudge per item
+            for item in operator_judgment:
+                score = 90 if item.severity == "high" else 70 if item.severity == "medium" else 40
+                label = (
+                    "critical"
+                    if item.severity == "high"
+                    else "high"
+                    if item.severity == "medium"
+                    else "medium"
+                )
+                nudges.append(
+                    Nudge(
+                        category="drift",
+                        priority_score=score,
+                        priority_label=label,
+                        title=f"[{item.category}] {item.doc_file}",
+                        detail=item.description or item.suggestion,
+                        suggested_action=item.suggestion,
+                        source_id=f"drift:judgment:{item.doc_file}:{item.category}",
+                    )
+                )
+
+            # Review-required items → one nudge per doc_file
+            review_by_file: dict[str, list] = {}
+            for item in review_required:
+                review_by_file.setdefault(item.doc_file, []).append(item)
+            for doc_file, items in review_by_file.items():
+                high = sum(1 for d in items if d.severity == "high")
+                score = 80 if high else 60
+                label = "high" if high else "medium"
+                nudges.append(
+                    Nudge(
+                        category="drift",
+                        priority_score=score,
+                        priority_label=label,
+                        title=f"{len(items)} drift item{'s' if len(items) != 1 else ''} in {doc_file}",
+                        detail=items[0].description or items[0].suggestion,
+                        suggested_action=f"Review drift in {doc_file}",
+                        command_hint="uv run python -m agents.drift_detector --fix",
+                        source_id=f"drift:review:{doc_file}",
+                    )
+                )
 
         age = _age_hours(drift.latest_timestamp)
         if age is not None and age > STALE_DRIFT_H:
@@ -586,9 +640,9 @@ def _collect_drift_nudges(nudges: list[Nudge]) -> None:
                     priority_score=25,
                     priority_label="low",
                     title=f"Drift report {age:.0f}h stale",
-                    detail="Weekly drift detection overdue",
+                    detail="Drift detection overdue",
                     suggested_action="Re-scan documentation against live infrastructure",
-                    command_hint="uv run python -m agents.drift_detector",
+                    command_hint="uv run python -m agents.drift_detector --reconcile",
                     source_id="drift:stale",
                 )
             )

@@ -16,19 +16,22 @@ inputs:
 - system state queries
 outputs:
 - profiles/drift-report.json
+- profiles/drift-remediation.jsonl
+- profiles/drift-metrics.json
 - drift correction suggestions
 capabilities:
 - drift_detection
 - doc_system_comparison
 - correction_suggestion
+- tiered_remediation
 schedule:
   type: timer
   systemd_unit: drift-detector.timer
-  interval: 6h
+  interval: 12h
 model: fast
-autonomy: supervised
-decision_scope: Detect and report drift. Suggests corrections but does not auto-apply
-  them.
+autonomy: tiered
+decision_scope: Auto-fixes high-confidence documentation drift (auto_fix + confidence >= threshold).
+  Escalates axiom violations and goal gaps to operator. Defers review-required items.
 escalation_target: operator
 axiom_bindings:
 - axiom_id: executive_function
@@ -44,18 +47,12 @@ health_group: drift
 service_tier: 2
 metrics_source: profiles/drift-report.json
 narrative: 'The Drift Detector compares documentation against actual system state,
-  finding
-
-  places where the two have diverged. It runs every 6 hours, consuming the
-
+  finding places where the two have diverged. It runs twice daily, consuming the
   infrastructure manifest from introspect and checking it against docs, configs,
-
-  and README files. It produces a drift report with specific correction suggestions
-
-  but never auto-applies fixes — the operator reviews and decides. This agent is
-
-  essential for a system that evolves faster than its documentation.
-
+  and README files. In reconcile mode, it auto-fixes high-confidence documentation
+  drift (stale docs, missing sections), escalates axiom violations and goal gaps
+  to the operator, and defers review-required items. An adaptive feedback loop
+  tracks whether fixes persist, adjusting the confidence threshold accordingly.
   '
 short_description: Docs vs reality comparison
 cli:
@@ -68,9 +65,13 @@ cli:
     description: Generate corrected documentation fragments
   - flag: --apply
     description: Apply fixes directly to files (requires --fix)
+  - flag: --reconcile
+    description: Tiered autonomous remediation (auto-fix + escalate + audit trail)
+  - flag: --reconcile-reactive
+    description: Reactive reconciliation from existing drift-report.json
 timer_display:
-  schedule_label: Weekly Sun 03:00
-  purpose: Documentation drift detection
+  schedule_label: Twice daily 03:00 & 15:00
+  purpose: Documentation drift reconciliation
 manual_section:
   title: Maintaining Documentation
   order: 4
@@ -80,7 +81,8 @@ manual_section:
   - ''
   - '```'
   - uv run python -m agents.drift_detector
+  - 'uv run python -m agents.drift_detector --reconcile  # auto-fix + escalate'
   - 'uv run python -m agents.drift_detector --fix  # generate corrected fragments'
   - '```'
   - ''
-  - The drift detector timer runs weekly (Sunday 03:00).
+  - The drift detector timer runs twice daily (03:00 and 15:00).

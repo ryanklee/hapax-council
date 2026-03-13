@@ -1,8 +1,9 @@
 [Unit]
-Description=Weekly documentation drift detection (Sunday 03:00)
+Description=Twice-daily documentation drift reconciliation (03:00, 15:00)
 
 [Timer]
-OnCalendar=Sun *-*-* 03:00:00
+OnCalendar=*-*-* 03:00:00
+OnCalendar=*-*-* 15:00:00
 RandomizedDelaySec=10min
 Persistent=true
 

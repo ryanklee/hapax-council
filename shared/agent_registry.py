@@ -41,6 +41,7 @@ class AgentCategory(StrEnum):
 
 class AutonomyTier(StrEnum):
     FULL = "full"  # runs unattended, no operator approval needed
+    TIERED = "tiered"  # auto-acts within confidence bounds, escalates the rest
     SUPERVISED = "supervised"  # runs automatically, operator reviews output
     ADVISORY = "advisory"  # produces recommendations, operator acts
 
