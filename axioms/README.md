@@ -1,135 +1,139 @@
-# axioms/ — Constitutional Governance
+# axioms/ — Constitutional Governance for Agentic Systems
 
-This directory contains the formal governance infrastructure that constrains every agent, every code path, and every operational workflow in hapax-council. The system borrows from constitutional law, common law precedent, and statutory interpretation — not as metaphors but as executable mechanisms with runtime enforcement.
+## The Problem with Governing Agents
 
-## Why Governance as Architecture
+Traditional software systems govern behavior through access control: enumerate who can do what, check permissions at runtime, log violations. This works when the space of possible actions is known in advance. A web application has endpoints; each endpoint has a permission; the middleware checks it.
 
-Most software systems encode policy as configuration: feature flags, role-based access control, rate limits. These mechanisms are designed to be changed — a product manager flips a toggle, a deploy rolls out new permissions. The assumption is that the humans operating the system share context about what the system should and shouldn't do, and that they'll update the policy when circumstances change.
+LLM agents break this model. An agent tasked with "prepare context for a 1:1 meeting" might, in the course of doing useful work, construct a code path that persists behavioral patterns about a team member, generates suggested coaching language, or infers someone's emotional state from calendar patterns. None of these actions were anticipated in an access control list. The agent didn't circumvent a rule — it found a path through territory where no rules existed.
 
-hapax-council has a different constraint profile. It is a single-operator system where LLM agents perform unsupervised work — processing meeting transcripts, updating context about people, generating notifications, controlling cameras and microphones. The agents are capable of constructing code paths that violate the operator's values in ways that would be difficult to detect after the fact. A sync agent could persist behavioral patterns about a household member. A management agent could generate coaching language about a direct report. A perception backend could accumulate biometric data without consent.
+The conventional response is to add rules after each incident: "don't do that specific thing." This creates an expanding list of prohibitions that grows with every novel violation, never converges, and gives false confidence that the remaining unprohibited space is safe. It is a fundamentally reactive posture applied to a system that can generate novel behavior faster than you can prohibit it.
 
-The axiom system addresses this by making certain constraints structurally unrelaxable. They are not configuration that can be updated through a normal code review. They are constitutional principles with formal enforcement at commit time, at runtime, and in the precedent record. Violating a T0 implication is not a bug to be triaged — it is a structural failure that tools prevent before it reaches review.
+This directory contains an alternative approach. Instead of enumerating what agents may not do, the system establishes structural invariants — constitutional axioms — that constrain what the codebase itself can express. An agent cannot persist behavioral patterns about a household member because the code required to do so cannot be written: commit hooks block it before it reaches review, runtime checks reject it at the ingestion boundary, and the precedent store records the reasoning for future reference. The constraint is not in the agent's prompt. It is in the architecture.
 
 ## The Five Axioms
 
-The axioms are defined in `registry.yaml`. Each has a weight (0–100) that determines priority when axioms conflict, a type (hardcoded or softcoded), and a scope (constitutional or domain).
+Five axioms govern the system. Each is a statement of principle — short enough to memorize, precise enough to generate concrete rules, and weighted to resolve conflicts when principles collide.
 
-| ID | Weight | Type | Scope | Constraint |
-|----|--------|------|-------|------------|
-| `single_user` | 100 | hardcoded | constitutional | One operator. No authentication, no roles, no multi-user abstractions. Absolute. |
-| `executive_function` | 95 | hardcoded | constitutional | Zero-config agents. Errors include next actions. Routine work automated. State visible without investigation. |
-| `corporate_boundary` | 90 | softcoded | domain: infrastructure | Work data stays in employer systems. Home infrastructure is personal + management-practice only. |
-| `interpersonal_transparency` | 88 | hardcoded | constitutional | No persistent state about non-operator persons without an active, revocable consent contract. |
-| `management_governance` | 85 | softcoded | domain: management | LLMs prepare context; humans deliver feedback. No generated coaching language about individuals. |
+| ID | Weight | Constraint |
+|----|--------|------------|
+| `single_user` | 100 | One operator. No authentication, no roles, no multi-user abstractions. Absolute. |
+| `executive_function` | 95 | Zero-config agents. Errors include next actions. Routine work automated. State visible without investigation. |
+| `corporate_boundary` | 90 | Work data stays in employer systems. Home infrastructure is personal + management-practice only. |
+| `interpersonal_transparency` | 88 | No persistent state about non-operator persons without an active, revocable consent contract. |
+| `management_governance` | 85 | LLMs prepare context; humans deliver feedback. No generated coaching language about individuals. |
 
-**Hardcoded** axioms are system invariants that cannot be specialized per domain. **Softcoded** axioms can be refined for specific domains while preserving the core constraint. **Constitutional** scope means the axiom applies system-wide; **domain** scope means it applies within a specific subsystem (management, infrastructure) and can be overridden by constitutional axioms of higher weight.
+The weights are not priorities for a task scheduler. They resolve conflicts. When `corporate_boundary` (90) says "route inference through the home proxy" and `executive_function` (95) says "agents must work with zero configuration," the higher-weighted axiom prevails: the agent must degrade gracefully when the proxy is unreachable, not fail with a configuration error demanding manual setup. The operator doesn't choose which axiom wins. The weights encode that choice permanently.
 
-### The Weight System
+`single_user` at weight 100 is absolute. No other axiom, no operational convenience, no future feature can override it. This means the system will never contain identity models, permission hierarchies, role-based routing, or multi-tenant data separation — not because those features haven't been built yet, but because the architecture structurally prevents them from being built.
 
-Weights are not priorities for a scheduler. They resolve conflicts when two axioms produce opposing guidance. If `corporate_boundary` (90) says "route all inference through LiteLLM on the home network" but `executive_function` (95) says "the agent must work with zero configuration," then executive_function prevails — the agent must degrade gracefully when LiteLLM is unreachable, not fail with a configuration error.
+### The Executive Function Axiom
 
-The `single_user` axiom at weight 100 is absolute. No other axiom, no operational pressure, no convenience argument overrides it. Code that introduces identity models, role enumerations, authentication middleware, or multi-tenant data partitions is structurally blocked.
+The `executive_function` axiom (weight 95) deserves particular attention because it encodes a specific disability accommodation — ADHD and autism — as a governance constraint, not a quality-of-life enhancement.
 
-## Implication Derivation
+Task initiation, sustained attention, and routine maintenance are genuine cognitive bottlenecks for the operator. An error message that says "check the logs for details" is not merely unhelpful; it requires exactly the kind of attention switching and sustained investigation that the axiom exists to eliminate. The T0 implication is concrete: every error must include a specific next action. Not "something went wrong" but "Qdrant is unreachable — run `docker compose up -d qdrant` and retry." Every recurring task must have a systemd timer — you cannot ship an agent and leave it as "the operator can run it manually." Every agent must work with zero configuration beyond environment variables.
 
-Each axiom generates concrete, testable implications through an interpretive process that uses four canons borrowed from legal reasoning:
+This extends to the system's own meta-processes. Four implications govern multi-round agent deliberations (adversarial debates over axiom tensions). When two agents argue across multiple rounds about whether a proposed change violates an axiom, the system checks whether the deliberation is genuine: Did either agent change its position when presented with contrary evidence? Can you trace why each agent shifted? Is one agent systematically capitulating to the other? These are adapted from hoop tests in process-tracing methodology — the political science technique for determining whether a causal mechanism is actually operating or merely correlating. If a deliberation fails all three hoop tests, it is flagged as performative: the agents went through motions without reasoning.
 
-**Textualist**: What does the axiom text literally say? `single_user` says "one operator" — this means no identity management classes, no access control functions, no multi-account UI.
+### The Consent Framework
 
-**Purposivist**: What goal does the axiom serve? `executive_function` exists to accommodate ADHD and autism as genuine cognitive constraints. An error message that says "check logs for details" violates the purpose even if it doesn't violate the literal text, because it requires sustained attention and task-switching that the axiom exists to eliminate.
+The `interpersonal_transparency` axiom (weight 88) creates the system's hardest constraint after single-user. It exists because the system operates in a household with other people. Cameras detect faces, microphones pick up voices, arrival patterns are observable. Without explicit governance, this data accumulates into persistent models of other people's behavior.
 
-**Absurdity doctrine**: Reject interpretations that produce absurd results. `single_user` doesn't mean the system can't have a login screen to protect the local interface from physical access — that would be absurd. It means the login doesn't create an identity or imply that other operators could exist.
+Most systems handle this with anonymization ("we don't store names") or opt-out ("you can request deletion"). This axiom takes a different position: no persistent state about any specific non-operator person may exist without an active consent contract — a bilateral agreement that enumerates exactly which data categories are permitted, grants the subject inspection access to everything the system holds about them, and is revocable by either party at any time with full data purge on revocation.
 
-**Omitted-case canon**: What does silence mean? `management_governance` says "LLMs prepare context; humans deliver feedback." It does not say "LLMs may generate suggested feedback language for humans to edit." The silence is intentional — the canon says don't add what the axiom chose not to include.
+The distinction between observation and modeling matters. Voice activity detection can detect that someone is speaking without identifying who. A camera can detect motion without recognizing a face. These transient observations don't require consent because they don't produce persistent state about a specific person. But the moment the system extracts a voice embedding for speaker identification, or infers a habitual arrival pattern, or derives "this person tends to be home between 6 and 9pm" — that is persistent state about an identifiable person, and it requires a contract.
 
-Each implication has an ID (e.g., `su-auth-001`), a tier (T0–T3), an enforcement mode, and the canon that produced it. The ~81 implications across the five axioms are stored in `implications/` as YAML files.
+The `ConsentRegistry` enforces this at the ingestion boundary — before embeddings are extracted, before state is persisted, before any downstream processing. The gate is early and hard. The `contracts/` directory is currently empty: no consent contracts have been established. The system is designed to support them but has not yet been exercised with a real household member willing to give structured consent.
 
-## Enforcement Tiers
+## How Axioms Become Rules
 
-| Tier | Action | Mechanism |
-|------|--------|-----------|
-| **T0** | Blocked | Claude Code hooks scan every file write, edit, commit, and push against 20 regex patterns. A PR that introduces prohibited scaffolding never reaches review. |
-| **T1** | Flagged | Requires human review before merging. The SDLC axiom gate (Haiku) flags T1 implications for operator attention. |
-| **T2** | Advisory | Automated warnings in agent output. Non-blocking but logged. |
-| **T3** | Lint | Documentation and style-level guidance. No automated enforcement. |
+An axiom like "one operator, no multi-user abstractions" is a principle. To enforce it, you need concrete rules: what specific code patterns violate it? What constitutes "multi-user"? What about a password-protected local interface — is that "authentication"?
 
-### Commit-Time Enforcement
+The system derives concrete implications from axioms through an interpretive process that borrows four canons from statutory and constitutional interpretation in law. These are not metaphorical borrowings. They are the actual reasoning techniques that courts use to derive specific obligations from general principles, adapted to generate machine-checkable rules from short axiom texts.
 
-Two shell scripts in `hooks/scripts/` implement structural prevention:
+**Textualist reading** asks: what does the axiom literally say? `single_user` says "one operator." This means the codebase cannot contain classes that model distinct identities, functions that route by credentials, or interfaces that display account-switching UI. The literal text prohibits the structural scaffolding of multiplicity.
 
-**`axiom-scan.sh`** runs on every Edit or Write tool call. It extracts the content being written, strips comments, and scans against T0 violation patterns. A match produces an error with the matched line, the violated implication, and a recovery suggestion. The file write is blocked.
+**Purposivist reading** asks: what goal does the axiom serve? `executive_function` exists to accommodate specific cognitive constraints. An agent that requires three command-line flags to run correctly doesn't violate the literal text ("zero-config" could be read as "no config files"), but it violates the purpose: the operator shouldn't have to remember invocation details. The purposivist reading catches violations that the text doesn't anticipate.
 
-**`axiom-commit-scan.sh`** runs on every `git commit` or `git push`. It scans staged changes (for commits) or branch diffs (for pushes) against the same patterns. A T0 match blocks the commit.
+**Absurdity doctrine** rejects interpretations that produce nonsensical results. `single_user` doesn't prohibit a login screen on the local web interface — that would be absurd, since physical security is a reasonable concern for a server in a shared household. What it prohibits is a login screen that creates a user identity or implies that other accounts could exist. The absurdity doctrine is the mechanism that prevents axiomatic governance from becoming oppressive: if a strict reading of the axiom leads somewhere unreasonable, the reading is wrong.
 
-Both scripts source `axiom-patterns.sh`, which defines 20 regex patterns covering prohibited structural categories: identity/access-control scaffolding, multi-account and multi-tenant abstractions, content-sharing and collaboration features, and management safety boundaries (generated feedback or coaching language about individuals). The patterns are calibrated to catch class and function definitions that introduce these categories, not incidental mentions in documentation.
+**Omitted-case canon** asks: what does the axiom's silence mean? `management_governance` says "LLMs prepare context; humans deliver feedback." It does not say "LLMs may draft suggested feedback language for humans to review and edit." The silence is intentional. The canon says: do not add what the axiom chose not to include. If the axiom had wanted to permit drafted language, it would have said so. Its silence on the matter is a prohibition.
 
-The patterns skip axiom enforcement files themselves (to avoid false positives on the patterns that define the patterns) and common build artifacts.
+This process currently yields ~81 concrete implications across the five axioms, each tagged with the canon that produced it, the tier of enforcement, and whether it's a negative constraint ("don't do X") or a positive requirement ("actively provide Y"). Implications are generated via LLM with majority-vote consistency checking across multiple runs, then reviewed and committed by the operator. They do not change at runtime.
 
-### Runtime Enforcement
+## Enforcement
 
-`shared/axiom_enforcement.py` provides two compliance-checking paths:
+### Tiers
 
-**Hot path** (`check_fast`) — sub-millisecond, no I/O. Pre-compiled `ComplianceRule` objects extract keywords from T0 implications and match them against a situation description using co-occurrence (2+ keywords from the same implication). Suitable for VetoChain predicates in the perception pipeline where governance decisions happen at audio-processing cadence.
+Not all implications warrant the same response. The system uses four enforcement tiers:
 
-**Cold path** (`check_full`) — full I/O. Loads axioms and implications from YAML, searches the Qdrant precedent store for semantically similar situations, and returns a comprehensive `ComplianceResult` with violation details, axiom IDs, and precedent matches. Used by agents making governance decisions that aren't time-critical.
+**T0 — Blocked.** Code that violates a T0 implication cannot be written. Claude Code hooks scan every file edit, every commit, and every push against 20 regex patterns that detect the structural scaffolding of prohibited categories. The hook fires before the edit is applied, not after. A T0 violation is not a failed code review — it is a prevented action.
 
-## The Precedent System
+**T1 — Flagged.** Requires human review before merging. The SDLC pipeline's axiom gate (a separate LLM judge) identifies T1 implications and flags them for operator attention. The code can be written; it cannot be merged without review.
 
-When an axiom implication encounters a novel situation — one that the implication text doesn't clearly resolve — the decision is recorded as a **precedent**. This is the common law mechanism: consistency over time without requiring that every edge case be specified in advance.
+**T2 — Advisory.** Automated warnings in agent output. Non-blocking, but logged and visible.
 
-### Structure
+**T3 — Lint.** Style and documentation guidance. No automated enforcement.
 
-Each precedent (`axiom_precedents.py`) records:
-- **Situation**: What was being decided
-- **Decision**: `compliant`, `violation`, or `edge_case`
-- **Reasoning**: Why this decision was made
-- **Distinguishing facts**: The key facts that drove the decision (for future matching)
-- **Authority**: `operator` (weight 1.0), `agent` (weight 0.7), or `derived` (weight 0.5)
+### Structural Prevention at Commit Time
 
-The authority hierarchy implements **vertical stare decisis**: an operator decision outweighs an agent decision on the same situation, and an agent decision outweighs a derived one. When an agent records a precedent, it has `authority="agent"` — it stands until the operator reviews and either ratifies or overrides it.
+Two shell scripts in `hooks/scripts/` implement the T0 boundary. `axiom-scan.sh` intercepts every file write and edit, scanning the proposed content against T0 patterns. `axiom-commit-scan.sh` intercepts every `git commit` and `git push`, scanning staged changes or branch diffs. Both scripts source a shared pattern definition (`axiom-patterns.sh`) that maintains 20 regex patterns covering the structural categories that axioms prohibit: identity management scaffolding, multi-account abstractions, content-sharing features, and management safety violations like generated coaching language.
 
-### Storage and Retrieval
+The patterns are tuned to catch class and function definitions, not incidental prose. They skip axiom enforcement files themselves to avoid false positives on the patterns that define the patterns.
 
-Precedents are stored in the `axiom-precedents` Qdrant collection (768-dimension embeddings via nomic-embed-text-v2-moe). When a new situation arises, `PrecedentStore.search(axiom_id, situation)` embeds the situation text and finds the most semantically similar precedents, filtered by axiom and excluding superseded entries. This means the system can find relevant precedents even when the exact wording differs.
+### Runtime Compliance
 
-~23 seed precedents in `precedents/seed/` establish the initial case law across architecture decisions, management boundaries, and executive function patterns.
+The enforcement module (`shared/axiom_enforcement.py`) provides two compliance-checking paths for different contexts:
 
-### Supremacy Analysis
+The **hot path** (`check_fast`) runs in sub-millisecond time with no I/O. It pre-compiles T0 implications into keyword co-occurrence rules at startup. When a governance decision needs axiom compliance at perception cadence — inside a VetoChain evaluating at 2.5-second intervals — the hot path checks whether the situation description co-activates keywords from any T0 implication. This is fast enough for the voice daemon's real-time pipeline.
 
-`validate_supremacy()` in `axiom_registry.py` checks for structural conflicts between domain and constitutional axioms. When a domain axiom's T0 implication overlaps with a constitutional axiom's T0 implication, the tension is flagged as a `SupremacyTension` for operator review. Constitutional axioms always prevail — a domain axiom cannot override a constitutional right.
+The **cold path** (`check_full`) is for decisions that aren't time-critical. It loads the full axiom and implication set from YAML, runs the hot path first, then searches the Qdrant precedent store for semantically similar situations. An agent deciding whether a proposed data flow violates the consent framework calls `check_full` and gets back a comprehensive result with violation details, relevant axiom IDs, and the most similar precedent decisions.
 
-## Implication Modes
+## The Precedent Store
 
-Each implication operates in one of two modes:
+Eighty-one implications cannot anticipate every situation. The system will encounter novel cases — a data flow that doesn't clearly fall into any implication's scope, a perception backend that processes biometric data in a way the implications didn't envision. The question is: how do you handle ambiguity consistently over time?
 
-**Compatibility** (negative constraint) — "What must NOT happen." The system checks that no code path violates the constraint. Example: `su-auth-001` — "All authentication, authorization, and identity management code must be removed or disabled." Enforcement: pattern matching, code scanning.
+The answer is case law. When a governance decision encounters a novel situation, the decision is recorded as a **precedent**: what was being decided, what the decision was (compliant, violation, or edge case), and critically, the reasoning and distinguishing facts that drove the decision. Future encounters with similar situations consult the precedent store first, before escalating.
 
-**Sufficiency** (positive constraint) — "What MUST be present." The system checks that a required capability exists. Example: `ex-alert-001` — "The system must have proactive alerting for all critical state changes." Enforcement: sufficiency probes that verify the capability is wired and functional.
+This is the mechanism that common law legal systems use to handle the gap between general principles and specific cases. A statute says "no vehicles in the park." Is a bicycle a vehicle? A wheelchair? An ambulance? The statute's authors didn't enumerate every case. Instead, the first time a court encounters "bicycle in the park," it decides and records the reasoning. The next time a similar case arises, the prior decision — the precedent — provides guidance. Over time, a body of case law accumulates that handles the edge cases the original statute couldn't anticipate.
 
-The distinction matters because compatibility violations are detectable by scanning (the forbidden thing is present), while sufficiency violations require probing (the required thing is absent). The enforcement infrastructure handles both through `AuditFinding` objects with `FindingKind.VIOLATION` and `FindingKind.SUFFICIENCY`.
+The same pattern applies here. The axiom says "no persistent state about non-operator persons without consent." A perception backend detects a voice but doesn't identify the speaker. Is that "persistent state about a person"? The first time this situation arises, a decision is made and recorded with the distinguishing facts: "transient observation, no identity resolution, no state persisted." Future similar situations find this precedent via semantic search and follow it.
 
-## Agent Integration
+### Authority and Weight
 
-Two pydantic-ai tools in `shared/axiom_tools.py` expose the governance system to LLM agents:
+Not all precedent-setters are equal. The system implements what legal theory calls **vertical stare decisis** — the principle that decisions from higher authorities bind lower ones.
 
-**`check_axiom_compliance(situation, axiom_id, domain)`** — Runs the cold path compliance check and returns violations or compliant status. Agents call this when making decisions that might touch axiom boundaries.
+Precedents carry an authority field:
+- **Operator** (weight 1.0) — The operator has explicitly reviewed and decided. This is the highest authority.
+- **Agent** (weight 0.7) — An agent made a governance call during execution. The decision stands until the operator reviews it, but it can be overridden.
+- **Derived** (weight 0.5) — Generated by the derivation pipeline or test infrastructure. Lowest authority.
 
-**`record_axiom_decision(axiom_id, situation, decision, reasoning, tier, distinguishing_facts)`** — Records a new precedent with `authority="agent"`. Called by agents after making a governance-relevant decision, creating the case law record for future reference.
+When an agent records a precedent, it enters the store with `authority="agent"`. It is provisional — good enough to guide future agent decisions, but pending operator ratification. If the operator later reviews the precedent and disagrees, the operator's decision supersedes it, creating a new precedent with higher authority. The old precedent is marked superseded but retained for audit.
 
-Both tools log usage to `AXIOM_AUDIT_DIR/tool-usage.jsonl` for observability.
+This solves a practical problem in agentic governance: the system needs to make consistent decisions even when the operator hasn't reviewed every edge case. Agent-authority precedents provide that consistency while preserving the operator's ability to override. The ~23 seed precedents in `precedents/seed/` establish the initial body of case law with operator authority, covering architecture decisions, management boundaries, and executive function patterns.
 
-## The Consent Framework
+### Semantic Search
 
-The `interpersonal_transparency` axiom (weight 88, constitutional) creates the hardest constraint in the system after single-user: no persistent state about non-operator persons without an active, revocable consent contract.
+Precedents are stored in Qdrant (768-dimension embeddings via nomic-embed-text-v2-moe). When a new situation arises, `PrecedentStore.search()` embeds the situation text and finds the most semantically similar precedents, filtered by axiom and excluding superseded entries. This means the system finds relevant precedents even when the exact wording differs — "voice embedding extracted for visitor" matches "biometric data processed for non-operator person" because the semantic meaning overlaps, even though the words don't.
 
-The `contracts/` directory (currently empty — no contracts have been established yet) is where bilateral consent agreements will be stored. Each contract must enumerate:
-- The specific data categories permitted (presence, biometrics, coarse location, etc.)
-- An explicit opt-in mechanism (not implied from behavior)
-- Subject inspection access (the person can see what the system holds about them)
-- Revocation by either party with full data purge
-- Audit trail (timestamp, parties, scope, revocation status)
+### Supremacy
 
-The `ConsentRegistry` (`shared/consent.py`) gates data flows at the ingestion boundary. In the voice daemon, `SpeakerIdentifier.identify_audio()` checks `ConsentRegistry.contract_check(person_id, "biometric")` before processing embeddings for non-operator persons. Without a contract, identification returns `uncertain` and enrollment raises `ValueError`. The gate is at the perception boundary — before embeddings are extracted, before state is persisted, before any downstream processing occurs.
+When implications from different axioms conflict, the constitutional hierarchy resolves the tension. `validate_supremacy()` checks for structural overlaps between domain axiom implications (scoped to a subsystem) and constitutional axiom implications (system-wide). Constitutional axioms always prevail. A domain axiom cannot override a constitutional principle, just as a state law cannot override a constitutional right. Tensions are flagged for operator review as `SupremacyTension` records.
+
+## Compatibility and Sufficiency
+
+Each implication operates in one of two modes, and the distinction matters for how enforcement works.
+
+**Compatibility** implications are negative constraints: things the system must not do. "The codebase must not contain identity management scaffolding." Enforcement is scanning — the forbidden thing is present and detectable. Pattern matching, code scanning, and commit hooks handle this well.
+
+**Sufficiency** implications are positive requirements: capabilities the system must actively provide. "Every error must include a specific next action." "All recurring tasks must have systemd timers." "The system must have proactive alerting for critical state changes." You cannot detect a sufficiency violation by scanning for something — the violation is an *absence*.
+
+Sufficiency is verified through behavioral probes (`shared/sufficiency_probes.py`) — deterministic functions that inspect actual infrastructure state. A probe checks whether agent error handlers contain remediation strings. Another counts running systemd timers and compares them to the expected agent set. Another reads deliberation transcripts and verifies the hoop tests passed. These are not unit tests; they are runtime verification that the axiom's requirements are actively met.
+
+The distinction between "the system doesn't do X" and "the system actively does Y" is where most governance frameworks stop. Proving that you don't violate a rule is easier than proving that you fulfill a requirement. The sufficiency probes are the mechanism that bridges that gap.
+
+## Agent Tools
+
+Two tools in `shared/axiom_tools.py` expose governance to LLM agents at runtime. `check_axiom_compliance()` runs the cold-path compliance check and returns violations or compliant status — agents call this when making decisions near axiom boundaries. `record_axiom_decision()` records a new precedent with agent authority — called after making a governance-relevant decision, adding to the case law for future reference. Both log to the audit trail.
 
 ## Directory Structure
 
@@ -143,37 +147,11 @@ axioms/
 │   ├── interpersonal-transparency.yaml  9 implications (it-*)
 │   └── management-governance.yaml  7 implications (mg-*)
 ├── precedents/
-│   └── seed/
-│       ├── single-user-seeds.yaml       4 seed precedents
-│       ├── executive-function-seeds.yaml 3 seed precedents
-│       ├── management-seeds.yaml        4 seed precedents
-│       ├── architecture-seeds.yaml      12 seed precedents
-│       └── sufficiency-seeds.yaml
+│   └── seed/                       23 seed precedents (operator authority)
 ├── contracts/                       Consent contracts (empty — none established)
-│   └── .gitkeep
-└── schemas/
-    ├── axiom.schema.json            Axiom definition schema
-    ├── implication.schema.json      Implication schema (tier, canon, mode)
-    └── precedent.schema.json        Precedent schema (authority, stare decisis)
+└── schemas/                         JSON schemas for axioms, implications, precedents
 ```
 
-Enforcement modules in `shared/`:
-```
-shared/
-├── axiom_registry.py       Load axioms, implications, validate supremacy
-├── axiom_enforcement.py    Hot path (check_fast) + cold path (check_full)
-├── axiom_precedents.py     Qdrant-backed precedent store
-├── axiom_audit.py          Unified AuditFinding types
-├── axiom_patterns.py       Pattern-based T0 violation scanning
-├── axiom_tools.py          Pydantic AI agent tools (check + record)
-├── axiom_derivation.py     LLM-based implication generator
-└── axiom_patterns.txt      20 regex patterns for structural violations
-```
+Enforcement in `shared/`: `axiom_registry.py` (loading), `axiom_enforcement.py` (hot/cold compliance), `axiom_precedents.py` (precedent store), `axiom_audit.py` (finding types), `axiom_patterns.py` (T0 scanning), `axiom_tools.py` (agent tools), `axiom_derivation.py` (implication generation), `sufficiency_probes.py` (positive requirement verification).
 
-Hook scripts in `hooks/scripts/`:
-```
-hooks/scripts/
-├── axiom-scan.sh           Edit/Write tool protection
-├── axiom-commit-scan.sh    Git commit/push protection
-└── axiom-patterns.sh       Shared T0 pattern definitions
-```
+Hooks in `hooks/scripts/`: `axiom-scan.sh` (edit/write protection), `axiom-commit-scan.sh` (commit/push protection), `axiom-patterns.sh` (shared T0 patterns).

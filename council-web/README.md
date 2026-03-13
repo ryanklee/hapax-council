@@ -1,28 +1,30 @@
 # council-web — Operational Dashboard
 
-React single-page application providing real-time operational visibility into the hapax-council agent system. Health monitoring, agent execution, streaming chat, nudge management, and demo browsing — all backed by the cockpit API via Server-Sent Events and React Query.
+A React single-page application that provides real-time operational visibility into the hapax-council agent system. Health monitoring, agent execution, streaming chat, nudge management, and demo browsing — backed by the cockpit API via Server-Sent Events and React Query.
 
 This is a Tier 1 interface: interactive, human-facing, read-heavy. It consumes the cockpit API (:8051) but never writes to the filesystem-as-bus directly. All mutations go through API endpoints that the reactive engine processes.
 
+## Why This Dashboard Exists
+
+The `executive_function` axiom (weight 95) requires that system state be visible without investigation. The operator should never have to SSH into the home server, check log files, or run diagnostic commands to understand what agents are doing. The dashboard satisfies this requirement by surfacing everything the operator needs — health status, agent output, active nudges, cost tracking, data freshness — in a single interface that pushes state changes to the browser rather than waiting to be polled.
+
+The `useHealthToasts` hook is the most direct expression of this axiom in the frontend. It watches health status and surfaces degradation as non-intrusive toast notifications. A Docker container goes down, a systemd timer misses its schedule, a Qdrant collection drops below threshold — the operator sees it without looking for it.
+
 ## Architecture
 
-The dashboard is structured around three concerns: **server state management** (what the backend knows), **real-time streaming** (what's happening now), and **contextual information display** (what the operator needs to see given what they're looking at).
+**Server state** is managed exclusively through TanStack React Query. Every backend call goes through `src/api/client.ts`, which hits `/api/*` (Vite proxies to :8051 in dev). Types in `src/api/types.ts` mirror the Python dataclasses in `cockpit/data/`. There is no local state management library — React Query is the single source of truth for anything that comes from the backend. This avoids the synchronization bugs that emerge when frontend state diverges from backend state.
 
-**Server state** is managed exclusively through TanStack React Query. Every backend call goes through `src/api/client.ts`, which hits `/api/*` (Vite proxies to :8051 in dev). Types in `src/api/types.ts` mirror the Python dataclasses in `cockpit/data/`. React Query hooks in `src/api/hooks.ts` wrap the client with appropriate stale times, retry policies, and cache invalidation. There is no local state management library — React Query is the single source of truth for anything that comes from the backend.
+**Streaming chat** uses Server-Sent Events (`src/api/sse.ts`) for the chat interface, handling Anthropic-style `content_block_delta` events, tool call rendering, and reconnection. Messages are streamed token-by-token with markdown rendering.
 
-**Real-time streaming** uses Server-Sent Events (`src/api/sse.ts`) for the chat interface. The streaming implementation handles Anthropic-style `content_block_delta` events, tool call rendering, and graceful reconnection. Chat messages are streamed token-by-token with markdown rendering via `react-markdown` + `remark-gfm`.
-
-**Contextual display** is provided by 15 sidebar panels that show information relevant to the operator's current focus: system health, VRAM utilization, Docker container status, systemd timer states, morning briefing, goals, scout findings, inference cost tracking, documentation drift, management context, accommodation status, and data freshness. These panels poll at intervals appropriate to their data — health every 30 seconds, briefing once per session, cost daily.
+**Contextual panels** — 15 sidebar panels show information relevant to the operator's current focus: system health, VRAM utilization, Docker containers, systemd timers, morning briefing, goals, scout findings, inference cost, documentation drift, management context, accommodation status, and data freshness. Each panel polls at intervals appropriate to its data, from 30 seconds (health) to once per session (briefing).
 
 ## Design Decisions
 
-**No test runner.** The dashboard is a thin presentation layer over a well-tested backend. The cockpit API has comprehensive tests; the dashboard adds visual presentation. This is a deliberate choice for a single-operator system where the operator is also the developer — the cost of maintaining frontend tests exceeds the value for a system with one user.
+**No test runner.** The dashboard is a thin presentation layer over a comprehensively tested backend. For a system with one user who is also the developer, the cost of maintaining frontend tests exceeds the value. If this changes, the architecture supports adding tests without refactoring.
 
-**Tailwind only.** All styling uses Tailwind CSS 4 via `@tailwindcss/vite`. No CSS modules, no styled-components, no CSS-in-JS. This keeps the styling collocated with the markup and eliminates an entire category of abstraction.
+**Tailwind only.** No CSS modules, no styled-components. Styling is collocated with markup. One fewer abstraction to maintain.
 
-**Feature-based organization.** Components are grouped by what they do (chat, dashboard, demos, sidebar, shared), not by what they are (components, containers, hooks). Each feature folder is self-contained.
-
-**Health toast notifications.** The `useHealthToasts` hook watches health status and surfaces degradation as non-intrusive toasts. The operator doesn't need to check a dashboard to know something changed — the executive function axiom requires that state be visible without investigation.
+**Feature-based folders.** Components are grouped by what they do (chat, dashboard, demos, sidebar, shared), not by type. Each feature folder is self-contained.
 
 ## Quick Start
 
@@ -49,15 +51,7 @@ uv run cockpit-api
 
 ## Stack
 
-- **React 19** + **TypeScript 5.9** (strict mode)
-- **Vite 7** with `@vitejs/plugin-react`
-- **Tailwind CSS 4** via `@tailwindcss/vite`
-- **TanStack React Query** — server state
-- **React Router 7** — client-side routing (3 routes)
-- **Recharts** — health history visualization
-- **Lucide React** — icons
-- **react-markdown** + remark-gfm — markdown rendering
-- **JetBrains Mono** — monospace font
+React 19, TypeScript 5.9 (strict), Vite 7, Tailwind CSS 4, TanStack React Query, React Router 7, Recharts, Lucide React, react-markdown + remark-gfm, JetBrains Mono.
 
 ## Project Structure
 
@@ -70,9 +64,7 @@ src/
     demos/          Demo list and detail views
     layout/         App shell, manual drawer, health toast watcher
     shared/         Command palette, error boundary, modals, markdown, toasts
-    sidebar/        15 contextual panels (health, VRAM, containers, timers,
-                    briefing, goals, scout, cost, drift, management,
-                    accommodations, freshness)
+    sidebar/        15 contextual panels
   hooks/            useHealthToasts, useInputHistory, useKeyboardShortcuts, useSSE
   pages/            DashboardPage, ChatPage, DemosPage
   utils.ts          Shared utilities

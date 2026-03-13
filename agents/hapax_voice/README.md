@@ -1,185 +1,141 @@
-# hapax_voice — Perception, Governance, and Actuation for Voice
+# hapax_voice — A Perception Type System for Governed Voice Interaction
 
-An always-on voice interaction daemon that fuses signals arriving at vastly different rates — MIDI clock ticks at sub-millisecond precision, audio energy at 50ms, emotion classification at 1–2 seconds, workspace analysis at 10–15 seconds — into governance decisions that control physical actuators (audio playback, OBS camera direction, TTS synthesis) without losing data or correctness.
+## The Temporal Fusion Problem
 
-The system is organized around three type-theoretic layers — **Perceptives**, **Detectives**, and **Directives** — that decompose the perception→decision→action pipeline into composable, auditable primitives. The layering is not a convenience abstraction. It is the mechanism by which constitutional axioms are enforced at the type level, governance decisions carry full provenance, and the gap between describing an action and executing it becomes the site where safety constraints live.
+An always-on voice daemon receives signals from the world at vastly different rates. A MIDI clock tick arrives every few milliseconds. Audio energy measurements update at 50ms. Voice activity detection settles over hundreds of milliseconds. Emotion classification from body language or vocal tone takes 1–2 seconds. An LLM-powered workspace analysis — "what is the operator doing right now?" — takes 10–15 seconds. All of these signals contribute to a single governance decision: should the system fire a beat-aligned audio sample, switch an OBS camera, or stay quiet?
 
-## The Multi-Cadence Problem
+Most systems handle this by choosing one of two bad options. The first is to downsample everything to the slowest rate: wait for the workspace analysis to complete, then make all decisions at once. This loses the temporal precision that music production requires — you cannot fire a vocal sample on a beat if your decision loop runs at 12-second intervals. The second is to run everything at the fastest rate: poll all signals at MIDI clock speed. This wastes computation, couples independent signals, and forces slow signals to either block or return stale values without telling anyone how stale they are.
 
-Voice interaction systems face a temporal fusion problem that most architectures solve by either (a) downsampling everything to the slowest rate, losing precision, or (b) running everything at the fastest rate, wasting computation and introducing false coupling between independent signals. Neither is acceptable when beat-aligned audio playback requires sub-50ms precision while workspace analysis involves a 12-second LLM call.
+The solution here draws from three research traditions and synthesizes them into something none of them provides alone.
 
-The solution draws from three research traditions:
+**Functional reactive programming** (Elliott 2009, Yampa, Reflex, RxPY) provides the core duality: `Behavior[T]` for values that are always available (like a voltage reading on a meter — there is always a current value), and `Event[T]` for things that happen at specific instants (like a button press or a MIDI tick). The `with_latest_from` combinator bridges them: when a fast event fires, sample all slow behaviors at whatever they currently hold. This is how a MIDI tick at sub-millisecond precision can incorporate an emotion reading that is 2 seconds old. The tick doesn't wait for emotion to update. It reads what's there.
 
-**Functional reactive programming** (Yampa, Reflex, RxPY). The `Behavior[T]`/`Event[T]` duality separates continuously-available state (a cell that always has a current reading) from discrete occurrences (a MIDI tick, a wake word detection). The `with_latest_from` combinator — borrowed directly from Rx — enables fast events to sample slow behaviors at their current values without blocking or polling. When a MIDI clock tick fires at <1ms precision, it samples emotion (which may be 2 seconds old) at whatever value it currently holds. The watermark on each `Behavior` tracks how old that value is, and the `FreshnessGuard` downstream can reject decisions made on data that's too stale.
+**Stream processing** (Flink, Dataflow, VLDB watermark theory) provides the mechanism for reasoning about staleness. Every `Behavior` carries a monotonic watermark — a timestamp that records when the value was last updated. When `with_latest_from` fuses a trigger event with multiple behaviors, it computes `min_watermark`: the age of the stalest signal in the fused result. A `FreshnessGuard` downstream can then reject decisions made on data that's too old. The MIDI tick sampled emotion at 2 seconds old, which is fine. But if the emotion signal is 30 seconds old because the classifier crashed, the FreshnessGuard catches it. This is the same pattern that distributed stream processors use to reason about completeness, adapted for a single-machine runtime.
 
-**DSP audio synthesis** (modular synthesis, control voltage). Suppression fields use attack/release envelopes — the same temporal smoothing used in audio compressors — to ramp governance thresholds up and down without discontinuities. A conversation detected by VAD doesn't instantly slam the MC governance chain to zero; it smoothly raises the energy threshold over the attack time, and releases it over a longer decay. This prevents the system from oscillating between states when signals are noisy.
+**DSP audio synthesis** (modular synthesis, compressor envelopes) provides the temporal smoothing needed for multi-role coordination. When a conversation starts and the MC (backup microphone) governance chain needs to quiet down, the suppression doesn't slam to zero. A `SuppressionField` uses attack/release envelopes — the same mechanism audio compressors use — to smoothly ramp the energy threshold upward. The MC chain doesn't switch off; it gradually becomes harder to trigger. When the conversation ends, the threshold releases slowly back to baseline. This prevents the kind of oscillation that binary mode-switching produces when signals are noisy.
 
-**Distributed systems** (watermarks, monotonic clocks, exactly-once delivery). Every `Behavior` enforces a monotonic watermark — updates with regressing timestamps are rejected. Every `Command` carries the minimum watermark of the perception data that informed it, enabling downstream systems to reason about how fresh the decision was. The `FusedContext` computed by `with_latest_from` records the stalest signal in `min_watermark`, giving the `FreshnessGuard` a single number to check. This is the same pattern used in stream processing systems (Flink, Dataflow) adapted for a single-machine, in-process runtime.
+## The Three Layers
 
-## Type System
+The type system is organized into three layers — **Perceptives**, **Detectives**, and **Directives** — that correspond to three questions: What is the world doing? What does it mean for governance? What action should we take? The layering is not a convenience for code organization. Each layer has algebraic properties that make the system's safety guarantees compositional — you can add new sensors, new governance rules, or new actuators without breaking existing guarantees.
 
-### Layer 1: Perceptives — Signal Abstractions
+### Perceptives: What Is the World Doing?
 
-Perceptives represent the raw material of perception: values that change over time.
+Perceptives are the raw material of perception. Two types capture the fundamental duality of time-varying state:
 
-**`Behavior[T]`** (`primitives.py`) — A continuously-available value with a monotonic watermark. `sample()` never fails; it always returns a `Stamped[T]` containing the current value and its timestamp. `update(value, timestamp)` advances the value forward; it raises `ValueError` if the timestamp regresses. This is the core abstraction for slow-changing state: emotion arousal, workspace context, stream health, operator presence. The monotonicity invariant means that downstream consumers can trust that a sampled value was produced at or after the reported time.
+**`Behavior[T]`** is a continuously-available value. It always has a current reading. You can sample it at any time and get a `Stamped[T]` — the value plus the timestamp when it was last updated. The crucial constraint is monotonicity: if you update a Behavior with a timestamp earlier than its current watermark, the update is rejected. Time does not go backward. This means any consumer can trust that a sampled value was produced at or after the reported time. Behaviors model things like emotion arousal, audio energy, stream health, operator presence, circadian alignment — signals that have a meaningful "current value" even between updates.
 
-**`Event[T]`** (`primitives.py`) — A discrete occurrence with pub/sub semantics. `emit(timestamp, value)` fires all subscribers; exceptions in one subscriber do not prevent delivery to others. Late subscribers receive no history — events are ephemeral. This models MIDI clock ticks, wake word detections, governance chain outputs, and actuation completions.
+**`Event[T]`** is a discrete occurrence. It has no current value — it happens at a specific instant and then it's gone. You subscribe to an Event and your callback fires when it emits. Late subscribers receive no history. Events model MIDI clock ticks, wake word detections, governance chain outputs, and actuation completions. The distinction from Behavior is semantic, not just pragmatic: asking "what is the current MIDI tick?" is a category error, while asking "what is the current emotion arousal?" is not.
 
-**`Stamped[T]`** (`primitives.py`) — An immutable snapshot: a value frozen at a moment in time. This is the common currency between Behaviors and Events. When `with_latest_from` samples a Behavior, it gets a `Stamped`. When a FusedContext records its samples, each is a `Stamped`. Immutability prevents TOCTOU (time-of-check-to-time-of-use) bugs between governance evaluation and actuation.
+**`Stamped[T]`** is the common currency: an immutable snapshot of a value frozen at a moment in time. Immutability prevents TOCTOU bugs — between the moment a governance chain evaluates a signal and the moment an executor acts on the decision, the data cannot change underneath.
 
-### Layer 2: Detectives — Governance Composition
+### Detectives: What Does It Mean?
 
-Detectives evaluate whether a proposed action should proceed. They compose into pipelines where safety constraints are structurally guaranteed.
+Detectives evaluate whether a proposed action should proceed. They are governance primitives with specific algebraic properties that make composition safe.
 
-**`VetoChain[C]`** (`governance.py`) — A set of `Veto` predicates evaluated over a context `C`. The chain is **deny-wins**: any single veto denial blocks the action. Evaluation is **exhaustive** — all vetoes run regardless of earlier denials, producing a complete `VetoResult` for audit. Chains compose via `|` (concatenation). The critical property: **adding a veto to a chain can only make the system more restrictive, never less**. This monotonicity means governance changes are safe by construction — you cannot accidentally widen permissions by adding a constraint.
+**`VetoChain[C]`** is a set of constraints evaluated over a context `C`. Each constraint (a `Veto`) is a predicate that either allows or denies. The chain is **deny-wins**: any single denial blocks the action. All vetoes evaluate regardless of earlier denials, producing a complete audit trail. Chains compose via `|` (concatenation).
 
-Each `Veto` optionally tags the axiom it enforces (e.g., `axiom="executive_function"`), linking runtime governance decisions back to constitutional principles.
+The critical property is monotonicity: **adding a veto to a chain can only make the system more restrictive, never less.** If a chain with vetoes A and B permits an action, the chain with vetoes A, B, and C will permit it only if C also allows it. You cannot accidentally widen permissions by adding a constraint. This is the same property that makes Cedar (Amazon's authorization policy language) safe for policy composition, applied here to perception governance. It means that when you wire a new safety check into an existing governance chain, you don't need to reason about interactions with existing checks — the algebra guarantees that the system can only become more conservative.
 
-**`FallbackChain[C, T]`** (`governance.py`) — A priority-ordered sequence of `Candidate` entries, each with a predicate and an action. `select(context)` returns the first candidate whose predicate passes. The chain always has a default (the last entry), ensuring graceful degradation — the system always has something to do. Candidates can carry nested `VetoChain` instances for fine-grained gating. Chains compose via `|`, with the left chain's default taking precedence.
+Each Veto optionally tags the axiom it enforces, linking runtime governance decisions back to constitutional principles.
 
-**`FreshnessGuard`** (`governance.py`) — Rejects decisions made on stale perception data. Each `FreshnessRequirement` specifies a behavior name and a maximum staleness in seconds. `check(context, now)` evaluates all watermarks against thresholds and returns a `FreshnessResult` with violation details. The fail-safe default is `fresh_enough=False` — if freshness cannot be determined, the decision is rejected. This prevents the system from acting on perception data that no longer reflects reality.
+**`FallbackChain[C, T]`** is a priority-ordered sequence of candidates, each with a predicate and an action. It returns the first eligible candidate — deterministically, first-eligible-wins. The chain always has a default (the last entry), which means the system always has something to do. This ensures graceful degradation: even when every interesting action is vetoed, the system doesn't crash or hang — it falls back to the default (typically silence or a hold).
 
-**`FusedContext`** (`governance.py`) — The output of `with_latest_from`: a trigger event fused with current Behavior samples. Carries `trigger_time`, `trigger_value`, a read-only `samples` dict of `Stamped` values, and `min_watermark` (the stalest signal). This is the universal input to governance chains — it contains everything a VetoChain or FallbackChain needs to make a decision.
+**`FreshnessGuard`** rejects decisions made on stale data. Each requirement specifies a behavior name and a maximum staleness in seconds. The fail-safe default is `fresh_enough=False` — if the guard cannot determine freshness, it rejects the decision. This prevents the system from acting on perception data that no longer reflects reality.
 
 ### The Combinator
 
-**`with_latest_from(trigger: Event, behaviors: dict[str, Behavior]) → Event[FusedContext]`** (`combinator.py`)
+**`with_latest_from(trigger: Event, behaviors: dict[str, Behavior]) → Event[FusedContext]`**
 
-The single combinator that bridges Perceptives to Detectives. When the trigger event fires, it samples all behaviors at their current values and emits a `FusedContext`. This is how MIDI-rate decisions incorporate second-scale perception: the MIDI tick is the trigger, the behaviors are emotion, energy, timeline mapping, and suppression state. The combinator computes `min_watermark` as the stalest signal, which flows into the `FreshnessGuard`.
+This single function bridges Perceptives to Detectives. When the trigger fires, it samples every behavior at its current value and emits a `FusedContext` — a frozen snapshot containing the trigger event, all sampled values with their watermarks, and the `min_watermark` (the stalest signal). The semantics are: "this thing just happened — what does the world look like right now?"
 
-The naming follows Rx convention. The semantics are: "when this event happens, what does the world look like right now?"
+This is borrowed directly from Rx's `withLatestFrom` operator, but the addition of watermarks and `min_watermark` computation is specific to this system. It is what allows fast decisions to incorporate slow signals without either blocking on them or ignoring their age.
 
-### Layer 3: Directives — Action Descriptions with Provenance
+### Directives: What Should We Do?
 
-Directives are not actions — they are descriptions of actions that carry the full governance trail of how they were selected. The gap between describing an action and executing it is where governance lives.
+Directives are not actions. They are descriptions of actions that carry the full governance trail of how they were selected. This distinction — between describing an action and performing it — is where governance lives.
 
-**`Command`** (`commands.py`) — An immutable data object recording: what action was selected (`action`, `params`), what governance evaluation produced it (`governance_result: VetoResult`, `selected_by`), which trigger caused it (`trigger_time`, `trigger_source`), and the minimum watermark of the perception data that informed it (`min_watermark`). A denied Command carries its `VetoResult` as provenance. An Executor can inspect it. The system never constructs a Command without a governance trail.
+**`Command`** is an immutable data object recording: what action was selected, what parameters it requires, what governance evaluation produced it (the complete `VetoResult`), which chain selected it, what trigger caused it, and the minimum watermark of the perception data that informed it. A denied Command still exists — it carries its denial as provenance. An Executor can inspect any Command and see the full chain of reasoning that led to it.
 
-**`Schedule`** (`commands.py`) — A Command bound to a specific time in a specific domain. `domain="beat"` means the target time is a beat number; `domain="wall"` means wall-clock. `wall_time` is the resolved wall-clock time (via `TimelineMapping`), and `tolerance_ms` specifies how late execution can be before the schedule is discarded. This bridges Detective output (a governance decision at the conceptual level) to Directive execution (a physical actuator at a precise time).
+The system never constructs a Command without a governance trail. There is no way to create an action description that skips the Detective layer. This is structural, not conventional.
+
+**`Schedule`** binds a Command to a specific time in a specific domain. `domain="beat"` means the target time is a beat number (resolved to wall-clock via `TimelineMapping`); `domain="wall"` means direct wall-clock targeting. The `tolerance_ms` field specifies how late execution can be before the schedule is discarded — a beat-aligned sample that arrives 200ms late is worse than not firing at all.
 
 ### Actuation
 
-**`Executor`** (`executor.py`, Protocol) — The interface for physical actuators. Each Executor declares a `name`, a `frozenset` of action strings it `handles`, an `available()` check, and an `execute(command)` method. The Protocol mirrors `PerceptionBackend` — availability-gated registration, clean shutdown, pluggable implementation.
+**`Executor`** is a protocol for physical actuators. Each declares what action names it handles and whether it's currently available. **`ExecutorRegistry`** routes Commands to the correct Executor. On successful dispatch, it emits an `ActuationEvent` — an immutable record of what happened, when, and how much latency was incurred. This event feeds back into Behaviors, closing the loop.
 
-**`ExecutorRegistry`** (`executor.py`) — Routes Commands to the correct Executor by action name. On successful dispatch, emits an `ActuationEvent` on a shared `Event[ActuationEvent]` stream, recording action, chain, wall time, target time, and latency. This event feeds back into perception Behaviors, closing the loop.
+**`ScheduleQueue`** is a priority queue ordered by wall-clock time. The actuation loop drains it continuously: schedules whose time has arrived are dispatched; those past their tolerance window are discarded; future schedules wait. This is how beat-aligned actuation achieves sub-50ms precision: the MC governance chain emits Schedules at beat positions, and the actuation loop drains them at the right moment.
 
-**`ScheduleQueue`** (`executor.py`) — A priority queue ordered by `wall_time`. `drain(now)` returns all schedules whose time has arrived, discards those past their tolerance window, and leaves future schedules in place. This enables beat-precise actuation: the MC governance chain emits Schedules at beat positions, and the actuation loop drains them at the right wall-clock moment.
+## The Governance Chains
 
-## Governance Chains
+Two governance chains demonstrate how the primitives compose into domain-specific decision pipelines.
 
-### MC Governance — Beat-Aligned Audio Actuation
+### MC Governance: Beat-Aligned Audio
 
-The MC (backup microphone) governance chain controls audio sample playback for music production — vocal throws, ad-libs, and silence — synchronized to MIDI transport.
+The MC (backup microphone) chain controls audio sample playback during live music production — vocal throws, ad-libs, and silence — synchronized to MIDI transport. The pipeline:
 
-```
-Event[MidiTick] → with_latest_from(behaviors) → Event[FusedContext]
-  → FreshnessGuard.check(energy: 200ms, emotion: 3s, timeline: 500ms)
-  → VetoChain: pipeline_active ∧ speech_clear ∧ energy_sufficient ∧ spacing_respected ∧ transport_active
-  → FallbackChain: vocal_throw | ad_lib | silence (default)
-  → Schedule(domain="beat", target_time=next_beat)
-```
+1. A MIDI clock tick fires (the trigger Event)
+2. `with_latest_from` samples energy, emotion, timeline mapping, suppression, and feedback behaviors
+3. `FreshnessGuard` rejects the decision if any signal is too stale (energy: 200ms, emotion: 3s, timeline: 500ms)
+4. `VetoChain` evaluates: Is the pipeline active? Is nobody talking (VAD below threshold)? Is there enough audio energy (adjusted by suppression)? Has enough time passed since the last throw (4s cooldown)? Is MIDI transport playing?
+5. `FallbackChain` selects: vocal throw (high energy + high arousal), ad-lib (moderate energy), or silence (default)
+6. The selected action becomes a `Schedule` at the next beat position, resolved from beat-time to wall-clock via `TimelineMapping`
 
-**Veto predicates** (module-level for testability): `speech_clear` gates on VAD confidence (don't fire over someone talking), `energy_sufficient` checks RMS against an effective threshold modulated by `SuppressionField` (conversation suppression raises the bar), `spacing_respected` enforces cooldown between firings (4s default), `transport_active` requires MIDI transport to be PLAYING.
+Each veto predicate is a module-level function, independently testable. The entire chain is composed from the same primitives used everywhere else.
 
-**Source**: `mc_governance.py`
+### OBS Governance: Camera Direction
 
-### OBS Governance — Camera Direction
+The OBS chain selects livestream camera scenes and transitions based on energy, stream health, and feedback from the MC chain. It runs at perception cadence (2.5s) rather than MIDI cadence, because camera cuts don't need beat alignment — they need stream health awareness and dwell-time respect (don't cut too frequently).
 
-The OBS governance chain selects livestream camera scenes (wide ambient, gear closeup, face cam, rapid cut, hold) and transitions (cut, dissolve, fade) based on audio energy, stream health, and MC feedback.
+A cross-chain feedback mechanism links the two: when the MC chain fires a vocal throw, the feedback behavior `last_mc_fire` updates. The OBS chain reads this and biases toward the face camera — if audio just fired, the viewer should see the performer. This is not a hardcoded coupling; it's a Behavior that one chain writes and another reads through the normal `with_latest_from` sampling.
 
-```
-Event[PerceptionTick] → with_latest_from(behaviors) → Event[FusedContext]
-  → FreshnessGuard.check(energy: 3s, emotion: 5s, stream_health: 10s)
-  → VetoChain: pipeline_active ∧ dwell_time_respected ∧ stream_health_sufficient ∧ encoding_capacity ∧ transport_active
-  → FallbackChain: rapid_cut | face_cam (mc_bias) | face_cam | gear_closeup | wide_ambient (default)
-  → Command(action=scene, params={transition: select_transition(energy)})
-```
+### Pipeline Governor
 
-Cross-chain feedback: if `last_mc_fire` (a feedback Behavior) indicates the MC chain fired within 2 seconds, the OBS chain biases toward `face_cam` via a boosted candidate — the camera should be on the performer when audio just fired.
-
-**Source**: `obs_governance.py`
-
-### Pipeline Governor — Perception-Level Directive
-
-The `PipelineGovernor` (`governor.py`) operates at a higher level than MC or OBS, determining whether the voice pipeline should be active at all. It evaluates `EnvironmentState` (the fused perception snapshot) and returns a directive: `"process"` (pipeline runs normally), `"pause"` (frame gate drops audio), or `"withdraw"` (session should close).
-
-Internally uses VetoChain + FallbackChain with axiom compliance checking: workspace context (from slow-tick LLM analysis) is matched against `management_governance` T0 implications to prevent the system from processing audio in contexts where it might generate feedback or coaching language about individuals. Wake word detection overrides both chains (supremacy flag with 3-tick grace period).
+Above both chains sits the `PipelineGovernor`, which determines whether the voice pipeline should be active at all. It evaluates the fused `EnvironmentState` and returns a directive: `"process"` (pipeline runs), `"pause"` (audio frames are dropped), or `"withdraw"` (session should close). It uses VetoChain + FallbackChain internally, with axiom compliance checking: workspace context (from slow-tick LLM analysis) is matched against `management_governance` T0 implications to prevent the system from processing audio in contexts where it might encounter management-sensitive content.
 
 ## Cross-Chain Coordination
 
 ### Suppression Fields
 
-`SuppressionField` (`suppression.py`) implements smooth-ramping threshold modulation using attack/release envelopes. When a conversation is detected, the field's target is set high; `tick(now)` advances the current value toward the target using the attack rate (fast ramp up) or release rate (slow ramp down).
+When roles must coexist — conversation and MC, for instance — binary mode-switching is too coarse. `SuppressionField` provides continuous modulation (0.0 to 1.0) using attack/release envelopes borrowed from audio compressor design. The `effective_threshold` function adjusts a base energy threshold by suppression level: at 0 the threshold is unchanged; at 1.0 it reaches 1.0 (impossible to trigger), fully suppressing the chain. Between those extremes, the chain becomes progressively harder to fire.
 
-The `effective_threshold` function adjusts a base threshold by suppression level: `threshold_eff = base + suppression * (1.0 - base)`. At suppression=0 the threshold is unchanged; at suppression=1.0 it reaches 1.0 (impossible to satisfy), fully suppressing the governed chain. This provides graceful degradation rather than binary on/off switching.
+This is Brooks' subsumption architecture (layered behavioral competence with inhibition) reimplemented as graduated modulation rather than binary suppression. It prevents oscillation when signals are noisy and allows multiple roles to coexist with dynamic priorities.
 
 ### Resource Arbiter
 
-`ResourceArbiter` (`arbiter.py`) resolves contention when multiple governance chains claim the same physical resource (e.g., both MC and OBS want audio output). Claims carry static priorities configured in `resource_config.py`. `drain_winners(now)` selects one winner per resource (highest priority, FIFO tie-breaking), garbage-collects expired holds, and removes one-shot claims after winning.
+When multiple governance chains produce Commands that claim the same physical resource (both MC and OBS want audio output), the `ResourceArbiter` resolves contention. Claims carry static priorities. `drain_winners()` selects one winner per resource per cycle, garbage-collects expired holds, and removes one-shot claims after winning. The arbiter sits between governance output and executor dispatch — the Commands exist (with full governance provenance) regardless of whether they win the resource.
 
 ### Feedback Loop
 
-`wire_feedback_behaviors()` (`feedback.py`) subscribes to the `ExecutorRegistry`'s `actuation_event` stream and maintains four Behaviors: `last_mc_fire` (wall time of last MC actuation), `mc_fire_count` (running count), `last_obs_switch` (last OBS scene change), and `last_tts_end` (last TTS completion). These Behaviors are included in the fused context of governance chains, enabling feedback-driven decisions: MC's `spacing_respected` veto reads `last_mc_fire` for cooldown, OBS's `_mc_fired_recently` reads it for camera bias.
-
-This closes the reactive loop: perception → governance → actuation → feedback → perception.
+`wire_feedback_behaviors()` subscribes to the `ExecutorRegistry`'s actuation event stream and maintains Behaviors that governance chains read: `last_mc_fire`, `mc_fire_count`, `last_obs_switch`, `last_tts_end`. The MC chain reads `last_mc_fire` to enforce cooldown (the `spacing_respected` veto). The OBS chain reads it to bias camera selection. This closes the reactive loop: perception → governance → actuation → feedback → perception. The feedback is not a special mechanism — it's Behaviors and Events, the same primitives used throughout.
 
 ## Perception Infrastructure
 
-### PerceptionEngine
+### Backends and Cadence
 
-`PerceptionEngine` (`perception.py`) produces `EnvironmentState` snapshots by fusing registered backends. It runs at two cadences: a fast tick (2.5s) that polls FAST and EVENT-tier backends (VAD, face detection, window state), and a slow enrichment tick (12s) that polls SLOW-tier backends (workspace analysis via LLM, circadian alignment).
+`PerceptionEngine` produces `EnvironmentState` snapshots by fusing registered backends. Each backend implements the `PerceptionBackend` protocol and is assigned to a `CadenceGroup` — a set of backends polled at a shared interval. Different groups run at different rates: audio energy at fast tick (2.5s), workspace analysis at slow tick (12s), Hyprland window state on IPC events.
 
-`EnvironmentState` is a frozen dataclass carrying: audio signals (speech detected, VAD confidence), visual signals (face count, operator present, presence score), desktop topology (active window, workspace), voice session state, and an interruptibility score computed from VAD, activity mode, physiological load, circadian alignment, and system health.
+Each CadenceGroup has its own `tick_event: Event[float]`. Governance chains wire to the tick event of the cadence group that matches their temporal requirements. The MC chain wires to MIDI clock ticks. The OBS chain wires to perception fast ticks. This means each chain fires at the rate it needs, sampling all other signals at their current values via `with_latest_from`.
 
-### Perception Backends
-
-Each backend implements the `PerceptionBackend` protocol: declares a `name`, `provides` (behavior names), `tier` (FAST/SLOW/EVENT), and `contribute(behaviors)` method. Eight backends in `backends/`:
-
-| Backend | Tier | Signals | Source |
-|---------|------|---------|--------|
-| `PipeWireBackend` | FAST | Audio energy (RMS, peak), emotion (arousal, valence) | PipeWire audio graph |
-| `HyprlandBackend` | EVENT | Active window, workspace, window count | Hyprland IPC socket |
-| `WatchBackend` | SLOW | Heart rate, HRV, stress estimate | Wearable API |
-| `HealthBackend` | FAST | CPU, RAM, temperature, GPU utilization | `/proc`, `nvidia-smi` |
-| `CircadianBackend` | SLOW | Circadian phase, alignment score | Time-of-day model |
-| `MidiClockBackend` | FAST | MIDI tick events, transport state, tempo | ALSA MIDI |
-| `StreamHealthBackend` | SLOW | Bitrate, encoding lag, dropped frames | OBS WebSocket |
-
-### CadenceGroup
-
-`CadenceGroup` (`cadence.py`) groups backends that share a polling interval. Each group has its own `tick_event: Event[float]` emitted after each poll cycle. This enables per-cadence combinator wiring: `with_latest_from(group.tick_event, behaviors)` triggers governance evaluation at the group's natural rate rather than at a fixed global rate. Different governance chains wire to different cadence groups based on their temporal requirements.
+Eight backends in `backends/`: PipeWire (audio energy, emotion), Hyprland (window/workspace), watch (heart rate, HRV), health (CPU, RAM, GPU), circadian (rhythm alignment), MIDI clock (ticks, transport, tempo), stream health (OBS bitrate, lag, drops).
 
 ### Multi-Source Wiring
 
-`WiringConfig` (`wiring.py`) maps physical sources (identified by `source_id` like `"monitor_mix"` or `"mic_input"`) to backend instances and cadence groups. `GovernanceBinding` maps bare governance behavior names (like `audio_energy_rms`) to source-qualified names (like `audio_energy_rms:monitor_mix`), allowing governance chains to be written against abstract signal names while the wiring layer resolves them to specific physical sources. `build_behavior_alias()` constructs the alias dict. Aggregation functions (`aggregate_max`, `aggregate_mean`, `aggregate_any`) derive synthetic behaviors from multiple sources.
+`WiringConfig` maps physical sources to backend instances and cadence groups. `GovernanceBinding` resolves bare signal names (like `audio_energy_rms`) to source-qualified names (like `audio_energy_rms:monitor_mix`), allowing governance chains to be written against abstract signals while the wiring layer handles physical routing. Aggregation functions derive synthetic behaviors from multiple sources (`aggregate_max`, `aggregate_mean`, `aggregate_any`).
 
 ## Musical Semantics
 
-**`TimelineMapping`** (`timeline.py`) — A bijective affine map between wall-clock time and beat time. Given a reference point (time, beat) and a tempo (BPM), `beat_at_time(t)` and `time_at_beat(b)` are pure arithmetic with no I/O. Transport state (PLAYING/STOPPED) freezes the mapping. This enables the MC governance chain to emit Schedules in beat-domain time and the actuation loop to resolve them to wall-clock for precise playback.
+`TimelineMapping` is a bijective affine map between wall-clock and beat time: given a reference point and a tempo, `beat_at_time(t)` and `time_at_beat(b)` are pure arithmetic. Transport state (PLAYING/STOPPED) freezes the mapping. Bijectivity means every wall-clock instant has exactly one beat position and vice versa — no ambiguity, no rounding. This is adapted from Ableton Link's timeline triple `(beat, time, tempo)`.
 
-**`MusicalPosition`** (`musical_position.py`) — Hierarchical decomposition of a global beat number into bar, beat-in-bar, phrase, bar-in-phrase, section, and phrase-in-section (assuming 4/4 time, 4-bar phrases, 4-phrase sections). This enables musically-aware governance: fire on downbeats, avoid mid-phrase interruptions, respect section boundaries.
+`MusicalPosition` decomposes a global beat number into bar, beat-in-bar, phrase, bar-in-phrase, section, and phrase-in-section (assuming 4/4 time, 4-bar phrases, 4-phrase sections). This enables musically-aware governance: fire on downbeats, respect phrase boundaries, avoid mid-section interruptions.
 
 ## Consent and Speaker Identity
 
-`SpeakerIdentifier` (`speaker_id.py`) performs speaker identification via embedding cosine similarity — not for authentication (single-user axiom), but for routing (operator vs. guest vs. uncertain). The `identify_audio()` and `enroll()` methods accept optional `person_id` and `consent_registry` parameters. For non-operator persons, the `ConsentRegistry` must have an active contract covering the `"biometric"` data category before embeddings are processed or persisted. Without a contract, identification returns `uncertain` and enrollment raises `ValueError`.
-
-This enforces the `interpersonal_transparency` axiom (weight 88) at the perception boundary — before embeddings are extracted, before state is persisted, before any downstream processing occurs.
+`SpeakerIdentifier` performs speaker identification via embedding cosine similarity — not for authentication (single-user axiom), but for routing decisions (operator present vs. guest vs. uncertain). For non-operator persons, the `ConsentRegistry` must have an active contract covering the `"biometric"` data category before embeddings are processed. Without a contract, identification returns `uncertain` and enrollment raises `ValueError`. The gate is at the perception boundary — before the embedding is even extracted.
 
 ## Daemon Lifecycle
 
-`VoiceDaemon` (`__main__.py`, ~1000 lines) orchestrates all subsystems:
-
-**Initialization**: Creates SessionManager, PresenceDetector, ContextGate, NotificationQueue, HotkeyServer (Unix socket), WakeWordDetector (Porcupine or OpenWakeWord), AudioInputStream, TTSManager, ChimePlayer, WorkspaceMonitor, PerceptionEngine, PipelineGovernor, FrameGate, ConsentRegistry, and ResourceArbiter. Registers perception backends (availability-gated — missing hardware degrades gracefully). Wires feedback behaviors and governance chains.
-
-**Async loops** (concurrent via `asyncio.gather`):
-- `_audio_loop()` — distributes 30ms audio frames to wake word detector (exact chunk sizes), VAD (512 samples), and Gemini Live session
-- `_perception_loop()` — fast tick (2.5s): poll backends, compute EnvironmentState, evaluate PipelineGovernor, apply directive to FrameGate
-- `_actuation_loop()` — drain ScheduleQueue at beat precision, route through ResourceArbiter, dispatch via ExecutorRegistry
-- `_wake_word_processor()` — awaits wake word detection, atomically starts session and pipeline
-- `_proactive_delivery_loop()` — checks notification queue when operator is present and interruptible
-
-**Pipeline backends**: `"local"` (Pipecat: STT → LLM → TTS with LocalAudioTransport) or `"gemini"` (Gemini Live speech-to-speech session).
+`VoiceDaemon` (`__main__.py`, ~1000 lines) orchestrates all subsystems. Five concurrent async loops handle audio distribution (30ms frames to wake word, VAD, and Gemini Live), perception (fast/slow tick polling), actuation (ScheduleQueue draining), wake word processing, and proactive notification delivery. Backends are registered with availability gating — missing hardware degrades gracefully, never crashes. Pipeline backends support local processing (Pipecat: STT → LLM → TTS) or cloud (Gemini Live speech-to-speech).
 
 ## Package Structure
 
@@ -187,32 +143,24 @@ This enforces the `interpersonal_transparency` axiom (weight 88) at the percepti
 agents/hapax_voice/
 ├── primitives.py           Behavior[T], Event[T], Stamped[T]
 ├── governance.py           VetoChain, FallbackChain, FreshnessGuard, FusedContext
-├── combinator.py           with_latest_from combinator
-├── commands.py             Command, Schedule (immutable directives)
-├── executor.py             Executor protocol, ExecutorRegistry, ScheduleQueue
-├── perception.py           PerceptionBackend protocol, PerceptionEngine, EnvironmentState
+├── combinator.py           with_latest_from
+├── commands.py             Command, Schedule
+├── executor.py             Executor, ExecutorRegistry, ScheduleQueue
+├── perception.py           PerceptionBackend, PerceptionEngine, EnvironmentState
 ├── wiring.py               WiringConfig, GovernanceBinding, multi-source aliases
 ├── cadence.py              CadenceGroup (multi-rate polling)
-├── mc_governance.py        MC chain composition (beat-aligned audio)
-├── obs_governance.py       OBS chain composition (camera direction)
+├── mc_governance.py        MC chain (beat-aligned audio)
+├── obs_governance.py       OBS chain (camera direction)
 ├── governor.py             PipelineGovernor (process/pause/withdraw)
 ├── suppression.py          SuppressionField (attack/release envelope)
 ├── arbiter.py              ResourceArbiter (priority-based contention)
-├── resource_config.py      RESOURCE_MAP, DEFAULT_PRIORITIES
 ├── feedback.py             wire_feedback_behaviors (actuation → perception)
-├── chain_state.py          GovernanceChainState, ConversationState, cross-role Behaviors
-├── speaker_id.py           SpeakerIdentifier (consent-gated biometric)
+├── chain_state.py          Cross-role state (GovernanceChainState, ConversationState)
+├── speaker_id.py           SpeakerIdentifier (consent-gated)
 ├── timeline.py             TimelineMapping (wall-clock ↔ beat bijection)
 ├── musical_position.py     MusicalPosition (hierarchical beat decomposition)
 ├── actuation_event.py      ActuationEvent (immutable actuation record)
-├── __main__.py             VoiceDaemon (daemon wiring and lifecycle)
-├── backends/
-│   ├── pipewire.py         PipeWire audio energy + emotion
-│   ├── hyprland.py         Hyprland window/workspace (IPC)
-│   ├── watch.py            Wearable health signals
-│   ├── health.py           System health (CPU, RAM, GPU, temp)
-│   ├── circadian.py        Circadian rhythm alignment
-│   ├── midi_clock.py       MIDI clock ticks + transport state
-│   └── stream_health.py    OBS stream health (bitrate, lag, drops)
+├── __main__.py             VoiceDaemon (wiring and lifecycle)
+├── backends/               8 perception backends (PipeWire, Hyprland, MIDI, etc.)
 └── ... (63 .py files total)
 ```
