@@ -78,8 +78,7 @@ def is_litellm_healthy() -> bool:
         _consecutive_failures += 1
         if _consecutive_failures == _CIRCUIT_OPEN_THRESHOLD:
             log.warning(
-                "LiteLLM circuit breaker OPEN after %d failures, "
-                "skipping checks for %ds",
+                "LiteLLM circuit breaker OPEN after %d failures, skipping checks for %ds",
                 _consecutive_failures,
                 int(_CIRCUIT_OPEN_COOLDOWN_S),
             )
