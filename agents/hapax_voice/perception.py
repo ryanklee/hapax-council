@@ -136,6 +136,8 @@ class EnvironmentState:
     # Visual signals (fast tick)
     face_count: int = 0
     operator_present: bool = False
+    operator_identified: bool = False
+    identity_confidence: float = 0.0
 
     # Presence (fast tick, from PresenceDetector)
     presence_score: str = "likely_absent"
@@ -196,6 +198,11 @@ class PerceptionEngine:
         self._b_vad_confidence: Behavior[float] = Behavior(0.0)
         self._b_operator_present: Behavior[bool] = Behavior(False)
         self._b_face_count: Behavior[int] = Behavior(0)
+        self._b_presence_score: Behavior[str] = Behavior("likely_absent")
+
+        # Identity Behaviors — watermark=0.0 so they're recognized as "not yet populated"
+        self._b_operator_identified: Behavior[bool] = Behavior(False, watermark=0.0)
+        self._b_identity_confidence: Behavior[float] = Behavior(0.0, watermark=0.0)
 
         # Phase 2 extension point: all behaviors by name
         self.behaviors: dict[str, Behavior] = {
@@ -207,6 +214,9 @@ class PerceptionEngine:
             "vad_confidence": self._b_vad_confidence,
             "operator_present": self._b_operator_present,
             "face_count": self._b_face_count,
+            "presence_score": self._b_presence_score,
+            "operator_identified": self._b_operator_identified,
+            "identity_confidence": self._b_identity_confidence,
         }
 
         # Tick event — emitted at end of each tick() for combinator wiring
@@ -278,7 +288,6 @@ class PerceptionEngine:
 
         # Update fast-tick Behaviors
         self._b_vad_confidence.update(vad_conf, now)
-        self._b_operator_present.update(face_detected, now)
         self._b_face_count.update(face_count, now)
 
         # Poll registered backends — each merges its Behaviors into self.behaviors
@@ -287,6 +296,13 @@ class PerceptionEngine:
                 backend.contribute(self.behaviors)
             except Exception:
                 log.exception("Backend %s contribute failed", name)
+
+        # Identity-aware operator_present: prefer identity signal when available
+        identity_b = self.behaviors.get("operator_identified")
+        if identity_b is not None and identity_b.watermark > 0:
+            self._b_operator_present.update(identity_b.value, now)
+        else:
+            self._b_operator_present.update(face_detected, now)
 
         interruptibility = compute_interruptibility(
             vad_confidence=self._b_vad_confidence.value,
@@ -300,6 +316,7 @@ class PerceptionEngine:
         )
 
         presence_score = getattr(self._presence, "score", "likely_absent")
+        self._b_presence_score.update(presence_score, now)
 
         state = EnvironmentState(
             timestamp=now,
@@ -307,6 +324,8 @@ class PerceptionEngine:
             vad_confidence=self._b_vad_confidence.value,
             face_count=self._b_face_count.value,
             operator_present=self._b_operator_present.value,
+            operator_identified=self._b_operator_identified.value,
+            identity_confidence=self._b_identity_confidence.value,
             presence_score=presence_score,
             activity_mode=self._b_activity_mode.value,
             workspace_context=self._b_workspace_context.value,

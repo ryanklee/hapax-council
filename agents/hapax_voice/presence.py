@@ -47,6 +47,7 @@ class PresenceDetector:
         self._event_log: Any | None = None
         self._last_score: str = "likely_absent"
         self._latest_vad_confidence: float = 0.0
+        self._operator_identified: bool = False
 
     def load_model(self) -> Any:
         """Lazily load and return the Silero VAD model (CPU-only)."""
@@ -103,10 +104,13 @@ class PresenceDetector:
         """Set the event log for emitting presence transition events."""
         self._event_log = event_log
 
-    def record_face_event(self, detected: bool, count: int = 0) -> None:
+    def record_face_event(
+        self, detected: bool, count: int = 0, operator_identified: bool = False
+    ) -> None:
         """Record a face detection result from the webcam."""
         self._face_detected = detected
         self._face_count = count if detected else 0
+        self._operator_identified = operator_identified
         if detected:
             self._last_face_time = time.monotonic()
 
@@ -175,6 +179,11 @@ class PresenceDetector:
         """Number of faces detected in the most recent frame."""
         return self._face_count if self.face_detected else 0
 
+    @property
+    def operator_identified(self) -> bool:
+        """Whether the operator was identified among detected faces."""
+        return self._operator_identified if self.face_detected else False
+
     def _prune_old_events(self) -> None:
         """Remove events older than the sliding window."""
         cutoff = time.monotonic() - (self.window_minutes * 60)
@@ -187,9 +196,11 @@ class PresenceDetector:
         self._prune_old_events()
         count = len(self._events)
         face = self.face_detected
+        identified = self.operator_identified
 
         if count >= 5:
-            new_score = "definitely_present" if face else "likely_present"
+            # definitely_present requires operator identified, not just any face
+            new_score = "definitely_present" if identified else "likely_present"
         elif count >= 2:
             new_score = "likely_present" if face else "uncertain"
         elif face:

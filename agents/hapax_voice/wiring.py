@@ -60,7 +60,13 @@ class GovernanceBinding:
     energy_source: str  # source_id for audio energy
     emotion_source: str  # source_id for emotion
     activity_source: str | None = None  # source_id for activity (optional)
-    unqualified: tuple[str, ...] = ("vad_confidence", "timeline_mapping")
+    unqualified: tuple[str, ...] = (
+        "vad_confidence",
+        "timeline_mapping",
+        "agreement_ok",
+        "operator_identified",
+        "identity_confidence",
+    )
 
 
 @dataclass(frozen=True)

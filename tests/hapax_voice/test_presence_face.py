@@ -28,13 +28,22 @@ def test_presence_face_not_detected_stays_false():
 
 
 def test_presence_composite_both_present():
-    """VAD likely_present + face = definitely_present."""
+    """VAD likely_present + identified operator = definitely_present."""
     p = PresenceDetector(window_minutes=5, vad_threshold=0.4)
     # Add enough VAD events for likely_present
     for _ in range(6):
         p.record_vad_event(confidence=0.9)
-    p.record_face_event(detected=True, count=1)
+    p.record_face_event(detected=True, count=1, operator_identified=True)
     assert p.score == "definitely_present"
+
+
+def test_presence_composite_face_not_identified():
+    """VAD likely_present + face (not identified) = likely_present, not definitely."""
+    p = PresenceDetector(window_minutes=5, vad_threshold=0.4)
+    for _ in range(6):
+        p.record_vad_event(confidence=0.9)
+    p.record_face_event(detected=True, count=1, operator_identified=False)
+    assert p.score == "likely_present"
 
 
 def test_presence_composite_vad_only():
@@ -72,3 +81,21 @@ def test_presence_guest_count():
     p = PresenceDetector(window_minutes=5, vad_threshold=0.4)
     p.record_face_event(detected=True, count=3)
     assert p.face_count == 3
+
+
+def test_operator_identified_property():
+    """operator_identified is True only when face detected AND identified."""
+    p = PresenceDetector(window_minutes=5, vad_threshold=0.4)
+    assert p.operator_identified is False  # no face
+    p.record_face_event(detected=True, count=1, operator_identified=True)
+    assert p.operator_identified is True
+    p.record_face_event(detected=False)
+    assert p.operator_identified is False  # face gone
+
+
+def test_operator_identified_false_when_not_identified():
+    """Face detected but operator not identified → operator_identified is False."""
+    p = PresenceDetector(window_minutes=5, vad_threshold=0.4)
+    p.record_face_event(detected=True, count=2, operator_identified=False)
+    assert p.operator_identified is False
+    assert p.face_detected is True

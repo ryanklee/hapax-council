@@ -24,6 +24,7 @@ try:
 except ImportError:
     cv2 = None  # type: ignore[assignment]
 
+from agents.hapax_voice.face_identity import FaceIdentityResolver
 from agents.hapax_voice.perception import PerceptionTier
 from agents.hapax_voice.primitives import Behavior
 from agents.hapax_voice.source_naming import qualify, validate_source_id
@@ -31,6 +32,7 @@ from agents.hapax_voice.source_naming import qualify, validate_source_id
 log = logging.getLogger(__name__)
 
 _BASE_NAMES = ("emotion_valence", "emotion_arousal", "emotion_dominant")
+_IDENTITY_NAMES = ("operator_identified", "identity_confidence")
 
 # 8 discrete emotion categories from hsemotion
 EMOTION_CATEGORIES = (
@@ -172,8 +174,13 @@ class _EmotionInference:
     types.
     """
 
-    def __init__(self, frame_reader: _FrameReader) -> None:
+    def __init__(
+        self,
+        frame_reader: _FrameReader,
+        identity_resolver: FaceIdentityResolver | None = None,
+    ) -> None:
         self._frame_reader = frame_reader
+        self._identity_resolver = identity_resolver
         self._thread: threading.Thread | None = None
         self._running = False
 
@@ -182,6 +189,8 @@ class _EmotionInference:
         self.arousal: float = 0.0  # 0.0-1.0 (rescaled from [-1,1])
         self.dominant: str = "neutral"
         self.last_update: float = 0.0
+        self.operator_identified: bool = False
+        self.identity_confidence: float = 0.0
 
         # Lazy-initialized models
         self._face_mesh = None
@@ -214,7 +223,7 @@ class _EmotionInference:
 
             self._face_mesh = mp.solutions.face_mesh.FaceMesh(
                 static_image_mode=False,
-                max_num_faces=1,
+                max_num_faces=4,
                 refine_landmarks=False,
                 min_detection_confidence=0.5,
                 min_tracking_confidence=0.5,
@@ -241,11 +250,51 @@ class _EmotionInference:
                     log.exception("Emotion inference error")
             time.sleep(INFERENCE_INTERVAL_S)
 
+    def _extract_crops(
+        self, frame: np.ndarray, face_landmarks_list: list
+    ) -> list[np.ndarray]:
+        """Extract face crops from frame for each detected face."""
+        h, w = frame.shape[:2]
+        crops: list[np.ndarray] = []
+        for landmarks in face_landmarks_list:
+            xs = [lm.x * w for lm in landmarks.landmark]
+            ys = [lm.y * h for lm in landmarks.landmark]
+            x_min, x_max = int(max(0, min(xs))), int(min(w, max(xs)))
+            y_min, y_max = int(max(0, min(ys))), int(min(h, max(ys)))
+            if x_max > x_min and y_max > y_min:
+                crops.append(frame[y_min:y_max, x_min:x_max])
+        return crops
+
+    def _select_operator_crop(
+        self, crops: list[np.ndarray]
+    ) -> tuple[np.ndarray | None, bool, float]:
+        """Select the operator's face crop using identity resolution.
+
+        Returns (selected_crop, operator_identified, identity_confidence).
+        """
+        if self._identity_resolver is None or not crops:
+            # No resolver → select first face (backward compat)
+            return (crops[0] if crops else None, False, 0.0)
+
+        results = self._identity_resolver.resolve_batch(crops)
+        best_idx: int | None = None
+        best_conf = -1.0
+        for i, result in enumerate(results):
+            if result.is_operator and result.confidence > best_conf:
+                best_idx = i
+                best_conf = result.confidence
+
+        if best_idx is not None:
+            return (crops[best_idx], True, best_conf)
+        # No operator found — hold last values (watermark stops → FreshnessGuard catches)
+        return (None, False, max((r.confidence for r in results), default=0.0))
+
     def _process_frame(self, frame: np.ndarray) -> None:
         """Run face detection + emotion classification on a single BGR frame.
 
-        This is the testable core: takes a numpy BGR frame, runs face mesh,
-        crops the face region, runs the emotion model.
+        Multi-face aware: detects up to 4 faces, uses identity resolution to
+        select the operator's face for emotion inference. Falls back to first
+        face when no identity resolver is available.
         """
         # MediaPipe expects RGB
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -253,32 +302,31 @@ class _EmotionInference:
 
         if not results.multi_face_landmarks:
             # No face detected — hold last values, stop advancing watermark
+            self.operator_identified = False
+            self.identity_confidence = 0.0
             return
 
-        landmarks = results.multi_face_landmarks[0]
-        h, w = frame.shape[:2]
-
-        # Extract face bounding box from landmarks
-        xs = [lm.x * w for lm in landmarks.landmark]
-        ys = [lm.y * h for lm in landmarks.landmark]
-        x_min, x_max = int(max(0, min(xs))), int(min(w, max(xs)))
-        y_min, y_max = int(max(0, min(ys))), int(min(h, max(ys)))
-
-        if x_max <= x_min or y_max <= y_min:
+        # Extract crops for all detected faces
+        crops = self._extract_crops(frame, results.multi_face_landmarks)
+        if not crops:
             return
 
-        face_crop = frame[y_min:y_max, x_min:x_max]
+        # Select operator's crop via identity resolution
+        face_crop, identified, confidence = self._select_operator_crop(crops)
+        self.operator_identified = identified
+        self.identity_confidence = confidence
+
+        if face_crop is None:
+            # Identity resolver active but operator not found — hold values
+            return
 
         # hsemotion expects BGR face crop, returns (emotion_str, scores_dict)
         emotion, scores = self._emotion_model.predict_emotions(face_crop, logits=True)
-        # scores is a dict or array — extract valence/arousal
-        # The model returns valence and arousal as separate outputs
         valence_raw = float(scores.get("valence", 0.0)) if isinstance(scores, dict) else 0.0
         arousal_raw = float(scores.get("arousal", 0.0)) if isinstance(scores, dict) else 0.0
 
         # If the model returns arrays, handle that case
         if hasattr(self._emotion_model, "predict_multi_emotions"):
-            # Use the multi-output API if available
             try:
                 result = self._emotion_model.predict_multi_emotions(face_crop)
                 if isinstance(result, dict):
@@ -312,11 +360,17 @@ class EmotionBackend:
     Without ``target``, operates as a stub (``available() → False``).
     """
 
-    def __init__(self, source_id: str | None = None, target: str | None = None) -> None:
+    def __init__(
+        self,
+        source_id: str | None = None,
+        target: str | None = None,
+        identity_resolver: FaceIdentityResolver | None = None,
+    ) -> None:
         if source_id is not None:
             validate_source_id(source_id)
         self._source_id = source_id
         self._target = target
+        self._identity_resolver = identity_resolver
         self._device_path: str | None = None
         self._frame_reader: _FrameReader | None = None
         self._inference: _EmotionInference | None = None
@@ -325,6 +379,8 @@ class EmotionBackend:
         self._b_valence: Behavior[float] = Behavior(0.0)
         self._b_arousal: Behavior[float] = Behavior(0.0)
         self._b_dominant: Behavior[str] = Behavior("neutral")
+        self._b_operator_identified: Behavior[bool] = Behavior(False)
+        self._b_identity_confidence: Behavior[float] = Behavior(0.0)
 
     @property
     def name(self) -> str:
@@ -335,8 +391,11 @@ class EmotionBackend:
     @property
     def provides(self) -> frozenset[str]:
         if self._source_id:
-            return frozenset(qualify(b, self._source_id) for b in _BASE_NAMES)
-        return frozenset(_BASE_NAMES)
+            qualified = frozenset(qualify(b, self._source_id) for b in _BASE_NAMES)
+        else:
+            qualified = frozenset(_BASE_NAMES)
+        # Identity names are always unqualified — singleton concept
+        return qualified | frozenset(_IDENTITY_NAMES)
 
     @property
     def tier(self) -> PerceptionTier:
@@ -376,6 +435,8 @@ class EmotionBackend:
         self._b_valence.update(self._inference.valence, now)
         self._b_arousal.update(self._inference.arousal, now)
         self._b_dominant.update(self._inference.dominant, now)
+        self._b_operator_identified.update(self._inference.operator_identified, now)
+        self._b_identity_confidence.update(self._inference.identity_confidence, now)
 
         if self._source_id:
             behaviors[qualify("emotion_valence", self._source_id)] = self._b_valence
@@ -386,13 +447,17 @@ class EmotionBackend:
             behaviors["emotion_arousal"] = self._b_arousal
             behaviors["emotion_dominant"] = self._b_dominant
 
+        # Identity is always unqualified — singleton concept
+        behaviors["operator_identified"] = self._b_operator_identified
+        behaviors["identity_confidence"] = self._b_identity_confidence
+
     def start(self) -> None:
         if self._device_path is None:
             log.warning("Emotion backend %s: no device path, cannot start", self.name)
             return
         self._frame_reader = _FrameReader(self._device_path)
         self._frame_reader.start()
-        self._inference = _EmotionInference(self._frame_reader)
+        self._inference = _EmotionInference(self._frame_reader, self._identity_resolver)
         self._inference.start()
         log.info("Emotion backend started: %s (device %s)", self.name, self._device_path)
 

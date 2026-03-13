@@ -251,6 +251,32 @@ class VoiceDaemon:
 
     def _register_perception_backends(self) -> None:
         """Instantiate and register available perception backends."""
+        # Face identity resolver — shared by EmotionBackend
+        identity_resolver = None
+        if self.cfg.identity_enabled:
+            try:
+                from agents.hapax_voice.face_identity import FaceIdentityResolver
+
+                resolver = FaceIdentityResolver(threshold=self.cfg.identity_threshold)
+                if resolver.available():
+                    identity_resolver = resolver
+                    log.info("Face identity resolver loaded")
+                else:
+                    log.info("Face identity not available (no enrollment or model)")
+            except Exception:
+                log.info("Face identity resolver failed to load, skipping")
+
+        # EmotionBackend — webcam-based emotion inference
+        try:
+            from agents.hapax_voice.backends.emotion import EmotionBackend
+
+            brio_target = self.cfg.webcam_brio_device if self.cfg.webcam_enabled else None
+            self.perception.register_backend(
+                EmotionBackend("face_cam", target=brio_target, identity_resolver=identity_resolver)
+            )
+        except Exception:
+            log.info("EmotionBackend not available, skipping")
+
         try:
             from agents.hapax_voice.backends.pipewire import PipeWireBackend
 

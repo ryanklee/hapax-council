@@ -84,6 +84,10 @@ class VoiceConfig(BaseModel):
     timelapse_retention_days: int = 7
     timelapse_path: str = "~/.local/share/hapax-voice/timelapse"
 
+    # Identity resolution
+    identity_enabled: bool = True
+    identity_threshold: float = 0.4
+
     # Perception layer
     perception_fast_tick_s: float = 2.5
     perception_slow_tick_s: float = 12.0

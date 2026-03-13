@@ -70,13 +70,16 @@ class TestEmotionBackendParameterization:
     def test_no_source_id_backward_compatible(self):
         b = EmotionBackend()
         assert b.name == "emotion"
-        assert b.provides == frozenset(
+        assert b.provides >= frozenset(
             {
                 "emotion_valence",
                 "emotion_arousal",
                 "emotion_dominant",
             }
         )
+        # Also includes identity signals (always unqualified)
+        assert "operator_identified" in b.provides
+        assert "identity_confidence" in b.provides
 
     def test_with_source_id_qualifies_name(self):
         b = EmotionBackend("face_cam")
@@ -84,13 +87,15 @@ class TestEmotionBackendParameterization:
 
     def test_with_source_id_qualifies_provides(self):
         b = EmotionBackend("face_cam")
-        assert b.provides == frozenset(
+        assert b.provides >= frozenset(
             {
                 "emotion_valence:face_cam",
                 "emotion_arousal:face_cam",
                 "emotion_dominant:face_cam",
             }
         )
+        # Identity signals always unqualified
+        assert "operator_identified" in b.provides
 
     def test_invalid_source_id_raises(self):
         with pytest.raises(ValueError, match="lowercase"):
@@ -100,7 +105,12 @@ class TestEmotionBackendParameterization:
         a = EmotionBackend("face_cam")
         b = EmotionBackend("overhead_gear")
         assert a.name != b.name
-        assert a.provides.isdisjoint(b.provides)
+        # Source-qualified emotion names are disjoint; identity names overlap (singleton)
+        from agents.hapax_voice.backends.emotion import _IDENTITY_NAMES
+
+        a_qualified = a.provides - frozenset(_IDENTITY_NAMES)
+        b_qualified = b.provides - frozenset(_IDENTITY_NAMES)
+        assert a_qualified.isdisjoint(b_qualified)
 
 
 # ===========================================================================
@@ -151,7 +161,12 @@ class TestParameterizedBackendRegistration:
     def test_two_emotion_different_sources_no_conflict(self):
         a = EmotionBackend("face_cam")
         b = EmotionBackend("overhead_gear")
-        assert a.provides.isdisjoint(b.provides)
+        # Source-qualified names are disjoint; identity names are shared (singleton)
+        from agents.hapax_voice.backends.emotion import _IDENTITY_NAMES
+
+        a_qualified = a.provides - frozenset(_IDENTITY_NAMES)
+        b_qualified = b.provides - frozenset(_IDENTITY_NAMES)
+        assert a_qualified.isdisjoint(b_qualified)
 
     def test_parameterized_and_unparameterized_no_conflict(self):
         """Unparameterized and parameterized produce different names — no conflict."""
@@ -182,11 +197,16 @@ class TestParameterizedBackendProperties:
 
     @given(valid_source_ids, valid_source_ids)
     def test_different_source_ids_produce_disjoint_emotion_provides(self, s1: str, s2: str):
-        """For any two distinct source_ids, provides sets are disjoint."""
+        """For any two distinct source_ids, source-qualified provides are disjoint."""
+        from agents.hapax_voice.backends.emotion import _IDENTITY_NAMES
+
         if s1 != s2:
             a = EmotionBackend(s1)
             b = EmotionBackend(s2)
-            assert a.provides.isdisjoint(b.provides)
+            # Exclude shared identity names (singleton concept)
+            a_qualified = a.provides - frozenset(_IDENTITY_NAMES)
+            b_qualified = b.provides - frozenset(_IDENTITY_NAMES)
+            assert a_qualified.isdisjoint(b_qualified)
 
     @given(valid_source_ids)
     def test_source_count_preserves_behavior_count(self, source: str):

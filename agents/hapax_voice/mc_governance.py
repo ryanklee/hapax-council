@@ -88,6 +88,30 @@ def transport_active(ctx: FusedContext) -> bool:
     return mapping.transport is TransportState.PLAYING
 
 
+def agreement_ok(ctx: FusedContext) -> bool:
+    """Allow when perceptual agreement checker reports no HARD violations.
+
+    Fails open (returns True) if agreement_ok is not wired into the context,
+    so governance still works when the agreement checker is not present.
+    """
+    try:
+        return ctx.get_sample("agreement_ok").value is True
+    except KeyError:
+        return True
+
+
+def operator_identified(ctx: FusedContext) -> bool:
+    """Allow when operator has been identified by the face identity resolver.
+
+    Fails open (returns True) if operator_identified is not wired into the
+    context, so governance still works without face identity enrollment.
+    """
+    try:
+        return ctx.get_sample("operator_identified").value is True
+    except KeyError:
+        return True
+
+
 # ---------------------------------------------------------------------------
 # Factory functions
 # ---------------------------------------------------------------------------
@@ -125,6 +149,14 @@ def build_mc_veto_chain(
             Veto(
                 name="transport_active",
                 predicate=transport_active,
+            ),
+            Veto(
+                name="agreement_ok",
+                predicate=agreement_ok,
+            ),
+            Veto(
+                name="operator_identified",
+                predicate=operator_identified,
             ),
         ]
     )

@@ -90,6 +90,7 @@ host = [
 [project.scripts]
 cockpit = "cockpit.__main__:main"
 cockpit-api = "cockpit.api.__main__:main"
+hapax-voice-enroll = "agents.hapax_voice.face_identity:enroll_cli"
 
 [dependency-groups]
 dev = [
