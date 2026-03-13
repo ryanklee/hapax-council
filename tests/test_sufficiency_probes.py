@@ -24,7 +24,7 @@ from shared.sufficiency_probes import (
 
 def test_probes_have_valid_fields():
     """All probes have required fields populated."""
-    valid_axioms = {"executive_function", "single_user", "corporate_boundary"}
+    valid_axioms = {"executive_function", "single_user", "corporate_boundary", "management_governance"}
     for probe in PROBES:
         assert probe.id.startswith("probe-")
         assert probe.axiom_id in valid_axioms
@@ -64,7 +64,8 @@ def test_run_probes_filter_by_axiom():
     su_results = run_probes(axiom_id="single_user")
     cb_results = run_probes(axiom_id="corporate_boundary")
 
-    assert len(ef_results) + len(su_results) + len(cb_results) == len(all_results)
+    mg_results = run_probes(axiom_id="management_governance")
+    assert len(ef_results) + len(su_results) + len(cb_results) + len(mg_results) == len(all_results)
     assert all(
         any(p.axiom_id == "executive_function" for p in PROBES if p.id == r.probe_id)
         for r in ef_results
