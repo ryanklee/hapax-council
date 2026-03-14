@@ -122,12 +122,17 @@ layers:
         - tests/hapax_voice/test_commands.py  # 17 tests
         - tests/hapax_voice/test_type_system_matrix_9.py  # provenance tracing
         - tests/hapax_voice/test_hypothesis_L4.py  # 6 hypothesis property tests
-      count: 35
+        - tests/hapax_voice/test_consent_threading_L4L6.py  # 6 tests
+      count: 41
       dimensions: [A, B, C, D, E, F, G]
     hypothesis:
       - "frozen invariant, MappingProxyType params, allowed↔denials consistency, tolerance boundary, governance round-trip, composition to L6"
     dog_star:
       - "D1.1: governance denial blocks dispatch (TestD1_1, 2 tests)"
+    consent_threading:
+      state: proven
+      dd: "DD-22 L4-L6"
+      notes: "Command gains optional consent_label (passthrough from FusedContext). Schedule inherits via Command. L5 types (domain config) have no consent semantics. L6 (ScheduleQueue) inherits via Schedule.command."
 
   L5:
     name: "SuppressionField, TimelineMapping, MusicalPosition"
@@ -183,6 +188,10 @@ layers:
       - "MC veto chain closure, deny-wins monotonicity, fallback determinism, custom config validity, action domain coverage"
     dog_star:
       - "D6.3: composition-time validation rejects missing behaviors (TestD6_3, 5 tests)"
+    consent_threading:
+      state: proven
+      dd: "DD-22 L7"
+      notes: "compose_mc/obs_governance propagate FusedContext.consent_label → Command.consent_label. Consent veto composable via VetoChain | operator — callers add consent_veto as needed."
 
   L8:
     name: "PerceptionEngine, PipelineGovernor, FrameGate"
