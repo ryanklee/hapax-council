@@ -63,7 +63,7 @@ layers:
 
   L2:
     name: "FusedContext, VetoChain, FallbackChain, FreshnessGuard"
-    modules: [governance.FusedContext, governance.VetoChain, governance.FallbackChain, governance.FreshnessGuard]
+    modules: [governance.FusedContext, governance.VetoChain, governance.FallbackChain, governance.FreshnessGuard, governance.consent_veto]
     state: proven
     tests:
       files:
@@ -73,7 +73,9 @@ layers:
         - tests/hapax_voice/test_type_system_matrix_3.py  # error boundaries
         - tests/hapax_voice/test_type_system_matrix_4.py  # algebraic properties
         - tests/hapax_voice/test_hypothesis_L2.py  # 7 hypothesis property tests
-      count: 74+
+        - tests/hapax_voice/test_consent_threading_L2L3.py::TestFusedContextConsent  # 4 tests
+        - tests/hapax_voice/test_consent_threading_L2L3.py::TestConsentVeto  # 7 tests
+      count: 85+
       dimensions: [A, B, C, D, E, F, G]
     hypothesis:
       - "VetoChain: associativity, identity, monotonicity, closure, idempotence (test_governance.py)"
@@ -81,6 +83,12 @@ layers:
       - "FusedContext: min_watermark ordering, frozen invariant, samples immutability"
       - "FreshnessGuard: stale detection, fresh acceptance, missing behavior always stale"
       - "VetoChain: deny-wins monotonicity under composition"
+      - "consent_veto: self-flow allowed, flow transitivity via join"
+    consent_threading:
+      state: proven
+      dd: "DD-5, DD-6"
+      dimensions: [A, B, C, D, E, F, G]
+      notes: "FusedContext gains optional consent_label (DD-5). consent_veto factory checks labels at enforcement boundaries (DD-6). None=untracked denied at enforcement per DD-3."
 
   L3:
     name: "with_latest_from combinator"
@@ -91,12 +99,19 @@ layers:
         - tests/hapax_voice/test_combinator.py::TestWithLatestFrom  # 13 tests
         - tests/hapax_voice/test_type_system_matrix_5.py  # forward pipeline flow
         - tests/hapax_voice/test_hypothesis_L3.py  # 5 hypothesis property tests
-      count: 30
+        - tests/hapax_voice/test_consent_threading_L2L3.py::TestWithLatestFromConsent  # 6 tests
+        - tests/hapax_voice/test_consent_threading_L2L3.py::TestConsentL2L3Hypothesis  # 3 hypothesis
+      count: 39
       dimensions: [A, B, C, D, E, F, G]
     hypothesis:
       - "trigger fidelity, snapshot correctness, min_watermark computation, rate independence, composition to L4"
+      - "consent: label join is LUB, flow transitivity via join"
     dog_star:
       - "D2: combinator watermark fidelity (TestL3_D2, 4 tests)"
+    consent_threading:
+      state: proven
+      dd: "DD-22 L3"
+      notes: "with_latest_from computes label join from all Behavior consent_labels. None Behaviors treated as bottom if any sibling is tracked. All-None → None (untracked)."
 
   L4:
     name: "Command, Schedule, VetoResult"
