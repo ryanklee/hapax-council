@@ -116,7 +116,7 @@ class VoiceConfig(BaseModel):
     vision_refresh_interval: int = 60
 
     # Wake word engine
-    wake_word_engine: str = "porcupine"  # "porcupine" or "oww"
+    wake_word_engine: str = "oww"  # "porcupine" or "oww"
     porcupine_sensitivity: float = 0.5
 
     # Chime settings
