@@ -628,9 +628,7 @@ class StudioCompositor:
         queue_sink = queue.get_static_pad("sink")
         tee_pad.link(queue_sink)
 
-    def _add_camera_snapshot_branch(
-        self, pipeline: Any, camera_tee: Any, cam: CameraSpec
-    ) -> None:
+    def _add_camera_snapshot_branch(self, pipeline: Any, camera_tee: Any, cam: CameraSpec) -> None:
         """Add per-camera snapshot branch writing JPEG to /dev/shm."""
         Gst = self._Gst
         role = cam.role.replace("-", "_")
@@ -696,9 +694,7 @@ class StudioCompositor:
         encoder.link(appsink)
 
         # Explicit tee -> queue pad link
-        tee_pad = camera_tee.request_pad(
-            camera_tee.get_pad_template("src_%u"), None, None
-        )
+        tee_pad = camera_tee.request_pad(camera_tee.get_pad_template("src_%u"), None, None)
         queue_sink = queue.get_static_pad("sink")
         tee_pad.link(queue_sink)
 
@@ -767,9 +763,7 @@ class StudioCompositor:
         scale_caps = Gst.ElementFactory.make("capsfilter", f"scalecaps_{role}")
         scale_caps.set_property(
             "caps",
-            Gst.Caps.from_string(
-                f"video/x-raw(memory:CUDAMemory),width={tile.w},height={tile.h}"
-            ),
+            Gst.Caps.from_string(f"video/x-raw(memory:CUDAMemory),width={tile.w},height={tile.h}"),
         )
 
         for el in [queue_comp, upload, cuda_convert, scale, scale_caps]:
@@ -781,9 +775,7 @@ class StudioCompositor:
         scale.link(scale_caps)
 
         # Explicit tee -> queue pad link
-        tee_pad = camera_tee.request_pad(
-            camera_tee.get_pad_template("src_%u"), None, None
-        )
+        tee_pad = camera_tee.request_pad(camera_tee.get_pad_template("src_%u"), None, None)
         queue_sink = queue_comp.get_static_pad("sink")
         tee_pad.link(queue_sink)
 
@@ -861,9 +853,7 @@ class StudioCompositor:
         parser.link(mux_sink)
 
         # Explicit tee -> queue pad link
-        tee_pad = camera_tee.request_pad(
-            camera_tee.get_pad_template("src_%u"), None, None
-        )
+        tee_pad = camera_tee.request_pad(camera_tee.get_pad_template("src_%u"), None, None)
         queue_sink = queue.get_static_pad("sink")
         tee_pad.link(queue_sink)
 
