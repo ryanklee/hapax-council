@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useStudio } from "../../api/hooks";
-import { Camera, X, Maximize } from "lucide-react";
+import { Camera, X, Maximize, GripVertical } from "lucide-react";
 
 const STATUS_COLORS: Record<string, string> = {
   active: "bg-green-500",
@@ -16,6 +16,23 @@ interface Props {
 export function StudioStatusGrid({ onFocusCamera, focusedCamera }: Props) {
   const { data: studio } = useStudio();
   const compositor = studio?.compositor;
+  const [order, setOrder] = useState<string[]>([]);
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [overIdx, setOverIdx] = useState<number | null>(null);
+
+  // Sync order from compositor cameras (only when new cameras appear)
+  const cameraKeys = compositor
+    ? Object.keys(compositor.cameras).join(",")
+    : "";
+  useEffect(() => {
+    if (!compositor) return;
+    const keys = Object.keys(compositor.cameras);
+    setOrder((prev) => {
+      const existing = prev.filter((k) => keys.includes(k));
+      const added = keys.filter((k) => !prev.includes(k));
+      return existing.length > 0 ? [...existing, ...added] : keys;
+    });
+  }, [cameraKeys]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!compositor || compositor.state === "unknown") {
     return (
@@ -25,24 +42,62 @@ export function StudioStatusGrid({ onFocusCamera, focusedCamera }: Props) {
     );
   }
 
-  const cameras = Object.entries(compositor.cameras);
   const recordingCams = compositor.recording_cameras ?? {};
+
+  const handleDragStart = (idx: number) => setDragIdx(idx);
+
+  const handleDragOver = (e: React.DragEvent, idx: number) => {
+    e.preventDefault();
+    setOverIdx(idx);
+  };
+
+  const handleDrop = (idx: number) => {
+    if (dragIdx !== null && dragIdx !== idx) {
+      setOrder((prev) => {
+        const next = [...prev];
+        const [moved] = next.splice(dragIdx, 1);
+        next.splice(idx, 0, moved);
+        return next;
+      });
+    }
+    setDragIdx(null);
+    setOverIdx(null);
+  };
+
+  const handleDragEnd = () => {
+    setDragIdx(null);
+    setOverIdx(null);
+  };
 
   return (
     <div className="flex gap-2">
-      {cameras.map(([role, status]) => {
+      {order.map((role, idx) => {
+        const status = compositor.cameras[role] ?? "unknown";
         const isRecording = recordingCams[role] === "active";
         const isFocused = focusedCamera === role;
+        const isDragging = dragIdx === idx;
+        const isOver = overIdx === idx && dragIdx !== idx;
+
         return (
-          <button
+          <div
             key={role}
+            draggable
+            onDragStart={() => handleDragStart(idx)}
+            onDragOver={(e) => handleDragOver(e, idx)}
+            onDrop={() => handleDrop(idx)}
+            onDragEnd={handleDragEnd}
             onClick={() => onFocusCamera?.(isFocused ? null : role)}
-            className={`flex flex-1 items-center gap-2 rounded border p-2 text-left transition-colors ${
-              isFocused
-                ? "border-amber-500/50 bg-amber-950/30"
-                : "border-zinc-800 bg-zinc-900 hover:border-zinc-700"
+            className={`flex flex-1 cursor-pointer items-center gap-1.5 rounded border p-2 transition-all ${
+              isDragging
+                ? "scale-95 opacity-50"
+                : isOver
+                  ? "border-purple-500/50 bg-purple-950/20"
+                  : isFocused
+                    ? "border-amber-500/50 bg-amber-950/30"
+                    : "border-zinc-800 bg-zinc-900 hover:border-zinc-700"
             }`}
           >
+            <GripVertical className="h-3 w-3 shrink-0 cursor-grab text-zinc-600 active:cursor-grabbing" />
             <span
               className={`inline-block h-2 w-2 shrink-0 rounded-full ${STATUS_COLORS[status] ?? "bg-zinc-600"}`}
             />
@@ -54,7 +109,7 @@ export function StudioStatusGrid({ onFocusCamera, focusedCamera }: Props) {
                 REC
               </span>
             )}
-          </button>
+          </div>
         );
       })}
     </div>
@@ -94,7 +149,7 @@ export function CameraSoloView({
     };
 
     pull();
-    const timer = setInterval(pull, 120); // ~8fps per camera
+    const timer = setInterval(pull, 120);
     return () => {
       running = false;
       clearInterval(timer);
