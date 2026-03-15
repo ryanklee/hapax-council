@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Maximize, Minimize } from "lucide-react";
 import Hls from "hls.js";
 import { StudioLiveGrid } from "../components/studio/StudioLiveGrid";
 import { PRESETS, type CompositePreset, type OverlayType } from "../components/studio/compositePresets";
@@ -24,6 +25,8 @@ export function StudioPage() {
   const [trailFilterIdx, setTrailFilterIdx] = useState(0);
   const [overlayOverrides, setOverlayOverrides] = useState<OverlayType[] | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const pageRef = useRef<HTMLDivElement>(null);
+  const [pageFullscreen, setPageFullscreen] = useState(false);
   const [hlsReady, setHlsReady] = useState(false);
   const hlsRef = useRef<Hls | null>(null);
 
@@ -121,8 +124,21 @@ export function StudioPage() {
     setUserOrder(null);
   }, []);
 
+  const togglePageFullscreen = useCallback(() => {
+    const el = pageRef.current;
+    if (!el) return;
+    if (document.fullscreenElement) document.exitFullscreen();
+    else el.requestFullscreen();
+  }, []);
+
+  useEffect(() => {
+    const onChange = () => setPageFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
   return (
-    <div className="flex flex-1 overflow-hidden">
+    <div ref={pageRef} className={`flex flex-1 overflow-hidden ${pageFullscreen ? "bg-zinc-950" : ""}`}>
       {/* Main content */}
       <div className="flex min-w-0 flex-1 flex-col gap-2 p-3">
         {/* Header — title + camera count only */}
@@ -133,6 +149,13 @@ export function StudioPage() {
               {compositor.active_cameras}/{compositor.total_cameras} cameras
             </span>
           )}
+          <button
+            onClick={togglePageFullscreen}
+            className="rounded p-0.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+            title={pageFullscreen ? "Exit fullscreen" : "Fullscreen studio"}
+          >
+            {pageFullscreen ? <Minimize className="h-3.5 w-3.5" /> : <Maximize className="h-3.5 w-3.5" />}
+          </button>
         </div>
 
         {/* Main view */}
