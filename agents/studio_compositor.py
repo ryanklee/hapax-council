@@ -208,8 +208,8 @@ def _fit_16x9(w: int, h: int) -> tuple[int, int, int, int]:
         # slot is taller than 16:9 — width is the constraint
         fit_w = w
         fit_h = int(w / target_ratio)
-    x_off = (w - fit_w) // 2
-    y_off = (h - fit_h) // 2
+    x_off = 0
+    y_off = 0
     return x_off, y_off, fit_w, fit_h
 
 
@@ -573,7 +573,7 @@ class StudioCompositor:
         scale_caps = Gst.ElementFactory.make("capsfilter", "snapshot-scale-caps")
         scale_caps.set_property(
             "caps",
-            Gst.Caps.from_string("video/x-raw,width=960,height=540"),
+            Gst.Caps.from_string("video/x-raw,width=1920,height=1080"),
         )
         rate = Gst.ElementFactory.make("videorate", "snapshot-rate")
         rate_caps = Gst.ElementFactory.make("capsfilter", "snapshot-rate-caps")
@@ -582,7 +582,7 @@ class StudioCompositor:
             Gst.Caps.from_string("video/x-raw,framerate=15/1"),
         )
         encoder = Gst.ElementFactory.make("jpegenc", "snapshot-jpeg")
-        encoder.set_property("quality", 75)
+        encoder.set_property("quality", 85)
         appsink = Gst.ElementFactory.make("appsink", "snapshot-sink")
         appsink.set_property("sync", False)
         appsink.set_property("async", False)
@@ -628,7 +628,9 @@ class StudioCompositor:
         queue_sink = queue.get_static_pad("sink")
         tee_pad.link(queue_sink)
 
-    def _add_camera_snapshot_branch(self, pipeline: Any, camera_tee: Any, cam: CameraSpec) -> None:
+    def _add_camera_snapshot_branch(
+        self, pipeline: Any, camera_tee: Any, cam: CameraSpec
+    ) -> None:
         """Add per-camera snapshot branch writing JPEG to /dev/shm."""
         Gst = self._Gst
         role = cam.role.replace("-", "_")
@@ -641,7 +643,7 @@ class StudioCompositor:
         rate_caps = Gst.ElementFactory.make("capsfilter", f"camsnap-ratecaps-{role}")
         rate_caps.set_property(
             "caps",
-            Gst.Caps.from_string("video/x-raw,framerate=5/1"),
+            Gst.Caps.from_string("video/x-raw,framerate=60/1"),
         )
         scale = Gst.ElementFactory.make("videoscale", f"camsnap-scale-{role}")
         # Maintain aspect ratio, target 640 wide
@@ -649,10 +651,10 @@ class StudioCompositor:
         scale_caps = Gst.ElementFactory.make("capsfilter", f"camsnap-scalecaps-{role}")
         scale_caps.set_property(
             "caps",
-            Gst.Caps.from_string(f"video/x-raw,width=640,height={aspect_h}"),
+            Gst.Caps.from_string(f"video/x-raw,width={cam.width},height={cam.height}"),
         )
         encoder = Gst.ElementFactory.make("jpegenc", f"camsnap-jpeg-{role}")
-        encoder.set_property("quality", 70)
+        encoder.set_property("quality", 80)
         appsink = Gst.ElementFactory.make("appsink", f"camsnap-sink-{role}")
         appsink.set_property("sync", False)
         appsink.set_property("async", False)
@@ -694,7 +696,9 @@ class StudioCompositor:
         encoder.link(appsink)
 
         # Explicit tee -> queue pad link
-        tee_pad = camera_tee.request_pad(camera_tee.get_pad_template("src_%u"), None, None)
+        tee_pad = camera_tee.request_pad(
+            camera_tee.get_pad_template("src_%u"), None, None
+        )
         queue_sink = queue.get_static_pad("sink")
         tee_pad.link(queue_sink)
 
@@ -763,7 +767,9 @@ class StudioCompositor:
         scale_caps = Gst.ElementFactory.make("capsfilter", f"scalecaps_{role}")
         scale_caps.set_property(
             "caps",
-            Gst.Caps.from_string(f"video/x-raw(memory:CUDAMemory),width={tile.w},height={tile.h}"),
+            Gst.Caps.from_string(
+                f"video/x-raw(memory:CUDAMemory),width={tile.w},height={tile.h}"
+            ),
         )
 
         for el in [queue_comp, upload, cuda_convert, scale, scale_caps]:
@@ -775,7 +781,9 @@ class StudioCompositor:
         scale.link(scale_caps)
 
         # Explicit tee -> queue pad link
-        tee_pad = camera_tee.request_pad(camera_tee.get_pad_template("src_%u"), None, None)
+        tee_pad = camera_tee.request_pad(
+            camera_tee.get_pad_template("src_%u"), None, None
+        )
         queue_sink = queue_comp.get_static_pad("sink")
         tee_pad.link(queue_sink)
 
@@ -853,7 +861,9 @@ class StudioCompositor:
         parser.link(mux_sink)
 
         # Explicit tee -> queue pad link
-        tee_pad = camera_tee.request_pad(camera_tee.get_pad_template("src_%u"), None, None)
+        tee_pad = camera_tee.request_pad(
+            camera_tee.get_pad_template("src_%u"), None, None
+        )
         queue_sink = queue.get_static_pad("sink")
         tee_pad.link(queue_sink)
 

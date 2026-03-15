@@ -5,6 +5,7 @@ OnFailure=notify-failure@%n.service
 
 [Service]
 Type=simple
+EnvironmentFile=%h/.config/hapax-video/%i.env
 ExecStartPre=/usr/bin/mkdir -p %h/video-recording/%i
 ExecStart=/home/hapax/.local/bin/uv run --directory /home/hapax/projects/hapax-council python -m agents.video_capture --camera %i --device ${DEVICE}
 Environment=PATH=/home/hapax/.local/bin:/usr/local/bin:/usr/bin:/bin
