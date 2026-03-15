@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStudio } from "../../api/hooks";
 import { Camera, X, Maximize, GripVertical } from "lucide-react";
 
@@ -16,23 +16,17 @@ interface Props {
 export function StudioStatusGrid({ onFocusCamera, focusedCamera }: Props) {
   const { data: studio } = useStudio();
   const compositor = studio?.compositor;
-  const [order, setOrder] = useState<string[]>([]);
+  const [userOrder, setUserOrder] = useState<string[] | null>(null);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [overIdx, setOverIdx] = useState<number | null>(null);
 
-  // Sync order from compositor cameras (only when new cameras appear)
-  const cameraKeys = compositor
-    ? Object.keys(compositor.cameras).join(",")
-    : "";
-  useEffect(() => {
-    if (!compositor) return;
-    const keys = Object.keys(compositor.cameras);
-    setOrder((prev) => {
-      const existing = prev.filter((k) => keys.includes(k));
-      const added = keys.filter((k) => !prev.includes(k));
-      return existing.length > 0 ? [...existing, ...added] : keys;
-    });
-  }, [cameraKeys]); // eslint-disable-line react-hooks/exhaustive-deps
+  const defaultOrder = useMemo(
+    () => (compositor ? Object.keys(compositor.cameras) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [compositor ? Object.keys(compositor.cameras).join(",") : ""],
+  );
+
+  const order = userOrder ?? defaultOrder;
 
   if (!compositor || compositor.state === "unknown") {
     return (
@@ -45,25 +39,20 @@ export function StudioStatusGrid({ onFocusCamera, focusedCamera }: Props) {
   const recordingCams = compositor.recording_cameras ?? {};
 
   const handleDragStart = (idx: number) => setDragIdx(idx);
-
   const handleDragOver = (e: React.DragEvent, idx: number) => {
     e.preventDefault();
     setOverIdx(idx);
   };
-
   const handleDrop = (idx: number) => {
     if (dragIdx !== null && dragIdx !== idx) {
-      setOrder((prev) => {
-        const next = [...prev];
-        const [moved] = next.splice(dragIdx, 1);
-        next.splice(idx, 0, moved);
-        return next;
-      });
+      const next = [...order];
+      const [moved] = next.splice(dragIdx, 1);
+      next.splice(idx, 0, moved);
+      setUserOrder(next);
     }
     setDragIdx(null);
     setOverIdx(null);
   };
-
   const handleDragEnd = () => {
     setDragIdx(null);
     setOverIdx(null);
@@ -116,7 +105,6 @@ export function StudioStatusGrid({ onFocusCamera, focusedCamera }: Props) {
   );
 }
 
-/** Solo camera viewer — shows a single camera feed full-size */
 export function CameraSoloView({
   role,
   onClose,
