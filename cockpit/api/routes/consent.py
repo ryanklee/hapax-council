@@ -1,9 +1,10 @@
-"""Consent management routes — revocation cascade and trace (DD-8, DD-11, DD-23).
+"""Consent and governance routes (DD-8, DD-11, DD-23).
 
 POST /consent/revoke/{person_id} — triggers revocation cascade
 GET /consent/trace — trace consent provenance for a file or Qdrant source
 GET /consent/contracts — list active consent contracts
 GET /consent/coverage — summary of consent coverage across stored data
+GET /consent/precedents — axiom precedent timeline (case law)
 """
 
 from __future__ import annotations
@@ -240,3 +241,62 @@ async def consent_coverage() -> dict:
         }
     except Exception as e:
         return {"error": str(e)}
+
+
+@router.get("/precedents")
+async def precedent_timeline(axiom_id: str | None = None) -> dict:
+    """Axiom precedent timeline — accumulated case law.
+
+    Shows governance decisions chronologically, proving that the
+    constitutional system evolves through precedent without changing
+    the axioms themselves.
+    """
+    try:
+        from shared.config import get_qdrant
+
+        client = get_qdrant()
+
+        # Scroll all precedents (small collection, ~10-50 points)
+        results = client.scroll(
+            collection_name="axiom-precedents",
+            limit=100,
+            with_payload=True,
+            with_vectors=False,
+        )
+        points = results[0] if results else []
+
+        precedents = []
+        for p in points:
+            payload = p.payload or {}
+            # Filter by axiom if requested
+            if axiom_id and payload.get("axiom_id") != axiom_id:
+                continue
+            precedents.append(
+                {
+                    "precedent_id": payload.get("precedent_id", ""),
+                    "axiom_id": payload.get("axiom_id", ""),
+                    "situation": payload.get("situation", ""),
+                    "decision": payload.get("decision", ""),
+                    "reasoning": (payload.get("reasoning") or "")[:500],
+                    "timestamp": payload.get("timestamp", ""),
+                    "cited_by": payload.get("cited_by", []),
+                }
+            )
+
+        # Sort by precedent_id (contains date: PRE-YYYYMMDD-hash)
+        precedents.sort(key=lambda p: p["precedent_id"])
+
+        # Group by axiom
+        by_axiom: dict[str, int] = {}
+        for p in precedents:
+            aid = p["axiom_id"]
+            by_axiom[aid] = by_axiom.get(aid, 0) + 1
+
+        return {
+            "total_precedents": len(precedents),
+            "by_axiom": by_axiom,
+            "precedents": precedents,
+            "filter": axiom_id,
+        }
+    except Exception as e:
+        return {"error": str(e), "total_precedents": 0, "precedents": []}
