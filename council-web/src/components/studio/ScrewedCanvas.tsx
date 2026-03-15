@@ -29,7 +29,7 @@ export function ScrewedCanvas({ role, className }: Props) {
 
     let displayIdx = 0;
     let ticksSinceAdvance = 0;
-    let holdFor = 4;
+    let holdFor = 8;
     let stutterPhase: "normal" | "holding" | "replaying" = "normal";
     let replayStart = 0;
     let replayStep = 0;
@@ -67,9 +67,9 @@ export function ScrewedCanvas({ role, className }: Props) {
         if (ticksSinceAdvance >= 2) {
           displayIdx = (writeHead - 1) % RING_SIZE;
           ticksSinceAdvance = 0;
-          if (Math.random() < 0.18 && available > 4) {
+          if (Math.random() < 0.45 && available > 3) { // 45% chance to freeze
             stutterPhase = "holding";
-            holdFor = 6 + Math.floor(Math.random() * 8);
+            holdFor = 10 + Math.floor(Math.random() * 15); // freeze for 10-24 ticks (~700-1680ms)
             ticksSinceAdvance = 0;
           }
         }
@@ -102,7 +102,7 @@ export function ScrewedCanvas({ role, className }: Props) {
         const ghost = frameRing[ghostIdx];
         if (!ghost) continue;
         ctx.save();
-        ctx.globalAlpha = 0.08 + (3 - g) * 0.05;
+        ctx.globalAlpha = 0.12 + (3 - g) * 0.08; // 0.12, 0.20, 0.28
         ctx.globalCompositeOperation = "lighter";
         ctx.drawImage(ghost, g * 0.5, g * 3, w, h);
         ctx.restore();
@@ -114,42 +114,37 @@ export function ScrewedCanvas({ role, className }: Props) {
         ctx.drawImage(main, 0, 0, w, h);
       }
 
-      // Desaturate via "saturation" composite
-      ctx.save();
-      ctx.globalCompositeOperation = "saturation";
-      ctx.fillStyle = "hsl(270, 10%, 50%)";
-      ctx.globalAlpha = 0.45;
-      ctx.fillRect(0, 0, w, h);
-      ctx.restore();
+      // Color: re-draw main frame with CSS filter applied via ctx.filter
+      if (main) {
+        ctx.save();
+        ctx.filter = "saturate(0.5) sepia(0.5) hue-rotate(240deg) brightness(0.85) contrast(1.1)";
+        ctx.globalCompositeOperation = "source-over";
+        ctx.globalAlpha = 0.7;
+        ctx.drawImage(main, 0, 0, w, h);
+        ctx.restore();
+      }
 
-      // Purple tint
-      ctx.save();
-      ctx.globalCompositeOperation = "multiply";
-      ctx.fillStyle = "rgb(180, 130, 200)";
-      ctx.globalAlpha = 0.2;
-      ctx.fillRect(0, 0, w, h);
-      ctx.restore();
-
-      // Syrup gradient
+      // Syrup gradient — purple settling toward bottom
       const grad = ctx.createLinearGradient(0, 0, 0, h);
-      grad.addColorStop(0, "rgba(80, 40, 100, 0.0)");
-      grad.addColorStop(0.6, "rgba(80, 40, 100, 0.08)");
-      grad.addColorStop(1, "rgba(60, 20, 80, 0.2)");
+      grad.addColorStop(0, "rgba(60, 20, 80, 0.0)");
+      grad.addColorStop(0.5, "rgba(70, 30, 90, 0.12)");
+      grad.addColorStop(1, "rgba(50, 10, 70, 0.3)");
+      ctx.filter = "none";
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, w, h);
 
-      // Light vignette
-      const vig = ctx.createRadialGradient(w / 2, h / 2, w * 0.35, w / 2, h / 2, w * 0.75);
+      // Vignette
+      const vig = ctx.createRadialGradient(w / 2, h / 2, w * 0.3, w / 2, h / 2, w * 0.7);
       vig.addColorStop(0, "rgba(0,0,0,0)");
-      vig.addColorStop(1, "rgba(0,0,0,0.3)");
+      vig.addColorStop(1, "rgba(0,0,0,0.35)");
       ctx.fillStyle = vig;
       ctx.fillRect(0, 0, w, h);
 
       // Band displacement — 8% chance
-      if (Math.random() < 0.08 && main) {
+      if (Math.random() < 0.15 && main) { // 15% chance
         const bandY = Math.floor(Math.random() * h * 0.7) + h * 0.15;
         const bandH = 3 + Math.floor(Math.random() * 8);
-        const shift = (Math.random() > 0.5 ? 1 : -1) * (2 + Math.random() * 6);
+        const shift = (Math.random() > 0.5 ? 1 : -1) * (4 + Math.random() * 12); // bigger displacement
         ctx.save();
         ctx.beginPath();
         ctx.rect(0, bandY, w, bandH);
@@ -158,9 +153,13 @@ export function ScrewedCanvas({ role, className }: Props) {
         ctx.restore();
       }
 
-      // Subtle flash when frozen
+      // Visible freeze indicator — purple wash intensifies when stuck
       if (stutterPhase === "holding") {
-        ctx.fillStyle = "rgba(100, 50, 120, 0.06)";
+        ctx.fillStyle = "rgba(80, 20, 100, 0.15)";
+        ctx.fillRect(0, 0, w, h);
+      } else if (stutterPhase === "replaying") {
+        // Flash on replay
+        ctx.fillStyle = "rgba(120, 60, 160, 0.08)";
         ctx.fillRect(0, 0, w, h);
       }
     };
