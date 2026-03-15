@@ -138,6 +138,21 @@ export function ScrewedCanvas({ role, className }: Props) {
         ctx.restore();
       }
 
+      // Delayed overlay — older frame drawn on top with different treatment
+      const delayOffset = 8; // 8 frames behind (~0.8s at 100ms fetch)
+      const delayIdx = (idx - delayOffset + available * 100) % available;
+      const delayed = frameRing[delayIdx];
+      if (delayed && available > delayOffset) {
+        ctx.save();
+        ctx.filter = "saturate(0.2) brightness(0.4) sepia(0.8) hue-rotate(270deg) blur(1.5px)";
+        ctx.globalAlpha = 0.3;
+        ctx.globalCompositeOperation = "screen";
+        // Draw delayed frame with slight downward offset (sinking)
+        const dt = tick * 0.03;
+        ctx.drawImage(delayed, Math.sin(dt) * 3, 6 + Math.sin(dt * 0.6) * 2, w, h);
+        ctx.restore();
+      }
+
       // Syrup gradient
       ctx.save();
       ctx.filter = "none";
