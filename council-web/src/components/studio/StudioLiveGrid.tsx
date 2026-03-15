@@ -94,8 +94,8 @@ function CameraCell({
   const imgRef = useRef<HTMLImageElement>(null);
   const cellRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const trailBuf = useRef<string[]>([]);
-  const [trailFrames, setTrailFrames] = useState<string[]>([]);
+  const trailBuf = useRef<{ src: string; ts: number }[]>([]);
+  const [trailFrames, setTrailFrames] = useState<{ src: string; age: number }[]>([]);
 
   const toggleFullscreen = useCallback(() => {
     const el = cellRef.current;
@@ -129,7 +129,7 @@ function CameraCell({
     return () => { running = false; clearInterval(timer); };
   }, [role, isHero]);
 
-  // Trail capture — freeze actual pixels from the live img via canvas
+  // Trail capture — freeze pixels via canvas, auto-expire by age
   useEffect(() => {
     if (!preset) {
       trailBuf.current = [];
@@ -138,24 +138,36 @@ function CameraCell({
     }
     const count = preset.trail.count;
     const intervalMs = preset.trail.intervalMs;
+    const maxAgeMs = preset.trail.maxAgeMs;
     let running = true;
 
     const timer = setInterval(() => {
       if (!running) return;
+      const now = Date.now();
       const img = imgRef.current;
-      if (!img) return;
-      const dataUrl = captureFrame(img, isHero ? 640 : 320);
-      if (dataUrl) {
-        trailBuf.current = [dataUrl, ...trailBuf.current].slice(0, count);
-        setTrailFrames([...trailBuf.current]);
+
+      // Expire old frames
+      trailBuf.current = trailBuf.current.filter((f) => now - f.ts < maxAgeMs);
+
+      // Capture new frame
+      if (img) {
+        const dataUrl = captureFrame(img, isHero ? 640 : 320);
+        if (dataUrl) {
+          trailBuf.current = [{ src: dataUrl, ts: now }, ...trailBuf.current].slice(0, count);
+        }
       }
+
+      // Update render state with age info
+      setTrailFrames(
+        trailBuf.current.map((f) => ({ src: f.src, age: (now - f.ts) / maxAgeMs }))
+      );
     }, intervalMs);
 
     return () => {
       running = false;
       clearInterval(timer);
     };
-  }, [role, isHero, !!preset, preset?.trail.count, preset?.trail.intervalMs]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [role, isHero, !!preset, preset?.trail.count, preset?.trail.intervalMs, preset?.trail.maxAgeMs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isDragging = dragIdx === idx;
   const isOver = overIdx === idx && dragIdx !== idx;
@@ -187,16 +199,16 @@ function CameraCell({
         style={preset?.liveFilter && preset.liveFilter !== "none" ? { filter: preset.liveFilter } : undefined}
       />
 
-      {/* Trail layers — frozen past frames as data URLs */}
-      {preset && trailFrames.map((src, i) => (
+      {/* Trail layers — frozen past frames, opacity fades with age */}
+      {preset && trailFrames.map((frame, i) => (
         <img
           key={i}
-          src={src}
+          src={frame.src}
           alt=""
           className="pointer-events-none absolute inset-0 h-full w-full object-contain"
           style={{
-            mixBlendMode: preset.trail.blendMode,
-            opacity: preset.trail.opacity * ((trailFrames.length - i) / trailFrames.length),
+            mixBlendMode: preset.trail.blendMode as React.CSSProperties["mixBlendMode"],
+            opacity: preset.trail.opacity * (1 - frame.age),
             filter: preset.trail.filter !== "none" ? preset.trail.filter : undefined,
           }}
         />
