@@ -29,14 +29,16 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import gi
 import yaml
 from pydantic import BaseModel, Field
 
-gi.require_version("Gst", "1.0")
-from gi.repository import GLib, Gst  # noqa: E402
+if TYPE_CHECKING:
+    import gi
+
+    gi.require_version("Gst", "1.0")
+    from gi.repository import GLib, Gst
 
 log = logging.getLogger(__name__)
 
@@ -126,7 +128,7 @@ def load_config(path: Path | None = None) -> CompositorConfig:
             data = yaml.safe_load(config_path.read_text()) or {}
             return CompositorConfig(**data)
         except Exception as exc:
-            log.warning("Failed to load config from %s: %s — using defaults", config_path, exc)
+            log.warning("Failed to load config from %s: %s -- using defaults", config_path, exc)
     return _default_config()
 
 
@@ -162,14 +164,12 @@ def compute_tile_layout(
     layout: dict[str, TileRect] = {}
 
     if heroes and len(others) >= 1:
-        # Hero gets top-left 2x2 block (half canvas width, half canvas height)
         hero = heroes[0]
         hero_w = canvas_w // 2
         hero_h = canvas_h // 2
 
         layout[hero.role] = TileRect(x=0, y=0, w=hero_w, h=hero_h)
 
-        # Right quadrant: 2-column grid filling same height as hero
         right_count = min(len(others), 4)
         right_cams = others[:right_count]
         remaining = others[right_count:]
@@ -189,7 +189,6 @@ def compute_tile_layout(
                 h=tile_h,
             )
 
-        # Bottom row: remaining cameras (future BRIOs etc.)
         if remaining:
             bottom_w = canvas_w // len(remaining)
             for i, cam in enumerate(remaining):
@@ -200,7 +199,6 @@ def compute_tile_layout(
                     h=canvas_h - hero_h,
                 )
     else:
-        # No hero: simple grid
         cols = math.ceil(math.sqrt(n))
         rows = math.ceil(n / cols)
         tile_w = canvas_w // cols
@@ -243,7 +241,7 @@ class OverlayState:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._data = OverlayData()
-        self._stale = True  # no data loaded yet
+        self._stale = True
 
     @property
     def data(self) -> OverlayData:
@@ -270,29 +268,40 @@ class OverlayState:
 # ---------------------------------------------------------------------------
 
 
+def _init_gstreamer() -> tuple[Any, Any]:
+    """Import and initialize GStreamer. Returns (GLib, Gst) modules."""
+    import gi as _gi
+
+    _gi.require_version("Gst", "1.0")
+    from gi.repository import GLib as _GLib
+    from gi.repository import Gst as _Gst
+
+    _Gst.init(None)
+    return _GLib, _Gst
+
+
 class StudioCompositor:
     """Manages the GStreamer compositing pipeline."""
 
     def __init__(self, config: CompositorConfig) -> None:
         self.config = config
-        self.pipeline: Gst.Pipeline | None = None
-        self.loop: GLib.MainLoop | None = None
+        self.pipeline: Gst.Pipeline | None = None  # type: ignore[name-defined]
+        self.loop: GLib.MainLoop | None = None  # type: ignore[name-defined]
         self._running = False
-        # Per-camera status: role -> "active" | "offline" | "error"
         self._camera_status: dict[str, str] = {}
         self._camera_status_lock = threading.Lock()
-        # Map GStreamer element name prefixes back to camera roles
         self._element_to_role: dict[str, str] = {}
         self._status_timer_id: int | None = None
-        # Overlay
         self._overlay_state = OverlayState()
         self._overlay_canvas_size: tuple[int, int] = (config.output_width, config.output_height)
         self._tile_layout: dict[str, TileRect] = {}
         self._state_reader_thread: threading.Thread | None = None
+        self._GLib: Any = None
+        self._Gst: Any = None
 
-    def _build_pipeline(self) -> Gst.Pipeline:
+    def _build_pipeline(self) -> Any:
         """Build the full GStreamer pipeline."""
-        Gst.init(None)
+        Gst = self._Gst
 
         pipeline = Gst.Pipeline.new("studio-compositor")
         layout = compute_tile_layout(
@@ -300,7 +309,6 @@ class StudioCompositor:
         )
         self._tile_layout = layout
 
-        # Create compositor
         compositor = Gst.ElementFactory.make("cudacompositor", "compositor")
         if compositor is None:
             raise RuntimeError(
@@ -310,21 +318,14 @@ class StudioCompositor:
 
         fps = self.config.framerate
 
-        # Add camera sources
         for cam in self.config.cameras:
             tile = layout.get(cam.role)
             if tile is None:
                 log.warning("No tile for camera %s, skipping", cam.role)
                 continue
-
             self._add_camera_branch(pipeline, compositor, cam, tile, fps)
 
-        # Output chain:
-        # compositor(CUDA) -> cudadownload -> videoconvert(BGRA) -> cairooverlay
-        #   -> videoconvert -> capsfilter(YUY2) -> v4l2sink
-        #
-        # We stay in CPU space after the overlay -- the encode-then-decode
-        # round trip was wasteful. v4l2loopback accepts raw YUY2 directly.
+        # Output chain: compositor -> cudadownload -> BGRA -> cairooverlay -> YUY2 -> v4l2sink
         download = Gst.ElementFactory.make("cudadownload", "download")
         convert_bgra = Gst.ElementFactory.make("videoconvert", "convert-bgra")
         bgra_caps = Gst.ElementFactory.make("capsfilter", "bgra-caps")
@@ -359,7 +360,6 @@ class StudioCompositor:
                 raise RuntimeError("Failed to create GStreamer element")
             pipeline.add(el)
 
-        # Link chain
         prev = compositor
         for el in elements:
             if not prev.link(el):
@@ -369,24 +369,16 @@ class StudioCompositor:
         return pipeline
 
     def _add_camera_branch(
-        self,
-        pipeline: Gst.Pipeline,
-        compositor: Gst.Element,
-        cam: CameraSpec,
-        tile: TileRect,
-        fps: int,
+        self, pipeline: Any, compositor: Any, cam: CameraSpec, tile: TileRect, fps: int
     ) -> None:
         """Add a single camera source branch to the pipeline."""
+        Gst = self._Gst
         role = cam.role.replace("-", "_")
-
-        # Track element -> role mapping for error identification
         self._element_to_role[f"src_{role}"] = cam.role
 
-        # Source with watchdog
         src = Gst.ElementFactory.make("v4l2src", f"src_{role}")
         src.set_property("device", cam.device)
 
-        # Skip missing devices gracefully
         if not Path(cam.device).exists():
             log.warning("Camera %s device %s not found, skipping", cam.role, cam.device)
             with self._camera_status_lock:
@@ -394,9 +386,6 @@ class StudioCompositor:
             return
 
         if cam.input_format == "mjpeg":
-            # MJPEG path: v4l2src -> capsfilter(mjpeg) -> jpegdec -> cudaupload -> cudaconvert
-            # Note: nvjpegdec cannot decode UVC webcam Motion-JPEG, so we use
-            # software jpegdec and upload the decoded frames to CUDA.
             src_caps = Gst.ElementFactory.make("capsfilter", f"srccaps_{role}")
             src_caps.set_property(
                 "caps",
@@ -415,7 +404,6 @@ class StudioCompositor:
             upload.link(convert)
             last = convert
         else:
-            # Raw path (e.g. IR gray): v4l2src -> videoconvert -> cudaupload
             src_caps = Gst.ElementFactory.make("capsfilter", f"srccaps_{role}")
             pix_fmt = cam.pixel_format or "GRAY8"
             src_caps.set_property(
@@ -434,7 +422,6 @@ class StudioCompositor:
             convert.link(upload)
             last = upload
 
-        # Scale to tile size before compositor
         scale = Gst.ElementFactory.make("cudascale", f"scale_{role}")
         scale_caps = Gst.ElementFactory.make("capsfilter", f"scalecaps_{role}")
         scale_caps.set_property(
@@ -444,11 +431,9 @@ class StudioCompositor:
 
         for el in [scale, scale_caps]:
             pipeline.add(el)
-
         last.link(scale)
         scale.link(scale_caps)
 
-        # Request a sink pad on compositor and set position
         pad_template = compositor.get_pad_template("sink_%u")
         pad = compositor.request_pad(pad_template, None, None)
         if pad is None:
@@ -459,22 +444,19 @@ class StudioCompositor:
         pad.set_property("width", tile.w)
         pad.set_property("height", tile.h)
 
-        # Link scale_caps src pad to compositor sink pad
         src_pad = scale_caps.get_static_pad("src")
         if src_pad.link(pad) != Gst.PadLinkReturn.OK:
             raise RuntimeError(f"Failed to link {cam.role} to compositor")
 
     # -- Error handling ---------------------------------------------------
 
-    def _resolve_camera_role(self, element: Gst.Element | None) -> str | None:
+    def _resolve_camera_role(self, element: Any) -> str | None:
         """Walk up from an element to find which camera branch it belongs to."""
         if element is None:
             return None
         name = element.get_name()
-        # Direct match on src element
         if name in self._element_to_role:
             return self._element_to_role[name]
-        # Check if any role suffix matches (e.g. dec_brio_operator -> brio-operator)
         for _elem_prefix, role in self._element_to_role.items():
             role_suffix = role.replace("-", "_")
             if role_suffix in name:
@@ -486,18 +468,14 @@ class StudioCompositor:
         with self._camera_status_lock:
             prev = self._camera_status.get(role)
             if prev == "offline":
-                return  # already marked
+                return
             self._camera_status[role] = "offline"
         log.warning("Camera %s marked offline", role)
         self._write_status("running")
 
-    def _on_bus_message(self, bus: Gst.Bus, message: Gst.Message) -> bool:
-        """Handle pipeline bus messages.
-
-        Camera errors are isolated -- the failed camera's tile freezes on its
-        last frame (cudacompositor holds the last buffer) while other cameras
-        continue. Only non-camera errors (compositor, encoder, sink) are fatal.
-        """
+    def _on_bus_message(self, bus: Any, message: Any) -> bool:
+        """Handle pipeline bus messages."""
+        Gst = self._Gst
         t = message.type
         if t == Gst.MessageType.EOS:
             log.info("Pipeline EOS")
@@ -505,22 +483,12 @@ class StudioCompositor:
         elif t == Gst.MessageType.ERROR:
             err, debug = message.parse_error()
             src_name = message.src.get_name() if message.src else "unknown"
-
-            # Check if this error belongs to a camera branch
             role = self._resolve_camera_role(message.src)
             if role is not None:
                 log.error("Camera %s error (element %s): %s", role, src_name, err.message)
                 self._mark_camera_offline(role)
-                # Don't stop the pipeline -- other cameras continue.
-                # The compositor pad holds the last frame automatically.
             else:
-                # Fatal: compositor/encoder/sink error
-                log.error(
-                    "Pipeline error from %s: %s (debug: %s)",
-                    src_name,
-                    err.message,
-                    debug,
-                )
+                log.error("Pipeline error from %s: %s (debug: %s)", src_name, err.message, debug)
                 self.stop()
         elif t == Gst.MessageType.WARNING:
             err, debug = message.parse_warning()
@@ -557,11 +525,11 @@ class StudioCompositor:
         """GLib timeout callback: periodically refresh the status file."""
         if self._running:
             self._write_status("running")
-        return self._running  # return False to stop the timer
+        return self._running
 
     # -- Overlay ----------------------------------------------------------
 
-    def _on_overlay_caps_changed(self, overlay: Gst.Element, caps: Gst.Caps) -> None:
+    def _on_overlay_caps_changed(self, overlay: Any, caps: Any) -> None:
         """Called when cairooverlay negotiates caps -- cache canvas size."""
         s = caps.get_structure(0)
         w = s.get_int("width")
@@ -570,12 +538,8 @@ class StudioCompositor:
             self._overlay_canvas_size = (w[1], h[1])
             log.debug("Overlay canvas: %dx%d", w[1], h[1])
 
-    def _on_draw(self, overlay: Gst.Element, cr: Any, timestamp: int, duration: int) -> None:
-        """Cairo draw callback -- renders text overlays on the composited frame.
-
-        Called on the streaming thread for every frame. Must be fast (<5ms).
-        Reads from the thread-safe OverlayState cache.
-        """
+    def _on_draw(self, overlay: Any, cr: Any, timestamp: int, duration: int) -> None:
+        """Cairo draw callback -- renders text overlays on the composited frame."""
         if not self.config.overlay_enabled:
             return
 
@@ -583,29 +547,22 @@ class StudioCompositor:
 
         canvas_w, canvas_h = self._overlay_canvas_size
         state = self._overlay_state.data
-
         cr.select_font_face("monospace", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
         pad = 4
 
-        # Per-camera labels
         for role, tile in self._tile_layout.items():
-            # Role label (top-left of tile)
             cr.set_font_size(14)
             text = role
             extents = cr.text_extents(text)
             cr.set_source_rgba(0.0, 0.0, 0.0, 0.6)
             cr.rectangle(
-                tile.x + pad,
-                tile.y + pad,
-                extents.width + pad * 2,
-                extents.height + pad * 2,
+                tile.x + pad, tile.y + pad, extents.width + pad * 2, extents.height + pad * 2
             )
             cr.fill()
             cr.set_source_rgba(1.0, 1.0, 1.0, 0.9)
             cr.move_to(tile.x + pad * 2, tile.y + pad + extents.height + pad)
             cr.show_text(text)
 
-            # Consent badge (top-right of tile)
             has_consent = any("consent" in c for c in state.active_contracts)
             badge_color = (0.2, 0.8, 0.2, 0.9) if has_consent else (0.8, 0.2, 0.2, 0.9)
             badge_text = "REC" if has_consent else "NO-REC"
@@ -620,7 +577,6 @@ class StudioCompositor:
             cr.move_to(bx + pad, by + be.height + pad)
             cr.show_text(badge_text)
 
-            # Offline indicator
             with self._camera_status_lock:
                 cam_status = self._camera_status.get(role, "unknown")
             if cam_status == "offline":
@@ -628,13 +584,9 @@ class StudioCompositor:
                 cr.set_source_rgba(1.0, 0.3, 0.3, 0.8)
                 ot = "OFFLINE"
                 oe = cr.text_extents(ot)
-                cr.move_to(
-                    tile.x + (tile.w - oe.width) / 2,
-                    tile.y + (tile.h + oe.height) / 2,
-                )
+                cr.move_to(tile.x + (tile.w - oe.width) / 2, tile.y + (tile.h + oe.height) / 2)
                 cr.show_text(ot)
 
-        # Global: flow state banner (top center)
         if state.flow_state:
             cr.set_font_size(20)
             flow_text = f"FLOW: {state.flow_state.upper()} ({state.flow_score:.0%})"
@@ -644,7 +596,6 @@ class StudioCompositor:
             cr.set_source_rgba(0.0, 0.0, 0.0, 0.6)
             cr.rectangle(fx - 6, fy, fe.width + 12, fe.height + 12)
             cr.fill()
-            # Color: green for active, yellow for warming, gray otherwise
             if state.flow_state == "active":
                 cr.set_source_rgba(0.2, 1.0, 0.4, 0.95)
             elif state.flow_state == "warming":
@@ -654,7 +605,6 @@ class StudioCompositor:
             cr.move_to(fx, fy + fe.height + 4)
             cr.show_text(flow_text)
 
-        # Global: classification tags (bottom-left)
         if state.production_activity or state.music_genre:
             cr.set_font_size(14)
             tags = " | ".join(filter(None, [state.production_activity, state.music_genre]))
@@ -668,7 +618,6 @@ class StudioCompositor:
             cr.move_to(tx, ty)
             cr.show_text(tags)
 
-        # Global: audio energy meter (bottom bar)
         if state.audio_energy_rms > 0:
             bar_h = 4
             bar_w = int(canvas_w * min(state.audio_energy_rms * 10, 1.0))
@@ -685,7 +634,6 @@ class StudioCompositor:
                 if PERCEPTION_STATE_PATH.exists():
                     raw = PERCEPTION_STATE_PATH.read_text()
                     data = OverlayData(**json.loads(raw))
-                    # Check staleness: if timestamp is >10s old, mark stale
                     if time.time() - data.timestamp > 10:
                         self._overlay_state.mark_stale()
                     else:
@@ -701,9 +649,12 @@ class StudioCompositor:
 
     def start(self) -> None:
         """Build and start the pipeline."""
+        self._GLib, self._Gst = _init_gstreamer()
+        GLib = self._GLib
+        Gst = self._Gst
+
         log.info("Building compositor pipeline with %d cameras", len(self.config.cameras))
 
-        # Initialize camera status -- _build_pipeline may mark some as offline
         with self._camera_status_lock:
             for cam in self.config.cameras:
                 self._camera_status[cam.role] = "starting"
@@ -723,7 +674,6 @@ class StudioCompositor:
 
         log.info("Pipeline started -- output on %s", self.config.output_device)
 
-        # Mark all cameras that weren't already offline as active
         with self._camera_status_lock:
             for role, status in self._camera_status.items():
                 if status == "starting":
@@ -734,18 +684,15 @@ class StudioCompositor:
 
         self.loop = GLib.MainLoop()
 
-        # Periodic status refresh
         interval_ms = int(self.config.status_interval_s * 1000)
         self._status_timer_id = GLib.timeout_add(interval_ms, self._status_tick)
 
-        # Start state reader thread for overlay data
         if self.config.overlay_enabled:
             self._state_reader_thread = threading.Thread(
                 target=self._state_reader_loop, daemon=True, name="state-reader"
             )
             self._state_reader_thread.start()
 
-        # Handle signals
         def _shutdown(signum: int, frame: Any) -> None:
             log.info("Signal %d received, shutting down", signum)
             self.stop()
@@ -765,11 +712,14 @@ class StudioCompositor:
         self._running = False
         log.info("Stopping compositor pipeline")
 
-        if self._status_timer_id is not None:
+        GLib = self._GLib
+        Gst = self._Gst
+
+        if self._status_timer_id is not None and GLib is not None:
             GLib.source_remove(self._status_timer_id)
             self._status_timer_id = None
 
-        if self.pipeline:
+        if self.pipeline and Gst is not None:
             self.pipeline.set_state(Gst.State.NULL)
 
         if self.loop and self.loop.is_running():
