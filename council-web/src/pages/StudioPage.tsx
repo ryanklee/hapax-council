@@ -36,7 +36,8 @@ export function StudioPage() {
 
   // HLS
   useEffect(() => {
-    if (!showHls || !streamInfo) return;
+    const hlsUrl = streamInfo?.hls_url;
+    if (!showHls || !hlsUrl) return;
     const video = videoRef.current;
     if (!video) return;
     if (!Hls.isSupported()) return;
@@ -47,7 +48,7 @@ export function StudioPage() {
       backBufferLength: 0,
     });
     hlsRef.current = hls;
-    hls.loadSource(streamInfo.hls_url);
+    hls.loadSource(hlsUrl);
     hls.attachMedia(video);
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
       video.play().then(() => setHlsReady(true)).catch(() => {});
@@ -59,7 +60,7 @@ export function StudioPage() {
       }
     }, 2000);
     return () => { clearInterval(sync); hls.destroy(); hlsRef.current = null; setHlsReady(false); };
-  }, [showHls, streamInfo]);
+  }, [showHls, streamInfo?.hls_url]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const prevPreset = useCallback(() => setPresetIdx((i) => (i - 1 + PRESETS.length) % PRESETS.length), []);
   const nextPreset = useCallback(() => setPresetIdx((i) => (i + 1) % PRESETS.length), []);
