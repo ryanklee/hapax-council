@@ -51,7 +51,7 @@ export const PRESETS: CompositePreset[] = [
     trail: {
       blendMode: "difference", opacity: 0.95,
       filter: "saturate(2) contrast(1.3)",
-      count: 6, intervalMs: 250, maxAgeMs: 3000,
+      count: 12, intervalMs: 100, maxAgeMs: 4000,
     },
     liveFilter: "contrast(1.15) saturate(1.2)",
     overlays: ["rgbsplit"],
