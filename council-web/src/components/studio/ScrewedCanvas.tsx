@@ -99,11 +99,21 @@ export function ScrewedCanvas({ role, className }: Props) {
         ctx.restore();
       }
 
-      // Main frame — SINGLE draw with screwed filter
+      // Main frame — screwed filter + slow warp pan
       const main = frameRing[idx];
       if (main) {
         ctx.save();
         ctx.filter = "saturate(0.55) sepia(0.4) hue-rotate(250deg) contrast(1.05) brightness(0.9)";
+        // Slow sinusoidal drift — like floating through syrup
+        const t = tick * 0.04;
+        const panX = Math.sin(t) * 8;
+        const panY = Math.sin(t * 0.7) * 5 + Math.sin(t * 0.3) * 3;
+        const rot = Math.sin(t * 0.5) * 0.008; // ~0.5 degree wobble
+        const scale = 1.03 + Math.sin(t * 0.2) * 0.015; // subtle zoom breathe
+        ctx.translate(w / 2, h / 2);
+        ctx.rotate(rot);
+        ctx.scale(scale, scale);
+        ctx.translate(-w / 2 + panX, -h / 2 + panY);
         ctx.drawImage(main, 0, 0, w, h);
         ctx.restore();
       }
