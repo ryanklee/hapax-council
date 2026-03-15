@@ -49,9 +49,9 @@ export const PRESETS: CompositePreset[] = [
     name: "Datamosh",
     description: "Glitch — RGB split + difference",
     trail: {
-      blendMode: "difference", opacity: 0.8,
+      blendMode: "difference", opacity: 0.95,
       filter: "saturate(2) contrast(1.3)",
-      count: 2, intervalMs: 150, maxAgeMs: 600,
+      count: 6, intervalMs: 250, maxAgeMs: 3000,
     },
     liveFilter: "contrast(1.15) saturate(1.2)",
     overlays: ["rgbsplit"],
