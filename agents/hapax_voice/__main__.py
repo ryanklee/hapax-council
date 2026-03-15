@@ -553,9 +553,7 @@ class VoiceDaemon:
                     self.presence.process_audio_frame(chunk)
                     # Feed VAD probability to conversation buffer
                     if self._conversation_buffer.is_active:
-                        self._conversation_buffer.update_vad(
-                            self.presence._latest_vad_confidence
-                        )
+                        self._conversation_buffer.update_vad(self.presence._latest_vad_confidence)
                 except Exception as exc:
                     log.warning("Presence consumer error: %s", exc)
 
@@ -1075,7 +1073,11 @@ class VoiceDaemon:
                     self.session.pause(reason=f"governor:{state.activity_mode}")
                 elif directive == "process" and self.session.is_paused:
                     self.session.resume()
-                elif directive == "withdraw" and self.session.is_active and self._conversation_pipeline is None:
+                elif (
+                    directive == "withdraw"
+                    and self.session.is_active
+                    and self._conversation_pipeline is None
+                ):
                     await self._close_session(reason="operator_absent")
 
                 # Update context gate with backend Behaviors
