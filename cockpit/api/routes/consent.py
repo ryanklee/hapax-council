@@ -1,10 +1,13 @@
 """Consent and governance routes (DD-8, DD-11, DD-23).
 
+POST /consent/create — create a consent contract (runtime, from channel)
 POST /consent/revoke/{person_id} — triggers revocation cascade
-GET /consent/trace — trace consent provenance for a file or Qdrant source
+GET /consent/trace — trace consent provenance for a file
 GET /consent/contracts — list active consent contracts
-GET /consent/coverage — summary of consent coverage across stored data
-GET /consent/precedents — axiom precedent timeline (case law)
+GET /consent/coverage — consent label coverage across Qdrant
+GET /consent/precedents — axiom precedent timeline
+GET /consent/channels — available consent channels for a guest
+GET /consent/overhead — governance overhead measurement
 """
 
 from __future__ import annotations
@@ -14,12 +17,93 @@ from pathlib import Path
 from urllib.parse import unquote
 
 from fastapi import APIRouter, Query
+from pydantic import BaseModel, Field
 
 from shared.governance.revocation_wiring import get_revocation_propagator
 
 _log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/consent", tags=["consent"])
+
+
+class ConsentCreateRequest(BaseModel):
+    """Request to create a consent contract via a channel."""
+
+    person_id: str = Field(description="Guest identifier")
+    scope: list[str] = Field(description="Data categories consented to")
+    channel_id: str = Field(default="operator-mediated", description="Channel used")
+    direction: str = Field(default="one_way")
+    visibility_mechanism: str = Field(default="on_request")
+
+
+@router.post("/create")
+async def create_consent(req: ConsentCreateRequest) -> dict:
+    """Create a consent contract at runtime.
+
+    Called when a guest grants consent via any channel. Writes contract
+    to axioms/contracts/ and registers in memory.
+    """
+    from shared.governance.consent import load_contracts
+
+    registry = load_contracts()
+    contract = registry.create_contract(
+        person_id=req.person_id,
+        scope=frozenset(req.scope),
+        direction=req.direction,
+        visibility_mechanism=req.visibility_mechanism,
+    )
+
+    _log.info(
+        "Consent created: %s for %s via %s (scope: %s)",
+        contract.id,
+        req.person_id,
+        req.channel_id,
+        sorted(req.scope),
+    )
+
+    return {
+        "contract_id": contract.id,
+        "person_id": req.person_id,
+        "scope": sorted(req.scope),
+        "channel_used": req.channel_id,
+        "active": contract.active,
+        "created_at": contract.created_at,
+    }
+
+
+@router.get("/channels")
+async def consent_channels(
+    is_child: bool = False,
+    guardian_present: bool = False,
+    incapabilities: str = "",
+) -> dict:
+    """Available consent channels for a guest, friction-sorted."""
+    from shared.governance.consent_channels import GuestContext, build_channel_menu
+
+    incap_set = frozenset(i.strip() for i in incapabilities.split(",") if i.strip())
+    guest = GuestContext(
+        known_incapabilities=incap_set,
+        is_child=is_child,
+        guardian_present=guardian_present,
+    )
+    menu = build_channel_menu(guest=guest)
+
+    return {
+        "sufficient": menu.sufficient,
+        "insufficiency_reason": menu.insufficiency_reason,
+        "channels": [
+            {
+                "id": o.channel.id,
+                "name": o.channel.name,
+                "available": o.available,
+                "reason": o.reason,
+                "friction_total": round(o.friction.total, 2),
+                "scope": sorted(o.channel.scope),
+                "description": o.channel.description,
+            }
+            for o in menu.offers
+        ],
+    }
 
 
 @router.post("/revoke/{person_id}")
