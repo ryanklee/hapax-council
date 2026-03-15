@@ -14,7 +14,7 @@ import {
   PanelRightOpen,
 } from "lucide-react";
 
-const ALL_OVERLAYS: OverlayType[] = ["scanlines", "rgbsplit", "vignette", "huecycle", "noise"];
+const ALL_OVERLAYS: OverlayType[] = ["scanlines", "rgbsplit", "vignette", "huecycle", "noise", "screwed"];
 
 interface Props {
   viewMode: "grid" | "composite" | "smooth";

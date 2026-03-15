@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Maximize, Minimize, GripVertical } from "lucide-react";
 import type { CompositePreset } from "./compositePresets";
+import { ScrewedCanvas } from "./ScrewedCanvas";
 import { CompositeOverlay } from "./CompositeOverlays";
 import "./studio-animations.css";
 
@@ -110,12 +111,73 @@ function CameraCell({
     return () => document.removeEventListener("fullscreenchange", onChange);
   }, []);
 
-  // Live feed pull
+  // Live feed pull — screwed mode uses stutter playback from a frame buffer
   useEffect(() => {
     const img = imgRef.current;
     if (!img) return;
     let running = true;
     let pending = false;
+
+    const screwedMode = !!preset?.livePullIntervalMs;
+
+    if (screwedMode) {
+      // SCREWED: fetch frames into a ring buffer, play back with stutter
+      const frameRing: string[] = [];
+      const RING_SIZE = 8;
+      let playhead = 0;
+      let tickCount = 0;
+      let holdCount = 0;
+      const holdDuration = 3; // hold each frame for N ticks before advancing
+      const replayChance = 0.15; // 15% chance per advance to jump back and replay
+
+      // Background fetcher — keeps filling the ring
+      const fetchFrame = () => {
+        if (!running || pending) return;
+        pending = true;
+        const loader = new Image();
+        loader.onload = () => {
+          if (running) {
+            if (frameRing.length < RING_SIZE) frameRing.push(loader.src);
+            else frameRing[tickCount % RING_SIZE] = loader.src;
+          }
+          pending = false;
+        };
+        loader.onerror = () => { pending = false; };
+        loader.src = `/api/studio/stream/camera/${role}?_t=${Date.now()}`;
+      };
+
+      // Playback ticker — stutters through the ring
+      const tick = () => {
+        if (!running || frameRing.length === 0) return;
+        tickCount++;
+        holdCount++;
+
+        if (holdCount >= holdDuration) {
+          holdCount = 0;
+          // Maybe replay: jump back 2-3 frames
+          if (Math.random() < replayChance && playhead > 2) {
+            playhead -= Math.floor(Math.random() * 3) + 1;
+          } else {
+            playhead++;
+          }
+        }
+
+        const idx = Math.abs(playhead) % frameRing.length;
+        img.src = frameRing[idx];
+      };
+
+      fetchFrame();
+      const fetchTimer = setInterval(fetchFrame, preset.livePullIntervalMs!);
+      const playTimer = setInterval(tick, 80); // playback at ~12fps tick rate
+
+      return () => {
+        running = false;
+        clearInterval(fetchTimer);
+        clearInterval(playTimer);
+      };
+    }
+
+    // Normal mode — direct pull
     const pull = () => {
       if (!running || pending) return;
       pending = true;
@@ -125,9 +187,10 @@ function CameraCell({
       loader.src = `/api/studio/stream/camera/${role}?_t=${Date.now()}`;
     };
     pull();
-    const timer = setInterval(pull, isHero ? 80 : 120);
+    const rate = isHero ? 80 : 120;
+    const timer = setInterval(pull, rate);
     return () => { running = false; clearInterval(timer); };
-  }, [role, isHero]);
+  }, [role, isHero, preset?.livePullIntervalMs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Trail capture — freeze pixels via canvas, auto-expire by age
   useEffect(() => {
@@ -190,14 +253,21 @@ function CameraCell({
       }`}
       style={preset ? { isolation: "isolate" } : undefined}
     >
-      {/* Live layer */}
-      <img
-        ref={imgRef}
-        alt={role}
-        crossOrigin="anonymous"
-        className={`bg-black object-contain ${isFullscreen ? "max-h-screen max-w-full" : "h-full w-full"}`}
-        style={preset?.liveFilter && preset.liveFilter !== "none" ? { filter: preset.liveFilter } : undefined}
-      />
+      {/* Live layer — ScrewedCanvas for screwed mode, normal img otherwise */}
+      {preset?.livePullIntervalMs ? (
+        <ScrewedCanvas
+          role={role}
+          className={`bg-black ${isFullscreen ? "max-h-screen max-w-full" : "h-full w-full"}`}
+        />
+      ) : (
+        <img
+          ref={imgRef}
+          alt={role}
+          crossOrigin="anonymous"
+          className={`bg-black object-contain ${isFullscreen ? "max-h-screen max-w-full" : "h-full w-full"}`}
+          style={preset?.liveFilter && preset.liveFilter !== "none" ? { filter: preset.liveFilter } : undefined}
+        />
+      )}
 
       {/* Trail layers — frozen past frames, opacity fades with age */}
       {preset && trailFrames.map((frame, i) => (

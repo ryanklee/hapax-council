@@ -14,9 +14,10 @@ export interface CompositePreset {
   liveFilter: string;
   overlays: OverlayType[];
   cellAnimation?: string;
+  livePullIntervalMs?: number; // override camera pull rate (default: 80/120ms)
 }
 
-export type OverlayType = "scanlines" | "rgbsplit" | "vignette" | "huecycle" | "noise";
+export type OverlayType = "scanlines" | "rgbsplit" | "vignette" | "huecycle" | "noise" | "screwed";
 
 export const PRESETS: CompositePreset[] = [
   {
@@ -35,15 +36,16 @@ export const PRESETS: CompositePreset[] = [
   },
   {
     name: "Screwed",
-    description: "Purple syrup, slow drift",
+    description: "Houston syrup — dim, heavy, sinking",
     trail: {
-      blendMode: "screen", opacity: 0.0,
-      filter: "none",
-      count: 0, intervalMs: 9999, maxAgeMs: 1,
+      blendMode: "lighten", opacity: 0.5,
+      filter: "saturate(0.3) brightness(0.3) blur(2px)",
+      count: 5, intervalMs: 400, maxAgeMs: 4000,
     },
-    liveFilter: "sepia(0.6) hue-rotate(260deg) saturate(2.5) brightness(0.65) contrast(1.4) blur(0.3px)",
-    overlays: ["scanlines", "vignette"],
-    cellAnimation: "studio-drift",
+    liveFilter: "saturate(0.6) brightness(0.45) contrast(0.85) sepia(0.5) hue-rotate(270deg)",
+    overlays: ["screwed", "scanlines"],
+    cellAnimation: "studio-screwed",
+    livePullIntervalMs: 180,
   },
   {
     name: "Datamosh",
