@@ -120,9 +120,11 @@ export function CompositeCanvas({
       ctx.clearRect(0, 0, w, h);
 
       // --- Ghost trails ---
+      // Space ghost frames further apart for visible temporal difference
       const trail = p.trail;
+      const trailSpacing = Math.max(3, Math.floor(available / (trail.count + 1)));
       for (let g = trail.count; g >= 1; g--) {
-        const gi = (idx - g * 2 + available * 100) % available;
+        const gi = (idx - g * trailSpacing + available * 100) % available;
         const ghost = frameRing[gi];
         if (!ghost) continue;
         ctx.save();
