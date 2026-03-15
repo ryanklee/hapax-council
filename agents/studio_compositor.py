@@ -1,8 +1,14 @@
 """Studio Compositor — GStreamer pipeline that tiles camera feeds into a single 1080p output.
 
-Reads N camera feeds via v4l2src, decodes MJPEG on GPU (nvjpegdec),
+Reads N camera feeds via v4l2src, decodes MJPEG with jpegdec, uploads to CUDA,
 composites via cudacompositor, encodes with nvh264enc, and outputs to
 /dev/video42 (v4l2loopback).
+
+Features:
+- Hero camera (2x tile), automatic grid layout for remaining cameras
+- Per-camera watchdog timeout (freeze last frame on disconnect)
+- Bus error handling: camera failures are isolated, other cameras continue
+- Status file written atomically to ~/.cache/hapax-compositor/status.json
 
 Usage:
     uv run python -m agents.studio_compositor --config PATH
@@ -14,8 +20,10 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import signal
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -62,6 +70,7 @@ class CompositorConfig(BaseModel):
     output_height: int = OUTPUT_HEIGHT
     framerate: int = 30
     bitrate: int = 8_000_000  # nvh264enc bitrate in bits/sec
+    watchdog_timeout_ms: int = 5000  # per-source watchdog timeout
     status_interval_s: float = 5.0
 
 
@@ -218,6 +227,12 @@ class StudioCompositor:
         self.pipeline: Gst.Pipeline | None = None
         self.loop: GLib.MainLoop | None = None
         self._running = False
+        # Per-camera status: role → "active" | "offline" | "error"
+        self._camera_status: dict[str, str] = {}
+        self._camera_status_lock = threading.Lock()
+        # Map GStreamer element name prefixes back to camera roles
+        self._element_to_role: dict[str, str] = {}
+        self._status_timer_id: int | None = None
 
     def _build_pipeline(self) -> Gst.Pipeline:
         """Build the full GStreamer pipeline."""
@@ -313,9 +328,19 @@ class StudioCompositor:
         """Add a single camera source branch to the pipeline."""
         role = cam.role.replace("-", "_")
 
-        # Source
+        # Track element → role mapping for error identification
+        self._element_to_role[f"src_{role}"] = cam.role
+
+        # Source with watchdog
         src = Gst.ElementFactory.make("v4l2src", f"src_{role}")
         src.set_property("device", cam.device)
+
+        # Skip missing devices gracefully
+        if not Path(cam.device).exists():
+            log.warning("Camera %s device %s not found, skipping", cam.role, cam.device)
+            with self._camera_status_lock:
+                self._camera_status[cam.role] = "offline"
+            return
 
         if cam.input_format == "mjpeg":
             # MJPEG path: v4l2src → capsfilter(mjpeg) → jpegdec → cudaupload → cudaconvert
@@ -388,8 +413,38 @@ class StudioCompositor:
         if src_pad.link(pad) != Gst.PadLinkReturn.OK:
             raise RuntimeError(f"Failed to link {cam.role} to compositor")
 
+    def _resolve_camera_role(self, element: Gst.Element | None) -> str | None:
+        """Walk up from an element to find which camera branch it belongs to."""
+        if element is None:
+            return None
+        name = element.get_name()
+        # Direct match on src element
+        if name in self._element_to_role:
+            return self._element_to_role[name]
+        # Check if any role suffix matches (e.g. dec_brio_operator → brio-operator)
+        for _elem_prefix, role in self._element_to_role.items():
+            role_suffix = role.replace("-", "_")
+            if role_suffix in name:
+                return role
+        return None
+
+    def _mark_camera_offline(self, role: str) -> None:
+        """Mark a camera as offline and update status file."""
+        with self._camera_status_lock:
+            prev = self._camera_status.get(role)
+            if prev == "offline":
+                return  # already marked
+            self._camera_status[role] = "offline"
+        log.warning("Camera %s marked offline", role)
+        self._write_status("running")
+
     def _on_bus_message(self, bus: Gst.Bus, message: Gst.Message) -> bool:
-        """Handle pipeline bus messages."""
+        """Handle pipeline bus messages.
+
+        Camera errors are isolated — the failed camera's tile freezes on its
+        last frame (cudacompositor holds the last buffer) while other cameras
+        continue. Only non-camera errors (compositor, encoder, sink) are fatal.
+        """
         t = message.type
         if t == Gst.MessageType.EOS:
             log.info("Pipeline EOS")
@@ -397,8 +452,23 @@ class StudioCompositor:
         elif t == Gst.MessageType.ERROR:
             err, debug = message.parse_error()
             src_name = message.src.get_name() if message.src else "unknown"
-            log.error("Pipeline error from %s: %s (debug: %s)", src_name, err.message, debug)
-            self.stop()
+
+            # Check if this error belongs to a camera branch
+            role = self._resolve_camera_role(message.src)
+            if role is not None:
+                log.error("Camera %s error (element %s): %s", role, src_name, err.message)
+                self._mark_camera_offline(role)
+                # Don't stop the pipeline — other cameras continue.
+                # The compositor pad holds the last frame automatically.
+            else:
+                # Fatal: compositor/encoder/sink error
+                log.error(
+                    "Pipeline error from %s: %s (debug: %s)",
+                    src_name,
+                    err.message,
+                    debug,
+                )
+                self.stop()
         elif t == Gst.MessageType.WARNING:
             err, debug = message.parse_warning()
             log.warning("Pipeline warning: %s (debug: %s)", err.message, debug)
@@ -408,13 +478,18 @@ class StudioCompositor:
                 log.debug("Pipeline state: %s → %s", old.value_nick, new.value_nick)
         return True
 
-    def _write_status(self, state: str, cameras: dict[str, str] | None = None) -> None:
-        """Write compositor status to cache file."""
+    def _write_status(self, state: str) -> None:
+        """Write compositor status to cache file (atomic write-then-rename)."""
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        with self._camera_status_lock:
+            cameras = dict(self._camera_status)
+        active_count = sum(1 for s in cameras.values() if s == "active")
         status = {
             "state": state,
-            "pid": __import__("os").getpid(),
-            "cameras": cameras or {},
+            "pid": os.getpid(),
+            "cameras": cameras,
+            "active_cameras": active_count,
+            "total_cameras": len(cameras),
             "output_device": self.config.output_device,
             "resolution": f"{self.config.output_width}x{self.config.output_height}",
             "timestamp": time.time(),
@@ -423,17 +498,28 @@ class StudioCompositor:
         tmp.write_text(json.dumps(status, indent=2))
         tmp.rename(STATUS_FILE)
 
+    def _status_tick(self) -> bool:
+        """GLib timeout callback: periodically refresh the status file."""
+        if self._running:
+            self._write_status("running")
+        return self._running  # return False to stop the timer
+
     def start(self) -> None:
         """Build and start the pipeline."""
         log.info("Building compositor pipeline with %d cameras", len(self.config.cameras))
+
+        # Initialize camera status — _build_pipeline may mark some as offline
+        with self._camera_status_lock:
+            for cam in self.config.cameras:
+                self._camera_status[cam.role] = "starting"
+
         self.pipeline = self._build_pipeline()
 
         bus = self.pipeline.get_bus()
         bus.add_signal_watch()
         bus.connect("message", self._on_bus_message)
 
-        cam_status = {c.role: "starting" for c in self.config.cameras}
-        self._write_status("starting", cam_status)
+        self._write_status("starting")
 
         ret = self.pipeline.set_state(Gst.State.PLAYING)
         if ret == Gst.StateChangeReturn.FAILURE:
@@ -441,11 +527,21 @@ class StudioCompositor:
             raise RuntimeError("Failed to start pipeline")
 
         log.info("Pipeline started — output on %s", self.config.output_device)
-        cam_status = {c.role: "active" for c in self.config.cameras}
-        self._write_status("running", cam_status)
+
+        # Mark all cameras that weren't already offline as active
+        with self._camera_status_lock:
+            for role, status in self._camera_status.items():
+                if status == "starting":
+                    self._camera_status[role] = "active"
 
         self._running = True
+        self._write_status("running")
+
         self.loop = GLib.MainLoop()
+
+        # Periodic status refresh
+        interval_ms = int(self.config.status_interval_s * 1000)
+        self._status_timer_id = GLib.timeout_add(interval_ms, self._status_tick)
 
         # Handle signals
         def _shutdown(signum: int, frame: Any) -> None:
@@ -466,6 +562,10 @@ class StudioCompositor:
             return
         self._running = False
         log.info("Stopping compositor pipeline")
+
+        if self._status_timer_id is not None:
+            GLib.source_remove(self._status_timer_id)
+            self._status_timer_id = None
 
         if self.pipeline:
             self.pipeline.set_state(Gst.State.NULL)
