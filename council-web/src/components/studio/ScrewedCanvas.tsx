@@ -156,6 +156,15 @@ export function ScrewedCanvas({ role, className }: Props) {
       ctx.fillStyle = vig;
       ctx.fillRect(0, 0, w, h);
 
+      // Scanlines
+      ctx.save();
+      ctx.globalAlpha = 0.12;
+      for (let y = 0; y < h; y += 4) {
+        ctx.fillStyle = "rgba(0,0,0,1)";
+        ctx.fillRect(0, y + 2, w, 1.5);
+      }
+      ctx.restore();
+
       // Band displacement
       if (Math.random() < 0.18 && main) {
         const bandY = Math.floor(Math.random() * h * 0.6) + h * 0.2;
