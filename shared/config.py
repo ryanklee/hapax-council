@@ -133,6 +133,7 @@ def get_qdrant() -> QdrantClient:
 _log = logging.getLogger("shared.config")
 _rag_tracer = trace.get_tracer("hapax.rag")
 
+
 @functools.lru_cache(maxsize=1)
 def _get_ollama_client():
     """Return a singleton Ollama client (avoids per-call HTTP client creation)."""
