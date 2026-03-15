@@ -106,10 +106,10 @@ export function ScrewedCanvas({ role, className }: Props) {
         ctx.filter = "saturate(0.55) sepia(0.4) hue-rotate(250deg) contrast(1.05) brightness(0.9)";
         // Slow sinusoidal drift — like floating through syrup
         const t = tick * 0.04;
-        const panX = Math.sin(t) * 8;
-        const panY = Math.sin(t * 0.7) * 5 + Math.sin(t * 0.3) * 3;
-        const rot = Math.sin(t * 0.5) * 0.008; // ~0.5 degree wobble
-        const scale = 1.03 + Math.sin(t * 0.2) * 0.015; // subtle zoom breathe
+        const panX = Math.sin(t) * 20;
+        const panY = Math.sin(t * 0.7) * 14 + Math.sin(t * 0.3) * 8;
+        const rot = Math.sin(t * 0.5) * 0.025; // ~0.5 degree wobble
+        const scale = 1.06 + Math.sin(t * 0.2) * 0.04; // subtle zoom breathe
         ctx.translate(w / 2, h / 2);
         ctx.rotate(rot);
         ctx.scale(scale, scale);
