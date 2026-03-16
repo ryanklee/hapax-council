@@ -1615,7 +1615,11 @@ class StudioCompositor:
             pass  # SNAPSHOT_DIR may not exist yet during early startup
 
     def _fx_tick_callback(self) -> bool:
-        """GLib timeout: update time-varying FX shader uniforms at ~30fps."""
+        """GLib timeout: update time-varying FX shader uniforms at ~30fps.
+
+        Reads audio_energy_rms from the perception state to modulate
+        shader parameters in sync with audio — beat-reactive effects.
+        """
         if not self._running:
             return False
         if not hasattr(self, "_fx_warp_shader"):
@@ -1633,41 +1637,79 @@ class StudioCompositor:
         if not preset:
             return True
 
-        # Update warp time
+        # --- Beat reactivity: read audio energy ---
+        with self._overlay_state._lock:
+            energy = self._overlay_state._data.audio_energy_rms
+        # Normalize: energy is typically 0.0-0.3, clamp to 0-1
+        beat = min(energy * 4.0, 1.0)
+        # Smooth with exponential decay for punchier response
+        if not hasattr(self, "_fx_beat_smooth"):
+            self._fx_beat_smooth = 0.0
+        self._fx_beat_smooth = max(beat, self._fx_beat_smooth * 0.85)
+        b = self._fx_beat_smooth  # 0.0 = silent, 1.0 = loud
+
+        # --- Color grade: pulse brightness/contrast on beats ---
+        cg = preset.color_grade
+        beat_brightness = cg.brightness + b * 0.15  # up to +15% brightness on beat
+        beat_contrast = cg.contrast + b * 0.1  # up to +10% contrast on beat
+        beat_saturation = cg.saturation + b * 0.2  # slightly more saturated on beat
+
+        cg_u = Gst.Structure.from_string(
+            f"uniforms, u_saturation=(float){beat_saturation}, "
+            f"u_brightness=(float){beat_brightness}, "
+            f"u_contrast=(float){beat_contrast}, "
+            f"u_sepia=(float){cg.sepia}, "
+            f"u_hue_rotate=(float){cg.hue_rotate}"
+        )
+        self._fx_color_grade.set_property("uniforms", cg_u[0])
+
+        # --- Warp: amplify displacement on beats ---
         if preset.warp and (preset.warp.pan_x > 0 or preset.warp.slice_count > 0):
             w = preset.warp
+            beat_slice_amp = w.slice_amplitude * (1.0 + b * 0.5)  # up to +50% on beat
+            beat_pan_x = w.pan_x * (1.0 + b * 0.3)
+            beat_pan_y = w.pan_y * (1.0 + b * 0.3)
+            beat_zoom_breath = w.zoom_breath * (1.0 + b * 0.4)
+
             warp_u = Gst.Structure.from_string(
                 f"uniforms, u_time=(float){t}, "
                 f"u_slice_count=(float){w.slice_count}, "
-                f"u_slice_amplitude=(float){w.slice_amplitude}, "
-                f"u_pan_x=(float){w.pan_x}, u_pan_y=(float){w.pan_y}, "
+                f"u_slice_amplitude=(float){beat_slice_amp}, "
+                f"u_pan_x=(float){beat_pan_x}, u_pan_y=(float){beat_pan_y}, "
                 f"u_rotation=(float){w.rotation}, u_zoom=(float){w.zoom}, "
-                f"u_zoom_breath=(float){w.zoom_breath}, "
+                f"u_zoom_breath=(float){beat_zoom_breath}, "
                 f"u_width=(float)1920.0, u_height=(float)1080.0"
             )
             self._fx_warp_shader.set_property("uniforms", warp_u[0])
 
-        # Update VHS time (scrolling noise band)
+        # --- VHS: increase chroma shift + noise band speed on beats ---
         if preset.use_vhs_shader:
-            noise_y = (self._fx_tick * 0.003) % 1.0
+            beat_chroma = 4.0 + b * 6.0  # 4-10px chroma shift, more on beat
+            noise_speed = 0.003 + b * 0.008  # faster noise scrolling on beat
+            noise_y = (self._fx_tick * noise_speed) % 1.0
             vhs_u = Gst.Structure.from_string(
-                f"uniforms, u_time=(float){t}, u_chroma_shift=(float)4.0, "
+                f"uniforms, u_time=(float){t}, u_chroma_shift=(float){beat_chroma}, "
                 f"u_head_switch_y=(float)0.92, u_noise_band_y=(float){noise_y}, "
                 f"u_width=(float)1920.0, u_height=(float)1080.0"
             )
             self._fx_vhs_shader.set_property("uniforms", vhs_u[0])
 
-        # Update post-process time + random band displacement
+        # --- Post-process: beat-triggered band displacement ---
         pp = preset.post_process
-        band_active = 1.0 if pp.band_chance > 0 and random.random() < pp.band_chance else 0.0
+        # Increase band displacement probability and intensity on beats
+        beat_band_chance = pp.band_chance + b * 0.3  # more frequent bands on beat
+        beat_band_shift = pp.band_max_shift * (1.0 + b * 1.0)  # up to 2x shift on beat
+
+        band_active = 1.0 if beat_band_chance > 0 and random.random() < beat_band_chance else 0.0
         band_y = random.random() * 0.6 + 0.2 if band_active else 0.0
         band_h = random.random() * 0.03 + 0.005 if band_active else 0.0
-        band_shift = (
-            (random.random() - 0.5) * 2 * pp.band_max_shift / 1920.0 if band_active else 0.0
-        )
+        band_shift = (random.random() - 0.5) * 2 * beat_band_shift / 1920.0 if band_active else 0.0
+
+        # Beat flash: brief vignette pulse (open up on beat, close in on silence)
+        beat_vignette = pp.vignette_strength * (1.0 - b * 0.3)  # vignette opens on beat
 
         pp_u = Gst.Structure.from_string(
-            f"uniforms, u_vignette_strength=(float){pp.vignette_strength}, "
+            f"uniforms, u_vignette_strength=(float){beat_vignette}, "
             f"u_scanline_alpha=(float){pp.scanline_alpha}, "
             f"u_time=(float){t}, "
             f"u_band_active=(float){band_active}, "
