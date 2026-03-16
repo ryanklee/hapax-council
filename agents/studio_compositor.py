@@ -675,6 +675,35 @@ class StudioCompositor:
             )
             color_grade.set_property("uniforms", uniforms[0])
 
+        # VHS shader (RGB split, head-switch, noise band, scanlines)
+        vhs_shader = Gst.ElementFactory.make("glshader", "fx-vhs")
+        vhs_frag = load_shader("vhs.frag")
+        if vhs_frag:
+            vhs_shader.set_property("fragment", vhs_frag)
+            vhs_uniforms = Gst.Structure.from_string(
+                "uniforms, u_time=(float)0.0, u_chroma_shift=(float)0.0, "
+                "u_head_switch_y=(float)0.92, u_noise_band_y=(float)0.0, "
+                "u_width=(float)1920.0, u_height=(float)1080.0"
+            )
+            vhs_shader.set_property("uniforms", vhs_uniforms[0])
+
+        # Slice warp shader (pan, rotate, zoom, horizontal slice displacement)
+        warp_shader = Gst.ElementFactory.make("glshader", "fx-warp")
+        warp_frag = load_shader("slice_warp.frag")
+        if warp_frag:
+            warp_shader.set_property("fragment", warp_frag)
+            warp_uniforms = Gst.Structure.from_string(
+                "uniforms, u_time=(float)0.0, u_slice_count=(float)0.0, "
+                "u_slice_amplitude=(float)0.0, u_pan_x=(float)0.0, u_pan_y=(float)0.0, "
+                "u_rotation=(float)0.0, u_zoom=(float)1.0, u_zoom_breath=(float)0.0, "
+                "u_width=(float)1920.0, u_height=(float)1080.0"
+            )
+            warp_shader.set_property("uniforms", warp_uniforms[0])
+
+        # GL effects (glow for Neon, sobel for Ghost)
+        glow_effect = Gst.ElementFactory.make("gleffects", "fx-glow")
+        glow_effect.set_property("effect", 0)  # identity (passthrough)
+
         # Post-process shader (vignette, scanlines, band displacement)
         post_proc = Gst.ElementFactory.make("glshader", "fx-post-process")
         post_frag = load_shader("post_process.frag")
@@ -772,7 +801,10 @@ class StudioCompositor:
         rgba_caps.link(glupload)
         glupload.link(glcolorconvert_in)
         glcolorconvert_in.link(color_grade)
-        color_grade.link(post_proc)
+        color_grade.link(vhs_shader)
+        vhs_shader.link(warp_shader)
+        warp_shader.link(glow_effect)
+        glow_effect.link(post_proc)
         post_proc.link(glcolorconvert_out)
         glcolorconvert_out.link(gldownload)
         gldownload.link(fx_convert)
@@ -793,8 +825,12 @@ class StudioCompositor:
 
         # Store references for runtime preset switching
         self._fx_color_grade = color_grade
+        self._fx_vhs_shader = vhs_shader
+        self._fx_warp_shader = warp_shader
+        self._fx_glow_effect = glow_effect
         self._fx_post_proc = post_proc
         self._fx_active_preset = initial_preset.name
+        self._fx_tick = 0
 
         log.info("FX branch: glshader pipeline → /dev/shm/hapax-compositor/fx-snapshot.jpg")
 
@@ -822,6 +858,44 @@ class StudioCompositor:
         )
         self._fx_color_grade.set_property("uniforms", uniforms[0])
 
+        # Update VHS shader — active only for VHS preset
+        chroma_shift = 4.0 if preset.use_vhs_shader else 0.0
+        vhs_uniforms = Gst.Structure.from_string(
+            f"uniforms, u_time=(float)0.0, u_chroma_shift=(float){chroma_shift}, "
+            f"u_head_switch_y=(float)0.92, u_noise_band_y=(float)0.0, "
+            f"u_width=(float)1920.0, u_height=(float)1080.0"
+        )
+        self._fx_vhs_shader.set_property("uniforms", vhs_uniforms[0])
+
+        # Update warp shader
+        warp = preset.warp
+        if warp:
+            warp_uniforms = Gst.Structure.from_string(
+                f"uniforms, u_time=(float)0.0, "
+                f"u_slice_count=(float){warp.slice_count}, "
+                f"u_slice_amplitude=(float){warp.slice_amplitude}, "
+                f"u_pan_x=(float){warp.pan_x}, u_pan_y=(float){warp.pan_y}, "
+                f"u_rotation=(float){warp.rotation}, u_zoom=(float){warp.zoom}, "
+                f"u_zoom_breath=(float){warp.zoom_breath}, "
+                f"u_width=(float)1920.0, u_height=(float)1080.0"
+            )
+        else:
+            warp_uniforms = Gst.Structure.from_string(
+                "uniforms, u_time=(float)0.0, u_slice_count=(float)0.0, "
+                "u_slice_amplitude=(float)0.0, u_pan_x=(float)0.0, u_pan_y=(float)0.0, "
+                "u_rotation=(float)0.0, u_zoom=(float)1.0, u_zoom_breath=(float)0.0, "
+                "u_width=(float)1920.0, u_height=(float)1080.0"
+            )
+        self._fx_warp_shader.set_property("uniforms", warp_uniforms[0])
+
+        # Update gleffects — glow for Neon, sobel for Ghost, identity otherwise
+        if preset.use_glow:
+            self._fx_glow_effect.set_property("effect", 15)  # glow
+        elif preset.use_sobel:
+            self._fx_glow_effect.set_property("effect", 16)  # sobel
+        else:
+            self._fx_glow_effect.set_property("effect", 0)  # identity
+
         # Update post-process uniforms
         pp = preset.post_process
         pp_uniforms = Gst.Structure.from_string(
@@ -838,6 +912,7 @@ class StudioCompositor:
         self._fx_post_proc.set_property("uniforms", pp_uniforms[0])
 
         self._fx_active_preset = preset_name
+        self._fx_tick = 0
         log.info("FX preset switched to: %s", preset_name)
 
     def _add_camera_snapshot_branch(self, pipeline: Any, camera_tee: Any, cam: CameraSpec) -> None:
@@ -1204,6 +1279,73 @@ class StudioCompositor:
         tmp.write_text(json.dumps(status, indent=2))
         tmp.rename(STATUS_FILE)
 
+    def _fx_tick_callback(self) -> bool:
+        """GLib timeout: update time-varying FX shader uniforms at ~30fps."""
+        if not self._running:
+            return False
+        if not hasattr(self, "_fx_warp_shader"):
+            return False
+
+        import random
+
+        from agents.studio_effects import PRESETS
+
+        self._fx_tick += 1
+        t = self._fx_tick * 0.04
+        Gst = self._Gst
+
+        preset = PRESETS.get(self._fx_active_preset)
+        if not preset:
+            return True
+
+        # Update warp time
+        if preset.warp and (preset.warp.pan_x > 0 or preset.warp.slice_count > 0):
+            w = preset.warp
+            warp_u = Gst.Structure.from_string(
+                f"uniforms, u_time=(float){t}, "
+                f"u_slice_count=(float){w.slice_count}, "
+                f"u_slice_amplitude=(float){w.slice_amplitude}, "
+                f"u_pan_x=(float){w.pan_x}, u_pan_y=(float){w.pan_y}, "
+                f"u_rotation=(float){w.rotation}, u_zoom=(float){w.zoom}, "
+                f"u_zoom_breath=(float){w.zoom_breath}, "
+                f"u_width=(float)1920.0, u_height=(float)1080.0"
+            )
+            self._fx_warp_shader.set_property("uniforms", warp_u[0])
+
+        # Update VHS time (scrolling noise band)
+        if preset.use_vhs_shader:
+            noise_y = (self._fx_tick * 0.003) % 1.0
+            vhs_u = Gst.Structure.from_string(
+                f"uniforms, u_time=(float){t}, u_chroma_shift=(float)4.0, "
+                f"u_head_switch_y=(float)0.92, u_noise_band_y=(float){noise_y}, "
+                f"u_width=(float)1920.0, u_height=(float)1080.0"
+            )
+            self._fx_vhs_shader.set_property("uniforms", vhs_u[0])
+
+        # Update post-process time + random band displacement
+        pp = preset.post_process
+        band_active = 1.0 if pp.band_chance > 0 and random.random() < pp.band_chance else 0.0
+        band_y = random.random() * 0.6 + 0.2 if band_active else 0.0
+        band_h = random.random() * 0.03 + 0.005 if band_active else 0.0
+        band_shift = (
+            (random.random() - 0.5) * 2 * pp.band_max_shift / 1920.0 if band_active else 0.0
+        )
+
+        pp_u = Gst.Structure.from_string(
+            f"uniforms, u_vignette_strength=(float){pp.vignette_strength}, "
+            f"u_scanline_alpha=(float){pp.scanline_alpha}, "
+            f"u_time=(float){t}, "
+            f"u_band_active=(float){band_active}, "
+            f"u_band_y=(float){band_y}, u_band_height=(float){band_h}, u_band_shift=(float){band_shift}, "
+            f"u_syrup_active=(float){1.0 if pp.syrup_gradient else 0.0}, "
+            f"u_syrup_color_r=(float){pp.syrup_color[0]}, "
+            f"u_syrup_color_g=(float){pp.syrup_color[1]}, "
+            f"u_syrup_color_b=(float){pp.syrup_color[2]}"
+        )
+        self._fx_post_proc.set_property("uniforms", pp_u[0])
+
+        return True  # keep timer running
+
     def _status_tick(self) -> bool:
         """GLib timeout callback: periodically refresh the status file."""
         if self._running:
@@ -1406,6 +1548,10 @@ class StudioCompositor:
 
         interval_ms = int(self.config.status_interval_s * 1000)
         self._status_timer_id = GLib.timeout_add(interval_ms, self._status_tick)
+
+        # FX uniform update timer (~30fps) for time-varying effects
+        if hasattr(self, "_fx_warp_shader"):
+            GLib.timeout_add(33, self._fx_tick_callback)
 
         if self.config.overlay_enabled:
             self._state_reader_thread = threading.Thread(
