@@ -223,17 +223,13 @@ class ExperientialWorld:
             "watch_activity_state": Behavior(self._watch_activity, watermark=self.t),
         }
         if self._active_window_class:
-            behaviors["active_window_class"] = Behavior(
-                self._active_window_class, watermark=self.t
-            )
+            behaviors["active_window_class"] = Behavior(self._active_window_class, watermark=self.t)
         self.gate.set_behaviors(behaviors)
         self.gate.set_activity_mode(self._activity_mode)
 
         # Ambient classification (gate reads from cached result)
         if not self._ambient_interruptible:
-            self.gate._ambient_result = MagicMock(
-                interruptible=False, reason=self._ambient_reason
-            )
+            self.gate._ambient_result = MagicMock(interruptible=False, reason=self._ambient_reason)
             if not any(v.name == "ambient" for v in self.gate._veto_chain.vetoes):
                 self.gate._veto_chain.add(Veto("ambient", predicate=self.gate._allow_ambient))
         else:
@@ -272,9 +268,7 @@ class ExperientialWorld:
         return Moment(
             gate_eligible=self._last_gate_result.eligible if self._last_gate_result else False,
             directive=self._last_directive or "unknown",
-            interruptibility=(
-                self._last_state.interruptibility_score if self._last_state else 0.0
-            ),
+            interruptibility=(self._last_state.interruptibility_score if self._last_state else 0.0),
             consent_phase=self.consent.phase,
             persistence=self.consent.persistence_allowed,
         )
@@ -285,25 +279,20 @@ class ExperientialWorld:
         prefix = f"{msg}: " if msg else ""
 
         assert actual.gate_eligible == expected.gate_eligible, (
-            f"{prefix}gate_eligible: got {actual.gate_eligible}, "
-            f"expected {expected.gate_eligible}"
+            f"{prefix}gate_eligible: got {actual.gate_eligible}, expected {expected.gate_eligible}"
         )
         assert actual.directive == expected.directive, (
             f"{prefix}directive: got {actual.directive}, expected {expected.directive}"
         )
-        assert actual.interruptibility == pytest.approx(
-            expected.interruptibility, abs=0.05
-        ), (
+        assert actual.interruptibility == pytest.approx(expected.interruptibility, abs=0.05), (
             f"{prefix}interruptibility: got {actual.interruptibility:.2f}, "
             f"expected {expected.interruptibility:.2f}"
         )
         assert actual.consent_phase == expected.consent_phase, (
-            f"{prefix}consent_phase: got {actual.consent_phase}, "
-            f"expected {expected.consent_phase}"
+            f"{prefix}consent_phase: got {actual.consent_phase}, expected {expected.consent_phase}"
         )
         assert actual.persistence == expected.persistence, (
-            f"{prefix}persistence: got {actual.persistence}, "
-            f"expected {expected.persistence}"
+            f"{prefix}persistence: got {actual.persistence}, expected {expected.persistence}"
         )
 
         if expected.gate_reason_contains and self._last_gate_result:
@@ -883,8 +872,7 @@ class TestDataFlowMatrix:
         w.advance(2.5)
         result = w.filter_tool(
             "search_emails",
-            "From: alice@corp.com | Subject: Q2 Budget Review\n"
-            "Hey, the Q2 numbers look good.",
+            "From: alice@corp.com | Subject: Q2 Budget Review\nHey, the Q2 numbers look good.",
         )
         assert "alice@corp.com" not in result
         assert "[someone at corp.com]" in result
@@ -1069,9 +1057,7 @@ class TestPipelinePlausibility:
         """'Hey Hapax turn the volume down please' during music →
         real speech → passes plausibility, appended to messages."""
         pipeline = self._make_pipeline(ambient_interruptible=False)
-        pipeline.stt.transcribe = AsyncMock(
-            return_value="Hey Hapax turn the volume down please"
-        )
+        pipeline.stt.transcribe = AsyncMock(return_value="Hey Hapax turn the volume down please")
 
         # Mock LLM to avoid network
         async def _fake_generate(self_):
