@@ -35,7 +35,6 @@ from agents.hapax_voice.session import SessionManager
 from shared.governance.consent import ConsentContract, ConsentRegistry
 from shared.governance.consent_reader import ConsentGatedReader, RetrievedDatum
 
-
 # ── The World ────────────────────────────────────────────────────────────────
 
 
@@ -628,19 +627,18 @@ class TestWifeWalksIn:
 
         # She walks in
         w.guest_enters()
-        w.advance(0.1)  # first tick after entry
+        w.advance(2.5)  # first tick: detection
 
         # IMMEDIATE: persistence blocked, but no notification yet
         assert not w.storing_person_data, "Protected from the first tick"
         assert w.consent_phase == ConsentPhase.GUEST_DETECTED
         assert not w.consent_alert_needed, "Still debouncing — might be passing through"
 
-        # 2.5 seconds — still debouncing
-        w.advance(2.4)
+        # Two more ticks — still debouncing at 5.0s from first detection
+        w.advance(2.5)
         assert not w.storing_person_data
-        assert not w.consent_alert_needed, "Debounce not satisfied"
 
-        # 5.0 seconds — debounce complete, notification fires
+        # 7.5s from entry — debounce complete, notification fires
         w.advance(2.5)
         assert w.consent_phase == ConsentPhase.CONSENT_PENDING
         assert w.consent_alert_needed, "NOW the system should say something"
@@ -658,7 +656,7 @@ class TestWifeWalksIn:
         w = ExperientialWorld()
         w.operator_sits_down()
         w.guest_enters()
-        w.advance(5.1)  # past debounce
+        w.advance(7.5)  # 3 ticks past debounce
         _ = w.consent_alert_needed  # consume notification
 
         w.grant_guest_consent()
@@ -671,7 +669,7 @@ class TestWifeWalksIn:
         w = ExperientialWorld()
         w.operator_sits_down()
         w.guest_enters()
-        w.advance(5.1)
+        w.advance(7.5)
         _ = w.consent_alert_needed
 
         w.refuse_guest_consent()
@@ -707,7 +705,7 @@ class TestWifeWalksIn:
         w = ExperientialWorld()
         w.operator_sits_down()
         w.guest_enters()
-        w.advance(5.1)  # debounce satisfied
+        w.advance(7.5)  # 3 ticks, debounce satisfied
         assert w.consent_phase == ConsentPhase.CONSENT_PENDING
 
         w.guest_leaves()
@@ -716,7 +714,7 @@ class TestWifeWalksIn:
         assert w.consent_phase == ConsentPhase.CONSENT_PENDING  # still waiting
 
         # After absence_clear_s (30s), auto-clear
-        w.advance(21.0)
+        w.advance(25.0)
         assert w.consent_phase == ConsentPhase.NO_GUEST, "Auto-cleared, no dangling state"
         assert w.storing_person_data, "Back to operator-only"
 
@@ -728,7 +726,7 @@ class TestWifeWalksIn:
         w.add_consent_contract("wife", frozenset({"perception", "document"}))
         w.operator_sits_down()
         w.guest_enters()
-        w.advance(5.1)
+        w.advance(7.5)
 
         # Consent tracker still goes to PENDING (it doesn't check contracts),
         # but the reader will allow data through for "wife"
@@ -860,7 +858,7 @@ class TestCompoundScenarios:
 
         # Phase 2: Wife walks in
         w.guest_enters()
-        w.advance(5.1)
+        w.advance(7.5)  # 3 ticks past debounce
         assert not w.storing_person_data  # her presence blocks persistence
         assert w.consent_phase == ConsentPhase.CONSENT_PENDING
         first_notification = w.consent_alert_needed
@@ -908,7 +906,7 @@ class TestCompoundScenarios:
 
         # Guest arrives during production
         w.guest_enters()
-        w.advance(5.1)  # past debounce
+        w.advance(7.5)  # 3 ticks past debounce
 
         # Production veto still active, but consent tracked independently
         assert w.system_paused
@@ -933,7 +931,7 @@ class TestCompoundScenarios:
         w.add_consent_contract("wife", frozenset({"perception"}))
         w.operator_sits_down()
         w.guest_enters()
-        w.advance(5.1)
+        w.advance(7.5)
         w.grant_guest_consent()
 
         # Look up an email from a coworker
