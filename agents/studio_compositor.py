@@ -472,6 +472,7 @@ class StudioCompositor:
         self._recording_muxes: dict[str, Any] = {}
         self._hls_valve: Any = None
         self._consent_recording_allowed: bool = True
+        self._person_detection: dict[str, Any] = {}
         # Overlay surface cache -- avoids full Cairo redraw when state unchanged
         self._overlay_cache_surface: Any = None
         self._overlay_cache_timestamp: float = 0.0
@@ -1601,6 +1602,9 @@ class StudioCompositor:
             "consent_recording_allowed": self._consent_recording_allowed,
             "guest_present": guest_present,
             "consent_phase": consent_phase,
+            "person_detection": {
+                role: d.get("person_count", 0) for role, d in self._person_detection.items()
+            },
             "timestamp": time.time(),
         }
         tmp = STATUS_FILE.with_suffix(".tmp")
@@ -1961,6 +1965,17 @@ class StudioCompositor:
             except (json.JSONDecodeError, OSError, ValueError) as exc:
                 log.debug("Failed to read perception state: %s", exc)
                 self._overlay_state.mark_stale()
+
+            # Read person detection results
+            detection_path = SNAPSHOT_DIR / "person-detection.json"
+            if detection_path.exists():
+                try:
+                    det_raw = detection_path.read_text()
+                    det = json.loads(det_raw)
+                    if time.time() - det.get("timestamp", 0) < 5:
+                        self._person_detection = det.get("cameras", {})
+                except (json.JSONDecodeError, OSError):
+                    pass
 
             # Consent enforcement: toggle recording/HLS valves
             with self._overlay_state._lock:
