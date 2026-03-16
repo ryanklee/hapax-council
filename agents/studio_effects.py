@@ -12,12 +12,9 @@ The EffectBin sits in the pipeline as:
 
 from __future__ import annotations
 
-import json
 import logging
-import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -103,45 +100,87 @@ PRESETS: dict[str, EffectPreset] = {
         name="trails",
         color_grade=ColorGradeConfig(saturation=0.7, brightness=1.15, sepia=0.1, hue_rotate=20),
         trail=TrailConfig(
-            count=10, opacity=0.65, blend_mode="add", drift_x=6, drift_y=8,
+            count=10,
+            opacity=0.65,
+            blend_mode="add",
+            drift_x=6,
+            drift_y=8,
             filter_params={"saturation": 0.8, "brightness": 1.8, "sepia": 0.15, "hue_rotate": 45},
         ),
         warp=WarpConfig(pan_x=3, pan_y=2, rotation=0.004, zoom=1.01, zoom_breath=0.005),
     ),
     "screwed": EffectPreset(
         name="screwed",
-        color_grade=ColorGradeConfig(saturation=0.55, brightness=0.9, contrast=1.05, sepia=0.4, hue_rotate=250),
+        color_grade=ColorGradeConfig(
+            saturation=0.55, brightness=0.9, contrast=1.05, sepia=0.4, hue_rotate=250
+        ),
         trail=TrailConfig(
-            count=3, opacity=0.2, blend_mode="add", drift_y=6,
+            count=3,
+            opacity=0.2,
+            blend_mode="add",
+            drift_y=6,
             filter_params={"saturation": 0.3, "brightness": 0.5, "sepia": 0.6, "hue_rotate": 250},
         ),
-        warp=WarpConfig(pan_x=20, pan_y=22, rotation=0.025, zoom=1.06, zoom_breath=0.04, slice_count=24, slice_amplitude=6),
-        stutter=StutterConfig(check_interval=10, freeze_chance=0.5, freeze_min=3, freeze_max=10, replay_frames=3),
+        warp=WarpConfig(
+            pan_x=20,
+            pan_y=22,
+            rotation=0.025,
+            zoom=1.06,
+            zoom_breath=0.04,
+            slice_count=24,
+            slice_amplitude=6,
+        ),
+        stutter=StutterConfig(
+            check_interval=10, freeze_chance=0.5, freeze_min=3, freeze_max=10, replay_frames=3
+        ),
         post_process=PostProcessConfig(
-            vignette_strength=0.3, scanline_alpha=0.12,
-            band_chance=0.18, band_max_shift=15,
-            syrup_gradient=True, syrup_color=(0.24, 0.08, 0.31),
+            vignette_strength=0.3,
+            scanline_alpha=0.12,
+            band_chance=0.18,
+            band_max_shift=15,
+            syrup_gradient=True,
+            syrup_color=(0.24, 0.08, 0.31),
         ),
     ),
     "datamosh": EffectPreset(
         name="datamosh",
         color_grade=ColorGradeConfig(saturation=0.6, brightness=1.15, contrast=1.8, hue_rotate=40),
         trail=TrailConfig(
-            count=7, opacity=0.95, blend_mode="difference", drift_x=8, drift_y=6,
+            count=7,
+            opacity=0.95,
+            blend_mode="difference",
+            drift_x=8,
+            drift_y=6,
             filter_params={"saturation": 0.8, "brightness": 1.4, "contrast": 2.2, "hue_rotate": 90},
         ),
-        stutter=StutterConfig(check_interval=8, freeze_chance=0.35, freeze_min=2, freeze_max=6, replay_frames=3),
+        stutter=StutterConfig(
+            check_interval=8, freeze_chance=0.35, freeze_min=2, freeze_max=6, replay_frames=3
+        ),
         post_process=PostProcessConfig(scanline_alpha=0.12, band_chance=0.5, band_max_shift=40),
     ),
     "vhs": EffectPreset(
         name="vhs",
-        color_grade=ColorGradeConfig(saturation=0.4, brightness=1.1, contrast=1.25, sepia=0.55, hue_rotate=-10),
+        color_grade=ColorGradeConfig(
+            saturation=0.4, brightness=1.1, contrast=1.25, sepia=0.55, hue_rotate=-10
+        ),
         trail=TrailConfig(count=3, opacity=0.25, blend_mode="add", drift_x=4, drift_y=2),
-        warp=WarpConfig(pan_x=2, pan_y=1, rotation=0.002, zoom=1.02, zoom_breath=0.004, slice_count=10, slice_amplitude=2),
-        stutter=StutterConfig(check_interval=20, freeze_chance=0.15, freeze_min=2, freeze_max=5, replay_frames=2),
+        warp=WarpConfig(
+            pan_x=2,
+            pan_y=1,
+            rotation=0.002,
+            zoom=1.02,
+            zoom_breath=0.004,
+            slice_count=10,
+            slice_amplitude=2,
+        ),
+        stutter=StutterConfig(
+            check_interval=20, freeze_chance=0.15, freeze_min=2, freeze_max=5, replay_frames=2
+        ),
         post_process=PostProcessConfig(
-            vignette_strength=0.4, scanline_alpha=0.12,
-            band_chance=0.2, band_max_shift=12,
+            vignette_strength=0.4,
+            scanline_alpha=0.12,
+            band_chance=0.2,
+            band_max_shift=12,
         ),
         use_vhs_shader=True,
     ),
@@ -149,7 +188,11 @@ PRESETS: dict[str, EffectPreset] = {
         name="neon",
         color_grade=ColorGradeConfig(saturation=3.5, brightness=1.45, contrast=1.5),
         trail=TrailConfig(
-            count=8, opacity=0.6, blend_mode="add", drift_x=3, drift_y=4,
+            count=8,
+            opacity=0.6,
+            blend_mode="add",
+            drift_x=3,
+            drift_y=4,
             filter_params={"saturation": 4.0, "brightness": 1.9, "contrast": 1.3},
         ),
         warp=WarpConfig(pan_x=4, pan_y=3, rotation=0.008, zoom=1.02, zoom_breath=0.012),
@@ -158,22 +201,31 @@ PRESETS: dict[str, EffectPreset] = {
     ),
     "trap": EffectPreset(
         name="trap",
-        color_grade=ColorGradeConfig(saturation=0.2, brightness=0.65, contrast=1.3, sepia=0.4, hue_rotate=160),
+        color_grade=ColorGradeConfig(
+            saturation=0.2, brightness=0.65, contrast=1.3, sepia=0.4, hue_rotate=160
+        ),
         trail=TrailConfig(
-            count=4, opacity=0.55, blend_mode="multiply", drift_x=1, drift_y=4,
+            count=4,
+            opacity=0.55,
+            blend_mode="multiply",
+            drift_x=1,
+            drift_y=4,
             filter_params={"saturation": 0.15, "brightness": 0.4, "sepia": 0.5, "hue_rotate": 180},
         ),
         warp=WarpConfig(pan_x=1, pan_y=1, rotation=0.002, zoom=1.005, zoom_breath=0.003),
         post_process=PostProcessConfig(
             vignette_strength=0.55,
-            syrup_gradient=True, syrup_color=(0.04, 0.02, 0.06),
+            syrup_gradient=True,
+            syrup_color=(0.04, 0.02, 0.06),
         ),
     ),
     "diff": EffectPreset(
         name="diff",
         color_grade=ColorGradeConfig(saturation=0.0, brightness=0.85, contrast=1.6),
         trail=TrailConfig(
-            count=2, opacity=0.95, blend_mode="difference",
+            count=2,
+            opacity=0.95,
+            blend_mode="difference",
             filter_params={"saturation": 0.0, "brightness": 1.6, "contrast": 2.5},
         ),
         post_process=PostProcessConfig(vignette_strength=0.15),

@@ -17,7 +17,7 @@ from collections import deque
 import gi
 
 gi.require_version("Gst", "1.0")
-from gi.repository import GLib, GObject, Gst
+from gi.repository import GObject, Gst
 
 log = logging.getLogger(__name__)
 
@@ -50,23 +50,33 @@ class StutterElement(Gst.Element):
     )
 
     check_interval = GObject.Property(
-        type=int, default=10, nick="Check interval",
+        type=int,
+        default=10,
+        nick="Check interval",
         blurb="Ticks between freeze checks",
     )
     freeze_chance = GObject.Property(
-        type=float, default=0.3, nick="Freeze chance",
+        type=float,
+        default=0.3,
+        nick="Freeze chance",
         blurb="Probability of freezing per check (0-1)",
     )
     freeze_min = GObject.Property(
-        type=int, default=3, nick="Freeze min",
+        type=int,
+        default=3,
+        nick="Freeze min",
         blurb="Minimum ticks to hold frozen frame",
     )
     freeze_max = GObject.Property(
-        type=int, default=10, nick="Freeze max",
+        type=int,
+        default=10,
+        nick="Freeze max",
         blurb="Maximum ticks to hold frozen frame",
     )
     replay_frames = GObject.Property(
-        type=int, default=3, nick="Replay frames",
+        type=int,
+        default=3,
+        nick="Replay frames",
         blurb="Number of frames to replay after freeze",
     )
 

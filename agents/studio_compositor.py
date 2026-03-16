@@ -559,6 +559,9 @@ class StudioCompositor:
         # Snapshot branch
         self._add_snapshot_branch(pipeline, output_tee)
 
+        # GPU effects branch
+        self._add_effects_branch(pipeline, output_tee)
+
         return pipeline
 
     def _add_snapshot_branch(self, pipeline: Any, tee: Any) -> None:
@@ -627,6 +630,215 @@ class StudioCompositor:
         tee_pad = tee.request_pad(tee.get_pad_template("src_%u"), None, None)
         queue_sink = queue.get_static_pad("sink")
         tee_pad.link(queue_sink)
+
+    def _add_effects_branch(self, pipeline: Any, tee: Any) -> None:
+        """Add GPU-accelerated visual effects branch.
+
+        Pipeline: tee → queue → videoconvert(RGBA) → glupload → glcolorconvert →
+                  glshader(color_grade) → [gleffects] → glshader(post_process) →
+                  glcolorconvert → gldownload → videoconvert → videoscale → videorate →
+                  jpegenc → appsink (fx snapshot to /dev/shm)
+        """
+        Gst = self._Gst
+
+        from agents.studio_effects import PRESETS, load_shader
+
+        # Start with a default preset
+        initial_preset = PRESETS.get("clean", list(PRESETS.values())[0])
+
+        # --- Build the chain ---
+        queue = Gst.ElementFactory.make("queue", "queue-fx")
+        queue.set_property("leaky", 2)
+        queue.set_property("max-size-buffers", 2)
+
+        # Convert to RGBA for GL upload
+        convert_rgba = Gst.ElementFactory.make("videoconvert", "fx-convert-rgba")
+        rgba_caps = Gst.ElementFactory.make("capsfilter", "fx-rgba-caps")
+        rgba_caps.set_property("caps", Gst.Caps.from_string("video/x-raw,format=RGBA"))
+
+        # GL upload + color convert
+        glupload = Gst.ElementFactory.make("glupload", "fx-glupload")
+        glcolorconvert_in = Gst.ElementFactory.make("glcolorconvert", "fx-glcc-in")
+
+        # Color grade shader
+        color_grade = Gst.ElementFactory.make("glshader", "fx-color-grade")
+        color_frag = load_shader("color_grade.frag")
+        if color_frag:
+            color_grade.set_property("fragment", color_frag)
+            cg = initial_preset.color_grade
+            uniforms = Gst.Structure.from_string(
+                f"uniforms, u_saturation=(float){cg.saturation}, "
+                f"u_brightness=(float){cg.brightness}, "
+                f"u_contrast=(float){cg.contrast}, "
+                f"u_sepia=(float){cg.sepia}, "
+                f"u_hue_rotate=(float){cg.hue_rotate}"
+            )
+            color_grade.set_property("uniforms", uniforms[0])
+
+        # Post-process shader (vignette, scanlines, band displacement)
+        post_proc = Gst.ElementFactory.make("glshader", "fx-post-process")
+        post_frag = load_shader("post_process.frag")
+        if post_frag:
+            post_proc.set_property("fragment", post_frag)
+            pp = initial_preset.post_process
+            pp_uniforms = Gst.Structure.from_string(
+                f"uniforms, u_vignette_strength=(float){pp.vignette_strength}, "
+                f"u_scanline_alpha=(float){pp.scanline_alpha}, "
+                f"u_time=(float)0.0, "
+                f"u_band_active=(float)0.0, "
+                f"u_band_y=(float)0.0, u_band_height=(float)0.0, u_band_shift=(float)0.0, "
+                f"u_syrup_active=(float){1.0 if pp.syrup_gradient else 0.0}, "
+                f"u_syrup_color_r=(float){pp.syrup_color[0]}, "
+                f"u_syrup_color_g=(float){pp.syrup_color[1]}, "
+                f"u_syrup_color_b=(float){pp.syrup_color[2]}"
+            )
+            post_proc.set_property("uniforms", pp_uniforms[0])
+
+        # GL download back to CPU
+        glcolorconvert_out = Gst.ElementFactory.make("glcolorconvert", "fx-glcc-out")
+        gldownload = Gst.ElementFactory.make("gldownload", "fx-gldownload")
+
+        # Scale + rate + JPEG encode for snapshot output
+        fx_convert = Gst.ElementFactory.make("videoconvert", "fx-out-convert")
+        fx_scale = Gst.ElementFactory.make("videoscale", "fx-scale")
+        fx_scale_caps = Gst.ElementFactory.make("capsfilter", "fx-scale-caps")
+        fx_scale_caps.set_property(
+            "caps", Gst.Caps.from_string("video/x-raw,width=1920,height=1080")
+        )
+
+        fx_rate = Gst.ElementFactory.make("videorate", "fx-rate")
+        fx_rate_caps = Gst.ElementFactory.make("capsfilter", "fx-rate-caps")
+        fx_rate_caps.set_property("caps", Gst.Caps.from_string("video/x-raw,framerate=15/1"))
+
+        fx_jpeg = Gst.ElementFactory.make("jpegenc", "fx-jpeg")
+        fx_jpeg.set_property("quality", 80)
+
+        fx_sink = Gst.ElementFactory.make("appsink", "fx-snapshot-sink")
+        fx_sink.set_property("sync", False)
+        fx_sink.set_property("async", False)
+        fx_sink.set_property("drop", True)
+        fx_sink.set_property("max-buffers", 1)
+
+        SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
+
+        def _on_fx_sample(sink: Any) -> int:
+            sample = sink.emit("pull-sample")
+            if sample is None:
+                return 1
+            buf = sample.get_buffer()
+            ok, mapinfo = buf.map(self._Gst.MapFlags.READ)
+            if ok:
+                try:
+                    tmp = SNAPSHOT_DIR / "fx-snapshot.jpg.tmp"
+                    final = SNAPSHOT_DIR / "fx-snapshot.jpg"
+                    tmp.write_bytes(bytes(mapinfo.data))
+                    tmp.rename(final)
+                except OSError:
+                    pass
+                finally:
+                    buf.unmap(mapinfo)
+            return 0
+
+        fx_sink.set_property("emit-signals", True)
+        fx_sink.connect("new-sample", _on_fx_sample)
+
+        # Add all elements to pipeline
+        elements = [
+            queue,
+            convert_rgba,
+            rgba_caps,
+            glupload,
+            glcolorconvert_in,
+            color_grade,
+            post_proc,
+            glcolorconvert_out,
+            gldownload,
+            fx_convert,
+            fx_scale,
+            fx_scale_caps,
+            fx_rate,
+            fx_rate_caps,
+            fx_jpeg,
+            fx_sink,
+        ]
+        for el in elements:
+            if el is None:
+                log.error("Failed to create FX pipeline element")
+                return
+            pipeline.add(el)
+
+        # Link chain
+        convert_rgba.link(rgba_caps)
+        rgba_caps.link(glupload)
+        glupload.link(glcolorconvert_in)
+        glcolorconvert_in.link(color_grade)
+        color_grade.link(post_proc)
+        post_proc.link(glcolorconvert_out)
+        glcolorconvert_out.link(gldownload)
+        gldownload.link(fx_convert)
+        fx_convert.link(fx_scale)
+        fx_scale.link(fx_scale_caps)
+        fx_scale_caps.link(fx_rate)
+        fx_rate.link(fx_rate_caps)
+        fx_rate_caps.link(fx_jpeg)
+        fx_jpeg.link(fx_sink)
+
+        # Link queue to convert (first in chain after queue)
+        queue.link(convert_rgba)
+
+        # Explicit tee → queue pad link
+        tee_pad = tee.request_pad(tee.get_pad_template("src_%u"), None, None)
+        queue_sink = queue.get_static_pad("sink")
+        tee_pad.link(queue_sink)
+
+        # Store references for runtime preset switching
+        self._fx_color_grade = color_grade
+        self._fx_post_proc = post_proc
+        self._fx_active_preset = initial_preset.name
+
+        log.info("FX branch: glshader pipeline → /dev/shm/hapax-compositor/fx-snapshot.jpg")
+
+    def _switch_fx_preset(self, preset_name: str) -> None:
+        """Switch the active visual effect preset at runtime."""
+        from agents.studio_effects import PRESETS
+
+        preset = PRESETS.get(preset_name)
+        if preset is None:
+            log.warning("Unknown FX preset: %s", preset_name)
+            return
+        if preset_name == self._fx_active_preset:
+            return
+
+        Gst = self._Gst
+
+        # Update color grade uniforms
+        cg = preset.color_grade
+        uniforms = Gst.Structure.from_string(
+            f"uniforms, u_saturation=(float){cg.saturation}, "
+            f"u_brightness=(float){cg.brightness}, "
+            f"u_contrast=(float){cg.contrast}, "
+            f"u_sepia=(float){cg.sepia}, "
+            f"u_hue_rotate=(float){cg.hue_rotate}"
+        )
+        self._fx_color_grade.set_property("uniforms", uniforms[0])
+
+        # Update post-process uniforms
+        pp = preset.post_process
+        pp_uniforms = Gst.Structure.from_string(
+            f"uniforms, u_vignette_strength=(float){pp.vignette_strength}, "
+            f"u_scanline_alpha=(float){pp.scanline_alpha}, "
+            f"u_time=(float)0.0, "
+            f"u_band_active=(float)0.0, "
+            f"u_band_y=(float)0.0, u_band_height=(float)0.0, u_band_shift=(float)0.0, "
+            f"u_syrup_active=(float){1.0 if pp.syrup_gradient else 0.0}, "
+            f"u_syrup_color_r=(float){pp.syrup_color[0]}, "
+            f"u_syrup_color_g=(float){pp.syrup_color[1]}, "
+            f"u_syrup_color_b=(float){pp.syrup_color[2]}"
+        )
+        self._fx_post_proc.set_property("uniforms", pp_uniforms[0])
+
+        self._fx_active_preset = preset_name
+        log.info("FX preset switched to: %s", preset_name)
 
     def _add_camera_snapshot_branch(self, pipeline: Any, camera_tee: Any, cam: CameraSpec) -> None:
         """Add per-camera snapshot branch writing JPEG to /dev/shm."""
@@ -1141,6 +1353,16 @@ class StudioCompositor:
                 except Exception as exc:
                     log.debug("Failed to evaluate camera profile: %s", exc)
 
+            # Check for FX preset switch requests
+            fx_request_path = SNAPSHOT_DIR / "fx-request.txt"
+            if fx_request_path.exists():
+                try:
+                    preset_name = fx_request_path.read_text().strip()
+                    if preset_name and hasattr(self, "_fx_color_grade"):
+                        self._switch_fx_preset(preset_name)
+                    fx_request_path.unlink()
+                except Exception as exc:
+                    log.debug("Failed to process FX request: %s", exc)
             time.sleep(1.0)
 
     # -- Lifecycle --------------------------------------------------------

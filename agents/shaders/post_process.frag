@@ -17,7 +17,9 @@ uniform float u_band_shift;         // normalized x shift
 
 // Syrup gradient
 uniform float u_syrup_active;
-uniform vec3 u_syrup_color;         // RGB 0-1
+uniform float u_syrup_color_r;
+uniform float u_syrup_color_g;
+uniform float u_syrup_color_b;
 
 void main() {
     vec2 uv = v_texcoord;
@@ -51,7 +53,7 @@ void main() {
     // Syrup gradient (darkens toward bottom)
     if (u_syrup_active > 0.5) {
         float gradStrength = smoothstep(0.3, 1.0, v_texcoord.y) * 0.25;
-        color.rgb = mix(color.rgb, u_syrup_color, gradStrength);
+        color.rgb = mix(color.rgb, vec3(u_syrup_color_r, u_syrup_color_g, u_syrup_color_b), gradStrength);
     }
 
     gl_FragColor = color;
