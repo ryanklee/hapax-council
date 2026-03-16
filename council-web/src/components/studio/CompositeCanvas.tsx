@@ -246,6 +246,20 @@ export function CompositeCanvas({
         }
       }
 
+      // --- VHS head switching noise — persistent bottom distortion ---
+      if (p.name === "VHS" && main) {
+        const headSwitchY = h * 0.92;
+        const headSwitchH = h * 0.08;
+        ctx.save();
+        if (mainFilter !== "none") ctx.filter = mainFilter;
+        ctx.beginPath();
+        ctx.rect(0, headSwitchY, w, headSwitchH);
+        ctx.clip();
+        const jitter = Math.sin(tick * 0.3) * 8 + Math.sin(tick * 0.7) * 4;
+        ctx.drawImage(main, jitter, -2, w, h);
+        ctx.restore();
+      }
+
       // --- Effects ---
       const fx = p.effects;
 
