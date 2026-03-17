@@ -37,10 +37,7 @@ class TestGateTokenCreation:
 
     def test_unique_nonces(self):
         """Each token gets a unique nonce."""
-        tokens = [
-            GateToken._mint(allowed=True, reason="ok", gate_id="g")
-            for _ in range(100)
-        ]
+        tokens = [GateToken._mint(allowed=True, reason="ok", gate_id="g") for _ in range(100)]
         nonces = {t.nonce for t in tokens}
         assert len(nonces) == 100
 
