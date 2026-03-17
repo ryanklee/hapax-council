@@ -22,6 +22,7 @@ from cockpit.engine.rules import RuleRegistry, evaluate_rules
 from cockpit.engine.watcher import DirectoryWatcher
 from shared.config import AI_AGENTS_DIR, PROFILES_DIR, RAG_SOURCES_DIR
 from shared.cycle_mode import CycleMode, get_cycle_mode
+from shared.stimmung import Stance
 
 _log = logging.getLogger(__name__)
 
@@ -184,8 +185,24 @@ class ReactiveEngine:
         if self._watcher is not None:
             self._watcher.ignore_fn(path)
 
+    def _read_stimmung_stance(self) -> str:
+        """Read current stimmung stance from /dev/shm. Returns 'nominal' on error."""
+        import json
+
+        stimmung_path = Path("/dev/shm/hapax-stimmung/state.json")
+        try:
+            data = json.loads(stimmung_path.read_text(encoding="utf-8"))
+            return data.get("overall_stance", "nominal")
+        except (OSError, json.JSONDecodeError):
+            return "nominal"
+
     async def _handle_change(self, event: ChangeEvent) -> None:
-        """Core event handler: evaluate rules → execute plan → log results."""
+        """Core event handler: evaluate rules → execute plan → log results.
+
+        WS2: stimmung-modulated processing. When system is degraded/critical,
+        skip non-critical GPU/LLM actions (phase 1+2) to conserve resources.
+        Phase 0 (deterministic) always runs.
+        """
         if self._paused:
             _log.debug("Paused, ignoring event: %s", event.path)
             return
@@ -206,6 +223,21 @@ class ReactiveEngine:
         if not plan.actions:
             _log.debug("No rules matched for %s", event.path)
             return
+
+        # WS2: stimmung modulation — skip expensive phases when system is stressed
+        stance = self._read_stimmung_stance()
+        if stance in (Stance.DEGRADED, Stance.CRITICAL):
+            original_count = len(plan.actions)
+            plan.actions = [a for a in plan.actions if a.phase == 0]
+            skipped = original_count - len(plan.actions)
+            if skipped > 0:
+                _log.info(
+                    "Stimmung %s: skipped %d non-critical action(s)",
+                    stance,
+                    skipped,
+                )
+            if not plan.actions:
+                return
 
         _log.info(
             "Matched %d action(s): %s",
