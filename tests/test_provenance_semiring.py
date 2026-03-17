@@ -190,8 +190,10 @@ class TestEvaluation:
 
     def test_complex_expression(self):
         """(c1 ⊗ c2) ⊕ c3: survives if (c1 AND c2) OR c3."""
-        e = ProvenanceExpr.leaf("c1").tensor(ProvenanceExpr.leaf("c2")).plus(
-            ProvenanceExpr.leaf("c3")
+        e = (
+            ProvenanceExpr.leaf("c1")
+            .tensor(ProvenanceExpr.leaf("c2"))
+            .plus(ProvenanceExpr.leaf("c3"))
         )
         assert e.evaluate(frozenset({"c1", "c2"})) is True  # left branch
         assert e.evaluate(frozenset({"c3"})) is True  # right branch
@@ -254,7 +256,5 @@ class TestIntrospection:
         assert e.is_trivial is False
 
     def test_contract_ids_compound(self):
-        e = ProvenanceExpr.leaf("a").tensor(ProvenanceExpr.leaf("b")).plus(
-            ProvenanceExpr.leaf("c")
-        )
+        e = ProvenanceExpr.leaf("a").tensor(ProvenanceExpr.leaf("b")).plus(ProvenanceExpr.leaf("c"))
         assert e.contract_ids() == frozenset({"a", "b", "c"})
