@@ -154,7 +154,9 @@ def _read_temporal_anchors() -> list[ConcernAnchor]:
 
     flow_state = _xml_tag_content(xml, "flow_state")
     if flow_state and flow_state != "idle":
-        anchors.append(ConcernAnchor(text=f"{flow_state} flow state", source="temporal", weight=0.8))
+        anchors.append(
+            ConcernAnchor(text=f"{flow_state} flow state", source="temporal", weight=0.8)
+        )
 
     music_genre = _xml_tag_content(xml, "music_genre")
     if music_genre:
