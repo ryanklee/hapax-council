@@ -273,6 +273,27 @@ class VoiceDaemon:
             except Exception:
                 log.warning("Echo canceller init failed, continuing without AEC", exc_info=True)
 
+        # Speaker identification (operator vs guest voice gating)
+        self._speaker_identifier = None
+        try:
+            from agents.hapax_voice.speaker_id import SpeakerIdentifier
+
+            enrollment_path = Path.home() / ".local/share/hapax-voice/speaker_embedding.npy"
+            if enrollment_path.exists():
+                self._speaker_identifier = SpeakerIdentifier(enrollment_path=enrollment_path)
+                # Pre-load pyannote model at startup (takes ~8s, avoids first-utterance delay)
+                import numpy as np
+
+                _dummy = np.zeros(16000, dtype=np.float32)
+                self._speaker_identifier.extract_embedding(_dummy, 16000)
+                log.info("Speaker identifier loaded from %s (pyannote warm)", enrollment_path)
+            else:
+                log.warning(
+                    "No speaker enrollment found at %s — speaker gating disabled", enrollment_path
+                )
+        except Exception:
+            log.warning("Speaker identifier init failed — speaker gating disabled", exc_info=True)
+
         # Bridge phrase engine (pre-synthesized contextual gap fillers)
         from agents.hapax_voice.bridge_engine import BridgeEngine
 
@@ -906,7 +927,18 @@ class VoiceDaemon:
         Runs while the conversation pipeline is active. Checks every
         50ms for complete utterances from the ConversationBuffer and
         feeds them to the pipeline for processing.
+
+        Speaker verification: accumulates speech audio across utterances
+        until enough is collected (~3s) for reliable pyannote embedding.
+        Once the operator is verified, the session is trusted until it
+        closes. Non-operator audio is dropped.
         """
+        # Session-scoped speaker verification state
+        _speaker_verified = False  # True once operator confirmed
+        _speaker_audio_buf: list[bytes] = []  # accumulate for verification
+        _speaker_audio_samples = 0  # total samples accumulated
+        _VERIFY_MIN_SAMPLES = 16000 * 3  # 3s of 16kHz audio for reliable ID
+
         try:
             while (
                 self._conversation_pipeline is not None
@@ -915,6 +947,41 @@ class VoiceDaemon:
             ):
                 utterance = self._conversation_buffer.get_utterance()
                 if utterance is not None:
+                    # Speaker verification gate
+                    if self._speaker_identifier is not None and not _speaker_verified:
+                        _speaker_audio_buf.append(utterance)
+                        _speaker_audio_samples += len(utterance) // 2  # int16 = 2 bytes/sample
+
+                        if _speaker_audio_samples >= _VERIFY_MIN_SAMPLES:
+                            # Enough audio accumulated — verify speaker
+                            combined = b"".join(_speaker_audio_buf)
+                            speaker = await self._verify_speaker(combined)
+
+                            if speaker == "operator":
+                                _speaker_verified = True
+                                self.session.set_speaker("operator", 0.0)
+                                log.info("Speaker gate: operator verified, session trusted")
+                                # Process all buffered utterances
+                                for buffered in _speaker_audio_buf:
+                                    self.session.mark_activity()
+                                    await self._conversation_pipeline.process_utterance(buffered)
+                                    self.session.mark_activity()
+                                _speaker_audio_buf.clear()
+                                continue
+                            elif speaker == "not_operator":
+                                log.info("Speaker gate: DROPPED — not operator")
+                                _speaker_audio_buf.clear()
+                                _speaker_audio_samples = 0
+                                continue
+                            else:
+                                # Uncertain — keep accumulating, but process
+                                # this utterance (fail-open for operator)
+                                log.info("Speaker gate: uncertain, accumulating more audio")
+                        else:
+                            # Not enough audio yet — process anyway (fail-open)
+                            # but keep accumulating for verification
+                            pass
+
                     self.session.mark_activity()
                     await self._conversation_pipeline.process_utterance(utterance)
                     self.session.mark_activity()
@@ -929,6 +996,36 @@ class VoiceDaemon:
             pass
         except Exception:
             log.exception("Conversation loop error")
+
+    async def _verify_speaker(self, audio_bytes: bytes) -> str:
+        """Run speaker verification on accumulated PCM audio.
+
+        Returns "operator", "not_operator", or "uncertain".
+        Runs pyannote embedding extraction in a thread to avoid blocking.
+        Expects at least 3s of audio for reliable identification.
+        """
+        try:
+            import numpy as np
+
+            audio = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
+            if len(audio) < 8000:  # less than 0.5s — too short even for best-effort
+                return "uncertain"
+
+            loop = asyncio.get_running_loop()
+            result = await loop.run_in_executor(
+                None,
+                lambda: self._speaker_identifier.identify_audio(audio, 16000),
+            )
+            log.info(
+                "Speaker verification: %s (confidence=%.3f, audio=%.1fs)",
+                result.label,
+                result.confidence,
+                len(audio) / 16000,
+            )
+            return result.label
+        except Exception:
+            log.debug("Speaker verification failed (fail-open)", exc_info=True)
+            return "uncertain"
 
     async def _stop_pipeline(self) -> None:
         """Stop the active pipeline or Gemini session."""
