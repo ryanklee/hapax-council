@@ -47,7 +47,7 @@ systems:
           5 seconds during daemon operation. A gap >10s means the system
           has lost sensory contact with the environment.
         properties:
-          - ring buffer depth >= 2 snapshots
+          - 'ring buffer depth >= 2 snapshots'
           - newest snapshot age < 5s
           - each snapshot contains timestamp, flow_score, production_activity
         verification: runtime
@@ -59,9 +59,9 @@ systems:
           At least 3 perception backends must be registered and available.
           Fewer than 3 means the system is partially blind.
         properties:
-          - registered_backends count >= 3
+          - 'registered_backends count >= 3'
           - each backend.available() returns True
-          - aggregate_confidence >= 0.5
+          - 'aggregate_confidence >= 0.5'
         verification: runtime
         measured_by: aggregate_confidence in perception-state.json
 
@@ -72,8 +72,8 @@ systems:
           (~25s of history) for meaningful trend computation. Below 5
           snapshots, temporal bands and protention degrade.
         properties:
-          - ring.__len__() >= 10 during steady state
-          - trend computation requires >= 2 data points
+          - 'ring.__len__() >= 10 during steady state'
+          - 'trend computation requires >= 2 data points'
         verification: integration
 
       - id: pc-snapshot-completeness-001
@@ -84,11 +84,11 @@ systems:
           consent_phase. Missing fields cause downstream NoneType errors
           and incorrect state classification.
         properties:
-          - "timestamp" key present and > 0
-          - "flow_score" key present (float 0.0-1.0)
-          - "production_activity" key present (string)
-          - "audio_energy_rms" key present (float >= 0)
-          - "consent_phase" key present (string)
+          - 'timestamp key present and > 0'
+          - 'flow_score key present (float 0.0-1.0)'
+          - 'production_activity key present (string)'
+          - 'audio_energy_rms key present (float >= 0)'
+          - 'consent_phase key present (string)'
         verification: runtime
 
   # ═══════════════════════════════════════════════════════════════════
@@ -142,7 +142,7 @@ systems:
           window for trend detection to work. Below 3, trend is always
           "stable" regardless of actual trajectory.
         properties:
-          - rolling window deque length >= 3 per dimension
+          - 'rolling window deque length >= 3 per dimension'
           - trend computation produces rising/falling/stable (not just stable)
         verification: integration
 
@@ -219,7 +219,7 @@ systems:
           chain accuracy and circadian model coverage.
         properties:
           - protention.observe() called in poll_perception()
-          - activity comes from best available source (workspace > LLM > empty)
+          - 'activity comes from best available source (workspace > LLM > empty)'
           - flow_score passed as float
           - hour passed as int
         verification: structural
@@ -245,7 +245,7 @@ systems:
           reducing the system's awareness of longer-term patterns.
         properties:
           - MinuteBuffer.tick() called every perception tick
-          - summary produced when elapsed >= 60s
+          - 'summary produced when elapsed >= 60s'
           - maxlen = 30 (30 minutes of history)
         verification: integration
 
@@ -259,7 +259,7 @@ systems:
         properties:
           - precompute() called after state computation in compute_and_write()
           - match() called before state computation in compute_and_write()
-          - only predictions with p >= 0.4 cached
+          - 'only predictions with p >= 0.4 cached'
           - cached scenarios have TTL (expected_in_s * 1.5, max 60s)
         verification: structural
 
@@ -343,7 +343,7 @@ systems:
           - boundary detected on activity change (production_activity)
           - boundary detected on flow state change (idle/warming/active)
           - boundary detected on consent_phase change
-          - boundary detected on time gap > 60s
+          - 'boundary detected on time gap > 60s'
           - completed episodes recorded to Qdrant operator-episodes
         verification: integration
 
@@ -411,7 +411,7 @@ systems:
         properties:
           - decay() called on each active pattern during consolidation
           - confidence *= 0.95 after 30 days
-          - active = False when confidence < 0.1 and days > 60
+          - 'active = False when confidence < 0.1 and days > 60'
           - decayed patterns re-saved to Qdrant (was a bug, now fixed)
         verification: integration
 
@@ -452,7 +452,7 @@ systems:
         properties:
           - stimmung→engine.phase_gating logged when actions skipped
           - stimmung→visual.ambient_modulation logged when non-nominal
-          - events tagged with both system:source and system:target
+          - 'events tagged with both system:source and system:target'
         verification: structural
 
       - id: tl-graceful-absence-001
@@ -492,8 +492,7 @@ systems:
           All 7 collections must exist.
         properties:
           - GET /healthz returns 200
-          - collections exist: documents, profile-facts, axiom-precedents,
-            studio-moments, operator-corrections, operator-episodes, operator-patterns
+          - 'collections exist: documents, profile-facts, axiom-precedents, studio-moments, operator-corrections, operator-episodes, operator-patterns'
           - all text collections use 768-dim cosine vectors
           - studio-moments uses 512-dim cosine vectors
         verification: runtime
@@ -520,7 +519,7 @@ systems:
           The system loses its cognitive layer.
         properties:
           - GET /health/liveliness returns 200
-          - model aliases resolve: fast (gemini-flash), balanced (claude-sonnet)
+          - 'model aliases resolve: fast (gemini-flash), balanced (claude-sonnet)'
           - /v1/models returns available models
         verification: runtime
 
@@ -533,8 +532,7 @@ systems:
           field loses all signal categories except perception.
         properties:
           - GET /api/health returns 200
-          - endpoints available: /health, /gpu, /nudges, /briefing,
-            /drift, /goals, /copilot, /engine/status
+          - 'endpoints available: /health, /gpu, /nudges, /briefing, /drift, /goals, /copilot, /engine/status'
         verification: runtime
 
       - id: inf-graceful-degradation-001
@@ -628,12 +626,10 @@ systems:
           and correction seeker. Missing fields cause silent degradation
           (defaults used) or crashes (KeyError).
         properties:
-          - required fields: timestamp, flow_score, production_activity,
-            audio_energy_rms, heart_rate_bpm, consent_phase, voice_session,
-            aggregate_confidence
-          - flow_score: float 0.0-1.0
-          - production_activity: string (may be empty)
-          - voice_session: dict with active, state, turn_count
+          - 'required fields: timestamp, flow_score, production_activity, audio_energy_rms, heart_rate_bpm, consent_phase, voice_session, aggregate_confidence'
+          - 'flow_score: float 0.0-1.0'
+          - 'production_activity: string (may be empty)'
+          - 'voice_session: dict with active, state, turn_count'
           - written atomically (tmp + rename) by _perception_state_writer
         verification: runtime
 
@@ -645,7 +641,7 @@ systems:
           reads the last line. Malformed lines cause stimmung health
           dimension to go stale.
         properties:
-          - each line: {"healthy": int, "total": int, "failed_checks": [...]}
+          - 'each line: {"healthy": int, "total": int, "failed_checks": [...]}'
           - file at profiles/health-history.jsonl
           - read by StimmungCollector._update_stimmung() (last line only)
         verification: structural
@@ -672,7 +668,7 @@ systems:
         properties:
           - parse_frontmatter() is the single canonical parser
           - no other module calls yaml.safe_load on frontmatter
-          - frontmatter schema: type, updated, source, tags (minimum)
+          - 'frontmatter schema: type, updated, source, tags (minimum)'
         verification: structural
 
   # ═══════════════════════════════════════════════════════════════════
@@ -698,7 +694,7 @@ systems:
           (HEALTH_INFRA signals), and the cockpit dashboard. Stale
           health data causes stimmung to lose its health dimension.
         properties:
-          - systemd timer: 15min interval with ±1min randomization
+          - 'systemd timer: 15min interval with ±1min randomization'
           - writes profiles/health-history.jsonl (append)
           - writes profiles/infra-snapshot.json (overwrite)
         verification: runtime
@@ -711,7 +707,7 @@ systems:
           system prompt fragments, ambient content, and profile facts
           in Qdrant.
         properties:
-          - systemd timer: 12h (prod), 45min (dev)
+          - 'systemd timer: 12h (prod), 45min (dev)'
           - writes profiles/operator-profile.json
           - indexes to Qdrant profile-facts collection
         verification: runtime
@@ -724,10 +720,10 @@ systems:
           knowledge maintenance (04:30). Tasks must execute in order
           and complete before the next starts.
         properties:
-          - llm-backup.timer: Sun 02:00 ±30min
-          - manifest-snapshot.timer: Sun 02:30 ±5min
-          - knowledge-maint.timer: Sun 04:30 ±10min
-          - drift-detector.timer: Sun 03:00 ±10min (also runs)
+          - 'llm-backup.timer: Sun 02:00 ±30min'
+          - 'manifest-snapshot.timer: Sun 02:30 ±5min'
+          - 'knowledge-maint.timer: Sun 04:30 ±10min'
+          - 'drift-detector.timer: Sun 03:00 ±10min (also runs)'
         verification: runtime
 
       - id: tm-cycle-mode-001
@@ -740,9 +736,9 @@ systems:
         properties:
           - file at ~/.cache/hapax/cycle-mode contains "dev" or "prod"
           - get_cycle_mode() returns CycleMode enum
-          - default on missing/error: prod
-          - dev mode: shorter intervals, faster debounce
-          - prod mode: longer intervals, conservative thresholds
+          - 'default on missing/error: prod'
+          - 'dev mode: shorter intervals, faster debounce'
+          - 'prod mode: longer intervals, conservative thresholds'
         verification: runtime
 
   # ═══════════════════════════════════════════════════════════════════
@@ -777,14 +773,12 @@ systems:
       - id: re-rule-count-001
         tier: V2
         text: >
-          ALL_RULES must contain exactly 9 rules. A missing rule means
+          ALL_RULES must contain exactly 10 rules. A missing rule means
           a filesystem event goes unhandled. An extra rule means
           unexpected actions fire.
         properties:
-          - len(ALL_RULES) == 9
-          - rule names: collector-refresh, config-changed, sdlc-event-logged,
-            rag-source-landed, audio-archive-sidecar, audio-clap-indexed,
-            carrier-intake, knowledge-maintenance, pattern-consolidation
+          - len(ALL_RULES) == 10
+          - 'rule names: collector-refresh, config-changed, sdlc-event-logged, rag-source-landed, audio-archive-sidecar, audio-clap-indexed, carrier-intake, knowledge-maintenance, pattern-consolidation, correction-synthesis'
         verification: integration
 
       - id: re-stimmung-gating-001
@@ -796,7 +790,179 @@ systems:
           system is already stressed.
         properties:
           - _handle_change reads stimmung stance
-          - if stance in (DEGRADED, CRITICAL): filter to phase == 0
+          - 'if stance in (DEGRADED, CRITICAL): filter to phase == 0'
           - skipped actions logged with count
           - interaction event emitted to Langfuse
         verification: structural
+
+      - id: re-distribution-shift-001
+        tier: V2
+        text: >
+          The engine tracks event pattern frequency via a 1-hour sliding
+          window (FrequencyWindow). When the windowed distribution diverges
+          from the long-term baseline (shift_score > 0.5), a WARNING event
+          is emitted. Engine status exposes novelty_score and shift_score.
+        properties:
+          - FrequencyWindow records each event pattern key
+          - shift_score compared against baseline every 10 events
+          - 'shift > 0.5 logged as WARNING + telemetry event'
+          - status dict includes shift_score and window_events
+        verification: integration
+
+  # ═══════════════════════════════════════════════════════════════════
+  # CONSENT CIRCULATION
+  # The system's ethical boundary. Without this, it models people
+  # without their knowledge — a constitutional violation.
+  # ═══════════════════════════════════════════════════════════════════
+
+  - id: consent
+    name: Consent Circulation
+    heartbeat: "event-driven (face detection, voice session)"
+    description: >
+      Detects non-operator persons, transitions through consent phases,
+      gates data persistence, and provides visual feedback. Enforces the
+      interpersonal_transparency axiom at runtime.
+
+    specs:
+      - id: cn-state-machine-001
+        tier: V0
+        text: >
+          ConsentStateTracker must transition through phases correctly:
+          NO_GUEST → GUEST_DETECTED (face_count > 1 or non-operator
+          speaker) → CONSENT_PENDING (after debounce_s) → CONSENT_GRANTED
+          or CONSENT_REFUSED. persistence_allowed must be False during
+          GUEST_DETECTED, CONSENT_PENDING, and CONSENT_REFUSED.
+        properties:
+          - tick() called every perception tick in daemon
+          - debounce_s default 5.0 (configurable)
+          - persistence_allowed = True only in NO_GUEST or CONSENT_GRANTED
+          - needs_notification fires once per CONSENT_PENDING transition
+        verification: integration
+
+      - id: cn-governor-veto-001
+        tier: V0
+        text: >
+          PipelineGovernor must veto autonomous pipeline processing during
+          consent_pending and consent_refused phases. Only wake word
+          override (operator-initiated) bypasses the veto. Axiom:
+          interpersonal_transparency.
+        properties:
+          - consent_pending Veto in VetoChain
+          - predicate checks consent_phase not in (consent_pending, consent_refused)
+          - wake word override still works during consent phases
+          - state transitions (0.5s) override consent veto
+        verification: integration
+
+      - id: cn-visual-feedback-001
+        tier: V1
+        text: >
+          The visual layer must produce escalating severity signals for
+          each consent phase: guest_detected → LOW, consent_pending → HIGH,
+          consent_refused → CRITICAL, consent_granted → LOW. No signal
+          for no_guest.
+        properties:
+          - signal source_id = "consent-phase"
+          - severity escalation matches phase risk level
+          - descriptive titles ("identifying", "curtailed", "purged", "consented")
+        verification: integration
+
+      - id: cn-gate-writer-001
+        tier: V0
+        text: >
+          ConsentGatedWriter must be the single structural chokepoint for
+          all person-adjacent persistent writes. Three validation layers:
+          provenance check, consent label check, person-specific contract
+          check. Audit log is append-only JSONL.
+        properties:
+          - check() validates before allowing write
+          - all contracts in provenance must be active
+          - GateDecision returned with allowed/reason/audit
+          - no code path persists person data bypassing this gate
+        verification: structural
+
+      - id: cn-voice-session-001
+        tier: V1
+        text: >
+          The consent voice session must launch when needs_notification
+          fires, the main voice session is inactive, and no consent
+          session is already running. It must use LLM tool calls for
+          grant/refuse decisions, not free-form text.
+        properties:
+          - guard conditions checked before launch
+          - record_consent_decision tool with decision enum
+          - max 3 clarification rounds
+          - 'on grant: create ConsentContract'
+          - 'on refuse: purge FLAC segments'
+        verification: structural
+
+  # ═══════════════════════════════════════════════════════════════════
+  # LATENCY CONTRACTS (WS5)
+  # The system's responsiveness. Local inference gates cloud calls
+  # for perception classification.
+  # ═══════════════════════════════════════════════════════════════════
+
+  - id: latency
+    name: Latency Contracts
+    heartbeat: "per-classification (10-12s slow tick)"
+    description: >
+      Local LLM (qwen3:4b) classifies activity/flow from perception
+      signals. When confident, skips the 2-5s Gemini Flash cloud call.
+      Self-tunes confidence threshold from disagreement history.
+
+    specs:
+      - id: lt-local-gate-001
+        tier: V1
+        text: >
+          The workspace monitor must check local LLM confidence before
+          calling Gemini. When confidence >= threshold (adaptive, default
+          0.7), the cloud call is skipped. Cloud is forced every 5th
+          cycle for drift prevention.
+        properties:
+          - _should_skip_cloud() called before _capture_and_analyze()
+          - reads llm_confidence from perception-state.json
+          - threshold starts at 0.7, adapts based on agreement rate
+          - force_cloud_every_n = 5
+        verification: integration
+
+      - id: lt-adaptive-threshold-001
+        tier: V2
+        text: >
+          The local confidence threshold self-tunes every 10 cloud calls.
+          High agreement (>80%) lowers threshold (more skips, min 0.5).
+          High disagreement (<60%) raises threshold (fewer skips, max 0.9).
+          Otherwise drifts toward 0.7.
+        properties:
+          - _maybe_adjust_threshold() called after each cloud comparison
+          - counters reset after each adjustment
+          - bounded to [0.5, 0.9]
+          - threshold change logged with agreement rate
+        verification: integration
+
+      - id: lt-model-disagreement-001
+        tier: V2
+        text: >
+          When the workspace monitor performs a cloud call, it compares
+          the result against local LLM classification. Disagreements are
+          logged and written to /dev/shm for the correction synthesis
+          pipeline. This closes the WS4↔WS5 feedback loop.
+        properties:
+          - _check_model_disagreement() called after each cloud analysis
+          - compares local_activity vs cloud_activity (inferred from app/context)
+          - disagreement written to /dev/shm/hapax-logos/model-disagreement.json
+          - agreement/disagreement counts tracked for threshold adaptation
+        verification: integration
+
+      - id: lt-stimmung-model-selection-001
+        tier: V1
+        text: >
+          get_model_adaptive() reads live stimmung and downgrades model
+          tier when system is stressed. Critical → local-fast. Resource
+          pressure > 0.7 → downgrade tier. LLM cost > 0.6 → downgrade
+          tier. Falls through to requested model when nominal.
+        properties:
+          - reads /dev/shm/hapax-stimmung/state.json
+          - critical stance → always local-fast
+          - 'resource_pressure > 0.7 → balanced→fast, fast→local-fast'
+          - 'llm_cost_pressure > 0.6 → balanced→fast'
+          - stimmung unavailable → use requested model
+        verification: integration
