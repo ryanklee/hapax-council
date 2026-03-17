@@ -119,6 +119,28 @@ def _snapshot_voice_session(
     }
 
 
+# ── Perception confidence (WS2) ──────────────────────────────────────────
+
+
+def _compute_aggregate_confidence(perception: PerceptionEngine) -> float:
+    """Compute aggregate confidence from registered backend availability.
+
+    Returns 1.0 when all backends are contributing fresh data,
+    lower when backends are missing or stale. Uses getattr for
+    backward compat with perception engines that lack the method.
+    """
+    try:
+        backends = perception.registered_backends
+        if not isinstance(backends, dict) or not backends:
+            return 0.5  # no backends or not a dict
+        available_count = sum(
+            1 for b in backends.values() if getattr(b, "available", lambda: True)()
+        )
+        return round(available_count / len(backends), 3)
+    except Exception:
+        return 1.0
+
+
 # ── Main writer ───────────────────────────────────────────────────────────
 
 
@@ -187,8 +209,13 @@ def write_perception_state(
         "voice_session": _snapshot_voice_session(session, pipeline),
         # Supplementary content (Batch B)
         "voice_content": _get_live_content(),
+        # WS2: aggregate perception confidence
+        "aggregate_confidence": _compute_aggregate_confidence(perception),
         "timestamp": time.time(),
     }
+
+    # Push to ring buffer for temporal depth (WS1)
+    _push_to_ring(state)
 
     try:
         PERCEPTION_STATE_DIR.mkdir(parents=True, exist_ok=True)
@@ -197,3 +224,24 @@ def write_perception_state(
         tmp.rename(PERCEPTION_STATE_FILE)
     except OSError:
         log.debug("Failed to write perception state", exc_info=True)
+
+
+# ── Perception Ring Buffer (WS1) ────────────────────────────────────────────
+
+_perception_ring: Any = None  # Lazy init to avoid import cycles
+
+
+def _push_to_ring(state: dict[str, Any]) -> None:
+    """Push snapshot to the shared perception ring buffer."""
+    global _perception_ring
+    if _perception_ring is None:
+        from agents.hapax_voice.perception_ring import PerceptionRing
+
+        _perception_ring = PerceptionRing()
+    snapshot = {**state, "ts": state.get("timestamp", time.time())}
+    _perception_ring.push(snapshot)
+
+
+def get_perception_ring() -> Any:
+    """Return the global perception ring (or None if not yet initialized)."""
+    return _perception_ring
