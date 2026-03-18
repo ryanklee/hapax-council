@@ -312,7 +312,7 @@ class VoiceDaemon:
 
         self._noise_reference = NoiseReference(
             room_sources=[
-                "C920_86B6B75F",  # room camera — closest to speakers
+                "HD Pro Webcam C920",  # any C920 mic — room noise reference
             ],
         )
         self._noise_reference.start()
