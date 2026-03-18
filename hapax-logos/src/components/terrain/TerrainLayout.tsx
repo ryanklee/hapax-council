@@ -4,20 +4,23 @@ import { FieldRegion } from "./regions/FieldRegion";
 import { GroundRegion } from "./regions/GroundRegion";
 import { WatershedRegion } from "./regions/WatershedRegion";
 import { BedrockRegion } from "./regions/BedrockRegion";
+import { useVisualLayer } from "../../hooks/useVisualLayer";
 
 export function TerrainLayout() {
+  const vl = useVisualLayer();
+
   return (
     <div
       className="h-screen w-screen overflow-hidden relative"
       style={{ fontFamily: "'JetBrains Mono', monospace", background: "#1d2021" }}
     >
-      {/* z-0: Ambient shader background — always alive */}
+      {/* z-0: Ambient shader background — always alive, driven by visual layer */}
       <AmbientShader
-        speed={0.08}
-        turbulence={0.1}
-        warmth={0.3}
-        brightness={0.15}
-        displayState="ambient"
+        speed={vl.ambient.speed}
+        turbulence={vl.ambient.turbulence}
+        warmth={vl.ambient.color_warmth}
+        brightness={vl.ambient.brightness * 0.6}
+        displayState={vl.state}
       />
 
       {/* z-1: Terrain grid */}
@@ -30,15 +33,10 @@ export function TerrainLayout() {
           gridTemplateRows: "12vh 1fr 10vh",
         }}
       >
-        {/* Row 1: Horizon — spans all 3 columns */}
         <HorizonRegion />
-
-        {/* Row 2: Field | Ground | Watershed */}
         <FieldRegion />
-        <GroundRegion />
+        <GroundRegion vl={vl} />
         <WatershedRegion />
-
-        {/* Row 3: Bedrock — spans all 3 columns */}
         <BedrockRegion />
       </div>
     </div>
