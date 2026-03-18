@@ -160,6 +160,18 @@ def _modulate_for_environment(
         if elapsed > _LONG_SESSION_S:
             rules.append("Long session. Tighten responses. Be extra concise.")
 
+    # Phone state context
+    if getattr(env, "phone_call_active", False):
+        rules.append("Operator is on a phone call. Be silent unless addressed directly.")
+    if getattr(env, "phone_call_incoming", False):
+        rules.append("Incoming phone call. Keep it brief — operator may need to answer.")
+    phone_battery = getattr(env, "phone_battery_pct", 100)
+    if phone_battery <= 15:
+        rules.append(f"Phone battery critical ({phone_battery}%). Mention if relevant.")
+    if getattr(env, "phone_media_playing", False):
+        title = getattr(env, "phone_media_app", "")
+        rules.append(f"Phone playing media{f' ({title})' if title else ''}. Keep voice responses short to not talk over it.")
+
     # Time-of-day heuristic (operator reports no significant modulation needed,
     # but late hours still warrant awareness)
     hour = datetime.now().hour

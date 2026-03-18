@@ -152,13 +152,48 @@ def get_openai_tools(
         "close_window": handle_close_window,
     }
 
+    # Phone tools (sync, no Pipecat shim needed)
+    from agents.hapax_voice.phone_tools import PHONE_TOOL_DEFINITIONS, PHONE_TOOL_HANDLERS
+
+    # Register phone tool handlers (sync → async wrappers)
+    for name, handler in PHONE_TOOL_HANDLERS.items():
+        if name in _handlers:
+            continue  # don't override existing (e.g., send_sms has confirmation flow)
+
+        async def _sync_wrap(args: dict, _fn=handler) -> str:
+            return _fn(**args)
+
+        _handlers[name] = None  # placeholder for wrapped map
+        _sync_wrap.__name__ = name
+
     # Convert schemas to OpenAI format
     all_schemas = TOOL_SCHEMAS + DESKTOP_TOOL_SCHEMAS
     tools = [_schema_to_openai(s) for s in all_schemas]
 
-    # Wrap handlers as proper async functions
+    # Add phone tool definitions (already in OpenAI format)
+    for pdef in PHONE_TOOL_DEFINITIONS:
+        fname = pdef["function"]["name"]
+        if fname not in _handlers or fname in PHONE_TOOL_HANDLERS:
+            # Only add tools that we have handlers for and aren't overridden
+            if fname not in {"send_sms"}:  # skip send_sms — existing confirmation flow is better
+                tools.append(pdef)
+
+    # Wrap Pipecat-style handlers as proper async functions
     wrapped: dict[str, Callable] = {
-        name: _make_async_wrapper(handler) for name, handler in _handlers.items()
+        name: _make_async_wrapper(handler)
+        for name, handler in _handlers.items()
+        if handler is not None
     }
+
+    # Add phone tool async wrappers (sync functions)
+    for name, handler in PHONE_TOOL_HANDLERS.items():
+        if name in wrapped or name == "send_sms":
+            continue
+
+        async def _phone_wrapper(args: dict, _fn=handler) -> str:
+            return _fn(**args)
+
+        _phone_wrapper.__name__ = name
+        wrapped[name] = _phone_wrapper
 
     return tools, wrapped
