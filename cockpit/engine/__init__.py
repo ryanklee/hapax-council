@@ -88,10 +88,79 @@ class _HistoryEntry:
 
     timestamp: datetime
     event_path: str
+    event_type: str
     doc_type: str | None
     rules_matched: list[str]
     actions: list[str]
     errors: list[str]
+
+
+class _AuditLog:
+    """Append-only JSONL audit trail for engine events.
+
+    Survives process restarts. Daily rotation, 30-day retention.
+    Complements the in-memory ring buffer (100 entries) with
+    persistent long-term history.
+    """
+
+    def __init__(self, base_dir: Path, retention_days: int = 30) -> None:
+        self._base_dir = base_dir
+        self._retention_days = retention_days
+        self._current_date: str = ""
+        self._file = None
+
+    def write(self, entry: _HistoryEntry) -> None:
+        """Append a history entry to the JSONL audit log."""
+        import json
+
+        try:
+            f = self._get_file()
+            record = {
+                "ts": entry.timestamp.isoformat(),
+                "event_path": entry.event_path,
+                "event_type": entry.event_type,
+                "doc_type": entry.doc_type,
+                "rules_matched": entry.rules_matched,
+                "actions": entry.actions,
+                "errors": entry.errors,
+            }
+            f.write(json.dumps(record, default=str) + "\n")
+            f.flush()
+        except Exception:
+            _log.debug("Failed to write audit log", exc_info=True)
+
+    def cleanup(self) -> None:
+        """Remove audit files older than retention_days."""
+        import datetime as dt
+
+        cutoff = dt.date.today() - dt.timedelta(days=self._retention_days)
+        for path in self._base_dir.glob("engine-audit-*.jsonl"):
+            try:
+                date_str = path.stem.replace("engine-audit-", "")
+                file_date = dt.date.fromisoformat(date_str)
+                if file_date < cutoff:
+                    path.unlink()
+                    _log.debug("Cleaned up old audit log: %s", path.name)
+            except (ValueError, OSError):
+                pass
+
+    def close(self) -> None:
+        if self._file is not None:
+            self._file.close()
+            self._file = None
+
+    def _get_file(self):
+        import datetime as dt
+
+        today = dt.date.today().isoformat()
+        if today != self._current_date:
+            if self._file is not None:
+                self._file.close()
+            self._base_dir.mkdir(parents=True, exist_ok=True)
+            path = self._base_dir / f"engine-audit-{today}.jsonl"
+            self._file = open(path, "a", encoding="utf-8")  # noqa: SIM115
+            self._current_date = today
+        return self._file
 
 
 class ReactiveEngine:
@@ -146,8 +215,13 @@ class ReactiveEngine:
         self._actions_executed = 0
         self._error_count = 0
 
-        # History ring buffer
+        # History ring buffer (fast API queries) + persistent audit log
         self._history: deque[_HistoryEntry] = deque(maxlen=100)
+        self._audit_log = _AuditLog(
+            base_dir=self._data_dir / "engine-audit",
+            retention_days=30,
+        )
+        self._audit_log.cleanup()  # prune old files on startup
 
         # Persistent event pattern counters (WS2 novelty detection)
         self._pattern_counters: dict[str, int] = _load_counters()
@@ -254,6 +328,7 @@ class ReactiveEngine:
 
         self._running = False
         _save_counters(self._pattern_counters)
+        self._audit_log.close()
         _log.info("Reactive engine stopped")
 
     def pause(self) -> None:
@@ -374,18 +449,19 @@ class ReactiveEngine:
         if plan.errors:
             _log.warning("Action errors: %s", plan.errors)
 
-        # Record history
+        # Record history (ring buffer + persistent audit)
         matched_rules = [a.name for a in plan.actions]
-        self._history.append(
-            _HistoryEntry(
-                timestamp=event.timestamp,
-                event_path=str(event.path),
-                doc_type=event.doc_type,
-                rules_matched=matched_rules,
-                actions=list(plan.results.keys()),
-                errors=list(plan.errors.keys()),
-            )
+        entry = _HistoryEntry(
+            timestamp=event.timestamp,
+            event_path=str(event.path),
+            event_type=event.event_type,
+            doc_type=event.doc_type,
+            rules_matched=matched_rules,
+            actions=list(plan.results.keys()),
+            errors=list(plan.errors.keys()),
         )
+        self._history.append(entry)
+        self._audit_log.write(entry)
 
         # WS2/WS4: track event pattern for novelty + distribution shift detection
         pattern_key = _event_pattern_key(event.event_type, event.doc_type, matched_rules)
