@@ -1,13 +1,50 @@
+import { useEffect, useCallback } from "react";
 import { AmbientShader } from "../hapax/AmbientShader";
 import { HorizonRegion } from "./regions/HorizonRegion";
 import { FieldRegion } from "./regions/FieldRegion";
 import { GroundRegion } from "./regions/GroundRegion";
 import { WatershedRegion } from "./regions/WatershedRegion";
 import { BedrockRegion } from "./regions/BedrockRegion";
+import { VoiceOverlay } from "./overlays/VoiceOverlay";
+import { InvestigationOverlay } from "./overlays/InvestigationOverlay";
 import { useVisualLayer } from "../../hooks/useVisualLayer";
+import { useTerrain } from "../../contexts/TerrainContext";
 
 export function TerrainLayout() {
   const vl = useVisualLayer();
+  const { activeOverlay, setOverlay } = useTerrain();
+
+  // Voice overlay: auto-show when voice active
+  useEffect(() => {
+    if (vl.voiceSession.active && activeOverlay !== "investigation") {
+      setOverlay("voice");
+    } else if (!vl.voiceSession.active && activeOverlay === "voice") {
+      setOverlay(null);
+    }
+  }, [vl.voiceSession.active, activeOverlay, setOverlay]);
+
+  // Keyboard: `/` toggles investigation overlay
+  const handleKey = useCallback(
+    (e: KeyboardEvent) => {
+      if (e.key === "/" && !e.ctrlKey && !e.metaKey) {
+        // Don't toggle if typing in an input
+        const target = e.target as HTMLElement;
+        if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)
+          return;
+        e.preventDefault();
+        setOverlay(activeOverlay === "investigation" ? null : "investigation");
+      }
+      if (e.key === "Escape" && activeOverlay) {
+        setOverlay(null);
+      }
+    },
+    [activeOverlay, setOverlay],
+  );
+
+  useEffect(() => {
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [handleKey]);
 
   return (
     <div
@@ -39,6 +76,12 @@ export function TerrainLayout() {
         <WatershedRegion />
         <BedrockRegion />
       </div>
+
+      {/* z-40: Investigation overlay */}
+      <InvestigationOverlay />
+
+      {/* z-50: Voice overlay */}
+      <VoiceOverlay vl={vl} />
     </div>
   );
 }

@@ -1,0 +1,34 @@
+/**
+ * InvestigationOverlay — translucent panel z-40, covers middle 60%.
+ * Toggled with `/` key. Contains Chat, Insight, and Demos tabs.
+ */
+
+import { useTerrain } from "../../../contexts/TerrainContext";
+import { InvestigationTabs } from "./InvestigationTabs";
+
+export function InvestigationOverlay() {
+  const { activeOverlay, setOverlay } = useTerrain();
+  if (activeOverlay !== "investigation") return null;
+
+  return (
+    <div
+      className="absolute inset-0 flex items-center justify-center"
+      style={{ zIndex: 40 }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) setOverlay(null);
+      }}
+    >
+      <div
+        className="w-[60%] h-[80%] rounded-2xl overflow-hidden"
+        style={{
+          background: "rgba(29, 32, 33, 0.92)",
+          backdropFilter: "blur(16px)",
+          border: "1px solid rgba(80, 73, 69, 0.3)",
+          boxShadow: "0 16px 64px rgba(0,0,0,0.5)",
+        }}
+      >
+        <InvestigationTabs />
+      </div>
+    </div>
+  );
+}
