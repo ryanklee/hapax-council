@@ -1120,11 +1120,7 @@ class VoiceDaemon:
         if state is None:
             return
         self._conversation_pipeline._activity_mode = state.activity_mode
-        _cp = (
-            self.consent_tracker.phase.value
-            if hasattr(self.consent_tracker, "phase")
-            else "none"
-        )
+        _cp = self.consent_tracker.phase.value if hasattr(self.consent_tracker, "phase") else "none"
         _phase_map = {
             "no_guest": "none",
             "guest_detected": "none",
