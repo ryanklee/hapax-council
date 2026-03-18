@@ -30,14 +30,14 @@ export function GroundRegion({ vl }: GroundRegionProps) {
 
           {/* Stratum: accommodation panel */}
           {depth === "stratum" && (
-            <div className="absolute inset-0 top-16 overflow-y-auto p-4">
+            <div className="absolute inset-0 top-16 overflow-y-auto p-4" style={{ zIndex: 5 }}>
               <AccommodationPanel />
             </div>
           )}
 
           {/* Core: studio live grid */}
           {depth === "core" && (
-            <div className="absolute inset-0 overflow-hidden">
+            <div className="absolute inset-0 overflow-hidden" style={{ zIndex: 5 }}>
               <Suspense
                 fallback={
                   <div className="flex items-center justify-center h-full text-zinc-600 text-xs">

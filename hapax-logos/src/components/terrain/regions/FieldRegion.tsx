@@ -16,21 +16,21 @@ export function FieldRegion() {
   return (
     <Region name="field">
       {(depth) => (
-        <div className="h-full">
+        <div className="h-full flex flex-col min-h-0">
           {/* Surface: compact summaries */}
-          <div className="px-4 py-2">
+          <div className="px-4 py-2 shrink-0">
             <AgentSummary />
           </div>
 
           {depth === "surface" && (
-            <div className="px-4">
+            <div className="px-4 shrink-0">
               <FreshnessPanel />
             </div>
           )}
 
           {/* Stratum: panels */}
           {depth === "stratum" && (
-            <div className="px-3 overflow-y-auto" style={{ maxHeight: "calc(100% - 40px)" }}>
+            <div className="px-3 overflow-y-auto flex-1 min-h-0">
               <FreshnessPanel />
               <ScoutPanel />
               <DriftPanel />
@@ -41,7 +41,7 @@ export function FieldRegion() {
 
           {/* Core: full agent view */}
           {depth === "core" && (
-            <div className="px-3 overflow-y-auto" style={{ maxHeight: "calc(100% - 40px)" }}>
+            <div className="px-3 overflow-y-auto flex-1 min-h-0">
               <ScoutPanel />
               <DriftPanel />
               <ManagementPanel />

@@ -18,9 +18,21 @@ const REGION_KEYS: Record<string, RegionName> = {
   b: "bedrock",
 };
 
+function useGridRows(): string {
+  const { regionDepths } = useTerrain();
+  const horizonExpanded = regionDepths.horizon !== "surface";
+  const bedrockExpanded = regionDepths.bedrock !== "surface";
+
+  // Dynamic row sizing: expanded regions claim more space
+  const horizonRow = horizonExpanded ? "minmax(12vh, 35vh)" : "12vh";
+  const bedrockRow = bedrockExpanded ? "minmax(10vh, 40vh)" : "10vh";
+  return `${horizonRow} 1fr ${bedrockRow}`;
+}
+
 export function TerrainLayout() {
   const vl = useVisualLayer();
   const { activeOverlay, setOverlay, focusRegion, cycleDepth } = useTerrain();
+  const gridRows = useGridRows();
 
   // Voice overlay: auto-show when voice active
   useEffect(() => {
@@ -87,7 +99,8 @@ export function TerrainLayout() {
           zIndex: 1,
           display: "grid",
           gridTemplateColumns: "minmax(180px, 1fr) 3fr minmax(180px, 1fr)",
-          gridTemplateRows: "12vh 1fr 10vh",
+          gridTemplateRows: gridRows,
+          transition: "grid-template-rows 300ms ease",
         }}
       >
         <HorizonRegion />

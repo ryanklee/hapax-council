@@ -2,6 +2,9 @@ import { useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { TerrainProvider, useTerrain, type RegionName, type Depth, type InvestigationTab } from "../contexts/TerrainContext";
 import { TerrainLayout } from "../components/terrain/TerrainLayout";
+import { ToastProvider } from "../components/shared/ToastProvider";
+import { AgentRunProvider } from "../contexts/AgentRunContext";
+import { ErrorBoundary } from "../components/shared/ErrorBoundary";
 
 const REGIONS: RegionName[] = ["horizon", "field", "ground", "watershed", "bedrock"];
 const DEPTHS: Depth[] = ["surface", "stratum", "core"];
@@ -37,9 +40,15 @@ function TerrainParamSync() {
 
 export function TerrainPage() {
   return (
-    <TerrainProvider>
-      <TerrainParamSync />
-      <TerrainLayout />
-    </TerrainProvider>
+    <ToastProvider>
+      <AgentRunProvider>
+        <TerrainProvider>
+          <ErrorBoundary>
+            <TerrainParamSync />
+            <TerrainLayout />
+          </ErrorBoundary>
+        </TerrainProvider>
+      </AgentRunProvider>
+    </ToastProvider>
   );
 }
