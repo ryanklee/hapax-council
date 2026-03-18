@@ -662,11 +662,7 @@ def _presence_transition_filter(event: ChangeEvent) -> bool:
         return False
 
     current = data.get("presence_state", "")
-    if not current or current == _last_presence_state:
-        return False
-
-    # Real transition detected
-    return True
+    return bool(current and current != _last_presence_state)
 
 
 def _presence_transition_produce(event: ChangeEvent) -> list[Action]:
@@ -750,10 +746,7 @@ def _consent_transition_filter(event: ChangeEvent) -> bool:
         return False
 
     current = data.get("consent_phase", "no_guest")
-    if current == _last_consent_phase:
-        return False
-
-    return True
+    return current != _last_consent_phase
 
 
 def _consent_transition_produce(event: ChangeEvent) -> list[Action]:
