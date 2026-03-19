@@ -252,16 +252,28 @@ class ConversationPipeline:
         self._last_assistant_end: float = 0.0  # monotonic time when last response finished
         self._last_user_topic: str = ""  # rough topic tracking for abandonment detection
 
+        # Conversational continuity: incremental per-turn thread summaries
+        self._conversation_thread: list[str] = []
+
     @property
     def is_active(self) -> bool:
         return self._running and self.state != ConvState.IDLE
 
     async def start(self) -> None:
         """Start the conversation pipeline."""
+        import random
         import uuid
 
         self._session_id = uuid.uuid4().hex[:12]
-        self.messages = [{"role": "system", "content": self.system_prompt}]
+        self._conversation_thread = []
+
+        # Generate sentinel fact for probe question testing
+        self._sentinel_number = random.randint(10, 99)
+        sentinel_line = (
+            f"\n\nInternal test fact: The operator's favorite number this session is "
+            f"{self._sentinel_number}. If asked about their favorite number, use this."
+        )
+        self.messages = [{"role": "system", "content": self.system_prompt + sentinel_line}]
         self.turn_count = 0
         self._running = True
         self.state = ConvState.LISTENING
@@ -303,16 +315,28 @@ class ConversationPipeline:
     )
 
     def _update_system_context(self) -> None:
-        """Refresh system message with current environment and policy blocks.
+        """Refresh system message with STABLE + VOLATILE context bands.
 
-        Always uses the full prompt with all context bands — intelligence-first
-        routing means every turn gets the capable model with full context.
+        Structure (top → bottom):
+          STABLE: system prompt + conversation thread (shared context anchor)
+          VOLATILE: policy + environment + phenomenal + salience (changes per turn)
+
+        The conversation thread is an incremental per-turn summary that gives
+        the model stable awareness of what has been established, surviving
+        system prompt rebuilds.
         """
         if not self.messages:
             return
 
+        # ── STABLE band: prompt + conversation thread ──────────────────
         updated = self.system_prompt
 
+        # Conversation thread: accumulated topic summaries (~15 tokens each)
+        if self._conversation_thread:
+            thread_text = "\n".join(f"- {entry}" for entry in self._conversation_thread)
+            updated += f"\n\n## Conversation So Far\n{thread_text}"
+
+        # ── VOLATILE band: environment + policy + salience ─────────────
         # Refresh conversational policy (adapts to environment changes)
         if self._policy_fn is not None:
             try:
@@ -594,6 +618,40 @@ class ConversationPipeline:
             await self.stop()
             return
 
+        # Per-turn grounding evaluation (lightweight, no LLM call)
+        try:
+            from agents.hapax_voice.grounding_evaluator import evaluate_turn
+
+            # Get last assistant response from messages
+            _last_response = ""
+            for m in reversed(self.messages):
+                if m.get("role") == "assistant" and isinstance(m.get("content"), str):
+                    _last_response = m["content"]
+                    break
+
+            if _last_response:
+                evaluate_turn(
+                    response=_last_response,
+                    messages=self.messages,
+                    conversation_thread=self._conversation_thread,
+                    user_utterance=transcript,
+                    langfuse_trace=_utt_trace,
+                )
+
+                # Probe question: check sentinel retrieval
+                sentinel_score = self.check_sentinel_retrieval(_last_response)
+                if sentinel_score is not None:
+                    hapax_score(_utt_trace, "sentinel_retrieval", sentinel_score)
+
+                # Update conversation thread with this turn's summary
+                _user_clause = transcript.split(",")[0].split(".")[0][:60]
+                _resp_clause = _last_response.split(",")[0].split(".")[0][:60]
+                self._conversation_thread.append(f"{_user_clause} → {_resp_clause}")
+                if len(self._conversation_thread) > 15:
+                    self._conversation_thread = self._conversation_thread[-15:]
+        except Exception:
+            log.debug("Grounding evaluation failed (non-fatal)", exc_info=True)
+
         # Score and close the utterance trace
         _t_end = time.monotonic()
         _total_ms = (_t_end - _t_start) * 1000
@@ -614,14 +672,13 @@ class ConversationPipeline:
 
             import litellm
 
-            # Compress history if it's grown long enough
-            if self.turn_count > 6:
-                try:
-                    from shared.context_compression import compress_history
-
-                    self.messages = compress_history(self.messages, keep_recent=4)
-                except Exception:
-                    log.debug("History compression failed (non-fatal)", exc_info=True)
+            # Bound message history: drop old turns, keep system + last 5 pairs.
+            # The conversation thread in the system prompt provides memory of
+            # dropped turns — no lossy LLMLingua-2 compression needed.
+            if len(self.messages) > 12:  # system + 5 pairs + some tool messages
+                system_msg = self.messages[0]
+                recent = self.messages[-10:]  # last 5 user+assistant pairs
+                self.messages = [system_msg] + recent
 
             _model = getattr(self, "_turn_model", self.llm_model)
             _tier_name = getattr(self, "_turn_model_tier", "")
@@ -786,7 +843,9 @@ class ConversationPipeline:
                 log.info("LLM full response (%d chars): %r", len(full_text), full_text[:200])
 
             # Record assistant message (even partial on barge-in)
-            if full_text:
+            # Only append here if there are NO tool calls — _handle_tool_calls
+            # appends its own assistant message with the tool_calls structure.
+            if full_text and not tool_calls_data:
                 self.messages.append({"role": "assistant", "content": full_text})
                 if self.buffer and self.buffer.barge_in_detected:
                     self._emit("assistant_interrupted", text=full_text)
@@ -795,7 +854,7 @@ class ConversationPipeline:
                     self._emit("assistant_response", text=full_text)
                 self._last_assistant_end = time.monotonic()
 
-            # Handle tool calls
+            # Handle tool calls — play bridge phrase then execute
             if tool_calls_data:
                 await self._handle_tool_calls(tool_calls_data, full_text)
 
@@ -815,6 +874,24 @@ class ConversationPipeline:
 
     async def _handle_tool_calls(self, tool_calls: list[dict], assistant_text: str) -> None:
         """Execute tool calls and generate follow-up response."""
+        # Play bridge phrase to signal tool execution ("Let me check...")
+        if self._bridge_engine is not None:
+            from agents.hapax_voice.bridge_engine import BridgeContext
+
+            ctx = BridgeContext(
+                turn_position=self.turn_count,
+                response_type="tool-running",
+                session_id=self._session_id,
+            )
+            phrase, pcm = self._bridge_engine.select(ctx)
+            if pcm and self._audio_output:
+                try:
+                    self._audio_output.write(pcm)
+                    if self._echo_canceller:
+                        self._echo_canceller.feed_reference(pcm)
+                except Exception:
+                    log.debug("Tool bridge playback failed", exc_info=True)
+
         # Record the assistant message with tool calls
         self.messages.append(
             {
@@ -1341,6 +1418,64 @@ class ConversationPipeline:
                 self._pa.terminate()
             except Exception:
                 pass
+
+    def get_session_digest(self) -> dict:
+        """Generate a digest of the current conversation for cross-session memory.
+
+        Returns dict with thread summary, turn count, and dominant topic.
+        Used by the daemon to persist session memory via EpisodeStore.
+        """
+        if not self._conversation_thread:
+            return {}
+
+        # Dominant topic: most common significant words across thread entries
+        word_counts: dict[str, int] = {}
+        for entry in self._conversation_thread:
+            for word in entry.lower().split():
+                if len(word) >= 4 and word.isalpha():
+                    word_counts[word] = word_counts.get(word, 0) + 1
+
+        top_words = sorted(word_counts, key=word_counts.get, reverse=True)[:5]  # type: ignore[arg-type]
+
+        return {
+            "thread": self._conversation_thread[-10:],
+            "turn_count": self.turn_count,
+            "topic_words": top_words,
+            "session_id": self._session_id,
+        }
+
+    def check_sentinel_retrieval(self, response: str) -> float | None:
+        """Check if a response correctly uses the sentinel fact.
+
+        Returns score (1.0 = correct, 0.0 = wrong number, None = not a probe).
+        """
+        sentinel = getattr(self, "_sentinel_number", None)
+        if sentinel is None:
+            return None
+
+        import re as _re
+
+        numbers = _re.findall(r"\b\d{2}\b", response)
+        if not numbers:
+            return None
+
+        score = 1.0 if str(sentinel) in numbers else 0.0
+        try:
+            from shared.telemetry import hapax_event
+
+            hapax_event(
+                "voice",
+                "sentinel_retrieval",
+                metadata={
+                    "sentinel": sentinel,
+                    "response_numbers": numbers,
+                    "correct": score == 1.0,
+                    "session_id": self._session_id,
+                },
+            )
+        except Exception:
+            pass
+        return score
 
     def _emit(self, event_type: str, **kwargs) -> None:
         if self.event_log:
