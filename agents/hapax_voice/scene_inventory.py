@@ -264,6 +264,22 @@ class SceneInventory:
                     continue
                 res_w, res_h = _RESOLUTIONS.get(o.last_camera, (1920, 1080))
                 box = o.last_box
+                # Normalize last N sightings boxes to 0-1 for trail rendering
+                norm_sightings: list[list[float]] = []
+                for s in o.sightings[-5:]:
+                    sb = s.get("box", [])
+                    s_cam = s.get("camera", o.last_camera)
+                    s_rw, s_rh = _RESOLUTIONS.get(s_cam, (1920, 1080))
+                    if len(sb) == 4:
+                        norm_sightings.append(
+                            [
+                                sb[0] / s_rw,
+                                sb[1] / s_rh,
+                                sb[2] / s_rw,
+                                sb[3] / s_rh,
+                            ]
+                        )
+
                 results.append(
                     {
                         "entity_id": o.entity_id,
@@ -277,8 +293,12 @@ class SceneInventory:
                         ],
                         "confidence": o.last_confidence,
                         "mobility": o.mobility,
+                        "mobility_score": round(o.mobility_score, 3),
                         "seen_count": o.seen_count,
                         "age_s": round(age, 1),
+                        "first_seen_age_s": round(now - o.first_seen, 1),
+                        "camera_count": len(o.camera_history),
+                        "sightings": norm_sightings,
                     }
                 )
             return results

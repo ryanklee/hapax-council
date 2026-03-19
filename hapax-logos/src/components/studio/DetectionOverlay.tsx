@@ -324,7 +324,9 @@ export function DetectionOverlay({
         const cy = (dy1 + dy2) / 2;
         const dw = dx2 - dx1;
         const dh = dy2 - dy1;
-        const radius = Math.max(dw, dh) * 0.6;
+        // Depth modulates halo radius: close=larger, far=smaller
+        const depthScale = det.depth === "close" ? 1.3 : det.depth === "far" ? 0.7 : 1.0;
+        const radius = Math.max(dw, dh) * 0.6 * depthScale;
 
         // Breathing animation
         const period = breathingPeriod(det.novelty);
@@ -417,8 +419,19 @@ export function DetectionOverlay({
           // Person enrichment pips (tier 2+, not consent-suppressed)
           if (det.label === "person" && !det.consent_suppressed && effectiveTier >= 2) {
             const pips: { color: string; label: string }[] = [];
-            if (det.mobility === "dynamic") pips.push({ color: "#fabd2f", label: "moving" });
-            if (det.novelty > 0.5) pips.push({ color: "#fb4934", label: "new" });
+
+            // Real enrichment data from perception pipeline
+            if (det.gaze_direction) pips.push({ color: "#83a598", label: det.gaze_direction });
+            if (det.emotion && det.emotion !== "neutral") pips.push({ color: "#d3869b", label: det.emotion });
+            if (det.posture && det.posture !== "upright") pips.push({ color: "#fabd2f", label: det.posture });
+            if (det.action) pips.push({ color: "#fe8019", label: det.action });
+            if (det.gesture && det.gesture !== "none") pips.push({ color: "#b8bb26", label: det.gesture });
+
+            // Fallback to mobility/novelty when no enrichments
+            if (pips.length === 0) {
+              if (det.mobility === "dynamic") pips.push({ color: "#fabd2f", label: "moving" });
+              if (det.novelty > 0.5) pips.push({ color: "#fb4934", label: "new" });
+            }
 
             let pipX = dx1 + 2;
             for (const pip of pips) {
@@ -439,14 +452,44 @@ export function DetectionOverlay({
           }
         }
 
-        // ── Tier 3: Trajectory trail ──────────────────────────────
-        if (effectiveTier >= 3 && det.mobility === "dynamic") {
+        // ── Tier 3: Trajectory trail from sightings history ──────
+        if (effectiveTier >= 3 && det.sightings && det.sightings.length >= 2) {
+          ctx.strokeStyle = color + "50";
+          ctx.lineWidth = 1;
+          ctx.setLineDash([3, 3]);
+          ctx.beginPath();
+
+          // Draw connected centroids from sightings history
+          for (let i = 0; i < det.sightings.length; i++) {
+            const s = det.sightings[i];
+            const sx = imgX + ((s[0] + s[2]) / 2) * imgW;
+            const sy = imgY + ((s[1] + s[3]) / 2) * imgH;
+            if (i === 0) ctx.moveTo(sx, sy);
+            else ctx.lineTo(sx, sy);
+          }
+          // Connect to current position
+          ctx.lineTo(cx, cy);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          // Fading dots at each sighting position
+          for (let i = 0; i < det.sightings.length; i++) {
+            const s = det.sightings[i];
+            const sx = imgX + ((s[0] + s[2]) / 2) * imgW;
+            const sy = imgY + ((s[1] + s[3]) / 2) * imgH;
+            const age = i / det.sightings.length; // 0=oldest, ~1=newest
+            ctx.fillStyle = color + Math.round(age * 0.6 * 255).toString(16).padStart(2, "0");
+            ctx.beginPath();
+            ctx.arc(sx, sy, 2, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        } else if (effectiveTier >= 3 && det.mobility === "dynamic") {
+          // Fallback: direction indicator when no sightings data
           ctx.strokeStyle = color + "40";
           ctx.lineWidth = 1;
           ctx.setLineDash([3, 3]);
           ctx.beginPath();
           ctx.moveTo(cx, cy);
-          // Simple trail — just show a direction indicator
           ctx.lineTo(cx + dw * 0.15, cy);
           ctx.stroke();
           ctx.setLineDash([]);

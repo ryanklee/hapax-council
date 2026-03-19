@@ -462,6 +462,20 @@ export interface ClassificationDetection {
   mobility: "static" | "dynamic" | "unknown";
   novelty: number; // 0.0=familiar, 1.0=brand new
   consent_suppressed: boolean;
+
+  // Person enrichments (operator camera, consent-gated)
+  gaze_direction?: string | null; // screen/hardware/away/person
+  emotion?: string | null; // 8-class HSEmotion
+  posture?: string | null; // upright/slouching/leaning_forward/leaning_back
+  gesture?: string | null; // MediaPipe hand gestures
+  action?: string | null; // Kinetics-400 or heuristic
+  depth?: string | null; // close/medium/far
+
+  // Entity metadata (all entities)
+  mobility_score?: number | null; // continuous 0.0-1.0
+  first_seen_age_s?: number | null; // seconds since first detection
+  camera_count?: number | null; // cameras that have seen this entity
+  sightings?: [number, number, number, number][] | null; // last 5 box positions
 }
 
 // --- Perception ---

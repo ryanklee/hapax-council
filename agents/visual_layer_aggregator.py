@@ -423,7 +423,9 @@ def _map_scene_inventory(data: dict) -> list[ClassificationDetection]:
     """Map scene_inventory from perception state to classification detections.
 
     Normalizes bounding boxes to 0-1, computes novelty from seen_count,
-    checks consent phase for person suppression. Returns top 5 by confidence.
+    checks consent phase for person suppression. Attaches person enrichments
+    from perception-state top-level keys when on operator camera and not
+    consent-suppressed. Returns top 5 by confidence.
     """
     inventory = data.get("scene_inventory", {})
     objects = inventory.get("objects", [])
@@ -453,6 +455,22 @@ def _map_scene_inventory(data: dict) -> list[ClassificationDetection]:
         "room": "c920-room",
         "aux": "c920-aux",
     }
+    _OPERATOR_CAMERAS = {"brio-operator", "operator"}
+
+    # Person enrichments from perception-state top-level keys (global, first-person only)
+    _ENRICHMENT_MAP = (
+        ("gaze_direction", "gaze_direction"),
+        ("emotion", "top_emotion"),
+        ("posture", "posture"),
+        ("gesture", "hand_gesture"),
+        ("action", "detected_action"),
+        ("depth", "nearest_person_distance"),
+    )
+    person_enrichments: dict[str, str | None] = {}
+    if not suppress_person_enrichments:
+        for field, key in _ENRICHMENT_MAP:
+            val = data.get(key, "")
+            person_enrichments[field] = val if val else None
 
     detections: list[ClassificationDetection] = []
     for obj in objects:
@@ -486,9 +504,36 @@ def _map_scene_inventory(data: dict) -> list[ClassificationDetection]:
 
         # CONSENT_REFUSED: remove non-operator person detections entirely
         if is_person and remove_person_detections:
-            # Operator is always rendered (operator_confirmed flag would go here)
-            # For now, skip all person detections during refusal
             continue
+
+        consent_suppressed = suppress_person_enrichments and is_person
+        is_operator_cam = camera_raw in _OPERATOR_CAMERAS
+
+        # Person enrichments: only for persons on operator camera, not suppressed
+        enrichment_kwargs: dict[str, Any] = {}
+        if is_person and is_operator_cam and not consent_suppressed:
+            enrichment_kwargs.update(person_enrichments)
+
+        # Entity metadata (available for all entities from snapshot_for_overlay)
+        mobility_score_raw = obj.get("mobility_score")
+        first_seen_age_raw = obj.get("first_seen_age_s")
+        camera_count_raw = obj.get("camera_count")
+
+        # Normalize sightings to tuples
+        raw_sightings = obj.get("sightings")
+        norm_sightings: list[tuple[float, float, float, float]] | None = None
+        if raw_sightings and isinstance(raw_sightings, list):
+            norm_sightings = []
+            for sb in raw_sightings[-5:]:
+                if isinstance(sb, (list, tuple)) and len(sb) == 4:
+                    norm_sightings.append(
+                        (
+                            float(sb[0]),
+                            float(sb[1]),
+                            float(sb[2]),
+                            float(sb[3]),
+                        )
+                    )
 
         detections.append(
             ClassificationDetection(
@@ -499,7 +544,16 @@ def _map_scene_inventory(data: dict) -> list[ClassificationDetection]:
                 confidence=confidence,
                 mobility=obj.get("mobility", "unknown"),
                 novelty=novelty,
-                consent_suppressed=suppress_person_enrichments and is_person,
+                consent_suppressed=consent_suppressed,
+                mobility_score=float(mobility_score_raw)
+                if mobility_score_raw is not None
+                else None,
+                first_seen_age_s=float(first_seen_age_raw)
+                if first_seen_age_raw is not None
+                else None,
+                camera_count=int(camera_count_raw) if camera_count_raw is not None else None,
+                sightings=norm_sightings if norm_sightings else None,
+                **enrichment_kwargs,
             )
         )
 
