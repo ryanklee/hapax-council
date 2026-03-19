@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { memo, useCallback, useState } from "react";
 import { Region } from "../Region";
 import { AgentSummary } from "../field/AgentSummary";
 import { FreshnessPanel } from "../../sidebar/FreshnessPanel";
@@ -14,7 +14,7 @@ import { useOverlay, type SignalCategory } from "../../../contexts/Classificatio
 import { useAgentRun } from "../../../contexts/AgentRunContext";
 import type { AgentInfo } from "../../../api/types";
 
-export function FieldRegion() {
+export const FieldRegion = memo(function FieldRegion() {
   const { runAgent } = useAgentRun();
   const { signalsByRegion, stimmungStance, visualLayer } = useOverlay();
   const [activeZone, setActiveZone] = useState<SignalCategory | null>(null);
@@ -83,4 +83,4 @@ export function FieldRegion() {
       )}
     </Region>
   );
-}
+});

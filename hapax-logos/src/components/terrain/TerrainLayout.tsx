@@ -11,7 +11,7 @@ import { AgentOutputDrawer } from "./AgentOutputDrawer";
 import { SplitPane } from "./SplitPane";
 import { DetailPane } from "./DetailPane";
 import { ClassificationOverlayProvider } from "../../contexts/ClassificationOverlayContext";
-import { useVisualLayerPoll } from "../../hooks/useVisualLayer";
+import { useVisualLayer } from "../../api/hooks";
 import { useTerrain, type RegionName } from "../../contexts/TerrainContext";
 
 const REGION_KEYS: Record<string, RegionName> = {
@@ -51,19 +51,24 @@ function useCoreMiddleRegion(): RegionName | null {
 }
 
 export function TerrainLayout() {
-  const vl = useVisualLayerPoll();
+  const { data: vl } = useVisualLayer();
   const { activeOverlay, setOverlay, focusRegion, cycleDepth, focusedRegion, regionDepths, setRegionDepth, splitRegion, splitFullscreen, setSplitRegion, setSplitFullscreen } = useTerrain();
   const gridRows = useGridRows();
   const coreMiddle = useCoreMiddleRegion();
 
+  // Extract fields with defaults
+  const ambient = vl?.ambient_params ?? { speed: 0.08, turbulence: 0.1, color_warmth: 0.3, brightness: 0.25 };
+  const displayState = vl?.display_state ?? "ambient";
+  const voiceActive = vl?.voice_session?.active ?? false;
+
   // Voice overlay: auto-show when voice active
   useEffect(() => {
-    if (vl.voiceSession.active && activeOverlay !== "investigation") {
+    if (voiceActive && activeOverlay !== "investigation") {
       setOverlay("voice");
-    } else if (!vl.voiceSession.active && activeOverlay === "voice") {
+    } else if (!voiceActive && activeOverlay === "voice") {
       setOverlay(null);
     }
-  }, [vl.voiceSession.active, activeOverlay, setOverlay]);
+  }, [voiceActive, activeOverlay, setOverlay]);
 
   // Keyboard: `/` toggles investigation, H/F/G/W/B focus regions, Escape dismisses
   const handleKey = useCallback(
@@ -139,11 +144,11 @@ export function TerrainLayout() {
       >
         {/* z-0: Ambient shader background */}
         <AmbientShader
-          speed={vl.ambient.speed}
-          turbulence={vl.ambient.turbulence}
-          warmth={vl.ambient.color_warmth}
-          brightness={vl.ambient.brightness * 0.6}
-          displayState={vl.state}
+          speed={ambient.speed}
+          turbulence={ambient.turbulence}
+          warmth={ambient.color_warmth}
+          brightness={ambient.brightness * 0.6}
+          displayState={displayState}
         />
 
         {/* z-1: Terrain grid (optionally wrapped in SplitPane) */}
@@ -199,6 +204,7 @@ export function TerrainLayout() {
 
         {/* z-50: Voice overlay */}
         <VoiceOverlay vl={vl} />
+
       </div>
     </ClassificationOverlayProvider>
   );

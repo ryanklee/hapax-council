@@ -1,4 +1,4 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, memo } from "react";
 import { Region } from "../Region";
 import { FlowSummary } from "../watershed/FlowSummary";
 import { useSystemFlow } from "../../../hooks/useSystemFlow";
@@ -9,7 +9,7 @@ const FlowPage = lazy(() =>
   import("../../../pages/FlowPage").then((m) => ({ default: m.FlowPage }))
 );
 
-export function WatershedRegion() {
+export const WatershedRegion = memo(function WatershedRegion() {
   const flow = useSystemFlow();
   const { stimmungStance } = useOverlay();
 
@@ -53,4 +53,4 @@ export function WatershedRegion() {
       )}
     </Region>
   );
-}
+});

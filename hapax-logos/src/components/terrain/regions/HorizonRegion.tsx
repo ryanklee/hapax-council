@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Region } from "../Region";
 import { useBriefing, useNudges } from "../../../api/hooks";
 import { GoalsPanel } from "../../sidebar/GoalsPanel";
@@ -39,7 +40,7 @@ function HorizonSurface() {
   );
 }
 
-export function HorizonRegion() {
+export const HorizonRegion = memo(function HorizonRegion() {
   const { signalsByRegion, stimmungStance } = useOverlay();
   const horizonSignals = signalsByRegion.horizon;
 
@@ -92,4 +93,4 @@ export function HorizonRegion() {
       )}
     </Region>
   );
-}
+});

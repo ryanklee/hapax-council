@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { Region } from "../Region";
 import { useHealth, useGovernanceHeartbeat, useCost } from "../../../api/hooks";
@@ -83,7 +83,7 @@ function BedrockSurface() {
   );
 }
 
-export function BedrockRegion() {
+export const BedrockRegion = memo(function BedrockRegion() {
   const { signalsByRegion, stimmungStance } = useOverlay();
   const bedrockSignals = signalsByRegion.bedrock;
   const [accommOpen, setAccommOpen] = useState(false);
@@ -144,4 +144,4 @@ export function BedrockRegion() {
       )}
     </Region>
   );
-}
+});
