@@ -34,6 +34,7 @@ from agents.predictive_cache import PredictiveCache
 from agents.protention_engine import ProtentionEngine
 from agents.temporal_bands import TemporalBandFormatter
 from agents.temporal_delta import compute_temporal_delta
+from agents.temporal_filter import ClassificationFilter
 from agents.temporal_scales import MultiScaleAggregator
 from agents.visual_layer_state import (
     SEVERITY_CRITICAL,
@@ -771,6 +772,8 @@ class VisualLayerAggregator:
 
         # Classification detection overlay
         self._classification_detections: list[ClassificationDetection] = []
+        # Per-entity temporal stability filters (Batch 4)
+        self._entity_filters: dict[str, ClassificationFilter] = {}
 
         # Content scheduler (replaces _rotate_ambient_text + _maybe_inject_camera)
         self._scheduler = ContentScheduler()
@@ -927,7 +930,8 @@ class VisualLayerAggregator:
                     self._ambient_moments.append(media_text)
 
             # Classification detection overlay
-            self._classification_detections = _map_scene_inventory(data)
+            raw_detections = _map_scene_inventory(data)
+            self._classification_detections = self._apply_stability_filter(raw_detections)
 
             # WS1: feed multi-scale aggregator
             self._multi_scale.tick(data)
@@ -1393,6 +1397,51 @@ class VisualLayerAggregator:
         params.color_warmth = round(min(1.0, max(params.color_warmth, tod_offset)), 3)
 
         return params
+
+    def _apply_stability_filter(
+        self, detections: list[ClassificationDetection]
+    ) -> list[ClassificationDetection]:
+        """Apply N-of-M hysteresis filter to prevent flickering enrichments.
+
+        Per-entity filters ensure gaze/emotion/posture/gesture/action/mobility
+        only change after 3 consistent readings in a 5-sample window.
+        """
+        # GC stale filters for entities no longer present
+        active_ids = {d.entity_id for d in detections}
+        stale = [eid for eid in self._entity_filters if eid not in active_ids]
+        for eid in stale:
+            del self._entity_filters[eid]
+
+        filtered: list[ClassificationDetection] = []
+        for det in detections:
+            if det.entity_id not in self._entity_filters:
+                self._entity_filters[det.entity_id] = ClassificationFilter()
+
+            filt = self._entity_filters[det.entity_id]
+            stable = filt.filter(
+                gaze_direction=det.gaze_direction,
+                emotion=det.emotion,
+                posture=det.posture,
+                gesture=det.gesture,
+                action=det.action,
+                mobility=det.mobility,
+            )
+
+            # Reconstruct detection with filtered values
+            filtered.append(
+                det.model_copy(
+                    update={
+                        "gaze_direction": stable.get("gaze_direction"),
+                        "emotion": stable.get("emotion"),
+                        "posture": stable.get("posture"),
+                        "gesture": stable.get("gesture"),
+                        "action": stable.get("action"),
+                        "mobility": stable.get("mobility") or det.mobility,
+                    }
+                )
+            )
+
+        return filtered
 
     def _infer_activity(self) -> tuple[str, str]:
         """Infer what the operator is doing from perception state.
