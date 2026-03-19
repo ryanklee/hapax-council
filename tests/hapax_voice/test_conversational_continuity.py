@@ -154,9 +154,7 @@ class TestMessageDrop:
             messages.append({"role": "user", "content": f"q{i}"})
             messages.append({"role": "assistant", "content": f"a{i}"})
 
-        pipeline = self._make_pipeline_with_messages(
-            messages, flags={"message_drop": False}
-        )
+        pipeline = self._make_pipeline_with_messages(messages, flags={"message_drop": False})
         original_len = len(pipeline.messages)
 
         # The drop logic is gated — with flag off, messages stay intact
