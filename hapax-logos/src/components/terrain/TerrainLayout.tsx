@@ -12,7 +12,7 @@ import { SplitPane } from "./SplitPane";
 import { DetailPane } from "./DetailPane";
 import { ClassificationOverlayProvider } from "../../contexts/ClassificationOverlayContext";
 import { useVisualLayer } from "../../api/hooks";
-import { useTerrain, type RegionName } from "../../contexts/TerrainContext";
+import { useTerrain, useTerrainDisplay, type RegionName } from "../../contexts/TerrainContext";
 
 const REGION_KEYS: Record<string, RegionName> = {
   h: "horizon",
@@ -23,7 +23,7 @@ const REGION_KEYS: Record<string, RegionName> = {
 };
 
 function useGridRows(): string {
-  const { regionDepths } = useTerrain();
+  const { regionDepths } = useTerrainDisplay();
   const horizonExpanded = regionDepths.horizon !== "surface";
   const bedrockExpanded = regionDepths.bedrock !== "surface";
   const middleRegions: RegionName[] = ["field", "ground", "watershed"];
@@ -45,7 +45,7 @@ function useGridRows(): string {
 
 /** Which middle-row region (if any) is at core depth — it should span all columns */
 function useCoreMiddleRegion(): RegionName | null {
-  const { regionDepths } = useTerrain();
+  const { regionDepths } = useTerrainDisplay();
   const middleRegions: RegionName[] = ["field", "ground", "watershed"];
   return middleRegions.find((r) => regionDepths[r] === "core") ?? null;
 }
