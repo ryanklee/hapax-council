@@ -228,7 +228,7 @@ async def judge_session(turns: list[dict]) -> dict:
             timeout=30,
         )
 
-        content = response.choices[0].message.content
+        content = response.choices[0].message.content or ""
         # Extract JSON from response
         json_match = content
         if "```json" in content:
