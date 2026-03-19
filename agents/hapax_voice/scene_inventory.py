@@ -45,9 +45,17 @@ class SceneObject:
     camera_history: set[str] = field(default_factory=set)
     yolo_track_ids: dict[str, int] = field(default_factory=dict)  # camera -> last track_id
 
+    # Per-entity enrichments (routed from classifiers via enrich_entity)
+    gaze_direction: str | None = None
+    emotion: str | None = None
+    posture: str | None = None
+    gesture: str | None = None
+    action: str | None = None
+    depth: str | None = None
+
     def to_dict(self) -> dict[str, Any]:
         """Serialize for JSON persistence."""
-        return {
+        d: dict[str, Any] = {
             "entity_id": self.entity_id,
             "label": self.label,
             "last_camera": self.last_camera,
@@ -62,6 +70,12 @@ class SceneObject:
             "camera_history": sorted(self.camera_history),
             "yolo_track_ids": self.yolo_track_ids,
         }
+        # Only persist non-None enrichments
+        for key in ("gaze_direction", "emotion", "posture", "gesture", "action", "depth"):
+            val = getattr(self, key)
+            if val is not None:
+                d[key] = val
+        return d
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> SceneObject:
@@ -80,6 +94,12 @@ class SceneObject:
             sightings=d.get("sightings", []),
             camera_history=set(d.get("camera_history", [])),
             yolo_track_ids=d.get("yolo_track_ids", {}),
+            gaze_direction=d.get("gaze_direction"),
+            emotion=d.get("emotion"),
+            posture=d.get("posture"),
+            gesture=d.get("gesture"),
+            action=d.get("action"),
+            depth=d.get("depth"),
         )
 
 
@@ -295,31 +315,70 @@ class SceneInventory:
                             }
                         )
 
-                results.append(
-                    {
-                        "entity_id": o.entity_id,
-                        "label": o.label,
-                        "camera": o.last_camera,
-                        "box": [
-                            box[0] / res_w,
-                            box[1] / res_h,
-                            box[2] / res_w,
-                            box[3] / res_h,
-                        ],
-                        "confidence": o.last_confidence,
-                        "mobility": o.mobility,
-                        "mobility_score": round(o.mobility_score, 3),
-                        "seen_count": o.seen_count,
-                        "age_s": round(age, 1),
-                        "first_seen": o.first_seen,
-                        "last_seen": o.last_seen,
-                        "first_seen_age_s": round(now - o.first_seen, 1),
-                        "camera_count": len(o.camera_history),
-                        "sightings": norm_sightings,
-                        "raw_sightings": raw_sightings,
-                    }
-                )
+                obj_out: dict[str, Any] = {
+                    "entity_id": o.entity_id,
+                    "label": o.label,
+                    "camera": o.last_camera,
+                    "box": [
+                        box[0] / res_w,
+                        box[1] / res_h,
+                        box[2] / res_w,
+                        box[3] / res_h,
+                    ],
+                    "confidence": o.last_confidence,
+                    "mobility": o.mobility,
+                    "mobility_score": round(o.mobility_score, 3),
+                    "seen_count": o.seen_count,
+                    "age_s": round(age, 1),
+                    "first_seen": o.first_seen,
+                    "last_seen": o.last_seen,
+                    "first_seen_age_s": round(now - o.first_seen, 1),
+                    "camera_count": len(o.camera_history),
+                    "sightings": norm_sightings,
+                    "raw_sightings": raw_sightings,
+                }
+                # Include per-entity enrichments if present
+                for key in (
+                    "gaze_direction",
+                    "emotion",
+                    "posture",
+                    "gesture",
+                    "action",
+                    "depth",
+                ):
+                    val = getattr(o, key, None)
+                    if val is not None:
+                        obj_out[key] = val
+
+                results.append(obj_out)
             return results
+
+    def enrich_entity(self, entity_id: str, **enrichments: str | None) -> bool:
+        """Attach classifier enrichments to an entity by ID.
+
+        Thread-safe. Valid keys: gaze_direction, emotion, posture, gesture, action, depth.
+        Returns True if the entity was found and enriched.
+        """
+        _VALID_KEYS = {"gaze_direction", "emotion", "posture", "gesture", "action", "depth"}
+        with self._lock:
+            obj = self._objects.get(entity_id)
+            if obj is None:
+                return False
+            for key, val in enrichments.items():
+                if key in _VALID_KEYS:
+                    setattr(obj, key, val)
+            return True
+
+    def find_by_track_id(self, camera: str, track_id: int) -> str | None:
+        """Find entity_id by YOLO track_id on a specific camera.
+
+        Returns entity_id or None if not found.
+        """
+        with self._lock:
+            for obj in self._objects.values():
+                if obj.yolo_track_ids.get(camera) == track_id:
+                    return obj.entity_id
+            return None
 
     def by_label(self, label: str) -> list[SceneObject]:
         """Find all objects with a given label."""

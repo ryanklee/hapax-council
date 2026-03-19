@@ -368,3 +368,132 @@ class TestSnapshotForOverlay:
         assert abs(s[1] - 0.5) < 0.01
         assert abs(s[2] - 1.0) < 0.01
         assert abs(s[3] - 1.0) < 0.01
+
+
+# ── Batch 3: per-entity enrichment wiring ──────────────────────────────
+
+
+class TestEnrichEntity:
+    """SceneInventory.enrich_entity() attaches per-entity enrichments."""
+
+    def test_enrich_sets_fields(self):
+        inv = SceneInventory(persist_path=None)
+        now = time.time()
+        inv.ingest(
+            [{"label": "person", "confidence": 0.9, "box": [100, 200, 300, 500], "track_id": 1}],
+            camera_role="brio-operator",
+            timestamp=now,
+        )
+        # Find entity by track_id
+        eid = inv.find_by_track_id("brio-operator", 1)
+        assert eid is not None
+
+        result = inv.enrich_entity(
+            eid,
+            gaze_direction="screen",
+            emotion="neutral",
+            posture="upright",
+            gesture="none",
+            action="typing",
+            depth="close",
+        )
+        assert result is True
+
+        # Verify enrichments appear in snapshot
+        results = inv.snapshot_for_overlay()
+        assert len(results) >= 1
+        obj = results[0]
+        assert obj.get("gaze_direction") == "screen"
+        assert obj.get("emotion") == "neutral"
+        assert obj.get("action") == "typing"
+        assert obj.get("depth") == "close"
+
+    def test_enrich_nonexistent_entity(self):
+        inv = SceneInventory(persist_path=None)
+        result = inv.enrich_entity("nonexistent", gaze_direction="screen")
+        assert result is False
+
+    def test_enrich_ignores_invalid_keys(self):
+        inv = SceneInventory(persist_path=None)
+        now = time.time()
+        inv.ingest(
+            [{"label": "person", "confidence": 0.9, "box": [100, 200, 300, 500], "track_id": 1}],
+            camera_role="brio-operator",
+            timestamp=now,
+        )
+        eid = inv.find_by_track_id("brio-operator", 1)
+        assert eid is not None
+        # "invalid_field" should be silently ignored
+        result = inv.enrich_entity(eid, invalid_field="bad", gaze_direction="screen")
+        assert result is True
+
+
+class TestFindByTrackId:
+    """SceneInventory.find_by_track_id() resolves track_id to entity_id."""
+
+    def test_find_existing(self):
+        inv = SceneInventory(persist_path=None)
+        now = time.time()
+        inv.ingest(
+            [{"label": "person", "confidence": 0.9, "box": [100, 200, 300, 500], "track_id": 42}],
+            camera_role="brio-operator",
+            timestamp=now,
+        )
+        eid = inv.find_by_track_id("brio-operator", 42)
+        assert eid is not None
+        assert len(eid) > 0
+
+    def test_find_wrong_camera(self):
+        inv = SceneInventory(persist_path=None)
+        now = time.time()
+        inv.ingest(
+            [{"label": "person", "confidence": 0.9, "box": [100, 200, 300, 500], "track_id": 42}],
+            camera_role="brio-operator",
+            timestamp=now,
+        )
+        eid = inv.find_by_track_id("c920-room", 42)
+        assert eid is None
+
+    def test_find_wrong_track_id(self):
+        inv = SceneInventory(persist_path=None)
+        now = time.time()
+        inv.ingest(
+            [{"label": "person", "confidence": 0.9, "box": [100, 200, 300, 500], "track_id": 42}],
+            camera_role="brio-operator",
+            timestamp=now,
+        )
+        eid = inv.find_by_track_id("brio-operator", 99)
+        assert eid is None
+
+
+class TestPerEntityEnrichmentForwarding:
+    """_map_scene_inventory reads per-entity enrichments from objects."""
+
+    def test_prefers_entity_enrichments_over_global(self):
+        """Per-entity enrichments take precedence over global perception-state."""
+        obj = _make_object(camera="operator")
+        obj["gaze_direction"] = "hardware"  # per-entity
+        obj["emotion"] = "happy"  # per-entity
+        data = _make_perception_data(
+            objects=[obj],
+            gaze="screen",  # global (should be overridden)
+            emotion="neutral",  # global (should be overridden)
+            posture="slouching",
+        )
+        dets = _map_scene_inventory(data)
+        assert len(dets) == 1
+        assert dets[0].gaze_direction == "hardware"  # from entity
+        assert dets[0].emotion == "happy"  # from entity
+        assert dets[0].posture == "slouching"  # from global (no entity value)
+
+    def test_falls_back_to_global_when_no_entity_enrichment(self):
+        obj = _make_object(camera="operator")
+        # No per-entity enrichments
+        data = _make_perception_data(
+            objects=[obj],
+            gaze="screen",
+            emotion="neutral",
+        )
+        dets = _map_scene_inventory(data)
+        assert dets[0].gaze_direction == "screen"  # from global
+        assert dets[0].emotion == "neutral"  # from global

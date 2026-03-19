@@ -511,9 +511,22 @@ def _map_scene_inventory(data: dict) -> list[ClassificationDetection]:
         is_operator_cam = camera_raw in _OPERATOR_CAMERAS
 
         # Person enrichments: only for persons on operator camera, not suppressed
+        # Prefer per-entity enrichments from inventory, fall back to global perception-state
         enrichment_kwargs: dict[str, Any] = {}
         if is_person and is_operator_cam and not consent_suppressed:
-            enrichment_kwargs.update(person_enrichments)
+            for field_name in (
+                "gaze_direction",
+                "emotion",
+                "posture",
+                "gesture",
+                "action",
+                "depth",
+            ):
+                entity_val = obj.get(field_name)
+                if entity_val:
+                    enrichment_kwargs[field_name] = entity_val
+                elif person_enrichments.get(field_name):
+                    enrichment_kwargs[field_name] = person_enrichments[field_name]
 
         # Entity metadata (available for all entities from snapshot_for_overlay)
         mobility_score_raw = obj.get("mobility_score")

@@ -1532,6 +1532,29 @@ class VisionBackend:
                     operator_confirmed=operator_confirmed,
                 )
 
+                # Route per-person enrichments to SceneInventory entities
+                if role == "operator" and hasattr(self, "_inventory"):
+                    try:
+                        # Find the most-confident person detection on this camera
+                        person_dets = [o for o in objects if o.get("label") == "person"]
+                        if person_dets:
+                            best = max(person_dets, key=lambda o: o.get("confidence", 0))
+                            track_id = best.get("track_id")
+                            if track_id is not None:
+                                eid = self._inventory.find_by_track_id(role, track_id)
+                                if eid:
+                                    self._inventory.enrich_entity(
+                                        eid,
+                                        gaze_direction=gaze_direction,
+                                        emotion=top_emotion,
+                                        posture=posture,
+                                        gesture=hand_gesture,
+                                        action=detected_action,
+                                        depth=nearest_person_distance,
+                                    )
+                    except Exception:
+                        log.debug("Per-entity enrichment routing failed", exc_info=True)
+
             except Exception:
                 log.exception("Vision inference step failed")
 
