@@ -985,6 +985,11 @@ class VoiceDaemon:
         if screen_ctx:
             prompt += screen_ctx
 
+        # Cross-session memory: inject recent conversation digest
+        recent_memory = self._load_recent_memory()
+        if recent_memory:
+            prompt += f"\n\n## Recent Conversations\n{recent_memory}"
+
         # Guest mode needs fresh tools (restricted set)
         if self.session.is_guest_mode and self.cfg.tools_enabled:
             tools, tool_handlers = get_openai_tools(
@@ -1030,6 +1035,27 @@ class VoiceDaemon:
 
         # Pause vision to free GPU memory for voice models
         self._pause_vision_for_conversation()
+
+        # Load experiment config if present (SCED methodology support)
+        try:
+            _exp_path = Path.home() / ".cache" / "hapax" / "voice-experiment.json"
+            if _exp_path.exists():
+                import json as _json
+
+                _exp = _json.loads(_exp_path.read_text())
+                self.event_log.set_experiment(
+                    name=_exp.get("name", "unnamed"),
+                    condition=_exp.get("condition", "A"),
+                    phase=_exp.get("phase", "baseline"),
+                )
+                log.info(
+                    "Experiment loaded: %s condition=%s phase=%s",
+                    _exp.get("name"),
+                    _exp.get("condition"),
+                    _exp.get("phase"),
+                )
+        except Exception:
+            log.debug("Experiment config load failed (non-fatal)", exc_info=True)
 
         # Pipeline.start() activates buffer and opens audio output
         await self._conversation_pipeline.start()
@@ -1274,6 +1300,9 @@ class VoiceDaemon:
 
     async def _close_session(self, reason: str) -> None:
         """Close the active session and stop the pipeline."""
+        # Persist session digest for cross-session memory before stopping
+        self._persist_session_digest()
+
         await self._stop_pipeline()
         self._acknowledge("deactivation")
         if self.session.is_active:
@@ -1282,7 +1311,102 @@ class VoiceDaemon:
                 "session_lifecycle", action="closed", reason=reason, duration_s=round(duration, 1)
             )
         self.event_log.set_session_id(None)
+        self.event_log.clear_experiment()
         self.session.close(reason=reason)
+
+    def _persist_session_digest(self) -> None:
+        """Save conversation digest to episodic memory for cross-session recall."""
+        if self._conversation_pipeline is None:
+            return
+        try:
+            digest = self._conversation_pipeline.get_session_digest()
+            if not digest or not digest.get("thread"):
+                return
+
+            import uuid
+
+            from qdrant_client.models import PointStruct
+
+            from shared.config import embed
+            from shared.episodic_memory import Episode, EpisodeStore
+
+            store = EpisodeStore()
+            store.ensure_collection()
+
+            # Build a minimal episode from the conversation digest
+            episode = Episode(
+                activity="voice_conversation",
+                voice_turns=digest.get("turn_count", 0),
+                duration_s=0,
+            )
+            topic_str = ", ".join(digest.get("topic_words", []))
+            thread_str = "; ".join(digest.get("thread", []))
+            summary = f"Voice conversation about {topic_str}. {thread_str}"
+
+            vec = embed(summary, prefix="search_document")
+            point_id = str(
+                uuid.uuid5(
+                    uuid.NAMESPACE_DNS,
+                    f"voice-session-{digest.get('session_id', 'unknown')}",
+                )
+            )
+            store.client.upsert(
+                "operator-episodes",
+                [
+                    PointStruct(
+                        id=point_id,
+                        vector=vec,
+                        payload={
+                            **episode.model_dump(),
+                            "thread": digest.get("thread", []),
+                            "topic_words": digest.get("topic_words", []),
+                            "session_id": digest.get("session_id", ""),
+                        },
+                    )
+                ],
+            )
+            log.info(
+                "Session digest persisted: %d turns, topics=%s",
+                digest.get("turn_count", 0),
+                topic_str,
+            )
+        except Exception:
+            log.debug("Session digest persistence failed (non-fatal)", exc_info=True)
+
+    def _load_recent_memory(self) -> str:
+        """Load recent voice session digests from episodic memory.
+
+        Returns a formatted string for system prompt injection, or empty string.
+        """
+        try:
+            from shared.episodic_memory import EpisodeStore
+
+            store = EpisodeStore()
+            matches = store.search(
+                "recent voice conversation",
+                activity="voice_conversation",
+                limit=3,
+                min_score=0.2,
+            )
+
+            if not matches:
+                return ""
+
+            lines = []
+            for match in matches:
+                payload = match.episode.model_dump()
+                thread = payload.get("thread", [])
+                topics = payload.get("topic_words", [])
+                turns = payload.get("voice_turns", 0)
+
+                if thread:
+                    topic_str = ", ".join(topics[:3]) if topics else "general"
+                    lines.append(f"- {turns} turns about {topic_str}: " + "; ".join(thread[-3:]))
+
+            return "\n".join(lines) if lines else ""
+        except Exception:
+            log.debug("Recent memory load failed (non-fatal)", exc_info=True)
+            return ""
 
     async def _run_consent_session(self) -> None:
         """Run a voice consent session for a detected guest.

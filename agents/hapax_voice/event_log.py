@@ -37,6 +37,23 @@ class EventLog:
         """Update the current session ID (set to None when session closes)."""
         self._session_id = session_id
 
+    def set_experiment(
+        self,
+        name: str,
+        condition: str,
+        phase: str,
+    ) -> None:
+        """Set experiment metadata injected into every subsequent event.
+
+        For SCED methodology: name identifies the experiment, condition is
+        A (baseline) or B (intervention), phase tracks within-experiment state.
+        """
+        self._experiment = {"experiment": name, "condition": condition, "phase": phase}
+
+    def clear_experiment(self) -> None:
+        """Clear experiment metadata."""
+        self._experiment = None
+
     def set_consent_fn(self, fn: object) -> None:
         """Set a callable that returns True when persistence is allowed.
 
@@ -96,6 +113,10 @@ class EventLog:
             "source_service": "hapax-voice",
             **fields,
         }
+        # Inject experiment metadata if active
+        experiment = getattr(self, "_experiment", None)
+        if experiment is not None:
+            event.update(experiment)
         # Inject OTel trace context if an active span exists
         try:
             from opentelemetry import trace
