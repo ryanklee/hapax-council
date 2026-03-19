@@ -281,11 +281,13 @@ class TestMapPhone:
         assert signals[0].severity == SEVERITY_LOW
 
     def test_media_playing(self):
-        signals = map_phone({
-            "phone_media_playing": True,
-            "phone_media_title": "A" * 70,
-            "phone_media_artist": "TestArtist",
-        })
+        signals = map_phone(
+            {
+                "phone_media_playing": True,
+                "phone_media_title": "A" * 70,
+                "phone_media_artist": "TestArtist",
+            }
+        )
         assert len(signals) == 1
         assert signals[0].category == SignalCategory.AMBIENT_SENSOR
         assert len(signals[0].detail) <= 60
