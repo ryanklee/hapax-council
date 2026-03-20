@@ -51,9 +51,9 @@ export function VisualPage() {
   // Poll state every 500ms
   useEffect(() => {
     if (!IS_TAURI) return;
-    refresh();
+    const timeout = setTimeout(refresh, 0);
     const interval = setInterval(refresh, 500);
-    return () => clearInterval(interval);
+    return () => { clearTimeout(timeout); clearInterval(interval); };
   }, [refresh]);
 
   // Listen for frame stats events from the visual surface
