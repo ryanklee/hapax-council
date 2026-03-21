@@ -9,7 +9,6 @@
 import { useState } from "react";
 import { HorizonRegion } from "./regions/HorizonRegion";
 import { FieldRegion } from "./regions/FieldRegion";
-import { GroundRegion } from "./regions/GroundRegion";
 import { WatershedRegion } from "./regions/WatershedRegion";
 import { BedrockRegion } from "./regions/BedrockRegion";
 import { StudioDetailPane } from "./ground/StudioDetailPane";
