@@ -1,6 +1,6 @@
 # Voice Grounding Research State
 
-**Last updated:** 2026-03-21 (session 2)
+**Last updated:** 2026-03-21 (session 3)
 **Update convention:** After any session with research decisions or implementation progress, update this file before ending.
 
 ## Position (one paragraph)
@@ -14,9 +14,10 @@ We are building the first system that attempts to operationalize Clark & Brennan
   - All research complete (28 agents across 4 rounds, 80+ citations)
   - Refined model designed and justified
   - Implementation: **Batches 1-4 COMMITTED** (76 tests passing, PR #229)
-  - Remaining: pre-registration update, OSF registration, lab journal backfill
-  - Context persistence system built (RESEARCH-STATE.md + memory pointer + CLAUDE.md directive)
-  - Workstation optimization: 7-layer research complete, all applied (PR #229). See WORKSTATION-OPTIMIZATION.md
+  - Workstation optimization: COMPLETE (PR #229). See WORKSTATION-OPTIMIZATION.md
+  - Task management: native filesystem-as-bus system in `data/tasks/` + cockpit API + MCP tools
+  - **Remaining work tracked in `data/tasks/`** — this document provides context, tasks are source of truth for work items
+  - Critical path: `osf-preregistration` → `resolve-aba-vs-abab` → `session-protocol-automation` → `data-collection-schema`
 - **Cycle 3:** NOT STARTED (contingent on Cycle 2 results; may require fine-tuned model if RLHF anti-pattern binds)
 
 ## What Was Built (Batches 1-4)
@@ -78,12 +79,12 @@ We are building the first system that attempts to operationalize Clark & Brennan
 
 ## Open Questions
 
-- A-B-A vs A-B-A-B design (Barlow: reversal inappropriate for learning interventions)
-- Effect size target from Cycle 2 baseline data
-- OSF registration timing and format
+- A-B-A vs A-B-A-B design (Barlow: reversal inappropriate for learning interventions) → task `resolve-aba-vs-abab`
+- Effect size target from Cycle 2 baseline data (will emerge from A1 phase)
 - RLHF anti-pattern: prompted Opus sufficient or fine-tuning needed? (Cycle 3 decision)
-- GitHub Pages still needs enabling for lab journal
-- Redis noeviction policy needs persistent config
+- ~~Redis noeviction policy~~ → RESOLVED (applied session 2)
+- ~~OSF registration timing~~ → tracked as task `osf-preregistration`
+- ~~GitHub Pages for lab journal~~ → tracked as task `lab-journal-setup`
 
 ## Key Documents (read to reconstruct full context)
 
