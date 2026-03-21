@@ -7,7 +7,7 @@
 
 ## Statement of Need
 
-Every frontier voice AI treats memory as profile retrieval — storing facts about the user and injecting them into context. None implement Clark & Brennan's contribution-acceptance cycle, repair sequences, or effort calibration. Shaikh et al. (ACL 2025) showed all frontier LLMs score 23.23% on grounding tasks — worse than random. RLHF actively suppresses grounding acts (Shaikh, NAACL 2024). OpenAI's model spec instructs models *not* to ask clarifying questions. The 32-year gap between Clark's theory and any implementation is not accidental — it reflects structural obstacles in how conversational AI is built.
+Every frontier voice AI treats memory as profile retrieval — storing facts about the user and injecting them into context. None implement Clark & Brennan's contribution-acceptance cycle, repair sequences, or effort calibration. Shaikh et al. (ACL 2025) showed all frontier LLMs score 23.23% on grounding tasks — worse than random. RLHF actively suppresses grounding acts (Shaikh, NAACL 2024). OpenAI's model spec instructs models *not* to ask clarifying questions. The 35-year gap between Clark's theory and any implementation is not accidental — it reflects structural obstacles in how conversational AI is built.
 
 This project implements the grounding theory mechanically: a discourse unit state machine (Traum 1994), concern-aware repair thresholds, acceptance classification, Grounding Quality Index (GQI), and 2D effort calibration — all external to the LLM, injected as directives. The system is evaluated via Single Case Experimental Design (SCED) with Bayesian analysis (BEST).
 
@@ -31,7 +31,7 @@ See [`research/`](research/) for the research compendium and [`agents/hapax_voic
 
 ## Ecosystem
 
-This research spans seven repositories:
+This research spans six repositories (plus one external dependency):
 
 | Repository | Role | Description |
 |-----------|------|-------------|
@@ -40,8 +40,8 @@ This research spans seven repositories:
 | [hapax-officium](https://github.com/ryanklee/hapax-officium) | Supporting software | Management decision support (17 agents) |
 | [hapax-watch](https://github.com/ryanklee/hapax-watch) | Research instrument | Wear OS biometric companion (HR, HRV, skin temp) |
 | [cockpit-mcp](https://github.com/ryanklee/cockpit-mcp) | Infrastructure | MCP server bridging cockpit APIs to Claude Code (40 tools) |
-| [tabbyAPI](https://github.com/ryanklee/tabbyAPI) | Infrastructure | ExllamaV2/V3 LLM inference backend |
-| [distro-work](https://github.com/ryanklee/distro-work) | System maintenance | Scripts and configuration, not a software project |
+| [tabbyAPI](https://github.com/theroyallab/tabbyAPI) | Infrastructure (external) | ExllamaV2/V3 LLM inference backend (upstream, not forked) |
+| [distro-work](https://github.com/ryanklee/distro-work) | System maintenance | Scripts and configuration |
 
 ## Quick Start
 

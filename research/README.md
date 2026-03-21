@@ -32,7 +32,6 @@ Theory documents live in [`../agents/hapax_voice/proofs/`](../agents/hapax_voice
 | [CYCLE-2-PREREGISTRATION.md](../agents/hapax_voice/proofs/CYCLE-2-PREREGISTRATION.md) | Experiment design: ABA, BEST, HDI+ROPE |
 | [CYCLE-1-PILOT-REPORT.md](../agents/hapax_voice/proofs/CYCLE-1-PILOT-REPORT.md) | Pilot methods, results, deviations |
 | [BASELINE-ANALYSIS.md](../agents/hapax_voice/proofs/BASELINE-ANALYSIS.md) | 17 sessions, 8 patterns |
-| [REPO-OPTIMIZATION-RESEARCH.md](../agents/hapax_voice/proofs/REPO-OPTIMIZATION-RESEARCH.md) | Repository optimization for research support |
 
 ## Lab Journal
 

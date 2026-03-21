@@ -11,6 +11,8 @@ abstract: >-
 authors:
   - given-names: Ryan
     family-names: Kleeberger
+version: 0.3.7
+date-released: "2026-03-21"
 repository-code: "https://github.com/ryanklee/hapax-council"
 url: "https://github.com/ryanklee/hapax-council"
 license: Apache-2.0
