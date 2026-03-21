@@ -160,7 +160,10 @@ class _VisionCache:
         self._scene_state_clip: str = ""
         self._updated_at: float = 0.0
         self._per_camera_scene_types: dict[str, str] = {}  # role → scene_type
+<<<<<<< HEAD
         self._scene_type_ts: float = 0.0  # monotonic timestamp of last scene_type update
+=======
+>>>>>>> origin/feat/classification-consumption-layer
 
         # Audio behaviors injected externally for cross-modal fusion
         self._audio_activity: str = "idle"
@@ -239,6 +242,7 @@ class _VisionCache:
                 if st and st != "unknown":
                     scene_type_votes[st] = scene_type_votes.get(st, 0) + 1
                     per_camera_scenes[role] = st
+<<<<<<< HEAD
         # Majority-vote scene type (fallback to stored global if fresh)
         if scene_type_votes:
             consensus_scene = max(scene_type_votes, key=scene_type_votes.get)  # type: ignore[arg-type]
@@ -246,6 +250,13 @@ class _VisionCache:
             consensus_scene = self._scene_type
         else:
             consensus_scene = "unknown"
+=======
+        # Majority-vote scene type (fallback to stored global)
+        if scene_type_votes:
+            consensus_scene = max(scene_type_votes, key=scene_type_votes.get)  # type: ignore[arg-type]
+        else:
+            consensus_scene = self._scene_type
+>>>>>>> origin/feat/classification-consumption-layer
 
         # Room occupancy: max person count across cameras (already computed)
         room_occupancy = person_count
@@ -321,7 +332,10 @@ class _VisionCache:
             self._scene_objects = scene_objects
             if scene_type is not None:
                 self._scene_type = scene_type
+<<<<<<< HEAD
                 self._scene_type_ts = time.monotonic()
+=======
+>>>>>>> origin/feat/classification-consumption-layer
                 if hasattr(self, "_current_role"):
                     self._per_camera_scene_types[self._current_role] = scene_type
             if gaze_direction is not None:
@@ -500,9 +514,12 @@ class VisionBackend:
         self._b_scene_inventory: Behavior[str] = Behavior("{}")
         self._b_per_camera_scenes: Behavior[str] = Behavior("{}")  # JSON dict
         self._b_room_occupancy: Behavior[int] = Behavior(0)
+<<<<<<< HEAD
 
         # Gaze temporal smoother: 3-of-5 majority vote to reduce jitter
         self._gaze_history: deque[str] = deque(maxlen=5)
+=======
+>>>>>>> origin/feat/classification-consumption-layer
 
     @property
     def name(self) -> str:
@@ -648,12 +665,15 @@ class VisionBackend:
         behaviors["scene_inventory"] = self._b_scene_inventory
         behaviors["per_camera_scenes"] = self._b_per_camera_scenes
         behaviors["room_occupancy"] = self._b_room_occupancy
+<<<<<<< HEAD
 
     def _smooth_gaze(self, raw_gaze: str) -> str:
         """3-of-5 majority vote smoother to reduce per-frame gaze jitter."""
         self._gaze_history.append(raw_gaze)
         counts = Counter(self._gaze_history)
         return counts.most_common(1)[0][0]
+=======
+>>>>>>> origin/feat/classification-consumption-layer
 
     def _run_gaze_estimation(self, frame: np.ndarray) -> str:
         """Estimate gaze direction from SCRFD 5-point face landmarks.
