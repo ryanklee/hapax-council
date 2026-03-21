@@ -582,6 +582,7 @@ def _map_scene_inventory(data: dict) -> list[ClassificationDetection]:
                 "is_exiting": delta.is_exiting,
             }
 
+
         detections.append(
             ClassificationDetection(
                 entity_id=entity_id,
@@ -1794,6 +1795,7 @@ class VisualLayerAggregator:
         state.recent_change_points = [
             cp for cp in self._last_change_points if now_ts - cp.get("timestamp", 0) < 120.0
         ]
+
 
         # Activity label — what Hapax thinks operator is doing
         activity_label, activity_detail = self._infer_activity()
