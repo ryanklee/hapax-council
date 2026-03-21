@@ -12,7 +12,7 @@ import { SplitPane } from "./SplitPane";
 import { DetailPane } from "./DetailPane";
 import { ClassificationOverlayProvider } from "../../contexts/ClassificationOverlayContext";
 import { GroundStudioProvider } from "../../contexts/GroundStudioContext";
-import { useVisualLayerPoll } from "../../hooks/useVisualLayer";
+import { useVisualLayer } from "../../api/hooks";
 import { useTerrain, useTerrainDisplay, type RegionName } from "../../contexts/TerrainContext";
 
 const REGION_KEYS: Record<string, RegionName> = {
@@ -52,7 +52,7 @@ function useCoreMiddleRegion(): RegionName | null {
 }
 
 export function TerrainLayout() {
-  const vl = useVisualLayerPoll();
+  const { data: vl } = useVisualLayer();
   const { activeOverlay, setOverlay, focusRegion, cycleDepth, focusedRegion, regionDepths, setRegionDepth, splitRegion, splitFullscreen, setSplitRegion, setSplitFullscreen } = useTerrain();
   const gridRows = useGridRows();
   const coreMiddle = useCoreMiddleRegion();
