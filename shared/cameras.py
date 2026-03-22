@@ -27,19 +27,40 @@ class CameraSpec:
     height: int
     camera_class: str  # "brio" | "c920"
     person_enrichment: bool  # Can run gaze/emotion/posture classifiers
+    # Approximate room position (meters from origin) and aim direction.
+    # Initial estimates — operator can calibrate via compositor UI.
+    position: tuple[float, float, float] = (0.0, 0.0, 0.0)  # (x, y, z)
+    yaw_deg: float = 0.0  # horizontal aim (0=north, 90=east)
 
 
 # ── Camera registry ───────────────────────────────────────────────────
 
 CAMERAS: tuple[CameraSpec, ...] = (
     # Brio cameras — high-res, person enrichment capable
-    CameraSpec("brio-operator", "operator", 1920, 1080, "brio", True),
-    CameraSpec("brio-room", "room-brio", 1920, 1080, "brio", True),
-    CameraSpec("brio-synths", "synths-brio", 1920, 1080, "brio", True),
+    CameraSpec(
+        "brio-operator", "operator", 1920, 1080, "brio", True, position=(1.5, 0.8, 1.2), yaw_deg=180
+    ),
+    CameraSpec(
+        "brio-room", "room-brio", 1920, 1080, "brio", True, position=(0.0, 3.0, 1.5), yaw_deg=90
+    ),
+    CameraSpec(
+        "brio-synths",
+        "synths-brio",
+        1920,
+        1080,
+        "brio",
+        True,
+        position=(3.0, 2.0, 1.8),
+        yaw_deg=270,
+    ),
     # C920 cameras — environment/object sensing
-    CameraSpec("c920-desk", "desk", 1280, 720, "c920", False),
-    CameraSpec("c920-room", "room", 1280, 720, "c920", False),
-    CameraSpec("c920-overhead", "overhead", 1280, 720, "c920", False),
+    CameraSpec(
+        "c920-desk", "desk", 1280, 720, "c920", False, position=(1.5, 0.5, 2.0), yaw_deg=270
+    ),
+    CameraSpec("c920-room", "room", 1280, 720, "c920", False, position=(0.0, 0.0, 1.5), yaw_deg=45),
+    CameraSpec(
+        "c920-overhead", "overhead", 1280, 720, "c920", False, position=(1.5, 1.5, 2.5), yaw_deg=0
+    ),
 )
 
 # ── Derived lookups ───────────────────────────────────────────────────

@@ -1461,6 +1461,77 @@ class VisualLayerAggregator:
             if nudge_titles:
                 self._nudge_titles = nudge_titles
 
+    async def poll_hls_segments(self) -> None:
+        """Analyze recent HLS segments for temporal action + motion energy.
+
+        Reads newest unprocessed HLS segment, extracts frames, runs MoViNet
+        for temporal action classification and computes motion energy.
+        Results feed into BOCPD for activity transition detection and are
+        written to /dev/shm/hapax-compositor/hls-analysis.json.
+        """
+        import json as _json
+        from pathlib import Path as _Path
+
+        hls_dir = _Path.home() / ".cache" / "hapax-compositor" / "hls"
+        playlist = hls_dir / "stream.m3u8"
+        if not playlist.exists():
+            return
+
+        try:
+            # Find newest segment from playlist
+            segments = sorted(hls_dir.glob("segment*.ts"), key=lambda p: p.stat().st_mtime)
+            if not segments:
+                return
+
+            newest = segments[-1]
+            # Skip if already processed
+            last_processed = getattr(self, "_last_hls_segment", "")
+            if newest.name == last_processed:
+                return
+            self._last_hls_segment = newest.name
+
+            from agents.models.hls_decoder import compute_motion_energy, decode_segment
+
+            frames = decode_segment(newest, max_frames=10)
+            if not frames:
+                return
+
+            motion_energy = compute_motion_energy(frames)
+
+            # Run MoViNet on segment frames for temporal action
+            action_label = "unknown"
+            try:
+                from agents.models.movinet import MoViNetA2
+
+                if not hasattr(self, "_hls_movinet"):
+                    self._hls_movinet = MoViNetA2()
+                for frame in frames:
+                    action_label = self._hls_movinet.predict(frame)
+            except Exception:
+                pass
+
+            # Write analysis to shared memory
+            analysis = {
+                "segment": newest.name,
+                "motion_energy": round(motion_energy, 4),
+                "action": action_label,
+                "timestamp": time.time(),
+            }
+            out_path = _Path("/dev/shm/hapax-compositor/hls-analysis.json")
+            tmp = out_path.with_suffix(".tmp")
+            tmp.write_text(_json.dumps(analysis))
+            tmp.rename(out_path)
+
+            # Feed to BOCPD for change-point detection
+            if hasattr(self, "_bocpd"):
+                self._bocpd.update(
+                    {"hls_motion": motion_energy},
+                    timestamp=time.time(),
+                )
+
+        except Exception:
+            log.debug("HLS segment analysis failed", exc_info=True)
+
     def _run_scheduler(self, state: VisualLayerState) -> None:
         """Run the content scheduler and apply its decision."""
         now = time.monotonic()
@@ -1965,6 +2036,13 @@ class VisualLayerAggregator:
             if now - last_ambient >= AMBIENT_CONTENT_INTERVAL_S:
                 await self.poll_ambient_content()
                 last_ambient = now
+
+            # HLS temporal analysis — every 10s (5 segments worth)
+            _hls_interval = getattr(self, "_hls_poll_interval", 10.0)
+            _last_hls = getattr(self, "_last_hls_poll", 0.0)
+            if now - _last_hls >= _hls_interval:
+                await self.poll_hls_segments()
+                self._last_hls_poll = now
 
             # WS1: persist protention engine state every 5 min
             if now - self._last_protention_save >= 300.0:

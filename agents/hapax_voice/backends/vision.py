@@ -1222,32 +1222,24 @@ class VisionBackend:
         frame: np.ndarray,
         person_boxes: list[list[float]],
     ) -> str:
-        """Estimate nearest person distance from bbox height ratio (CPU-only).
+        """Estimate nearest person distance via Depth-Anything-V2 monocular depth.
 
-        Replaces Depth Anything V2 (~800MB VRAM) with a simple heuristic:
-        bbox_height / frame_height ratio maps to close/medium/far.
-
+        Falls back to bbox height ratio heuristic if model unavailable.
         Returns "close", "medium", "far", or "none".
         """
         if not person_boxes:
             return "none"
+        try:
+            if not hasattr(self, "_depth_estimator"):
+                from agents.models.depth_estimator import DepthEstimator
 
-        frame_h = frame.shape[0]
-        if frame_h < 1:
-            return "none"
+                self._depth_estimator = DepthEstimator()
+            return self._depth_estimator.estimate(frame, person_boxes)
+        except Exception:
+            log.debug("Depth estimator unavailable, using bbox fallback")
+            from agents.models.depth_estimator import _bbox_fallback
 
-        max_ratio = 0.0
-        for box in person_boxes:
-            box_h = box[3] - box[1]
-            ratio = box_h / frame_h
-            max_ratio = max(max_ratio, ratio)
-
-        if max_ratio > 0.6:
-            return "close"
-        elif max_ratio > 0.3:
-            return "medium"
-        else:
-            return "far"
+            return _bbox_fallback(frame, person_boxes)
 
     def _inference_loop(self) -> None:
         """Background thread: round-robin cameras → YOLO inference → cache."""
