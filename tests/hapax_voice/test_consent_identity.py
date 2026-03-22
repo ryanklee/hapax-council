@@ -217,7 +217,9 @@ class TestIdentityProperties(unittest.TestCase):
             assert tracker.all_consented == (not tracker.any_pending)
 
     @given(
-        speaker=st.sampled_from(["operator", "operator", "not_operator", "uncertain", "wife", "friend"]),
+        speaker=st.sampled_from(
+            ["operator", "operator", "not_operator", "uncertain", "wife", "friend"]
+        ),
     )
     @settings(max_examples=30)
     def test_operator_always_has_contract(self, speaker):
