@@ -75,6 +75,17 @@ Applied research informing agent system design and automation.
 | content-scheduling-research.md | `docs/research/` | Content scheduling patterns |
 | visual-design-parameters-research.md | `docs/research/` | Visual design parameter space |
 | multi-technique-rendering-architecture.md | `docs/research/` | Rendering architecture |
+| 2026-03-14-ingestion-classifier-stack-research.md | `docs/research/` | Ingestion classifier stack |
+| 2026-03-15-consent-channel-selection-research.md | `docs/research/` | Consent channel selection |
+| 2026-03-15-consent-gated-retrieval-research.md | `docs/research/` | Consent-gated retrieval |
+| 2026-03-15-privacy-aware-voice-ux-patterns.md | `docs/research/` | Privacy-aware voice UX |
+| 2026-03-16-cuda-gl-interop-investigation.md | `docs/research/` | CUDA-GL interop investigation |
+| 2026-03-16-v4l2loopback-direct-investigation.md | `docs/research/` | V4L2 loopback direct path |
+| wgpu-open-questions-resolved.md | `docs/research/` | WGPU open questions |
+| ws1-temporal-structure-engineering.md | `docs/research/` | Temporal structure engineering |
+| ws2-self-regulation-and-novelty.md | `docs/research/` | Self-regulation and novelty |
+| ws3-experiential-refinement.md | `docs/research/` | Experiential refinement |
+| ws5-latency-architecture.md | `docs/research/` | Latency architecture |
 
 ## Cross-Project Audits (distro-work)
 
