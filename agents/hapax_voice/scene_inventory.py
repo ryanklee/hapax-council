@@ -162,10 +162,18 @@ class SceneInventory:
                 self._byte_trackers[camera_role] = None
         return self._byte_trackers[camera_role]
 
-    def ingest(self, detections: list[dict], camera_role: str, timestamp: float) -> None:
+    def ingest(
+        self,
+        detections: list[dict],
+        camera_role: str,
+        timestamp: float,
+        *,
+        face_embedding: Any | None = None,
+    ) -> None:
         """Process a batch of detections from one camera tick.
 
         Each detection dict should have: label, confidence, box, track_id.
+        face_embedding: 512-d face embedding from SCRFD for cross-camera ReID.
         ByteTrack provides improved track_id association when available.
         """
         self._ensure_stitcher()
@@ -274,6 +282,7 @@ class SceneInventory:
                                 entity_id=eid,
                                 camera=camera_role,
                                 label=label,
+                                face_embedding=face_embedding,
                             )
                             # Apply best merge suggestion: alias new entity to existing
                             for s in suggestions:
@@ -360,9 +369,20 @@ class SceneInventory:
                     "last_seen": o.last_seen,
                     "first_seen_age_s": round(now - o.first_seen, 1),
                     "camera_count": len(o.camera_history),
+                    "cameras_seen": sorted(o.camera_history),
                     "sightings": norm_sightings,
                     "raw_sightings": raw_sightings,
                 }
+                # Multi-view confidence boost: objects seen on 2+ cameras recently
+                recent_cams = {
+                    s.get("camera", "")
+                    for s in o.sightings[-5:]
+                    if isinstance(s, dict) and now - s.get("ts", 0) < 15.0
+                }
+                if len(recent_cams) > 1:
+                    obj_out["confidence"] = round(obj_out["confidence"] * 1.2, 3)
+                    obj_out["multi_view_boost"] = True
+
                 # Include per-entity enrichments
                 for key in ("gaze_direction", "emotion", "posture", "gesture", "action", "depth"):
                     val = getattr(o, key, None)
@@ -470,10 +490,14 @@ class SceneInventory:
                 results.append(obj_out)
             return results
 
-    def enrich_entity(self, entity_id: str, **enrichments: str | None) -> bool:
+    def enrich_entity(
+        self, entity_id: str, *, enrich_confidence: float = 0.0, **enrichments: str | None
+    ) -> bool:
         """Attach classifier enrichments to an entity by ID.
 
         Thread-safe. Valid keys: gaze_direction, emotion, posture, gesture, action, depth.
+        Confidence-gated: only overwrites if new confidence >= stored confidence,
+        so the camera with the best view wins rather than last-write-wins.
         Returns True if the entity was found and enriched.
         """
         _VALID_KEYS = {"gaze_direction", "emotion", "posture", "gesture", "action", "depth"}
@@ -481,8 +505,13 @@ class SceneInventory:
             obj = self._objects.get(entity_id)
             if obj is None:
                 return False
+            stored_conf = getattr(obj, "_enrich_confidence", 0.0)
+            if enrich_confidence > 0 and enrich_confidence < stored_conf:
+                return True  # lower-quality enrichment, keep existing
+            if enrich_confidence > 0:
+                obj._enrich_confidence = enrich_confidence  # type: ignore[attr-defined]
             for key, val in enrichments.items():
-                if key in _VALID_KEYS:
+                if key in _VALID_KEYS and val is not None and val not in ("unknown", "none"):
                     setattr(obj, key, val)
             return True
 

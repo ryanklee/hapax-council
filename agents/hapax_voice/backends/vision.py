@@ -167,6 +167,11 @@ class _VisionCache:
         self._audio_genre: str = "unknown"
         self._audio_energy: float = 0.0
 
+        # Enrichment ring buffers — majority-vote temporal smoothing
+        self._gaze_ring: deque[str] = deque(maxlen=5)
+        self._emotion_ring: deque[str] = deque(maxlen=5)
+        self._posture_ring: deque[str] = deque(maxlen=5)
+
     def _merged_detections(self) -> str:
         """Merge detections from all cameras into one JSON array."""
         import json as _json
@@ -223,12 +228,19 @@ class _VisionCache:
                     return val
             return default
 
-        gaze = _best_enrichment("gaze_direction", "unknown")
-        emotion = _best_enrichment("top_emotion", "neutral")
+        # Use ring buffer majority vote when available, fall back to cross-camera best
+        def _ring_majority(ring: deque, fallback: str) -> str:
+            if ring:
+                counts = Counter(ring)
+                return counts.most_common(1)[0][0]
+            return fallback
+
+        gaze = _ring_majority(self._gaze_ring, _best_enrichment("gaze_direction", "unknown"))
+        emotion = _ring_majority(self._emotion_ring, _best_enrichment("top_emotion", "neutral"))
         hand_gesture = _best_enrichment("hand_gesture", "none")
 
-        # Posture: prefer room-brio (full body), fallback to operator, then synths
-        posture = _best_enrichment("posture", "unknown")
+        # Posture: ring buffer → cross-camera best
+        posture = _ring_majority(self._posture_ring, _best_enrichment("posture", "unknown"))
         pose_summary = _best_enrichment("pose_summary", "unknown")
 
         # Scene objects: union across all cameras
@@ -335,6 +347,8 @@ class _VisionCache:
                     self._per_camera_scene_types[self._current_role] = scene_type
             if gaze_direction is not None:
                 self._gaze_direction = gaze_direction
+                if gaze_direction != "unknown":
+                    self._gaze_ring.append(gaze_direction)
             if hand_gesture is not None:
                 self._hand_gesture = hand_gesture
             if nearest_person_distance is not None:
@@ -345,10 +359,14 @@ class _VisionCache:
                 self._color_temperature = color_temperature
             if posture is not None:
                 self._posture = posture
+                if posture != "unknown":
+                    self._posture_ring.append(posture)
             if detected_action is not None:
                 self._detected_action = detected_action
             if top_emotion is not None:
                 self._top_emotion = top_emotion
+                if top_emotion != "neutral":
+                    self._emotion_ring.append(top_emotion)
             if operator_confirmed is not None:
                 self._operator_confirmed = operator_confirmed
             if scene_state_clip is not None:
@@ -490,6 +508,9 @@ class VisionBackend:
         from agents.hapax_voice.face_detector import FaceDetector
 
         self._face_detector = FaceDetector(min_confidence=0.5)
+
+        # Previous frame per camera for inter-frame motion scoring
+        self._prev_frames: dict[str, np.ndarray] = {}
 
         self._b_objects: Behavior[str] = Behavior("[]")
         self._b_person_count: Behavior[int] = Behavior(0)
@@ -1334,6 +1355,22 @@ class VisionBackend:
                     self._stop_event.wait(self._poll_interval)
                     continue
 
+                # ── Inter-frame motion scoring (optical flow approximation) ──
+                _motion = 0.0
+                prev = self._prev_frames.get(role)
+                if prev is not None and prev.shape == frame.shape:
+                    try:
+                        diff = cv2.absdiff(
+                            cv2.cvtColor(prev, cv2.COLOR_BGR2GRAY),
+                            cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY),
+                        )
+                        _motion = float(diff.mean()) / 255.0
+                    except Exception:
+                        pass
+                self._prev_frames[role] = frame
+                self._cache._per_camera_motion = getattr(self._cache, "_per_camera_motion", {})
+                self._cache._per_camera_motion[role] = _motion
+
                 # Acquire VRAM lock for GPU inference
                 if not self._vram_lock.acquire():
                     log.debug("VRAM lock held, skipping vision inference")
@@ -1473,13 +1510,24 @@ class VisionBackend:
                             if label == "person":
                                 person_count += 1
 
+                    # ── Face detection (before inventory, for cross-camera ReID) ──
+                    face_result = None
+                    _face_emb = None
+                    if person_count > 0:
+                        try:
+                            face_result = self._face_detector.detect(frame, camera_role=role)
+                            if face_result.detected and face_result.embeddings:
+                                _face_emb = face_result.embeddings[0]
+                        except Exception:
+                            log.debug("Face detection for stitcher failed", exc_info=True)
+
                     # ── Feed detections to scene inventory ─────────────────
                     try:
                         if not hasattr(self, "_inventory"):
                             from agents.hapax_voice.scene_inventory import SceneInventory
 
                             self._inventory = SceneInventory()
-                        self._inventory.ingest(objects, role, time.time())
+                        self._inventory.ingest(objects, role, time.time(), face_embedding=_face_emb)
                     except Exception as exc:
                         log.debug("Scene inventory ingest failed: %s", exc)
 
@@ -1564,16 +1612,11 @@ class VisionBackend:
                 top_emotion: str | None = None
                 operator_confirmed: bool | None = None
 
-                # ── Cross-camera person ReID via SCRFD embeddings ──────
-                if person_count > 0:
-                    try:
-                        face_result = self._face_detector.detect(frame, camera_role=role)
-                        if face_result.detected and face_result.operator_flags:
-                            operator_confirmed = any(face_result.operator_flags)
-                        else:
-                            operator_confirmed = None  # no face → unknown
-                    except Exception as exc:
-                        log.debug("ReID face check failed: %s", exc)
+                # ── Cross-camera person ReID (face_result computed above, before ingest) ──
+                if face_result is not None and face_result.detected and face_result.operator_flags:
+                    operator_confirmed = any(face_result.operator_flags)
+                elif person_count > 0:
+                    operator_confirmed = None  # face detection ran but no face found
 
                 if role in ("operator", "room-brio", "synths-brio"):
                     # Gaze/emotion/gesture: any Brio camera with a person detected.
@@ -1688,6 +1731,7 @@ class VisionBackend:
                                     if operator_confirmed or operator_confirmed is None:
                                         self._inventory.enrich_entity(
                                             eid,
+                                            enrich_confidence=best.get("confidence", 0.0),
                                             gaze_direction=gaze_direction,
                                             emotion=top_emotion,
                                             posture=posture,

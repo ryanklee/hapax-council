@@ -35,6 +35,7 @@ DEFAULT_SIGNAL_WEIGHTS: dict[str, tuple[float, float]] = {
     "midi_active": (0.90, 0.02),
     "bt_phone_connected": (0.95, 0.05),  # BT paired phone in range = very strong presence
     "phone_kde_connected": (0.80, 0.25),  # KDE Connect WiFi reachable = likely in house
+    "room_occupancy": (0.85, 0.20),  # person detected on any camera = strong presence signal
 }
 
 
@@ -230,6 +231,13 @@ class PresenceEngine:
         # MIDI active
         b = behaviors.get("midi_playing")
         obs["midi_active"] = b.value if b is not None else None
+
+        # Room occupancy from multi-camera person detection
+        b = behaviors.get("room_occupancy")
+        if b is not None and isinstance(b.value, (int, float)) and b.value >= 1:
+            obs["room_occupancy"] = True
+        else:
+            obs["room_occupancy"] = None  # no data = neutral
 
         return obs
 
