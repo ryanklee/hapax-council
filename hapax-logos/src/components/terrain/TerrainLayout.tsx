@@ -113,6 +113,92 @@ function KeyboardHintBar() {
   );
 }
 
+/** Shows available shortcuts while any modifier key is held. */
+function ModifierShortcutOverlay() {
+  const [held, setHeld] = useState<string | null>(null);
+
+  useEffect(() => {
+    function onDown(e: KeyboardEvent) {
+      if (e.key === "Shift" || e.key === "Control" || e.key === "Alt" || e.key === "Meta") {
+        setHeld(e.key);
+      }
+    }
+    function onUp(e: KeyboardEvent) {
+      if (e.key === "Shift" || e.key === "Control" || e.key === "Alt" || e.key === "Meta") {
+        setHeld(null);
+      }
+    }
+    function onBlur() {
+      setHeld(null);
+    }
+    window.addEventListener("keydown", onDown);
+    window.addEventListener("keyup", onUp);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onDown);
+      window.removeEventListener("keyup", onUp);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, []);
+
+  if (!held) return null;
+
+  const shortcuts: { keys: string; label: string }[] =
+    held === "Shift"
+      ? [
+          { keys: "Shift+D", label: "toggle detection visibility" },
+        ]
+      : held === "Control" || held === "Meta"
+        ? [
+            { keys: "Ctrl+P", label: "command palette" },
+          ]
+        : [];
+
+  // Also show single-key shortcuts as a reference
+  const singleKeys = [
+    { keys: "H F G W B", label: "focus regions" },
+    { keys: "/", label: "investigate" },
+    { keys: "?", label: "manual" },
+    { keys: "S", label: "split" },
+    { keys: "D", label: "cycle detect tier" },
+    { keys: "Esc", label: "dismiss / collapse" },
+  ];
+
+  return (
+    <div
+      className="absolute bottom-3 left-1/2 -translate-x-1/2 flex flex-col gap-1.5 px-4 py-2 rounded"
+      style={{
+        zIndex: 50,
+        background: "rgba(29, 32, 33, 0.92)",
+        backdropFilter: "blur(12px)",
+        border: "1px solid rgba(180, 160, 120, 0.2)",
+        fontFamily: "'JetBrains Mono', monospace",
+        minWidth: 280,
+      }}
+    >
+      {shortcuts.length > 0 && (
+        <div className="flex flex-col gap-0.5 border-b border-zinc-700/50 pb-1.5 mb-0.5">
+          <span className="text-[9px] uppercase tracking-wider text-zinc-500 mb-0.5">{held}</span>
+          {shortcuts.map((s) => (
+            <div key={s.keys} className="flex justify-between text-[11px]">
+              <span style={{ color: "rgba(184, 187, 38, 0.8)" }}>{s.keys}</span>
+              <span style={{ color: "rgba(180, 160, 120, 0.6)" }}>{s.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex flex-wrap gap-x-4 gap-y-0.5">
+        {singleKeys.map((s) => (
+          <div key={s.keys} className="flex gap-1.5 text-[10px]">
+            <span style={{ color: "rgba(184, 187, 38, 0.5)" }}>{s.keys}</span>
+            <span style={{ color: "rgba(180, 160, 120, 0.35)" }}>{s.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** Keyboard handler for detection tier/visibility (must be inside ClassificationOverlayProvider). */
 function DetectionKeyboardHandler() {
   const { detectionTier, setDetectionTier, detectionLayerVisible, setDetectionLayerVisible } =
@@ -232,6 +318,7 @@ export function TerrainLayout() {
   return (
     <ClassificationOverlayProvider>
     <DetectionKeyboardHandler />
+    <ModifierShortcutOverlay />
     <GroundStudioProvider>
       <div
         className="h-screen w-screen overflow-hidden relative"
