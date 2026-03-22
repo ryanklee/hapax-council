@@ -214,13 +214,16 @@ class TestTickIntegration:
         s = ContentScheduler()
         ctx = _default_context()
         pools = ContentPools()  # empty
-        # Should still work (shader_variation and time_of_day are always available)
+        # Should still work (always-available sources)
+        always_available = {
+            ContentSource.SHADER_VARIATION,
+            ContentSource.TIME_OF_DAY,
+            ContentSource.ACTIVITY_LABEL,
+            ContentSource.BIOMETRIC_MOD,
+        }
         for i in range(10):
             result = s.tick(ctx, pools, now=100.0 + i * 20.0)
-            assert result is None or result.source in (
-                ContentSource.SHADER_VARIATION,
-                ContentSource.TIME_OF_DAY,
-            )
+            assert result is None or result.source in always_available
 
     def test_camera_decision_has_role(self):
         s = ContentScheduler()
@@ -380,3 +383,111 @@ class TestInvariants:
         ctx = SchedulerContext(activity=activity, flow_score=flow)
         density = s._compute_density(ctx)
         assert density in DisplayDensity
+
+
+class TestNewContentSources:
+    """Tests for TIME_OF_DAY, ACTIVITY_LABEL, BIOMETRIC_MOD, SUPPLEMENTARY_CARD."""
+
+    def test_circadian_phrases_all_hours(self):
+        s = ContentScheduler()
+        for hour in range(24):
+            phrases = s._circadian_phrases(hour)
+            assert isinstance(phrases, list)
+            assert len(phrases) >= 2
+            for p in phrases:
+                assert isinstance(p, str)
+                assert len(p) > 3
+
+    def test_activity_phrase_flow_qualifier(self):
+        s = ContentScheduler()
+        assert "flow" in s._activity_phrase("coding", 0.8)
+        assert "engaged" in s._activity_phrase("coding", 0.5)
+        assert s._activity_phrase("idle", 0.0) == "idle"
+
+    def test_biometric_phrase_elevated_hr(self):
+        s = ContentScheduler()
+        result = s._biometric_phrase(110, 1.0, False)
+        assert "110" in result
+        assert "elevated" in result
+
+    def test_biometric_phrase_stress(self):
+        s = ContentScheduler()
+        result = s._biometric_phrase(70, 1.0, True)
+        assert "stress" in result
+
+    def test_biometric_phrase_poor_sleep(self):
+        s = ContentScheduler()
+        result = s._biometric_phrase(70, 0.4, False)
+        assert "sleep" in result
+
+    def test_biometric_phrase_steady(self):
+        s = ContentScheduler()
+        assert s._biometric_phrase(0, 1.0, False) == "steady state"
+
+    def test_available_sources_includes_new(self):
+        s = ContentScheduler()
+        ctx = _default_context()
+        pools = _default_pools()
+        available = s._available_sources(ctx, pools)
+        assert ContentSource.ACTIVITY_LABEL in available
+        assert ContentSource.BIOMETRIC_MOD in available
+        assert ContentSource.SUPPLEMENTARY_CARD in available
+
+    def test_available_sources_supplementary_needs_nudges(self):
+        s = ContentScheduler()
+        ctx = _default_context()
+        pools = ContentPools()  # empty
+        available = s._available_sources(ctx, pools)
+        assert ContentSource.SUPPLEMENTARY_CARD not in available
+
+    def test_build_decision_time_of_day(self):
+        s = ContentScheduler()
+        s._rng.seed(42)
+        ctx = _default_context(hour=15)
+        pools = _default_pools()
+        config = s._configs[ContentSource.TIME_OF_DAY]
+        decision = s._build_decision(ContentSource.TIME_OF_DAY, config, ctx, pools, 100.0)
+        assert decision.source == ContentSource.TIME_OF_DAY
+        assert decision.content in s._circadian_phrases(15)
+
+    def test_build_decision_activity_label(self):
+        s = ContentScheduler()
+        ctx = _default_context(activity="coding", flow_score=0.7)
+        pools = _default_pools()
+        config = s._configs[ContentSource.ACTIVITY_LABEL]
+        decision = s._build_decision(ContentSource.ACTIVITY_LABEL, config, ctx, pools, 100.0)
+        assert decision.source == ContentSource.ACTIVITY_LABEL
+        assert "coding" in decision.content
+
+    def test_build_decision_biometric_mod(self):
+        s = ContentScheduler()
+        ctx = _default_context(heart_rate=105, stress_elevated=True)
+        pools = _default_pools()
+        config = s._configs[ContentSource.BIOMETRIC_MOD]
+        decision = s._build_decision(ContentSource.BIOMETRIC_MOD, config, ctx, pools, 100.0)
+        assert decision.source == ContentSource.BIOMETRIC_MOD
+        assert "105" in decision.content
+
+    def test_build_decision_supplementary_card(self):
+        s = ContentScheduler()
+        s._rng.seed(42)
+        ctx = _default_context()
+        pools = _default_pools()
+        config = s._configs[ContentSource.SUPPLEMENTARY_CARD]
+        decision = s._build_decision(ContentSource.SUPPLEMENTARY_CARD, config, ctx, pools, 100.0)
+        assert decision.source == ContentSource.SUPPLEMENTARY_CARD
+        assert "open loop:" in decision.content
+
+    def test_empty_pools_includes_new_always_available(self):
+        s = ContentScheduler()
+        ctx = _default_context()
+        pools = ContentPools()
+        for i in range(20):
+            result = s.tick(ctx, pools, now=100.0 + i * 20.0)
+            if result and result.source in (
+                ContentSource.ACTIVITY_LABEL,
+                ContentSource.BIOMETRIC_MOD,
+                ContentSource.TIME_OF_DAY,
+            ):
+                assert result.content
+                break

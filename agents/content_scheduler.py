@@ -402,6 +402,10 @@ class ContentScheduler:
         # These are always conceptually available
         available.append(ContentSource.SHADER_VARIATION)
         available.append(ContentSource.TIME_OF_DAY)
+        available.append(ContentSource.ACTIVITY_LABEL)
+        available.append(ContentSource.BIOMETRIC_MOD)
+        if pools.nudge_titles:
+            available.append(ContentSource.SUPPLEMENTARY_CARD)
 
         # Filter out meeting-blocked sources
         if ctx.activity in ("in a meeting", "presenting"):
@@ -573,6 +577,47 @@ class ContentScheduler:
                 shader_nudge=shader_nudge,
             )
 
+        if source == ContentSource.TIME_OF_DAY:
+            content = self._rng.choice(self._circadian_phrases(ctx.hour))
+            return SchedulerDecision(
+                source=source,
+                content=content,
+                dwell_s=dwell,
+                notification_level="change_blind",
+                shader_nudge=shader_nudge,
+            )
+
+        if source == ContentSource.ACTIVITY_LABEL:
+            content = self._activity_phrase(ctx.activity, ctx.flow_score)
+            return SchedulerDecision(
+                source=source,
+                content=content,
+                dwell_s=dwell,
+                notification_level="change_blind",
+                shader_nudge=shader_nudge,
+            )
+
+        if source == ContentSource.BIOMETRIC_MOD:
+            content = self._biometric_phrase(ctx.heart_rate, ctx.sleep_quality, ctx.stress_elevated)
+            return SchedulerDecision(
+                source=source,
+                content=content,
+                dwell_s=dwell,
+                notification_level="change_blind",
+                shader_nudge=shader_nudge,
+            )
+
+        if source == ContentSource.SUPPLEMENTARY_CARD:
+            title = self._rng.choice(pools.nudge_titles) if pools.nudge_titles else ""
+            content = f"open loop: {title}" if title else ""
+            return SchedulerDecision(
+                source=source,
+                content=content,
+                dwell_s=dwell,
+                notification_level="change_blind",
+                shader_nudge=shader_nudge,
+            )
+
         # Default: source name as content
         return SchedulerDecision(
             source=source,
@@ -593,6 +638,48 @@ class ContentScheduler:
         choice = self._rng.choice(available)
         self._fact_history.append(choice)
         return choice
+
+    def _circadian_phrases(self, hour: int) -> list[str]:
+        """Atmospheric time-of-day phrases."""
+        if hour < 6:
+            return ["the quiet hours", "deep night", "before dawn"]
+        if hour < 9:
+            return ["morning threshold", "day emerging", "first light"]
+        if hour < 12:
+            return ["morning arc", "rising energy", "mid-morning"]
+        if hour < 14:
+            return ["midday plateau", "solar peak", "noon passage"]
+        if hour < 17:
+            return ["afternoon drift", "post-meridian", "waning daylight"]
+        if hour < 20:
+            return ["evening approach", "golden hour", "day receding"]
+        if hour < 22:
+            return ["evening settling", "dusk threshold", "dimming"]
+        return ["late hours", "winding down", "approaching quiet"]
+
+    def _activity_phrase(self, activity: str, flow_score: float) -> str:
+        """Surface activity as atmospheric text."""
+        if flow_score > 0.6:
+            return f"{activity} · flow"
+        if flow_score > 0.3:
+            return f"{activity} · engaged"
+        return activity
+
+    def _biometric_phrase(self, heart_rate: int, sleep_quality: float, stress: bool) -> str:
+        """Surface biometric state as atmospheric text."""
+        parts: list[str] = []
+        if heart_rate > 0:
+            if heart_rate > 100:
+                parts.append(f"hr {heart_rate} elevated")
+            elif heart_rate < 60:
+                parts.append(f"hr {heart_rate} resting")
+            else:
+                parts.append(f"hr {heart_rate}")
+        if 0 < sleep_quality < 0.6:
+            parts.append(f"sleep {int(sleep_quality * 100)}%")
+        if stress:
+            parts.append("stress detected")
+        return " · ".join(parts) if parts else "steady state"
 
     def _compute_shader_nudge(self, source: ContentSource, ctx: SchedulerContext) -> ShaderNudge:
         """Compute shader parameter adjustments based on source + context.

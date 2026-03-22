@@ -788,6 +788,7 @@ class VisualLayerAggregator:
         # Content scheduler (replaces _rotate_ambient_text + _maybe_inject_camera)
         self._scheduler = ContentScheduler()
         self._ambient_text: str = ""
+        self._secondary_ambient_text: str = ""
         self._ambient_facts: list[str] = []
         self._nudge_titles: list[str] = []
         self._ambient_moments: list[str] = []
@@ -1533,8 +1534,16 @@ class VisualLayerAggregator:
         elif decision.content and decision.source in (
             ContentSource.STUDIO_MOMENT,
             ContentSource.SIGNAL_CARD,
+            ContentSource.TIME_OF_DAY,
+            ContentSource.SUPPLEMENTARY_CARD,
         ):
             self._ambient_text = decision.content
+
+        elif decision.content and decision.source in (
+            ContentSource.ACTIVITY_LABEL,
+            ContentSource.BIOMETRIC_MOD,
+        ):
+            self._secondary_ambient_text = decision.content
 
         # Apply shader nudge
         nudge = decision.shader_nudge
@@ -1808,6 +1817,7 @@ class VisualLayerAggregator:
         state.biometrics = self._biometrics
         state.injected_feeds = self._injected_feeds
         state.ambient_text = self._ambient_text
+        state.secondary_ambient_text = self._secondary_ambient_text
 
         # Classification detection overlay
         state.classification_detections = self._classification_detections

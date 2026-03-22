@@ -7,6 +7,7 @@ import { CameraGrid } from "../ground/CameraGrid";
 import { CameraHero } from "../ground/CameraHero";
 import { SignalCluster, densityFromDepth } from "../signals/SignalCluster";
 import { PresenceIndicator } from "../ground/PresenceIndicator";
+import { GroundNudgePills } from "../ground/GroundNudgePills";
 import { useSignals } from "../../../contexts/ClassificationOverlayContext";
 import { useTerrainActions, useTerrainDisplay } from "../../../contexts/TerrainContext";
 import { useGroundStudio } from "../../../contexts/GroundStudioContext";
@@ -48,12 +49,23 @@ export const GroundRegion = memo(function GroundRegion({ vl }: GroundRegionProps
       {(depth) => (
         <div className="h-full relative">
           {/* Surface: ambient canvas + time + camera pip */}
-          <AmbientCanvas ambientText={vl?.ambient_text ?? ""} speed={vl?.ambient_params?.speed ?? 0.08} />
+          <AmbientCanvas
+            ambientText={vl?.ambient_text ?? ""}
+            secondaryText={vl?.secondary_ambient_text ?? ""}
+            speed={vl?.ambient_params?.speed ?? 0.08}
+          />
           <TimeDisplay
             activityLabel={vl?.activity_label ?? "present"}
             activityDetail={vl?.activity_detail ?? ""}
             displayState={vl?.display_state ?? "ambient"}
           />
+
+          {/* Surface: faint nudge pills — bottom-left, above ambient text */}
+          {depth === "surface" && (
+            <div className="absolute bottom-20 left-8 pointer-events-none" style={{ zIndex: 2 }}>
+              <GroundNudgePills />
+            </div>
+          )}
 
           {/* Surface: small camera pip -- bottom-right, above presence indicator */}
           {depth === "surface" && (

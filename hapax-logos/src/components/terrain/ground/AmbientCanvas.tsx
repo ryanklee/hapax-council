@@ -28,10 +28,11 @@ const FALLBACK_FRAGMENTS = [
 
 interface AmbientCanvasProps {
   ambientText: string;
+  secondaryText: string;
   speed: number;
 }
 
-export function AmbientCanvas({ ambientText, speed }: AmbientCanvasProps) {
+export function AmbientCanvas({ ambientText, secondaryText, speed }: AmbientCanvasProps) {
   const [fragmentIdx, setFragmentIdx] = useState(0);
 
   useEffect(() => {
@@ -94,6 +95,19 @@ export function AmbientCanvas({ ambientText, speed }: AmbientCanvasProps) {
           </div>
         </div>
       </div>
+
+      {/* Secondary context line — below time display, top-left */}
+      {secondaryText && (
+        <div className="absolute top-14 left-4 pointer-events-none">
+          <div
+            key={secondaryText}
+            className="text-white/10 text-[10px] tracking-widest"
+            style={{ animation: "fragmentIn 3s ease-out forwards" }}
+          >
+            {secondaryText}
+          </div>
+        </div>
+      )}
 
       <style>{`
         @keyframes drift1 {

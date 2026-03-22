@@ -289,6 +289,7 @@ class VisualLayerState(BaseModel):
     biometrics: BiometricState = Field(default_factory=BiometricState)
     injected_feeds: list[InjectedFeed] = Field(default_factory=list)
     ambient_text: str = ""  # Dynamic ambient fragment (replaces hardcoded list)
+    secondary_ambient_text: str = ""  # Secondary context (activity/biometric)
     activity_label: str = ""  # What Hapax thinks operator is doing
     activity_detail: str = ""  # Supporting detail (app, genre, etc.)
     display_density: str = "ambient"  # Content density mode from scheduler

@@ -478,6 +478,7 @@ export interface VisualLayerState {
   classification_detections?: ClassificationDetection[];
   classification_directives?: Record<string, string>;
   ambient_text?: string;
+  secondary_ambient_text?: string;
   activity_label?: string;
   activity_detail?: string;
   display_density?: string;
