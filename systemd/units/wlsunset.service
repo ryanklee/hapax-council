@@ -1,0 +1,11 @@
+[Unit]
+Description=Wayland color temperature (static 3200K warm)
+PartOf=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/wlsunset -T 3201 -t 3200
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

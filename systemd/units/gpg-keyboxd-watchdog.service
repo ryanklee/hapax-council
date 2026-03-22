@@ -1,0 +1,6 @@
+[Unit]
+Description=Restart stuck keyboxd if GPG operations fail
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c 'gpg --list-keys >/dev/null 2>&1 || { echo "keyboxd stuck, restarting"; gpgconf --kill keyboxd; rm -f ~/.gnupg/public-keys.d/pubring.db.lock ~/.gnupg/public-keys.d/.#lk*; gpg --list-keys >/dev/null 2>&1; }'

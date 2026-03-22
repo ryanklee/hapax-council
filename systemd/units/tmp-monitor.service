@@ -1,0 +1,6 @@
+[Unit]
+Description=Monitor /tmp usage and clean leaked files
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/tmp-monitor.sh

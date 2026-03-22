@@ -1,0 +1,27 @@
+[Unit]
+Description=LLM Stack Analytics Tier (ClickHouse, Langfuse, MinIO, Prometheus, Grafana)
+After=llm-stack.service
+Requires=llm-stack.service
+OnFailure=notify-failure@%n.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/home/hapax/llm-stack
+Environment=HOME=/home/hapax
+Environment=GNUPGHOME=/home/hapax/.gnupg
+Environment=PASSWORD_STORE_DIR=/home/hapax/.password-store
+Environment=PATH=/home/hapax/.local/bin:/usr/local/bin:/usr/bin:/bin
+# 60s delay — let core services (qdrant, postgres, litellm) settle first
+ExecStartPre=/bin/sleep 60
+ExecStartPre=/home/hapax/llm-stack/generate-env.sh
+ExecStart=/usr/bin/docker compose --profile analytics up -d
+ExecStop=/usr/bin/docker compose --profile analytics down
+ExecStopPost=/bin/rm -f /home/hapax/llm-stack/.env
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=llm-stack-analytics
+TimeoutStartSec=180
+
+[Install]
+WantedBy=default.target

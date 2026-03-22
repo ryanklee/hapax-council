@@ -1,0 +1,18 @@
+[Unit]
+Description=AV correlator — cross-modal audio/video correlation and moments index
+After=network.target audio-processor.service video-processor.service
+OnFailure=notify-failure@%n.service
+
+[Service]
+Type=oneshot
+ExecStart=/home/hapax/.local/bin/uv run --directory /home/hapax/projects/hapax-council python -m agents.av_correlator --correlate
+Environment=PATH=/home/hapax/.local/bin:/home/hapax/.cargo/bin:/usr/local/bin:/usr/bin:/bin
+Environment=HOME=/home/hapax
+Environment=GNUPGHOME=/home/hapax/.gnupg
+Environment=PASSWORD_STORE_DIR=/home/hapax/.password-store
+MemoryMax=2G
+CPUQuota=200%
+AllowedCPUs=4-7
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=av-correlator

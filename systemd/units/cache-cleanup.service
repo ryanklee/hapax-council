@@ -1,0 +1,8 @@
+[Unit]
+Description=Weekly cache cleanup — Docker, uv, pacman, stale worktree venvs
+
+[Service]
+Type=oneshot
+ExecStart=/home/hapax/projects/hapax-council/scripts/cache-cleanup.sh
+Environment=PATH=/home/hapax/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=HOME=/home/hapax

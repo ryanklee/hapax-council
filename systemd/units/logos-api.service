@@ -1,22 +1,24 @@
 [Unit]
 Description=Logos API — FastAPI backend on :8051
-After=docker.service
-Wants=docker.service
+After=network.target llm-stack.service
+Wants=llm-stack.service
 StartLimitBurst=5
 StartLimitIntervalSec=300
 OnFailure=notify-failure@%n.service
 
 [Service]
 Type=simple
-WorkingDirectory=/home/operator/projects/hapax-council
+WorkingDirectory=/home/hapax/projects/hapax-council
 EnvironmentFile=-/run/user/1000/hapax-voice.env
-ExecStart=/home/operator/projects/hapax-council/.venv/bin/python -m logos.api --host 0.0.0.0
+ExecStart=/home/hapax/.local/bin/uv --directory /home/hapax/projects/hapax-council run python -m logos.api --host 0.0.0.0 --port 8051
 Restart=on-failure
 RestartSec=5
-Environment=PATH=/home/operator/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PATH=/home/hapax/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=HOME=/home/hapax
-MemoryMax=512M
+MemoryMax=1G
 SyslogIdentifier=logos-api
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=default.target

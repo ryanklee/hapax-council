@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily Health Connect parsing
+
+[Timer]
+OnBootSec=30min
+OnUnitActiveSec=24h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

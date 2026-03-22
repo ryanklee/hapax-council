@@ -1,0 +1,10 @@
+[Unit]
+Description=LLM Stack Weekly Maintenance
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=%h/llm-stack/stack-maintenance.sh
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=stack-maintenance

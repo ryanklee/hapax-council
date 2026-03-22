@@ -1,0 +1,10 @@
+[Unit]
+Description=Run RAG document ingestion periodically (delayed after boot)
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=15min
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target

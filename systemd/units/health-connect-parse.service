@@ -1,0 +1,19 @@
+[Unit]
+Description=Parse Health Connect backup from Google Drive
+After=gdrive-sync.service
+OnFailure=notify-failure@%n.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/hapax/projects/hapax-council
+ExecStart=/home/hapax/projects/hapax-council/.venv/bin/python -m agents.health_connect_parser --watch
+Environment=HOME=/home/hapax
+Environment=HAPAX_HOME=/home/hapax
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=health-connect-parse
+MemoryMax=256M
+CPUQuota=20%
+
+[Install]
+WantedBy=default.target
