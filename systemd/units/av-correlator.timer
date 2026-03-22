@@ -1,0 +1,10 @@
+[Unit]
+Description=Run AV correlator every 30 minutes (offset 15 min from processors)
+
+[Timer]
+OnBootSec=20min
+OnUnitActiveSec=30min
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target

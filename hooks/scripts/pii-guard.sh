@@ -55,11 +55,11 @@ if echo "$new_content" | grep -qP 'Minneapolis[- ]St\.?\s*Paul'; then
 fi
 
 # Home directory absolute paths (reveals username)
-if echo "$new_content" | grep -qP '/home/operator/'; then
-  # Allow in .gitignore, CLAUDE.md, and hook scripts (infrastructure files)
+if echo "$new_content" | grep -qP '/home/hapax/'; then
+  # Allow in infrastructure files that legitimately reference the home directory
   case "$file_path" in
-    */.gitignore|*/CLAUDE.md|*/hooks/*|*/.claude/*) ;;
-    *) blocked+=("Home directory path (/home/operator/)") ;;
+    */.gitignore|*/CLAUDE.md|*/hooks/*|*/.claude/*|*/systemd/*|*/process-compose*|*/scripts/*) ;;
+    *) blocked+=("Home directory path (/home/hapax/)") ;;
   esac
 fi
 

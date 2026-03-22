@@ -1,0 +1,12 @@
+[Unit]
+Description=Keep Keychron K2 Bluetooth keyboard awake
+After=bluetooth.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/keychron-keepalive
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

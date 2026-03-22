@@ -1,0 +1,10 @@
+[Unit]
+Description=Sync gdrive:drop every 30s
+
+[Timer]
+OnBootSec=10s
+OnUnitActiveSec=30s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

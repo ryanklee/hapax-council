@@ -1,0 +1,8 @@
+[Unit]
+Description=Log anomaly detection — alert on ERROR spikes per agent
+After=default.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/projects/distro-work/scripts/log-anomaly-alert.sh
+Environment=NTFY_URL=http://localhost:8090/hapax-alerts

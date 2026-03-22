@@ -1,0 +1,10 @@
+[Unit]
+Description=LLM Stack Weekly Maintenance Timer
+
+[Timer]
+OnCalendar=Sun *-*-* 02:00:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

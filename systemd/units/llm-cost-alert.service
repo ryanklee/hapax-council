@@ -1,0 +1,8 @@
+[Unit]
+Description=LLM cost anomaly alerter
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/projects/distro-work/scripts/llm-cost-alert.sh
+Environment=PATH=/usr/bin:/usr/local/bin

@@ -1,0 +1,20 @@
+[Unit]
+Description=gmail sync (Google API)
+After=network.target
+OnFailure=notify-failure@%n.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/hapax/projects/hapax-council
+ExecStartPre=/home/hapax/.local/bin/hapax-env-setup
+ExecStart=/home/hapax/.local/bin/uv run python -m agents.gmail_sync --auto
+EnvironmentFile=-/run/user/1000/hapax.env
+Environment=PATH=/home/hapax/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=HOME=/home/hapax
+Environment=GNUPGHOME=/home/hapax/.gnupg
+Environment=PASSWORD_STORE_DIR=/home/hapax/.password-store
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=gmail-sync
+MemoryMax=512M
+CPUQuota=30%

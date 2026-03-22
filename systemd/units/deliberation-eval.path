@@ -1,0 +1,6 @@
+[Path]
+PathChanged=/home/hapax/projects/hapax-council/profiles/deliberations
+Unit=deliberation-eval.service
+
+[Install]
+WantedBy=default.target

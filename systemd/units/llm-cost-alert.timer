@@ -1,0 +1,10 @@
+[Unit]
+Description=LLM cost anomaly check (9 AM and 6 PM)
+
+[Timer]
+OnCalendar=*-*-* 09:00:00
+OnCalendar=*-*-* 18:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

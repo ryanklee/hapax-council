@@ -1,0 +1,15 @@
+[Unit]
+Description=Studio FX Output — feeds GPU-effected video to /dev/video50
+After=studio-compositor.service
+Wants=studio-compositor.service
+
+[Service]
+Type=simple
+ExecStart=/home/hapax/projects/hapax-council/systemd/units/studio-fx-output.sh
+Restart=on-failure
+RestartSec=5
+Environment=PATH=/home/hapax/.local/bin:/usr/local/bin:/usr/bin:/bin
+SyslogIdentifier=studio-fx-output
+
+[Install]
+WantedBy=default.target
