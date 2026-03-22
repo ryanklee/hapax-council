@@ -568,6 +568,7 @@ export interface PerceptionState {
   speech_language: string;
   ambient_brightness: number;
   color_temperature: string;
+  audio_scene: string;
   posture: string;
   detected_action: string;
   usb_devices: string;

@@ -7,6 +7,7 @@ import {
   type SignalCategory,
   useSignals,
   useOverlayControl,
+  useDetections,
 } from "../../contexts/ClassificationOverlayContext";
 import type { SignalEntry } from "../../api/types";
 
@@ -18,6 +19,7 @@ interface PerceptionCanvasProps {
 export function PerceptionCanvas({ activeZone, onZoneClick }: PerceptionCanvasProps) {
   const { visualLayer, filteredSignals } = useSignals();
   const { zoneOpacityOverrides } = useOverlayControl();
+  const { detectionTier, detectionLayerVisible, enrichmentVisibility } = useDetections();
   const imgRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const classificationDetections = visualLayer?.classification_detections ?? [];
@@ -60,13 +62,14 @@ export function PerceptionCanvas({ activeZone, onZoneClick }: PerceptionCanvasPr
         alt="Studio composite"
       />
 
-      {/* Detection overlay (tier 1, all cameras) */}
+      {/* Detection overlay — tier from global context */}
       <DetectionOverlay
         containerRef={containerRef}
         classificationDetections={classificationDetections}
-        tier={1}
-        visible={classificationDetections.length > 0}
+        tier={detectionTier}
+        visible={detectionLayerVisible && classificationDetections.length > 0}
         objectFit="contain"
+        enrichmentVisibility={enrichmentVisibility}
       />
 
       {/* Zone overlays */}

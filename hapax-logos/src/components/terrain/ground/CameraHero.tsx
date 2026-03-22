@@ -2,11 +2,14 @@ import { useCallback, useEffect, useRef } from "react";
 import { useSnapshotPoll } from "../../../hooks/useSnapshotPoll";
 import { useBatchSnapshot } from "../../../hooks/useBatchSnapshotPoll";
 import { DetectionOverlay } from "../../studio/DetectionOverlay";
+import { SceneBadges } from "../../studio/SceneBadges";
 import { CompositeCanvas } from "../../studio/CompositeCanvas";
 import { PRESETS } from "../../studio/compositePresets";
 import { sourceUrl, selectEffect } from "../../studio/effectSources";
 import { useStudio } from "../../../api/hooks";
+import { useDetections } from "../../../contexts/ClassificationOverlayContext";
 import type { ClassificationDetection } from "../../../api/types";
+import type { DetectionTier } from "../../studio/DetectionOverlay";
 
 const _BUILD_TS = "build-2026-03-21T01:20";
 
@@ -30,6 +33,8 @@ export function CameraHero({
   presetIdx = 0,
 }: CameraHeroProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const { detectionTier, detectionLayerVisible, enrichmentVisibility } = useDetections();
+  const heroTier = Math.max(detectionTier, 2) as DetectionTier; // hero always ≥ tier 2
   const effectUrl = sourceUrl(effectSourceId);
   // Tell compositor to switch effect when source changes
   useEffect(() => { selectEffect(effectSourceId); }, [effectSourceId]);
@@ -92,15 +97,17 @@ export function CameraHero({
             containerRef={containerRef}
             cameraRole={heroRole}
             classificationDetections={classificationDetections}
-            tier={2}
-            visible={true}
+            tier={heroTier}
+            visible={detectionLayerVisible}
             objectFit="cover"
             activePreset={preset.name}
+            enrichmentVisibility={enrichmentVisibility}
           />
           {/* Camera role label */}
           <div className="absolute left-2 top-2 z-20 rounded bg-black/60 px-2 py-0.5 text-[10px] font-medium text-zinc-300">
             {heroRole} · {preset.name}{smoothMode ? " · HLS" : ""}{effectUrl ? ` · ${effectSourceId}` : ""}
           </div>
+          <SceneBadges />
         </div>
         {/* Secondary strip */}
         {secondaryCameras.length > 0 && (
@@ -135,9 +142,10 @@ export function CameraHero({
           containerRef={containerRef}
           cameraRole={effectUrl ? undefined : heroRole}
           classificationDetections={classificationDetections}
-          tier={2}
-          visible={true}
+          tier={heroTier}
+          visible={detectionLayerVisible}
           objectFit="cover"
+          enrichmentVisibility={enrichmentVisibility}
         />
         {/* Staleness warning */}
         {isStale && (
@@ -151,6 +159,7 @@ export function CameraHero({
         <div className="absolute left-2 top-2 z-20 rounded bg-black/60 px-2 py-0.5 text-[10px] font-medium text-zinc-300">
           {heroRole}{effectUrl ? ` · ${effectSourceId}` : ""}
         </div>
+        <SceneBadges />
       </div>
       {/* Secondary camera strip — edge-to-edge at the bottom */}
       {secondaryCameras.length > 0 && (

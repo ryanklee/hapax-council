@@ -10,7 +10,8 @@ import { InvestigationOverlay } from "./overlays/InvestigationOverlay";
 import { AgentOutputDrawer } from "./AgentOutputDrawer";
 import { SplitPane } from "./SplitPane";
 import { DetailPane } from "./DetailPane";
-import { ClassificationOverlayProvider } from "../../contexts/ClassificationOverlayContext";
+import { ClassificationOverlayProvider, useDetections } from "../../contexts/ClassificationOverlayContext";
+import type { DetectionTier } from "../studio/DetectionOverlay";
 import { GroundStudioProvider } from "../../contexts/GroundStudioContext";
 import { useVisualLayer } from "../../api/hooks";
 import { useTerrain, useTerrainDisplay, type RegionName } from "../../contexts/TerrainContext";
@@ -100,6 +101,7 @@ function KeyboardHintBar() {
       <span><kbd>/</kbd> investigate</span>
       <span><kbd>?</kbd> manual</span>
       <span><kbd>S</kbd> split</span>
+      <span><kbd>D</kbd> detect</span>
       <button
         onClick={dismiss}
         style={{ color: "rgba(180, 160, 120, 0.3)", cursor: "pointer", background: "none", border: "none", padding: "0 0 0 4px", fontSize: 11 }}
@@ -109,6 +111,33 @@ function KeyboardHintBar() {
       </button>
     </div>
   );
+}
+
+/** Keyboard handler for detection tier/visibility (must be inside ClassificationOverlayProvider). */
+function DetectionKeyboardHandler() {
+  const { detectionTier, setDetectionTier, detectionLayerVisible, setDetectionLayerVisible } =
+    useDetections();
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const target = e.target as HTMLElement;
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)
+        return;
+
+      if (e.key === "d" && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+        e.preventDefault();
+        const next = ((detectionTier % 3) + 1) as DetectionTier;
+        setDetectionTier(next);
+      } else if (e.key === "D" && e.shiftKey && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        setDetectionLayerVisible(!detectionLayerVisible);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [detectionTier, setDetectionTier, detectionLayerVisible, setDetectionLayerVisible]);
+
+  return null;
 }
 
 export function TerrainLayout() {
@@ -202,6 +231,7 @@ export function TerrainLayout() {
 
   return (
     <ClassificationOverlayProvider>
+    <DetectionKeyboardHandler />
     <GroundStudioProvider>
       <div
         className="h-screen w-screen overflow-hidden relative"

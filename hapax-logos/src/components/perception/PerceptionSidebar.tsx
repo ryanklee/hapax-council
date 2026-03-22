@@ -4,11 +4,14 @@ import { ChannelStrip } from "./ChannelStrip";
 import { DisplayStateBadge } from "./DisplayStateBadge";
 import {
   SIGNAL_CATEGORIES,
+  ENRICHMENT_KEYS,
   type OverlayMode,
   type SignalCategory,
   useSignals,
   useOverlayControl,
+  useDetections,
 } from "../../contexts/ClassificationOverlayContext";
+import type { DetectionTier } from "../studio/DetectionOverlay";
 import type { SignalEntry } from "../../api/types";
 
 interface PerceptionSidebarProps {
@@ -25,6 +28,14 @@ const MODE_OPTIONS: { value: OverlayMode; label: string }[] = [
 export function PerceptionSidebar({ activeZone, onZoneSelect }: PerceptionSidebarProps) {
   const { visualLayer } = useSignals();
   const { overlayMode, setOverlayMode, channelVisibility, toggleChannel } = useOverlayControl();
+  const {
+    detectionTier,
+    setDetectionTier,
+    detectionLayerVisible,
+    setDetectionLayerVisible,
+    enrichmentVisibility,
+    setEnrichmentVisibility,
+  } = useDetections();
 
   const [collapsed, setCollapsed] = useState(false);
   const [expandedGroup, setExpandedGroup] = useState<SignalCategory | null>(null);
@@ -97,6 +108,61 @@ export function PerceptionSidebar({ activeZone, onZoneSelect }: PerceptionSideba
                 }`}
               >
                 {opt.label}
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {/* Detection tier & enrichment toggles */}
+        <section className="border-b border-zinc-800/50 px-3 py-2.5">
+          <div className="mb-1.5 flex items-center justify-between">
+            <h3 className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+              Detection
+            </h3>
+            <button
+              onClick={() => setDetectionLayerVisible(!detectionLayerVisible)}
+              className={`text-[9px] px-1.5 py-0.5 rounded transition-colors ${
+                detectionLayerVisible
+                  ? "bg-zinc-700 text-zinc-300"
+                  : "bg-zinc-800/50 text-zinc-600"
+              }`}
+            >
+              {detectionLayerVisible ? "on" : "off"}
+            </button>
+          </div>
+          <div className="flex gap-1 mb-2">
+            {([1, 2, 3] as DetectionTier[]).map((t) => (
+              <button
+                key={t}
+                onClick={() => setDetectionTier(t)}
+                className={`flex-1 rounded px-1.5 py-1 text-[10px] font-medium transition-colors ${
+                  detectionTier === t
+                    ? "bg-zinc-700 text-zinc-100"
+                    : "bg-zinc-800/50 text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+          <div className="space-y-0.5">
+            {ENRICHMENT_KEYS.map((key) => (
+              <button
+                key={key}
+                onClick={() => setEnrichmentVisibility(key, !enrichmentVisibility[key])}
+                className={`flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-[9px] transition-colors ${
+                  enrichmentVisibility[key] !== false
+                    ? "text-zinc-400"
+                    : "text-zinc-600"
+                }`}
+              >
+                <span
+                  className="inline-block h-1.5 w-1.5 rounded-full"
+                  style={{
+                    background: enrichmentVisibility[key] !== false ? "#8ec07c" : "#504945",
+                  }}
+                />
+                {key}
               </button>
             ))}
           </div>

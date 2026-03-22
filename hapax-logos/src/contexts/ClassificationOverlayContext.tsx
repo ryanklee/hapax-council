@@ -144,12 +144,21 @@ const SignalContext = createContext<SignalContextValue | null>(null);
 
 // ── Detection Context ───────────────────────────────────────────────────
 // Changes at VL poll rate + user toggles. Consumers: DetectionOverlay, camera components, StudioDetailPane
+/** Per-classifier enrichment visibility toggles. */
+export const ENRICHMENT_KEYS = [
+  "gaze", "emotion", "posture", "gesture", "action",
+  "depth", "trajectory", "velocity", "dwell",
+] as const;
+export type EnrichmentKey = (typeof ENRICHMENT_KEYS)[number];
+
 interface DetectionContextValue {
   classificationDetections: ClassificationDetection[];
   detectionLayerVisible: boolean;
   setDetectionLayerVisible: (v: boolean) => void;
   detectionTier: DetectionTier;
   setDetectionTier: (t: DetectionTier) => void;
+  enrichmentVisibility: Record<string, boolean>;
+  setEnrichmentVisibility: (key: string, visible: boolean) => void;
 }
 
 const DetectionContext = createContext<DetectionContextValue | null>(null);
@@ -197,6 +206,23 @@ export function ClassificationOverlayProvider({ children }: { children: ReactNod
   const setDetectionTier = useCallback((t: DetectionTier) => {
     setDetectionTierRaw(t);
     try { localStorage.setItem("hapax-detection-tier", String(t)); } catch { /* */ }
+  }, []);
+
+  // Per-classifier enrichment visibility — persisted in localStorage
+  const [enrichmentVisibility, setEnrichmentVisRaw] = useState<Record<string, boolean>>(() => {
+    try {
+      const raw = localStorage.getItem("hapax-detection-enrichments");
+      if (raw) return JSON.parse(raw) as Record<string, boolean>;
+    } catch { /* */ }
+    return Object.fromEntries(ENRICHMENT_KEYS.map((k) => [k, true]));
+  });
+
+  const setEnrichmentVisibility = useCallback((key: string, visible: boolean) => {
+    setEnrichmentVisRaw((prev) => {
+      const next = { ...prev, [key]: visible };
+      try { localStorage.setItem("hapax-detection-enrichments", JSON.stringify(next)); } catch { /* */ }
+      return next;
+    });
   }, []);
 
   const classificationDetections: ClassificationDetection[] = visualLayer?.classification_detections ?? [];
@@ -256,8 +282,8 @@ export function ClassificationOverlayProvider({ children }: { children: ReactNod
 
   // Detection context — VL poll rate + user toggles
   const detectionValue = useMemo(
-    () => ({ classificationDetections, detectionLayerVisible, setDetectionLayerVisible, detectionTier, setDetectionTier }),
-    [classificationDetections, detectionLayerVisible, setDetectionLayerVisible, detectionTier, setDetectionTier],
+    () => ({ classificationDetections, detectionLayerVisible, setDetectionLayerVisible, detectionTier, setDetectionTier, enrichmentVisibility, setEnrichmentVisibility }),
+    [classificationDetections, detectionLayerVisible, setDetectionLayerVisible, detectionTier, setDetectionTier, enrichmentVisibility, setEnrichmentVisibility],
   );
 
   // Overlay control — user interaction only

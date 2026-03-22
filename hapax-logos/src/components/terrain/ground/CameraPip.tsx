@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import { useBatchSnapshot } from "../../../hooks/useBatchSnapshotPoll";
 import { DetectionOverlay } from "../../studio/DetectionOverlay";
+import { useDetections } from "../../../contexts/ClassificationOverlayContext";
 import type { ClassificationDetection } from "../../../api/types";
 
 interface CameraPipProps {
@@ -11,6 +12,7 @@ interface CameraPipProps {
 
 export function CameraPip({ heroRole, classificationDetections, onClick }: CameraPipProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const { detectionTier, detectionLayerVisible, enrichmentVisibility } = useDetections();
   const { imgRef, isStale } = useBatchSnapshot(heroRole, 200); // 5fps — ambient pip, low priority
 
   return (
@@ -37,9 +39,10 @@ export function CameraPip({ heroRole, classificationDetections, onClick }: Camer
         containerRef={containerRef}
         cameraRole={heroRole}
         classificationDetections={classificationDetections}
-        tier={1}
-        visible={true}
+        tier={detectionTier}
+        visible={detectionLayerVisible}
         objectFit="cover"
+        enrichmentVisibility={enrichmentVisibility}
       />
       {/* Camera role label */}
       <div className="absolute bottom-0.5 left-1 rounded bg-black/60 px-1 py-px text-[8px] text-zinc-400">

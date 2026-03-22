@@ -80,7 +80,14 @@ function isIrPreset(preset?: string): boolean {
   return !!preset && IR_PRESETS.has(preset.toLowerCase());
 }
 
-function haloColor(det: ClassificationDetection, irMode = false): string {
+function haloColor(
+  det: ClassificationDetection,
+  irMode = false,
+  ev?: Record<string, boolean>,
+): string {
+  // ev = enrichmentVisibility: gate enrichment-driven color by per-classifier toggle
+  const _ev = (k: string) => ev?.[k] !== false;
+
   // Consent suppressed → desaturated
   if (det.consent_suppressed) return SUPPRESSED_COLOR;
 
@@ -98,12 +105,12 @@ function haloColor(det: ClassificationDetection, irMode = false): string {
 
   // Person: gaze is primary color driver (most actionable signal)
   const gazeColors = irMode ? IR_GAZE_COLORS : GAZE_COLORS;
-  if (det.gaze_direction && gazeColors[det.gaze_direction]) {
+  if (_ev("gaze") && det.gaze_direction && gazeColors[det.gaze_direction]) {
     return gazeColors[det.gaze_direction];
   }
 
   // Emotion as secondary (only non-neutral)
-  if (det.emotion && det.emotion !== "neutral" && EMOTION_TINTS[det.emotion]) {
+  if (_ev("emotion") && det.emotion && det.emotion !== "neutral" && EMOTION_TINTS[det.emotion]) {
     return EMOTION_TINTS[det.emotion];
   }
 
@@ -180,6 +187,8 @@ export interface DetectionOverlayProps {
   visible?: boolean;
   objectFit?: "contain" | "cover";
   activePreset?: string;
+  /** Per-classifier visibility toggles. Keys: gaze, emotion, posture, gesture, action, depth, trajectory, velocity, dwell. */
+  enrichmentVisibility?: Record<string, boolean>;
 }
 
 export function DetectionOverlay({
@@ -190,7 +199,11 @@ export function DetectionOverlay({
   visible = true,
   objectFit = "contain",
   activePreset,
+  enrichmentVisibility,
 }: DetectionOverlayProps) {
+  // Helper: check if an enrichment is visible (default true if not specified)
+  const isEnrichmentVisible = (key: string): boolean =>
+    enrichmentVisibility?.[key] !== false;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const smoothedRef = useRef<Map<string, SmoothedBox>>(new Map());
   const hoveredIdRef = useRef<string | null>(null);
@@ -389,7 +402,7 @@ export function DetectionOverlay({
       const gradientCache = new Map<string, CanvasGradient>();
 
       for (const det of detections) {
-        const color = haloColor(det, irMode);   // enrichment-driven (gaze/emotion/state)
+        const color = haloColor(det, irMode, enrichmentVisibility);
         const pillColor = classColor(det.label); // category-stable for readability
         const opacityScale = haloOpacityScale(det);
         const isHovered = currentHovered === det.entity_id;

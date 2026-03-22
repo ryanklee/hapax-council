@@ -2,6 +2,7 @@ import { useRef } from "react";
 import { useBatchSnapshot } from "../../../hooks/useBatchSnapshotPoll";
 import { DetectionOverlay } from "../../studio/DetectionOverlay";
 import { useStudio } from "../../../api/hooks";
+import { useDetections } from "../../../contexts/ClassificationOverlayContext";
 import type { ClassificationDetection } from "../../../api/types";
 
 interface CameraTileProps {
@@ -14,6 +15,7 @@ interface CameraTileProps {
 
 function CameraTile({ role, classificationDetections, status, recording, onClick }: CameraTileProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const { detectionTier, detectionLayerVisible, enrichmentVisibility } = useDetections();
   const { imgRef, isStale } = useBatchSnapshot(role, 250); // 4fps — grid tiles don't need 60fps
 
   const borderColor = recording
@@ -42,9 +44,10 @@ function CameraTile({ role, classificationDetections, status, recording, onClick
         containerRef={containerRef}
         cameraRole={role}
         classificationDetections={classificationDetections}
-        tier={1}
-        visible={true}
+        tier={detectionTier}
+        visible={detectionLayerVisible}
         objectFit="cover"
+        enrichmentVisibility={enrichmentVisibility}
       />
       {/* Camera role label */}
       <div className="absolute bottom-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-zinc-300">
