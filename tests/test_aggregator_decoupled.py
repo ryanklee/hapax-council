@@ -76,9 +76,12 @@ class TestComputeAndWriteBackwardCompat:
         assert isinstance(state.zone_opacities, dict)
 
     def test_ambient_text_still_works(self):
+        from unittest.mock import patch
+
         agg = VisualLayerAggregator()
         agg._ambient_text = "test fact"
-        state = agg.compute_and_write()
+        with patch.object(agg, "_run_scheduler"):
+            state = agg.compute_and_write()
         assert state.ambient_text == "test fact"
 
     def test_activity_label_still_inferred(self):

@@ -252,11 +252,21 @@ class TestConsentSuppression:
 
     def test_consent_refused_removes_person_detections(self):
         data = _make_perception_data(
-            objects=[_make_object(camera="operator")],
+            objects=[_make_object(camera="room")],
             consent_phase="consent_refused",
         )
         dets = _map_scene_inventory(data)
         assert len(dets) == 0
+
+    def test_consent_refused_preserves_operator_person(self):
+        """Operator's own person detection on operator camera is never removed."""
+        data = _make_perception_data(
+            objects=[_make_object(camera="operator")],
+            consent_phase="consent_refused",
+        )
+        dets = _map_scene_inventory(data)
+        assert len(dets) == 1
+        assert dets[0].consent_suppressed is True
 
     def test_consent_granted_allows_enrichments(self):
         data = _make_perception_data(
