@@ -2,17 +2,17 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 
-// --- Cycle Mode ---
+// --- Working Mode ---
 
 #[derive(Debug, Clone, Serialize)]
-pub struct CycleModeResponse {
+pub struct WorkingModeResponse {
     pub mode: String,
     pub switched_at: Option<String>,
 }
 
 #[tauri::command]
-pub fn get_cycle_mode() -> CycleModeResponse {
-    let path = expand_home("~/.cache/hapax/cycle-mode");
+pub fn get_working_mode() -> WorkingModeResponse {
+    let path = expand_home("~/.cache/hapax/working-mode");
     match std::fs::read_to_string(&path) {
         Ok(content) => {
             let mode = content.trim().to_string();
@@ -25,24 +25,24 @@ pub fn get_cycle_mode() -> CycleModeResponse {
                         .unwrap_or_default();
                     format_timestamp(d.as_secs())
                 });
-            CycleModeResponse { mode, switched_at }
+            WorkingModeResponse { mode, switched_at }
         }
-        Err(_) => CycleModeResponse {
-            mode: "prod".into(),
+        Err(_) => WorkingModeResponse {
+            mode: "rnd".into(),
             switched_at: None,
         },
     }
 }
 
 #[tauri::command]
-pub fn set_cycle_mode(mode: String) -> CycleModeResponse {
-    let path = expand_home("~/.cache/hapax/cycle-mode");
+pub fn set_working_mode(mode: String) -> WorkingModeResponse {
+    let path = expand_home("~/.cache/hapax/working-mode");
     // Ensure parent dir exists
     if let Some(parent) = Path::new(&path).parent() {
         std::fs::create_dir_all(parent).ok();
     }
     std::fs::write(&path, &mode).ok();
-    get_cycle_mode()
+    get_working_mode()
 }
 
 // --- Accommodations ---

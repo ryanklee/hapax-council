@@ -570,27 +570,27 @@ def audit_runtime() -> SpecReport:
             )
         )
 
-    # tm-cycle-mode-001: cycle mode readable
-    cycle_path = Path.home() / ".cache" / "hapax" / "cycle-mode"
+    # tm-working-mode-001: working mode readable
+    working_mode_path = Path.home() / ".cache" / "hapax" / "working-mode"
     try:
-        mode = cycle_path.read_text().strip()
+        mode = working_mode_path.read_text().strip()
         report.results.append(
             SpecResult(
-                spec_id="tm-cycle-mode-001",
+                spec_id="tm-working-mode-001",
                 system="timing",
                 tier="V1",
-                passed=mode in ("dev", "prod"),
-                details=f"cycle mode: {mode}",
+                passed=mode in ("research", "rnd"),
+                details=f"working mode: {mode}",
             )
         )
     except OSError:
         report.results.append(
             SpecResult(
-                spec_id="tm-cycle-mode-001",
+                spec_id="tm-working-mode-001",
                 system="timing",
                 tier="V1",
                 passed=False,
-                details="cycle mode file not found (defaulting to prod)",
+                details="working mode file not found (defaulting to rnd)",
             )
         )
 

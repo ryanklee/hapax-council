@@ -3629,12 +3629,12 @@ def write_infra_snapshot(report: HealthReport) -> None:
     timers = _collect_all_timers()
 
     # Add container cron jobs (sync-pipeline)
-    from shared.cycle_mode import get_cycle_mode
+    from shared.working_mode import get_working_mode
 
-    cycle = get_cycle_mode()
-    crontab = AI_AGENTS_DIR / "sync-pipeline" / f"crontab.{cycle}"
+    wmode = get_working_mode()
+    crontab = AI_AGENTS_DIR / "sync-pipeline" / f"crontab.{wmode}"
     if not crontab.exists():
-        crontab = AI_AGENTS_DIR / "sync-pipeline" / "crontab.prod"
+        crontab = AI_AGENTS_DIR / "sync-pipeline" / "crontab.rnd"
     if crontab.exists():
         for line in crontab.read_text().splitlines():
             line = line.strip()
@@ -3657,7 +3657,7 @@ def write_infra_snapshot(report: HealthReport) -> None:
 
     snapshot = {
         "timestamp": report.timestamp,
-        "cycle_mode": cycle,
+        "working_mode": wmode,
         "containers": containers,
         "timers": timers,
         "gpu": gpu,

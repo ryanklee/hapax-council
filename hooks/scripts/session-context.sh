@@ -148,11 +148,11 @@ if [ -f "$PROFILE" ]; then
   fi
 fi
 
-# Cycle mode
-MODE_FILE="$HOME/.cache/hapax/cycle-mode"
+# Working mode
+MODE_FILE="$HOME/.cache/hapax/working-mode"
 if [ -f "$MODE_FILE" ]; then
   MODE="$(cat "$MODE_FILE" 2>/dev/null | tr -d '[:space:]')"
-  if [ "$MODE" = "dev" ] || [ "$MODE" = "prod" ]; then
+  if [ "$MODE" = "research" ] || [ "$MODE" = "rnd" ]; then
     MODE_AGE=$(( ($(date +%s) - $(stat -c %Y "$MODE_FILE")) ))
     if [ "$MODE_AGE" -lt 3600 ]; then
       AGE_STR="$((MODE_AGE / 60))min ago"
@@ -161,10 +161,13 @@ if [ -f "$MODE_FILE" ]; then
     else
       AGE_STR="$((MODE_AGE / 86400))d ago"
     fi
-    echo "Cycle: $MODE (switched $AGE_STR)"
+    LABEL="$MODE"
+    [ "$MODE" = "rnd" ] && LABEL="R&D"
+    [ "$MODE" = "research" ] && LABEL="RESEARCH"
+    echo "Mode: $LABEL (switched $AGE_STR)"
   fi
 else
-  echo "Cycle: prod (default)"
+  echo "Mode: R&D (default)"
 fi
 
 # Axiom governance nudge (push-based — surfaces status every session)

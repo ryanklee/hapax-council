@@ -1,6 +1,6 @@
 import { Activity, BookOpen, Loader2 } from "lucide-react";
 import { NavLink } from "react-router-dom";
-import { useHealth, useCycleMode, useSetCycleMode } from "../api/hooks";
+import { useHealth, useWorkingMode, useSetWorkingMode } from "../api/hooks";
 
 interface HeaderProps {
   onManualToggle?: () => void;
@@ -9,10 +9,10 @@ interface HeaderProps {
 
 export function Header({ onManualToggle, hapaxStatus }: HeaderProps) {
   const { data: health } = useHealth();
-  const { data: cycleMode } = useCycleMode();
-  const setCycleMode = useSetCycleMode();
+  const { data: workingMode } = useWorkingMode();
+  const setWorkingMode = useSetWorkingMode();
 
-  const isDev = cycleMode?.mode === "dev";
+  const isResearch = workingMode?.mode === "research";
 
   const statusColor =
     health?.overall_status === "healthy"
@@ -79,21 +79,21 @@ export function Header({ onManualToggle, hapaxStatus }: HeaderProps) {
           {health ? `${health.healthy}/${health.total_checks} checks` : "loading..."}
         </span>
         <button
-          onClick={() => setCycleMode.mutate(isDev ? "prod" : "dev")}
-          disabled={setCycleMode.isPending}
+          onClick={() => setWorkingMode.mutate(isResearch ? "rnd" : "research")}
+          disabled={setWorkingMode.isPending}
           className={`flex items-center gap-1 rounded px-2 py-1 text-[10px] font-medium transition-colors ${
-            isDev
-              ? "bg-amber-900/50 text-amber-400 hover:bg-amber-900/70"
+            isResearch
+              ? "bg-green-900/50 text-green-400 hover:bg-green-900/70"
               : "text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
           }`}
-          title={`Cycle mode: ${cycleMode?.mode ?? "prod"} — click to switch`}
+          title={`Working mode: ${workingMode?.mode ?? "rnd"} — click to switch`}
         >
-          {setCycleMode.isPending ? (
+          {setWorkingMode.isPending ? (
             <Loader2 className="h-3 w-3 animate-spin" />
           ) : (
-            <span className={`inline-block h-1.5 w-1.5 rounded-full ${isDev ? "bg-amber-400" : "bg-zinc-600"}`} />
+            <span className={`inline-block h-1.5 w-1.5 rounded-full ${isResearch ? "bg-green-400" : "bg-zinc-600"}`} />
           )}
-          {isDev ? "dev" : "prod"}
+          {isResearch ? "RES" : "R&D"}
         </button>
         <div className="hidden items-center gap-2 text-[10px] text-zinc-600 sm:flex">
           <span><kbd className="rounded border border-zinc-700 px-1 py-0.5">?</kbd> help</span>

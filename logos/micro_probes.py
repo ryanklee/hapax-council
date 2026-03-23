@@ -13,17 +13,17 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from shared.cycle_mode import CycleMode, get_cycle_mode
+from shared.working_mode import is_research
 
 
 def _probe_idle_threshold() -> int:
-    """Minimum idle seconds before a probe can surface."""
-    return 900 if get_cycle_mode() == CycleMode.DEV else 300
+    """Minimum idle seconds before a probe can surface. Suppressed in research mode."""
+    return 999999 if is_research() else 300
 
 
 def _probe_cooldown() -> int:
-    """Minimum seconds between probes."""
-    return 1800 if get_cycle_mode() == CycleMode.DEV else 600
+    """Minimum seconds between probes. Suppressed in research mode."""
+    return 999999 if is_research() else 600
 
 
 # Backward-compatible constants for imports

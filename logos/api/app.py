@@ -92,7 +92,6 @@ from logos.api.routes.agents import router as agents_router
 from logos.api.routes.chat import router as chat_router
 from logos.api.routes.consent import router as consent_router
 from logos.api.routes.copilot import router as copilot_router
-from logos.api.routes.cycle_mode import router as cycle_mode_router
 from logos.api.routes.data import router as data_router
 from logos.api.routes.demos import router as demos_router
 from logos.api.routes.engine import router as engine_router
@@ -104,6 +103,7 @@ from logos.api.routes.profile import router as profile_router
 from logos.api.routes.query import router as query_router
 from logos.api.routes.scout import router as scout_router
 from logos.api.routes.studio import router as studio_router
+from logos.api.routes.working_mode import router as working_mode_router
 
 app.include_router(data_router)
 app.include_router(nudges_router)
@@ -113,7 +113,7 @@ app.include_router(profile_router)
 app.include_router(accommodations_router)
 app.include_router(copilot_router)
 app.include_router(demos_router)
-app.include_router(cycle_mode_router)
+app.include_router(working_mode_router)
 app.include_router(scout_router)
 app.include_router(query_router)
 app.include_router(engine_router)

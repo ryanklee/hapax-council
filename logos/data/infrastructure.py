@@ -11,14 +11,14 @@ import json
 from dataclasses import dataclass, field
 
 from shared.config import PROFILES_DIR
-from shared.cycle_mode import get_cycle_mode
+from shared.working_mode import get_working_mode
 
 INFRA_SNAPSHOT = PROFILES_DIR / "infra-snapshot.json"
 
-# Container cron schedules by cycle mode — kept in sync with
-# sync-pipeline/crontab.prod and sync-pipeline/crontab.dev
+# Container cron schedules by working mode — kept in sync with
+# sync-pipeline/crontab.rnd and sync-pipeline/crontab.research
 _CONTAINER_CRON: dict[str, dict[str, str]] = {
-    "prod": {
+    "rnd": {
         "gdrive_sync": "15 */2 * * *",
         "gcalendar_sync": "*/30 * * * *",
         "gmail_sync": "5 * * * *",
@@ -27,7 +27,7 @@ _CONTAINER_CRON: dict[str, dict[str, str]] = {
         "obsidian_sync": "10,40 * * * *",
         "chrome_sync": "20 * * * *",
     },
-    "dev": {
+    "research": {
         "gdrive_sync": "15 */4 * * *",
         "gcalendar_sync": "0 */2 * * *",
         "gmail_sync": "5 */4 * * *",
@@ -80,7 +80,7 @@ async def collect_docker() -> list[ContainerStatus]:
 
 
 async def collect_timers() -> list[TimerStatus]:
-    """Read systemd timers from snapshot, compute container cron from cycle mode."""
+    """Read systemd timers from snapshot, compute container cron from working mode."""
     snapshot = _load_snapshot()
 
     # Systemd timers from snapshot (written by health monitor on host)
@@ -95,9 +95,9 @@ async def collect_timers() -> list[TimerStatus]:
         if t.get("type") != "container-cron"
     ]
 
-    # Container cron jobs — computed live from current cycle mode
-    mode = get_cycle_mode()
-    cron_schedules = _CONTAINER_CRON.get(mode, _CONTAINER_CRON["prod"])
+    # Container cron jobs — computed live from current working mode
+    mode = get_working_mode()
+    cron_schedules = _CONTAINER_CRON.get(mode, _CONTAINER_CRON["rnd"])
     for agent, schedule in cron_schedules.items():
         timers.append(
             TimerStatus(
