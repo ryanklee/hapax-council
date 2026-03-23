@@ -18,8 +18,8 @@ fn main() {
             commands::health::get_infrastructure,
             commands::health::get_health_history,
             // State
-            commands::state::get_cycle_mode,
-            commands::state::set_cycle_mode,
+            commands::state::get_working_mode,
+            commands::state::set_working_mode,
             commands::state::get_accommodations,
             commands::state::get_manual,
             commands::state::get_goals,

@@ -4,14 +4,29 @@ set -euo pipefail
 # Working mode switcher: RESEARCH ↔ R&D
 # Usage: hapax-working-mode [research|rnd]
 #   No argument: print current mode.
+#
+# This is the single mode system for the entire hapax stack.
+# - RND: full steam ahead, accelerated timers, probes active
+# - RESEARCH: experiment-safe, slower timers, probes suppressed
 
 MODE_FILE="$HOME/.cache/hapax/working-mode"
 RELAY_DIR="$HOME/.cache/hapax/relay"
 LANGFUSE_ENV_FILE="$HOME/.cache/hapax/langfuse-env"
 REPOS_DIR="$HOME/projects"
+OVERRIDES_SRC="$(dirname "$(readlink -f "$0")")/../systemd/overrides/rnd"
+SYSTEMD_USER_DIR="$HOME/.config/systemd/user"
 
 # Repos to check for stale branches
 REPOS=(hapax-council hapax-officium hapax-constitution hapax-mcp)
+
+# Host-side timers affected by mode switch
+TIMERS=(
+    profile-update
+    digest
+    daily-briefing
+    drift-detector
+    knowledge-maint
+)
 
 current_mode() {
     if [[ -f "$MODE_FILE" ]]; then
@@ -92,10 +107,12 @@ Switched at $(date -Iseconds).
 $(if [[ "$mode" == "research" ]]; then
     echo "- Experiment code paths are FROZEN. Do not modify frozen paths without a deviation record."
     echo "- All voice traces are tagged environment=research."
+    echo "- Timers reverted to default (slower) schedules to reduce filesystem churn."
     echo "- Focus: data collection, analysis, experiment infrastructure only."
 else
     echo "- R&D work is free. All code paths modifiable (except experiment-frozen paths)."
     echo "- All voice traces are tagged environment=development."
+    echo "- Timers accelerated for maximum development velocity."
     echo "- Focus: feature development, infrastructure, non-experiment work."
 fi)
 EOF
@@ -109,6 +126,37 @@ write_langfuse_env() {
     else
         echo "development" > "$LANGFUSE_ENV_FILE"
     fi
+}
+
+apply_timer_overrides() {
+    local mode="$1"
+    if [[ "$mode" == "rnd" ]]; then
+        # R&D: install accelerated timer overrides
+        if [[ -d "$OVERRIDES_SRC" ]]; then
+            for timer in "${TIMERS[@]}"; do
+                local override_file="$OVERRIDES_SRC/${timer}.timer"
+                if [[ -f "$override_file" ]]; then
+                    local drop_in="$SYSTEMD_USER_DIR/${timer}.timer.d"
+                    mkdir -p "$drop_in"
+                    cp "$override_file" "$drop_in/override.conf"
+                fi
+            done
+            echo "  Installed R&D timer overrides for ${#TIMERS[@]} timers"
+        fi
+    else
+        # Research: remove overrides → revert to default (slower) schedules
+        for timer in "${TIMERS[@]}"; do
+            local drop_in="$SYSTEMD_USER_DIR/${timer}.timer.d"
+            rm -rf "$drop_in"
+        done
+        echo "  Removed timer overrides (research defaults)"
+    fi
+
+    # Reload and restart
+    systemctl --user daemon-reload
+    for timer in "${TIMERS[@]}"; do
+        systemctl --user restart "${timer}.timer" 2>/dev/null || true
+    done
 }
 
 notify() {
@@ -186,6 +234,7 @@ echo "$MODE" > "$MODE_FILE"
 write_langfuse_env "$MODE"
 write_relay_mode "$MODE"
 write_inflection "$MODE"
+apply_timer_overrides "$MODE"
 notify "$MODE"
 signal_waybar
 
@@ -193,3 +242,11 @@ LABEL="R&D"
 [[ "$MODE" == "research" ]] && LABEL="RESEARCH"
 
 echo "Working mode → $LABEL"
+
+# Print active schedules for affected timers
+echo ""
+echo "Active schedules:"
+for timer in "${TIMERS[@]}"; do
+    next=$(systemctl --user show "${timer}.timer" -p NextElapseUSecRealtime --value 2>/dev/null || echo "unknown")
+    printf "  %-24s %s\n" "${timer}" "$next"
+done

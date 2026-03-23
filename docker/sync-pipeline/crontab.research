@@ -1,0 +1,13 @@
+# Sync pipeline — research schedules (reduced frequency)
+# Used when WORKING_MODE=research to minimize filesystem churn
+
+# Google agents
+15 */4 * * *   /app/sync-pipeline/run-agent.sh gdrive_sync
+0 */2 * * *    /app/sync-pipeline/run-agent.sh gcalendar_sync
+5 */4 * * *    /app/sync-pipeline/run-agent.sh gmail_sync
+30 */12 * * *  /app/sync-pipeline/run-agent.sh youtube_sync
+
+# Local filesystem agents
+15 */4 * * *   /app/sync-pipeline/run-agent.sh claude_code_sync
+0 */2 * * *    /app/sync-pipeline/run-agent.sh obsidian_sync
+20 */4 * * *   /app/sync-pipeline/run-agent.sh chrome_sync

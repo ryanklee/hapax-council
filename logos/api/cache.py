@@ -131,15 +131,13 @@ class DataCache:
 # Singleton cache instance
 cache = DataCache()
 
-from shared.cycle_mode import CycleMode, get_cycle_mode
-
 
 def _fast_interval() -> int:
-    return 15 if get_cycle_mode() == CycleMode.DEV else 30
+    return 15
 
 
 def _slow_interval() -> int:
-    return 120 if get_cycle_mode() == CycleMode.DEV else 300
+    return 120
 
 
 FAST_INTERVAL = 30  # backward-compat

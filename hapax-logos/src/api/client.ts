@@ -58,11 +58,11 @@ export const api = {
     IS_TAURI
       ? invoke<import("./types").HealthHistory>("get_health_history", { days })
       : get<import("./types").HealthHistory>(`/health/history?days=${days}`),
-  cycleMode: () => tauriOrHttp<import("./types").CycleModeResponse>("get_cycle_mode", "/cycle-mode"),
-  setCycleMode: (mode: "dev" | "prod") =>
+  workingMode: () => tauriOrHttp<import("./types").WorkingModeResponse>("get_working_mode", "/working-mode"),
+  setWorkingMode: (mode: "research" | "rnd") =>
     IS_TAURI
-      ? invoke<import("./types").CycleModeResponse>("set_cycle_mode", { mode })
-      : put<import("./types").CycleModeResponse>("/cycle-mode", { mode }),
+      ? invoke<import("./types").WorkingModeResponse>("set_working_mode", { mode })
+      : put<import("./types").WorkingModeResponse>("/working-mode", { mode }),
   accommodations: () => tauriOrHttp<import("./types").AccommodationSet>("get_accommodations", "/accommodations"),
   manual: () => tauriOrHttp<import("./types").ManualResponse>("get_manual", "/manual"),
   goals: () => tauriOrHttp<import("./types").GoalSnapshot>("get_goals", "/goals"),

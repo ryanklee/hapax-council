@@ -25,7 +25,7 @@ def get_infra_snapshot(profiles_dir: Path) -> str:
         return "Infrastructure snapshot not found. The health monitor may not have run yet."
 
     lines = [f"Infrastructure Snapshot ({data.get('timestamp', 'unknown')})"]
-    lines.append(f"Cycle mode: {data.get('cycle_mode', 'unknown')}")
+    lines.append(f"Working mode: {data.get('working_mode', 'unknown')}")
     lines.append("")
 
     containers = data.get("containers", [])

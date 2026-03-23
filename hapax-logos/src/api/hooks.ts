@@ -90,17 +90,17 @@ export function useCancelAgent() {
   });
 }
 
-// --- Cycle Mode ---
+// --- Working Mode ---
 
-export const useCycleMode = () =>
-  useQuery({ queryKey: ["cycleMode"], queryFn: api.cycleMode, refetchInterval: SLOW });
+export const useWorkingMode = () =>
+  useQuery({ queryKey: ["workingMode"], queryFn: api.workingMode, refetchInterval: SLOW });
 
-export function useSetCycleMode() {
+export function useSetWorkingMode() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (mode: "dev" | "prod") => api.setCycleMode(mode),
+    mutationFn: (mode: "research" | "rnd") => api.setWorkingMode(mode),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["cycleMode"] });
+      queryClient.invalidateQueries({ queryKey: ["workingMode"] });
     },
   });
 }

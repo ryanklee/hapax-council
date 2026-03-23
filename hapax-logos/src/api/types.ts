@@ -297,10 +297,10 @@ export interface ChatModelsResponse {
   models: string[];
 }
 
-// --- Cycle Mode ---
+// --- Working Mode ---
 
-export interface CycleModeResponse {
-  mode: "dev" | "prod";
+export interface WorkingModeResponse {
+  mode: "research" | "rnd";
   switched_at: string | null;
 }
 

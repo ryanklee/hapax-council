@@ -26,7 +26,7 @@ FastAPI on `:8051`. `uv run logos-api` to start. Containers: `docker compose up 
 ## Council-Specific Conventions
 
 - Hypothesis for property-based algebraic proofs.
-- Cycle mode file: `~/.cache/hapax/cycle-mode` (dev/prod).
+- Working mode file: `~/.cache/hapax/working-mode` (research/rnd). CLI: `hapax-working-mode`.
 - Safety: LLMs prepare, humans deliver. Never generate feedback language or coaching recommendations about individual team members.
 
 ## Axiom Governance
@@ -50,7 +50,7 @@ LLM-driven lifecycle via GitHub Actions: Triage → Plan → Implement → Adver
 ## Key Modules
 
 - **`shared/config.py`** — Model aliases, LiteLLM/Qdrant clients, embedding, `DATA_DIR`
-- **`shared/cycle_mode.py`** — Reads `~/.cache/hapax/cycle-mode`. CLI: `hapax-mode dev|prod`
+- **`shared/working_mode.py`** — Reads `~/.cache/hapax/working-mode` (research/rnd). CLI: `hapax-working-mode`
 - **`shared/notify.py`** — `send_notification()` for ntfy + desktop
 - **`shared/frontmatter.py`** — Canonical frontmatter parser (never duplicate this)
 - **`shared/dimensions.py`** — 11 profile dimensions. Sync agents produce behavioral facts only.

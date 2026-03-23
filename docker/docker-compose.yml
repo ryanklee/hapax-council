@@ -42,7 +42,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
-      - CYCLE_MODE=${CYCLE_MODE:-prod}
+      - WORKING_MODE=${WORKING_MODE:-rnd}
     volumes:
       # Read-write: state + RAG output
       - ${HOME}/.cache:/root/.cache

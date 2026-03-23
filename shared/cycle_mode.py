@@ -1,27 +1,13 @@
-"""shared/cycle_mode.py — Cycle mode reader.
+"""shared/cycle_mode.py — DEPRECATED. Use shared.working_mode instead.
 
-Single source of truth for the current cycle mode (dev or prod).
-The mode file is written by the hapax-mode CLI script and the
-logos API. Agents read it at invocation to adjust thresholds.
+Backward-compatible shim: the two-mode system is now unified under
+WorkingMode (research/rnd). CycleMode (dev/prod) no longer exists
+as a separate concept.
+
+Mapping: DEV → RND, PROD → RESEARCH (but callers should migrate to
+WorkingMode directly).
 """
 
-from __future__ import annotations
-
-from enum import StrEnum
-from pathlib import Path
-
-
-class CycleMode(StrEnum):
-    PROD = "prod"
-    DEV = "dev"
-
-
-MODE_FILE = Path.home() / ".cache" / "hapax" / "cycle-mode"
-
-
-def get_cycle_mode() -> CycleMode:
-    """Read the current cycle mode. Defaults to PROD if file is missing or invalid."""
-    try:
-        return CycleMode(MODE_FILE.read_text().strip())
-    except (FileNotFoundError, ValueError):
-        return CycleMode.PROD
+from shared.working_mode import WORKING_MODE_FILE as MODE_FILE  # noqa: F401
+from shared.working_mode import WorkingMode as CycleMode  # noqa: F401
+from shared.working_mode import get_working_mode as get_cycle_mode  # noqa: F401

@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CYCLE_MODE="${CYCLE_MODE:-prod}"
+WORKING_MODE="${WORKING_MODE:-rnd}"
 CRONTAB_DIR="/app/sync-pipeline"
 
-echo "sync-pipeline: starting with CYCLE_MODE=${CYCLE_MODE}"
+echo "sync-pipeline: starting with WORKING_MODE=${WORKING_MODE}"
 
 # Select crontab based on cycle mode
-CRONTAB="${CRONTAB_DIR}/crontab.${CYCLE_MODE}"
+CRONTAB="${CRONTAB_DIR}/crontab.${WORKING_MODE}"
 if [ ! -f "$CRONTAB" ]; then
-    echo "sync-pipeline: ERROR — no crontab for mode '${CYCLE_MODE}'" >&2
+    echo "sync-pipeline: ERROR — no crontab for mode '${WORKING_MODE}'" >&2
     exit 1
 fi
 
@@ -29,7 +29,7 @@ for i in $(seq 1 30); do
 done
 
 # Log installed schedule
-echo "sync-pipeline: schedule (${CYCLE_MODE}):"
+echo "sync-pipeline: schedule (${WORKING_MODE}):"
 grep -v '^#' "$CRONTAB" | grep -v '^$'
 
 # Run supercronic in foreground

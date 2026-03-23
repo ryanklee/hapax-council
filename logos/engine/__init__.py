@@ -21,9 +21,9 @@ from logos.engine.models import ChangeEvent
 from logos.engine.rules import RuleRegistry, evaluate_rules
 from logos.engine.watcher import DirectoryWatcher
 from shared.config import AI_AGENTS_DIR, PROFILES_DIR, RAG_SOURCES_DIR
-from shared.cycle_mode import CycleMode, get_cycle_mode
 from shared.stimmung import Stance
 from shared.telemetry import hapax_event, hapax_interaction
+from shared.working_mode import WorkingMode, get_working_mode
 
 # ── Persistent Event Counters (WS2) ─────────────────────────────────────────
 
@@ -177,8 +177,8 @@ class ReactiveEngine:
         quiet_window_s: float | None = None,
         cooldown_default_s: float | None = None,
     ) -> None:
-        cycle = get_cycle_mode()
-        default_debounce = 1000 if cycle == CycleMode.DEV else 500
+        mode = get_working_mode()
+        default_debounce = 1500 if mode == WorkingMode.RESEARCH else 500
 
         self._data_dir = data_dir or PROFILES_DIR
         self._debounce_ms = debounce_ms or _env_int("ENGINE_DEBOUNCE_MS", default_debounce)
