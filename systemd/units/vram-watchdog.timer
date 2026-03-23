@@ -1,0 +1,10 @@
+[Unit]
+Description=VRAM Watchdog — 30s poll
+
+[Timer]
+OnBootSec=60
+OnUnitActiveSec=30s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

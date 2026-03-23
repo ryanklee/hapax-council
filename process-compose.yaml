@@ -1,15 +1,16 @@
-# Hapax Application Layer — process-compose
+# Hapax Application Layer — process-compose (DEVELOPMENT ONLY)
 #
-# Manages all hapax processes on top of the Docker infrastructure layer.
-# Docker Compose handles: Qdrant, LiteLLM, PostgreSQL, Langfuse, Grafana, etc.
-# Process Compose handles: voice daemon, logos API, visual aggregator, logos app.
+# For local development and debugging. NOT used in production boot chain.
+# Production services are managed by individual systemd user units.
+# See systemd/units/ for the production service definitions.
 #
 # Start:  process-compose up
 # TUI:    process-compose attach
 # Status: process-compose process list
 # Stop:   process-compose down
 #
-# Secrets are loaded once at startup via `pass` and shared as environment.
+# Before using: stop the systemd services to avoid port conflicts:
+#   systemctl --user stop logos-api hapax-voice visual-layer-aggregator studio-compositor
 
 version: "0.5"
 
@@ -67,6 +68,7 @@ processes:
   voice:
     command: bash -c 'source /run/user/1000/hapax-voice.env && exec /home/hapax/projects/hapax-council/.venv/bin/python -m agents.hapax_voice'
     working_dir: /home/hapax/projects/hapax-council
+    disabled: true  # Managed by systemd hapax-voice.service (OOM protection, nice, secrets)
     depends_on:
       secrets:
         condition: process_completed_successfully
@@ -89,8 +91,6 @@ processes:
     depends_on:
       logos-api:
         condition: process_healthy
-      voice:
-        condition: process_started
     availability:
       restart: on_failure
       backoff_seconds: 5

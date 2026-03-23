@@ -849,7 +849,7 @@ class VisionBackend:
             if not hasattr(self, "_emotion_recognizer"):
                 from hsemotion_onnx.facial_emotions import HSEmotionRecognizer
 
-                self._emotion_recognizer = HSEmotionRecognizer(model_name="enet_b2_8_best")
+                self._emotion_recognizer = HSEmotionRecognizer(model_name="enet_b2_8")
                 log.info("HSEmotion emotion pipeline initialized (reusing face_detector SCRFD)")
 
             # Reuse face_detector's SCRFD app (saves ~30MB VRAM)

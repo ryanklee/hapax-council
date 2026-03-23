@@ -49,12 +49,12 @@ fi
 
 # ── 90%+ : Kill duplicate GPU processes (keep newest per type) ──
 if [ "$PCT" -ge 90 ]; then
-    # Find duplicate voice daemons — keep the one process-compose tracks
-    PC_VOICE_PID=$(curl -sf http://127.0.0.1:9080/process/voice 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('pid',0))" 2>/dev/null || echo 0)
+    # Find duplicate voice daemons — keep the one systemd tracks
+    VOICE_PID=$(systemctl --user show hapax-voice.service -p MainPID --value 2>/dev/null || echo 0)
 
     for pid in $(nvidia-smi --query-compute-apps=pid,name --format=csv,noheader 2>/dev/null | grep hapax_voice | cut -d, -f1 | tr -d ' '); do
-        if [ "$pid" != "$PC_VOICE_PID" ] && [ "$pid" != "0" ]; then
-            log "Killing duplicate voice daemon PID $pid (process-compose tracks $PC_VOICE_PID)"
+        if [ "$pid" != "$VOICE_PID" ] && [ "$pid" != "0" ]; then
+            log "Killing duplicate voice daemon PID $pid (systemd tracks $VOICE_PID)"
             kill "$pid" 2>/dev/null || true
         fi
     done
