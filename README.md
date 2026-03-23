@@ -123,14 +123,19 @@ Husserlian temporal bands (retention/impression/protention/surprise), Bayesian p
 
 ## Infrastructure
 
-| Service | Port | Purpose |
-|---------|------|---------|
-| Logos API | :8051 | FastAPI (20+ routes, SSE streaming) |
-| LiteLLM | :4000 | LLM gateway → Claude/Gemini/Ollama |
-| Qdrant | :6333 | Vector DB (6 collections, 768d nomic-embed) |
-| Ollama | :11434 | Local inference (RTX 3090) |
-| Langfuse | :3000 | LLM observability |
-| PostgreSQL | :5432 | Audit/operational DB |
+All services managed by systemd user units (no process-compose in production). See `systemd/units/` for unit files and `docs/compendium.md` §14 for full lifecycle documentation.
+
+| Service | Port | Purpose | Manager |
+|---------|------|---------|---------|
+| Logos API | :8051 | FastAPI (20+ routes, SSE streaming) | systemd |
+| LiteLLM | :4000 | LLM gateway → Claude/Gemini/Ollama | Docker |
+| Qdrant | :6333 | Vector DB (6 collections, 768d nomic-embed) | Docker |
+| Ollama | :11434 | Local inference (RTX 3090) | systemd (system) |
+| Langfuse | :3000 | LLM observability | Docker |
+| PostgreSQL | :5432 | Audit/operational DB | Docker |
+| Prometheus | :9090 | Metrics collection | Docker |
+| node_exporter | :9100 | Host metrics | systemd (system) |
+| nvidia-gpu-exporter | :9835 | GPU metrics | systemd (system) |
 
 ## Project Structure
 

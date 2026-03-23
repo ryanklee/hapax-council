@@ -87,7 +87,7 @@ The governing claim: alignment and governance are not costs bolted onto a useful
 | hapax_voice/ | 95 files (largest subsystem) |
 | Test files | 470+ |
 | Agent manifests | 33 (YAML, 4-layer schema) |
-| Systemd services | 10 services, 2 timers |
+| Systemd services | 12 long-running services, 41 timers |
 | /dev/shm directories | 4 (apperception, compositor, logos, stimmung) |
 | Qdrant collections | 4 (claude-memory, profile-facts, documents, axiom-precedents) + 2 (studio-moments, hapax-apperceptions) |
 | Research documents | 30+ (500+ sources total) |
@@ -852,6 +852,41 @@ React Flow visualization of the system's circulatory anatomy. 9 nodes (Perceptio
 | axiom-precedents | 768 | Governance decision precedents (31 seed) | **Working** |
 | studio-moments | 512 (CLAP) | Audio classification events | **Working** |
 | hapax-apperceptions | 768 | Self-observation archive | **Experimental** |
+
+### Service Lifecycle
+
+All services are managed by systemd user units (lingering enabled). No process supervisors (process-compose, supervisord) in the production boot chain. `process-compose.yaml` exists for development only.
+
+**Boot sequence** (after kernel + greetd autologin):
+
+```
+hapax-secrets.service          (oneshot) Load all credentials from pass store
+├─► llm-stack.service          (oneshot) docker compose --profile full up -d
+│   ├─► llm-stack-analytics    (oneshot) docker compose --profile analytics up -d [60s delay]
+│   ├─► logos-api.service      FastAPI on :8051
+│   ├─► officium-api.service   FastAPI on :8050
+│   └─► rag-ingest.service     Docling document ingestion watchdog
+├─► hapax-voice.service        Voice daemon (After: pipewire, secrets) [10s delay]
+├─► visual-layer-aggregator    Perception → Stimmung → /dev/shm (After: logos-api, voice)
+├─► studio-compositor.service  GPU camera tiling/recording/HLS (After: voice, visual-agg)
+│   └─► studio-fx-output       ffmpeg snapshot → /dev/video50
+├─► audio-recorder.service     pw-record → ffmpeg FLAC segmenting (After: pipewire)
+├─► hapax-watch-receiver       Uvicorn on :8042 (Wear OS biometrics)
+└─► 41 timers                  Sync agents, health monitor, VRAM watchdog, backups
+```
+
+**Secrets**: Single `hapax-secrets.service` (oneshot, RemainAfterExit=yes) writes all credentials to `/run/user/1000/hapax-secrets.env`. All services declare `Requires=hapax-secrets.service`. No inline `pass show` calls in individual services. No race conditions.
+
+**Resource isolation**: Each service has its own cgroup with explicit MemoryMax, OOMScoreAdjust, Nice, and CPUWeight. Priority tiers:
+- Tier 0 (real-time): studio-compositor (CPUWeight=500)
+- Tier 1 (interactive): hapax-voice (Nice=-10, OOMScoreAdjust=-500, MemoryMax=8G)
+- Tier 2 (background): rag-ingest, studio-fx-output (Nice=10)
+
+**Recovery**: Kernel panic auto-reboots in 10s. Hardware watchdog (SP5100 TCO) forces reset if systemd hangs. greetd autologin + lingering ensures all services restart without human intervention.
+
+**Docker containers** (13, restart: always): Qdrant, PostgreSQL, Redis, LiteLLM, Langfuse, Langfuse-worker, Prometheus, Grafana, ClickHouse, n8n, OpenWebUI, MinIO, ntfy.
+
+**Development workflow**: Stop systemd services, run `process-compose up` for TUI-based multi-service development. See header of `process-compose.yaml` for instructions.
 
 ### Embedding
 

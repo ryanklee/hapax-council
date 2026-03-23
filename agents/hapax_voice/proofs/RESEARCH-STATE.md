@@ -1,6 +1,6 @@
 # Voice Grounding Research State
 
-**Last updated:** 2026-03-22 (session 10 — pre-testing readiness + context-as-computation research)
+**Last updated:** 2026-03-23 (session 11 — system freeze diagnosis, 24/7 reliability, service lifecycle consolidation)
 **Update convention:** After any session with research decisions or implementation progress, update this file before ending.
 
 ## Position (one paragraph)
@@ -151,6 +151,33 @@ All infrastructure-only. No changes to experiment code, grounding theory, or res
 - **Session 7 (mode isolation)**: Five-layer RESEARCH/R&D isolation: (1) code freeze via manifest + pre-commit + CI gate, (2) data isolation via Langfuse environment tagging, (3) working mode file + Python module, (4) relay protocol integration, (5) waybar + fish prompt visual indicators. Deviation workflow for frozen-path changes. Pre-flight checklist enforces zero stale branches before mode switch.
 - **Session 8 (systemd overhaul)**: Reverted /home/operator PII scrub (incomplete, fragile symlink dependency). Normalized 168 path references across 41 files. Imported 51 untracked systemd units + 8 drop-in override directories (coverage 47%→97%). Reconciled 4 drifted units: llm-stack (--profile full), logos-api (merged 3 versions, retired drop-in), rag-ingest (Type=simple daemon), audio-recorder (pw-record pipeline). Fixed health-watchdog bug (exit code 2 discarded reports). Cleaned broken symlinks, debris, stale branches. officium-api.service now tracked in hapax-officium repo. PR #264 merged, all CI green.
 - **Session 9 (drift + cockpit rename)**: Tuned drift detector to split headline count: real drift vs doc hygiene (coverage-gap, missing-section, etc). Drops reported items from 181→~20. Completed cockpit→logos rename across all 3 repos (~80 files): `COCKPIT_API_URL`→`LOGOS_API_URL`, `COCKPIT_WEB_DIR`→`LOGOS_WEB_DIR` in shared/config.py + all importers, docstrings, Tauri commands, vscode extension, specs, cache paths. Fixed Qdrant collection count (4→8), vscode port (8095→8051/8050), boundary doc sync (constitution←officium). Fixed AgentSummary to handle flat array API response (was showing "0 agents"). Fixed studio-compositor crash (PyGObject missing after Python 3.14 upgrade — `uv pip install PyGObject`). PR #265 merged, all CI green.
+
+## Session 11 (2026-03-23): System Freeze Diagnosis + 24/7 Reliability + Service Lifecycle
+
+Infrastructure-only. No changes to experiment code, grounding theory, or research design.
+
+**System freeze diagnosis:** Machine hard-locked overnight (no clean shutdown, no kernel panic logged). Root cause: NVIDIA GPU hang (open driver 595.45.04 on freshly rebuilt kernel 6.18.19-lts) with `nowatchdog` kernel parameter disabling all lockup detection. Memory was fine (66% free). Journal gap from 19:39–07:03 due to hard freeze preventing flush.
+
+**24/7 reliability hardening:**
+- Removed `nowatchdog` from kernel cmdline; enabled NMI watchdog, softlockup/hung-task panic, auto-reboot on panic (10s)
+- Enabled hardware watchdog (AMD SP5100 TCO) via systemd RuntimeWatchdogSec=30
+- Journal persistence: SyncIntervalSec=15s, ForwardToKMsg=yes, pstore for crash dumps
+- Installed prometheus-node-exporter, added to Prometheus scrape config
+- Enabled snapper-timeline (hourly btrfs snapshots)
+- OOM protection: earlyoom (-1000), docker (-900), pipewire (-900), ollama (-500)
+- greetd autologin configured; loginctl enable-linger for unattended boot
+- Docker containers: `restart: unless-stopped` → `restart: always`
+
+**Service lifecycle consolidation (process-compose → pure systemd):**
+- Created `hapax-secrets.service`: centralized oneshot credential loader. All services now declare `Requires=hapax-secrets.service`. Eliminates 4x redundant `pass show` calls and race condition where logos-api read hapax-voice's env file without a dependency.
+- Migrated `visual-layer-aggregator` from process-compose to systemd (unit already existed, was disabled). Now has own cgroup with 1G memory limit (was sharing cgroup, thrashing at 256M).
+- Migrated `vram-watchdog` from process-compose bash loop to systemd timer (30s interval). Updated script to use `systemctl --user show` instead of process-compose API.
+- Disabled `hapax-stack.service` (process-compose wrapper). Marked `process-compose.yaml` as development-only.
+- Updated 24 files: all unit files now reference `hapax-secrets.env`, all overrides point to correct dependencies.
+- Fixed `hapax-env-setup` script to read from `hapax-secrets.env` (single source of truth).
+- Documented in `systemd/README.md` (new), `docs/compendium.md` §14, workspace + council CLAUDE.md, README.md.
+
+**Bug fix:** `enet_b2_8_best` → `enet_b2_8` in vision.py. hsemotion model name was invalid, causing 666 failed download attempts per hour (every 5s per camera inference cycle). The file `enet_b2_8_best.onnx` doesn't exist in the hsemotion model registry; correct name is `enet_b2_8`.
 
 ## Operator Research Preferences
 

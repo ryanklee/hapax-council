@@ -8,7 +8,7 @@ Type=oneshot
 WorkingDirectory=/home/hapax/projects/hapax-council
 ExecStartPre=/home/hapax/.local/bin/hapax-env-setup
 ExecStart=/home/hapax/.local/bin/uv run python -m agents.gcalendar_sync --auto
-EnvironmentFile=-/run/user/1000/hapax.env
+EnvironmentFile=-/run/user/1000/hapax-secrets.env
 Environment=PATH=/home/hapax/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=HOME=/home/hapax
 Environment=GNUPGHOME=/home/hapax/.gnupg

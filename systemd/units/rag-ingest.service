@@ -15,7 +15,7 @@ Environment=PASSWORD_STORE_DIR=/home/hapax/.password-store
 # huggingface-hub version conflict). Create with: make setup-ingest-venv
 ExecStartPre=/home/hapax/.local/bin/hapax-env-setup
 ExecStart=/home/hapax/projects/hapax-council/.venv-ingest/bin/python -m agents.ingest
-EnvironmentFile=-/run/user/1000/hapax.env
+EnvironmentFile=-/run/user/1000/hapax-secrets.env
 Restart=on-failure
 RestartSec=15
 StandardOutput=journal
