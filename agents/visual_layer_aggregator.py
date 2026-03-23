@@ -843,6 +843,10 @@ class VisualLayerAggregator:
         self._episode_store: EpisodeStore | None = None
         self._correction_store: CorrectionStore | None = None
         self._correction_seeker = CorrectionSeeker()
+        self._pattern_store = None  # PatternStore, lazy-init in _init_ws3
+        self._active_patterns: list = []
+        self._last_pattern_query_ts: float = 0.0
+        self._last_pattern_activity: str = ""
         self._ws3_initialized = False
 
         # Self-band: apperception tick (standalone, reads from shm)
@@ -1037,6 +1041,14 @@ class VisualLayerAggregator:
             log.debug("WS3 stores unavailable (Qdrant down?)", exc_info=True)
             self._correction_store = None
             self._episode_store = None
+        try:
+            from shared.pattern_consolidation import PatternStore
+
+            self._pattern_store = PatternStore()
+            self._pattern_store.ensure_collection()
+        except Exception:
+            log.debug("PatternStore unavailable", exc_info=True)
+            self._pattern_store = None
 
     def _tick_experiential(self, data: dict) -> None:
         """Feed perception data to the WS3 experiential pipeline.
@@ -1091,6 +1103,33 @@ class VisualLayerAggregator:
                 )
             except Exception:
                 log.debug("Active correction seeking failed", exc_info=True)
+
+        # 4. Pattern consultation (rate-limited: every 60s or on activity change)
+        if self._pattern_store is not None:
+            try:
+                import time as _time
+
+                activity = data.get("production_activity", "")
+                now = _time.monotonic()
+                activity_changed = activity != self._last_pattern_activity
+                cooldown_elapsed = (now - self._last_pattern_query_ts) > 60.0
+                if activity_changed or cooldown_elapsed:
+                    self._last_pattern_query_ts = now
+                    self._last_pattern_activity = activity
+                    flow_state = data.get("flow_state", "")
+                    hour = datetime.now().hour
+                    query = f"activity={activity} flow_state={flow_state} hour={hour}"
+                    matches = self._pattern_store.search(query, limit=3, min_score=0.3)
+                    self._active_patterns = matches
+                    if matches:
+                        log.debug(
+                            "WS3 patterns: %d matches (top: %.2f — %s)",
+                            len(matches),
+                            matches[0].score,
+                            matches[0].pattern.prediction[:80],
+                        )
+            except Exception:
+                log.debug("Pattern consultation failed", exc_info=True)
 
     def _update_stimmung(self) -> None:
         """Collect stimmung readings from all available data sources.
