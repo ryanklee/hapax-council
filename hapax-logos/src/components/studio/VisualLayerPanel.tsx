@@ -69,10 +69,10 @@ export default function VisualLayerPanel() {
                     style={{
                       backgroundColor:
                         s.severity >= 0.7
-                          ? "#ef4444"
+                          ? "var(--color-red-400)"
                           : s.severity >= 0.4
-                            ? "#f59e0b"
-                            : "#6b7280",
+                            ? "var(--color-yellow-400)"
+                            : "var(--color-zinc-500)",
                     }}
                   />
                   {s.title}

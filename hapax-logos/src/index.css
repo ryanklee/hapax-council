@@ -86,7 +86,7 @@
 
 /* Terrain depth transition flash */
 @keyframes depth-flash {
-  0% { border-color: rgba(184, 187, 38, 0.2); }
+  0% { border-color: color-mix(in srgb, var(--color-green-400) 20%, transparent); }
   100% { border-color: transparent; }
 }
 
@@ -101,22 +101,22 @@
 
 /* Stimmung glow breathing for region borders */
 @keyframes stimmung-breathe-degraded {
-  0%,100% { border-color: rgba(180, 160, 120, 0.08); }
-  50% { border-color: rgba(254, 128, 25, 0.25); }
+  0%,100% { border-color: color-mix(in srgb, var(--color-zinc-400) 8%, transparent); }
+  50% { border-color: color-mix(in srgb, var(--color-orange-400) 25%, transparent); }
 }
 @keyframes stimmung-breathe-critical {
-  0%,100% { border-color: rgba(180, 160, 120, 0.08); }
-  50% { border-color: rgba(251, 73, 52, 0.35); }
+  0%,100% { border-color: color-mix(in srgb, var(--color-zinc-400) 8%, transparent); }
+  50% { border-color: color-mix(in srgb, var(--color-red-400) 35%, transparent); }
 }
 
 /* Demo highlight — amber pulse for region attention */
 @keyframes demo-highlight {
   0%,100% {
-    border-color: rgba(250, 189, 47, 0.3);
-    box-shadow: inset 0 0 4px rgba(250, 189, 47, 0.05), 0 0 4px rgba(250, 189, 47, 0.1);
+    border-color: color-mix(in srgb, var(--color-yellow-400) 30%, transparent);
+    box-shadow: inset 0 0 4px color-mix(in srgb, var(--color-yellow-400) 5%, transparent), 0 0 4px color-mix(in srgb, var(--color-yellow-400) 10%, transparent);
   }
   50% {
-    border-color: rgba(250, 189, 47, 0.6);
-    box-shadow: inset 0 0 8px rgba(250, 189, 47, 0.15), 0 0 12px rgba(250, 189, 47, 0.3);
+    border-color: color-mix(in srgb, var(--color-yellow-400) 60%, transparent);
+    box-shadow: inset 0 0 8px color-mix(in srgb, var(--color-yellow-400) 15%, transparent), 0 0 12px color-mix(in srgb, var(--color-yellow-400) 30%, transparent);
   }
 }
