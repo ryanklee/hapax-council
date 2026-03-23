@@ -9,7 +9,7 @@ const HapaxPage = lazy(() => import("./pages/HapaxPage").then((m) => ({ default:
 export default function App() {
   return (
     <BrowserRouter>
-      <Suspense fallback={<div className="flex h-screen items-center justify-center bg-[#1d2021] text-zinc-600 text-xs">loading...</div>}>
+      <Suspense fallback={<div className="flex h-screen items-center justify-center bg-zinc-950 text-zinc-600 text-xs">loading...</div>}>
       <Routes>
         {/* Terrain — default, spatial regions, no chrome */}
         <Route index element={<TerrainPage />} />

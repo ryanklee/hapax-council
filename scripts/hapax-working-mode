@@ -238,6 +238,11 @@ apply_timer_overrides "$MODE"
 notify "$MODE"
 signal_waybar
 
+# Apply visual theme (DE colors, wallpaper, terminal palette)
+if command -v hapax-theme-apply &>/dev/null; then
+    hapax-theme-apply "$MODE" &
+fi
+
 LABEL="R&D"
 [[ "$MODE" == "research" ]] && LABEL="RESEARCH"
 

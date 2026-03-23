@@ -1,35 +1,33 @@
 import { useEffect, useRef, useState } from "react";
 import DOMPurify from "dompurify";
 import { Copy, AlertTriangle } from "lucide-react";
+import { useTheme } from "../../theme/ThemeProvider";
 
 let mermaidInstance: typeof import("mermaid") | null = null;
-let initPromise: Promise<void> | null = null;
 let renderCounter = 0;
+let lastThemeKey = "";
 
-async function getMermaid() {
-  if (mermaidInstance) return mermaidInstance;
-  if (!initPromise) {
-    initPromise = (async () => {
-      const m = await import("mermaid");
-      m.default.initialize({
-        startOnLoad: false,
-        theme: "dark",
-        themeVariables: {
-          primaryColor: "#3c3836",
-          primaryTextColor: "#ebdbb2",
-          primaryBorderColor: "#b8bb26",
-          lineColor: "#665c54",
-          secondaryColor: "#282828",
-          tertiaryColor: "#504945",
-          fontFamily: "JetBrains Mono, monospace",
-          fontSize: "12px",
-        },
-      });
-      mermaidInstance = m;
-    })();
-  }
-  await initPromise;
-  return mermaidInstance!;
+async function getMermaid(palette: Record<string, string>) {
+  const themeKey = palette["zinc-950"];
+  if (mermaidInstance && lastThemeKey === themeKey) return mermaidInstance;
+  const m = mermaidInstance ?? (await import("mermaid"));
+  m.default.initialize({
+    startOnLoad: false,
+    theme: "dark",
+    themeVariables: {
+      primaryColor: palette["zinc-800"],
+      primaryTextColor: palette["zinc-200"],
+      primaryBorderColor: palette["green-400"],
+      lineColor: palette["zinc-600"],
+      secondaryColor: palette["zinc-900"],
+      tertiaryColor: palette["zinc-700"],
+      fontFamily: "JetBrains Mono, monospace",
+      fontSize: "12px",
+    },
+  });
+  mermaidInstance = m;
+  lastThemeKey = themeKey;
+  return mermaidInstance;
 }
 
 interface MermaidBlockProps {
@@ -40,6 +38,7 @@ export function MermaidBlock({ source }: MermaidBlockProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const { palette } = useTheme();
 
   useEffect(() => {
     let cancelled = false;
@@ -47,7 +46,7 @@ export function MermaidBlock({ source }: MermaidBlockProps) {
 
     (async () => {
       try {
-        const mermaid = await getMermaid();
+        const mermaid = await getMermaid(palette);
         const { svg } = await mermaid.default.render(id, source.trim());
         if (!cancelled && containerRef.current) {
           // Safe: SVG from mermaid is sanitized through DOMPurify before insertion

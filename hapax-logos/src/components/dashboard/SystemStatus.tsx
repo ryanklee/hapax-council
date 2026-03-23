@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { useTheme } from "../../theme/ThemeProvider";
 
 interface FlowNode {
   id: string;
@@ -23,20 +24,25 @@ interface FlowState {
   timestamp: number;
 }
 
-const STATUS_DOT: Record<string, string> = {
-  active: "#10b981",
-  stale: "#f59e0b",
-  offline: "#374151",
-};
-
-const STANCE_COLOR: Record<string, string> = {
-  nominal: "#10b981",
-  cautious: "#f59e0b",
-  degraded: "#f97316",
-  critical: "#ef4444",
-};
+function useStatusColors() {
+  const { colors, palette } = useTheme();
+  return {
+    dot: {
+      active: colors.success,
+      stale: colors.warning,
+      offline: palette["zinc-700"],
+    } as Record<string, string>,
+    stance: {
+      nominal: colors.success,
+      cautious: colors.warning,
+      degraded: palette["orange-400"],
+      critical: colors.error,
+    } as Record<string, string>,
+  };
+}
 
 export function SystemStatus() {
+  const { dot: STATUS_DOT, stance: STANCE_COLOR } = useStatusColors();
   const [state, setState] = useState<FlowState | null>(null);
 
   useEffect(() => {
