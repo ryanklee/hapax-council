@@ -1916,6 +1916,14 @@ class VisualLayerAggregator:
         # WS2: attach stimmung stance
         state.stimmung_stance = stimmung_stance
 
+        # Boot readiness: "waiting" → "collecting" → "ready"
+        if not self._last_perception_data:
+            state.readiness = "waiting"
+        elif not self._ambient_facts and not self._nudge_titles:
+            state.readiness = "collecting"
+        else:
+            state.readiness = "ready"
+
         # Track for adaptive cadence
         self._prev_display_state = state.display_state
 

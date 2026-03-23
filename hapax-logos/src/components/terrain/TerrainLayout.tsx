@@ -240,6 +240,8 @@ export function TerrainLayout() {
   const ambient = vl?.ambient_params ?? { speed: 0.08, turbulence: 0.1, color_warmth: 0.3, brightness: 0.25 };
   const displayState = vl?.display_state ?? "ambient";
   const voiceActive = vl?.voice_session?.active ?? false;
+  const readiness = vl?.readiness ?? "waiting";
+  const isReady = readiness === "ready";
 
   // Voice overlay: auto-show when voice active
   useEffect(() => {
@@ -336,6 +338,38 @@ export function TerrainLayout() {
           brightness={ambient.brightness * 0.6}
           displayState={displayState}
         />
+
+        {/* Boot readiness overlay — shows until system data is flowing */}
+        {!isReady && (
+          <div
+            className="absolute inset-0 flex items-center justify-center pointer-events-none"
+            style={{ zIndex: 40 }}
+          >
+            <div className="flex flex-col items-center gap-3">
+              <span
+                className="text-[12px] uppercase tracking-[0.4em]"
+                style={{ color: "rgba(180, 160, 120, 0.4)" }}
+              >
+                {readiness === "waiting" ? "waiting" : "collecting"}
+              </span>
+              <div className="flex gap-1.5">
+                {[0, 1, 2].map((i) => (
+                  <div
+                    key={i}
+                    className="w-1.5 h-1.5 rounded-full"
+                    style={{
+                      background:
+                        readiness === "collecting"
+                          ? "rgba(184, 187, 38, 0.5)"
+                          : "rgba(180, 160, 120, 0.3)",
+                      animation: `signal-breathe-slow ${2 + i * 0.3}s ease-in-out infinite`,
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* z-1: Terrain grid (optionally wrapped in SplitPane) */}
         {splitRegion ? (

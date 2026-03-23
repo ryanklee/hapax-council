@@ -297,6 +297,7 @@ class VisualLayerState(BaseModel):
     temporal_context: TemporalContext = Field(default_factory=TemporalContext)
     signal_staleness: SignalStaleness = Field(default_factory=SignalStaleness)
     stimmung_stance: str = "nominal"  # System self-state stance (WS2)
+    readiness: str = "waiting"  # Boot state: "waiting" | "collecting" | "ready"
     # Classification detection overlay
     classification_detections: list[ClassificationDetection] = Field(default_factory=list)
     classification_directives: dict[str, str] = Field(default_factory=dict)

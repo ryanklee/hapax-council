@@ -483,6 +483,7 @@ export interface VisualLayerState {
   activity_detail?: string;
   display_density?: string;
   watershed_events?: WatershedEvent[];
+  readiness?: "waiting" | "collecting" | "ready";
   timestamp: number;
   aggregator?: string;
 }
