@@ -50,7 +50,7 @@ export const WatershedRegion = memo(function WatershedRegion() {
                 </div>
               }
             >
-              <div className="flex-1 min-h-0 w-full" style={{ minHeight: "200px" }}>
+              <div className="flex-1 min-h-0 w-full" style={{ minHeight: "200px" }} onClick={(e) => e.stopPropagation()}>
                 <FlowPage />
               </div>
             </Suspense>
