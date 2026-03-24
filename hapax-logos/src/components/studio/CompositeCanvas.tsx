@@ -53,6 +53,13 @@ export function CompositeCanvas({
     let smoothWriteHead = 0;
     let smoothPending = false;
 
+    // Trail accumulation canvas (persists between frames for real persistence trails)
+    const accumCanvas = document.createElement("canvas");
+    const accumCtx = accumCanvas.getContext("2d")!;
+    const driftCanvas = document.createElement("canvas");
+    const driftCtx = driftCanvas.getContext("2d")!;
+    let lastAccumHead = 0;
+
     // Stutter state
     let tick = 0;
     let displayIdx = 0;
@@ -242,20 +249,55 @@ export function CompositeCanvas({
         ctx.restore();
       }
 
-      // --- Ghost trails (composited on top of main frame) ---
+      // --- Accumulation trails (offscreen canvas persists between frames) ---
       const trail = p.trail;
-      const trailSpacing = Math.max(3, Math.floor(available / (trail.count + 1)));
-      for (let g = trail.count; g >= 1; g--) {
-        const gi = (idx - g * trailSpacing + available * 100) % available;
-        const ghost = frameRing[gi];
-        if (!ghost) continue;
-        ctx.save();
-        if (cachedTrailFilter !== "none") {
-          ctx.filter = cachedTrailFilter;
+      if (trail.count > 0 && trail.opacity > 0) {
+        // Resize accumulation canvases to match
+        if (accumCanvas.width !== w || accumCanvas.height !== h) {
+          accumCanvas.width = w;
+          accumCanvas.height = h;
+          driftCanvas.width = w;
+          driftCanvas.height = h;
+          lastAccumHead = 0;
         }
-        ctx.globalAlpha = trail.opacity * (1 - g / (trail.count + 1));
+
+        // Only update accumulator when a new frame arrives from fetch
+        if (writeHead !== lastAccumHead) {
+          lastAccumHead = writeHead;
+
+          // Persistence derived from trail.count: higher count = longer trails
+          const persistence = 1 - 1 / (trail.count + 2);
+
+          // Decay old accumulation
+          accumCtx.save();
+          accumCtx.globalCompositeOperation = "destination-in";
+          accumCtx.fillStyle = `rgba(255,255,255,${persistence})`;
+          accumCtx.fillRect(0, 0, w, h);
+          accumCtx.restore();
+
+          // Spatial drift: shift old content before adding new frame
+          if (trail.driftX !== 0 || trail.driftY !== 0) {
+            driftCtx.clearRect(0, 0, w, h);
+            driftCtx.drawImage(accumCanvas, 0, 0);
+            accumCtx.clearRect(0, 0, w, h);
+            accumCtx.drawImage(driftCanvas, trail.driftX, trail.driftY);
+          }
+
+          // Add current frame to accumulator
+          accumCtx.save();
+          if (cachedTrailFilter !== "none") {
+            accumCtx.filter = cachedTrailFilter;
+          }
+          accumCtx.globalCompositeOperation = trail.blendMode as GlobalCompositeOperation;
+          accumCtx.drawImage(main, 0, 0, w, h);
+          accumCtx.restore();
+        }
+
+        // Composite accumulator onto main canvas
+        ctx.save();
+        ctx.globalAlpha = trail.opacity;
         ctx.globalCompositeOperation = trail.blendMode as GlobalCompositeOperation;
-        ctx.drawImage(ghost, trail.driftX * g, trail.driftY * g, w, h);
+        ctx.drawImage(accumCanvas, 0, 0);
         ctx.restore();
       }
 
