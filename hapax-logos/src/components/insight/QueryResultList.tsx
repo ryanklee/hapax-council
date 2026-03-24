@@ -6,6 +6,7 @@ export interface ResultEntry {
   query: string;
   markdown: string;
   isStreaming: boolean;
+  error?: string | null;
   metadata?: {
     agent_used: string;
     tokens_in: number;
@@ -16,9 +17,10 @@ export interface ResultEntry {
 
 interface QueryResultListProps {
   results: ResultEntry[];
+  onDelete?: (id: string) => void;
 }
 
-export function QueryResultList({ results }: QueryResultListProps) {
+export function QueryResultList({ results, onDelete }: QueryResultListProps) {
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -36,7 +38,9 @@ export function QueryResultList({ results }: QueryResultListProps) {
             query={r.query}
             markdown={r.markdown}
             isStreaming={r.isStreaming}
+            error={r.error}
             metadata={r.metadata}
+            onDelete={onDelete ? () => onDelete(r.id) : undefined}
           />
         </div>
       ))}

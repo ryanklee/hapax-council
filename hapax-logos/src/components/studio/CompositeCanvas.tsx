@@ -53,6 +53,13 @@ export function CompositeCanvas({
     let smoothWriteHead = 0;
     let smoothPending = false;
 
+    // Trail accumulation canvas (persists between frames for real persistence trails)
+    const accumCanvas = document.createElement("canvas");
+    const accumCtx = accumCanvas.getContext("2d")!;
+    const driftCanvas = document.createElement("canvas");
+    const driftCtx = driftCanvas.getContext("2d")!;
+    let lastAccumHead = 0;
+
     // Stutter state
     let tick = 0;
     let displayIdx = 0;
@@ -169,26 +176,7 @@ export function CompositeCanvas({
       const idx = Math.abs(displayIdx) % available;
       ctx.clearRect(0, 0, w, h);
 
-      // --- Ghost trails ---
-      // Space ghost frames further apart for visible temporal difference
-      const trail = p.trail;
-      const trailSpacing = Math.max(3, Math.floor(available / (trail.count + 1)));
-      for (let g = trail.count; g >= 1; g--) {
-        const gi = (idx - g * trailSpacing + available * 100) % available;
-        const ghost = frameRing[gi];
-        if (!ghost) continue;
-        ctx.save();
-        // Use cached trail filter (includes Neon hue rotation)
-        if (cachedTrailFilter !== "none") {
-          ctx.filter = cachedTrailFilter;
-        }
-        ctx.globalAlpha = trail.opacity * (1 - g / (trail.count + 1));
-        ctx.globalCompositeOperation = trail.blendMode as GlobalCompositeOperation;
-        ctx.drawImage(ghost, trail.driftX * g, trail.driftY * g, w, h);
-        ctx.restore();
-      }
-
-      // --- Main frame ---
+      // --- Main frame (drawn first so trails composite on top) ---
       const main = frameRing[idx];
       if (!main) return;
 
@@ -259,6 +247,63 @@ export function CompositeCanvas({
         }
         ctx.drawImage(main, 0, 0, w, h);
         ctx.restore();
+      }
+
+      // --- Accumulation trails (offscreen canvas persists between frames) ---
+      const trail = p.trail;
+      if (trail.count > 0 && trail.opacity > 0) {
+        // Resize accumulation canvases to match
+        if (accumCanvas.width !== w || accumCanvas.height !== h) {
+          accumCanvas.width = w;
+          accumCanvas.height = h;
+          driftCanvas.width = w;
+          driftCanvas.height = h;
+          lastAccumHead = 0;
+        }
+
+        // Persistence derived from trail.count: higher count = longer trails
+        const persistence = 1 - 1 / (trail.count + 2);
+        const isNewFrame = writeHead !== lastAccumHead;
+
+        // Decay and drift on new frames (before compositing so trail shows PAST only)
+        if (isNewFrame) {
+          lastAccumHead = writeHead;
+
+          // Decay old accumulation
+          accumCtx.save();
+          accumCtx.globalCompositeOperation = "destination-in";
+          accumCtx.fillStyle = `rgba(255,255,255,${persistence})`;
+          accumCtx.fillRect(0, 0, w, h);
+          accumCtx.restore();
+
+          // Spatial drift: shift old content
+          if (trail.driftX !== 0 || trail.driftY !== 0) {
+            driftCtx.clearRect(0, 0, w, h);
+            driftCtx.drawImage(accumCanvas, 0, 0);
+            accumCtx.clearRect(0, 0, w, h);
+            accumCtx.drawImage(driftCanvas, trail.driftX, trail.driftY);
+          }
+        }
+
+        // Composite accumulator (past frames only) onto main canvas
+        ctx.save();
+        ctx.globalAlpha = trail.opacity;
+        ctx.globalCompositeOperation = trail.blendMode as GlobalCompositeOperation;
+        ctx.drawImage(accumCanvas, 0, 0);
+        ctx.restore();
+
+        // THEN add current frame to accumulator for next frame's trail.
+        // Use source-over at reduced alpha to avoid additive saturation.
+        if (isNewFrame) {
+          accumCtx.save();
+          if (cachedTrailFilter !== "none") {
+            accumCtx.filter = cachedTrailFilter;
+          }
+          accumCtx.globalAlpha = 1 - persistence;
+          accumCtx.globalCompositeOperation = "source-over";
+          accumCtx.drawImage(main, 0, 0, w, h);
+          accumCtx.restore();
+        }
       }
 
       // --- Delayed overlay (smooth source if available, else delayed from live ring) ---

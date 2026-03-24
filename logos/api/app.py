@@ -27,6 +27,14 @@ _log = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     await start_refresh_loop()
 
+    # Recover stale insight queries from prior shutdown
+    try:
+        from logos.data.insight_queries import recover_stale
+
+        recover_stale()
+    except Exception:
+        _log.exception("Insight query recovery failed (continuing)")
+
     # Verify Qdrant collection schemas (non-fatal)
     try:
         from shared.qdrant_schema import log_collection_issues
