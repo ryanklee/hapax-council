@@ -18,6 +18,8 @@ import pytest
 playwright = pytest.importorskip("playwright.sync_api")
 from playwright.sync_api import sync_playwright  # noqa: E402
 
+pytestmark = pytest.mark.e2e
+
 LOGOS_URL = "http://localhost:5173"
 API_BASE = "http://localhost:8051"
 WORKSPACE = 7
