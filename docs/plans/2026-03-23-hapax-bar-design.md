@@ -1,7 +1,7 @@
 # Hapax Bar — Design Document
 
 **Date:** 2026-03-23
-**Status:** Draft
+**Status:** Implemented
 **Scope:** Replace Waybar with a Python + Astal GTK4 status bar driven by the Logos API
 
 ---
