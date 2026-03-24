@@ -516,6 +516,15 @@ local function poll_commands()
                         dfhack.printerr(("hapax-df-bridge: workshop out of bounds (%d,%d,%d)"):format(wx, wy, wz))
                         return
                     end
+                    -- Check tiles are open floor (not wall) — digging must complete first
+                    local center_tt = dfhack.maps.getTileType(wx, wy, wz)
+                    if center_tt then
+                        local shape = df.tiletype.attrs[center_tt].shape
+                        if shape == df.tiletype_shape.WALL then
+                            dfhack.println(("hapax-df-bridge: workshop at (%d,%d,%d) waiting — tiles not yet dug"):format(wx, wy, wz))
+                            return
+                        end
+                    end
                     local bld, err = dfhack.buildings.constructBuilding{
                         type = df.building_type.Workshop,
                         subtype = ws_enum,

@@ -95,27 +95,22 @@ def _encode_planner(
             log.debug("Tactical: waiting for dig to complete (%.0fs elapsed, need 60s)", elapsed)
             return []
 
-        # Place workshops in the dug room — send offsets, Lua resolves position
+        # Send ALL workshops every cycle — bridge is idempotent
+        # (checks tiles are open floor before placing, skips if wall or already built)
         workshop_types = ["Still", "Kitchen", "Craftsdwarfs"]
-        for ws_type in workshop_types:
-            if ws_type not in ctx.workshops_placed:
-                offset = ctx.next_workshop_offset
-                # Send sentinel (0,0,0) with offsets — Lua computes final position
-                actions.append(
-                    {
-                        "action": "build_workshop",
-                        "x": 0,
-                        "y": 0,
-                        "z": 0,
-                        "offset_x": -3 + (offset * 4),
-                        "offset_y": 0,
-                        "workshop_type": ws_type,
-                    }
-                )
-                ctx.workshops_placed.add(ws_type)
-                ctx.next_workshop_offset += 1
-                log.info("Tactical: place %s workshop (offset_x=%d)", ws_type, -3 + (offset * 4))
-                break  # one workshop per cycle
+        for i, ws_type in enumerate(workshop_types):
+            actions.append(
+                {
+                    "action": "build_workshop",
+                    "x": 0,
+                    "y": 0,
+                    "z": 0,
+                    "offset_x": -3 + (i * 4),
+                    "offset_y": 0,
+                    "workshop_type": ws_type,
+                }
+            )
+        log.info("Tactical: requesting 3 workshops (bridge will place when tiles are open)")
 
     return actions
 
