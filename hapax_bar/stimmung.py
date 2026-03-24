@@ -30,6 +30,9 @@ class StimmungState:
         self.operator_energy: float = 0.7
         self.heart_rate: int = 0
         self.activity_label: str = "idle"
+        self.activity_mode: str = "idle"
+        self.flow_score: float = 0.0
+        self.interruptibility: float = 1.0
         self._callbacks: list = []
 
     def subscribe(self, callback: Any) -> None:
@@ -96,6 +99,15 @@ class StimmungState:
             pass
 
         self.heart_rate = bio.get("heart_rate_bpm", 0)
+
+        # Extract perception fields
+        try:
+            perc = json.loads(PERCEPTION_PATH.read_text())
+            self.flow_score = perc.get("flow_score", 0.0)
+            self.interruptibility = perc.get("interruptibility_score", 1.0)
+            self.activity_mode = perc.get("activity_mode", "idle")
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass
 
         changed = (
             new_voice_state != self.voice_state
