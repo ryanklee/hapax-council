@@ -1,7 +1,7 @@
 import { lazy, Suspense } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Clock, Cpu, Loader2 } from "lucide-react";
+import { Clock, Cpu, Loader2, Trash2 } from "lucide-react";
 
 const MermaidBlock = lazy(() =>
   import("./MermaidBlock").then((m) => ({ default: m.MermaidBlock })),
@@ -11,19 +11,23 @@ interface QueryResultProps {
   query: string;
   markdown: string;
   isStreaming: boolean;
+  error?: string | null;
   metadata?: {
     agent_used: string;
     tokens_in: number;
     tokens_out: number;
     elapsed_ms: number;
   };
+  onDelete?: () => void;
 }
 
 export function QueryResult({
   query,
   markdown,
   isStreaming,
+  error,
   metadata,
+  onDelete,
 }: QueryResultProps) {
   return (
     <div className="space-y-3">
@@ -37,6 +41,12 @@ export function QueryResult({
           <>
             <Loader2 className="h-3 w-3 animate-spin text-green-400" />
             <span className="text-green-400">Querying...</span>
+          </>
+        ) : error ? (
+          <>
+            <span className="text-red-400">Error</span>
+            <span className="text-zinc-600">·</span>
+            <span className="text-zinc-500 truncate">{error}</span>
           </>
         ) : metadata ? (
           <>
@@ -57,6 +67,18 @@ export function QueryResult({
             </span>
           </>
         ) : null}
+        {!isStreaming && onDelete && (
+          <>
+            <span className="flex-1" />
+            <button
+              onClick={onDelete}
+              className="text-zinc-600 hover:text-zinc-400 transition-colors"
+              title="Delete result"
+            >
+              <Trash2 className="h-3 w-3" />
+            </button>
+          </>
+        )}
       </div>
 
       {markdown && (

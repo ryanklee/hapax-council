@@ -215,3 +215,39 @@ export const usePerception = () =>
 
 export const useVisualLayer = () =>
   useQuery({ queryKey: ["visualLayer"], queryFn: api.visualLayer, refetchInterval: FAST_VL });
+
+// ── Insight Queries ─────────────────────────────────────────────────────────
+
+const INSIGHT_ACTIVE = 2_000; // 2s when queries are running
+
+export const useInsightQueries = (hasRunning: boolean) =>
+  useQuery({
+    queryKey: ["insightQueries"],
+    queryFn: api.insightQueries,
+    refetchInterval: hasRunning ? INSIGHT_ACTIVE : FAST,
+  });
+
+export function useRunInsightQuery() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (query: string) => api.runInsightQuery(query),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["insightQueries"] }),
+  });
+}
+
+export function useRefineInsightQuery() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (args: { query: string; parentId: string; priorResult: string; agentType: string }) =>
+      api.refineInsightQuery(args.query, args.parentId, args.priorResult, args.agentType),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["insightQueries"] }),
+  });
+}
+
+export function useDeleteInsightQuery() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.deleteInsightQuery(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["insightQueries"] }),
+  });
+}

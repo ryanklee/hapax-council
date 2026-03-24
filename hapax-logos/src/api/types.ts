@@ -577,3 +577,22 @@ export interface PerceptionState {
   bluetooth_nearby: string;
   network_devices: string;
 }
+
+export interface InsightQuery {
+  id: string;
+  query: string;
+  status: "running" | "done" | "error";
+  agent_type: string;
+  markdown: string;
+  created_at: string;
+  completed_at: string | null;
+  elapsed_ms: number | null;
+  tokens_in: number | null;
+  tokens_out: number | null;
+  error: string | null;
+  parent_id: string | null;
+}
+
+export interface InsightQueryList {
+  queries: InsightQuery[];
+}
