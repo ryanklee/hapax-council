@@ -157,6 +157,7 @@ class FortressEpisodeBuilder:
     def _close_episode(self, state: FastFortressState, trigger: str) -> FortressEpisode:
         ep = self._current
         assert ep is not None
+        ep.trigger = trigger
         ep.game_tick_end = state.game_tick
         ep.population_end = state.population
         ep.food_end = state.food_count
