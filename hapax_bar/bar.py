@@ -6,12 +6,14 @@ from gi.repository import Astal, Gtk
 
 from hapax_bar.modules.audio import MicModule, VolumeModule
 from hapax_bar.modules.clock import ClockModule
+from hapax_bar.modules.cost import CostModule
 from hapax_bar.modules.docker import DockerModule
 from hapax_bar.modules.gpu import GpuModule
 from hapax_bar.modules.health import HealthModule
 from hapax_bar.modules.idle import IdleInhibitorModule
 from hapax_bar.modules.mpris import MprisModule
 from hapax_bar.modules.network import NetworkModule
+from hapax_bar.modules.privacy import PrivacyModule
 from hapax_bar.modules.submap import SubmapModule
 from hapax_bar.modules.sysinfo import CpuModule, DiskModule, MemoryModule, TemperatureModule
 from hapax_bar.modules.systemd import SystemdFailedModule
@@ -52,6 +54,7 @@ def create_bar(
     right.append(HealthModule())
     right.append(GpuModule())
     if primary:
+        right.append(CostModule())
         right.append(TemperatureModule())
     right.append(CpuModule())
     right.append(MemoryModule())
@@ -63,6 +66,7 @@ def create_bar(
         right.append(MicModule())
     right.append(NetworkModule())
     if primary:
+        right.append(PrivacyModule())
         right.append(IdleInhibitorModule())
         right.append(SystemdFailedModule())
     right.append(ClockModule())
