@@ -1,6 +1,6 @@
 # Voice Grounding Research State
 
-**Last updated:** 2026-03-24 (session 15 — system feature audit + notification wiring + hapax-bar completion)
+**Last updated:** 2026-03-24 (session 16 — composite trail rendering fix + dev workflow guardrail)
 **Update convention:** After any session with research decisions or implementation progress, update this file before ending.
 
 ## Position (one paragraph)
@@ -326,6 +326,22 @@ Infrastructure-only. No changes to experiment code, grounding theory, or researc
 **PR #284 merged** (feat/boundary-contracts → main): resolved 3 merge conflicts (RESEARCH-STATE, DEVIATION-009, test_local_llm_gate), fixed gitleaks secrets-scan failure (home-directory-path in design doc), all 8 CI checks green.
 
 **Documentation fixes:** Council CLAUDE.md reactive engine "12 rules" → 14. Workspace CLAUDE.md hapax-mcp "40 tools" → 34.
+
+## Session 16 (2026-03-24): Composite Trail Rendering Fix + Dev Workflow Guardrail
+
+Infrastructure-only. No changes to experiment code, grounding theory, or research design.
+
+**Composite trail rendering rewrite (PR #296).** The `CompositeCanvas` trail system was completely broken — trails were invisible across all 12 composite presets. Three root causes:
+
+1. **Rendering order:** Ghost trail frames were drawn *before* the main frame, then fully occluded by the main frame's `source-over` compositing. Fix: draw main frame first, trails on top.
+
+2. **Architecture:** Replaced the discrete ghost-frame approach (draw N past ring-buffer frames at fixed offsets — produced stacked copies, not persistence trails) with accumulation-based persistence using an offscreen canvas. The new approach mirrors the GPU `temporalfx` Rust plugin: decay old content via `destination-in`, optionally drift spatially, accumulate new frames with `source-over` at reduced alpha, composite onto main canvas with the preset's blend mode.
+
+3. **Compositing order within accumulator:** Current frame was added to the accumulator *before* compositing it onto the main canvas, making the trail indistinguishable from the main image. Also used `lighter` (additive) blend internally, causing the accumulator to converge to ~6x brightness and saturate to white. Fix: composite accumulator (past frames only) first, then add current frame for next frame's trail. Use `source-over` at `alpha = (1 - persistence)` internally.
+
+**Preset tuning:** Trails preset brightness 1.8→1.1, opacity 0.65→0.55, overlay brightness 2.0→1.3 to prevent additive blowout that caused HLS blinking via `mix-blend-screen` interaction.
+
+**Dev server worktree mismatch guardrail.** Lost the entire debugging session because beta edited files in `hapax-council--beta/` while the vite dev server served from `hapax-council/` (alpha). Three rounds of code fixes were invisible. Added a detection check to `session-context.sh` startup hook: compares the vite process's cwd against the current git worktree, emits a loud warning if they differ. Also saved feedback memory for future sessions.
 
 ## Operator Research Preferences
 
