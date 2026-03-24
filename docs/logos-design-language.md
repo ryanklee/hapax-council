@@ -537,7 +537,7 @@ These surfaces must comply with §1–§8. All colors must derive from §3, all 
 | Surface | Config location | Mode switching | Current compliance |
 |---------|----------------|----------------|--------------------|
 | **Logos React app** | `hapax-logos/src/` | ThemeProvider + CSS custom properties | High — active development target |
-| **hapax-bar** | `hapax_bar/styles/hapax-bar-{rnd,research}.css` | Instant CSS swap via control socket or API poll | Full — GTK4 CSS custom properties, design-language compliant |
+| **hapax-bar (Horizon + Bedrock)** | `hapax_bar/styles/hapax-bar-{rnd,research}.css` | Instant CSS swap via control socket | Full — dual-bar (Horizon top + Bedrock bottom per §4.1), GTK4 CSS custom properties, stimmung field with §6.1 breathing + §3.7 severity ladder |
 | **Mako notifications** | `~/.config/mako/config-{rnd,research}` | Config swap via `hapax-theme-apply` | High — minor border token issue |
 | **Fuzzel launcher** | `~/.config/fuzzel/fuzzel-{rnd,research}.ini` | Config swap via `hapax-theme-apply` | High — inherits §10.1 question |
 | **Hyprland compositor** | `~/.config/hypr/hyprland.conf` | `hyprctl keyword` via `hapax-theme-apply` | Medium — static defaults stale, group colors unwired |
