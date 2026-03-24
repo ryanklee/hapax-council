@@ -93,7 +93,7 @@ class TestGetGovernance:
         data = resp.json()
         assert "chains" in data
         assert "suppression" in data
-        assert len(data["chains"]) == 6
+        assert len(data["chains"]) == 7
 
 
 class TestGetGoals:

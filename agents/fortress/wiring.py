@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import time
+from typing import Any
 
 from agents.fortress.chains.advisor import AdvisorChain
 from agents.fortress.chains.creativity import CreativityChain
@@ -55,6 +56,12 @@ class FortressGovernor:
         t = now or time.monotonic()
         self._last_tick_time = t
         return {name: field.tick(t) for name, field in self._fields.items()}
+
+    def governor_state(self) -> dict[str, Any]:
+        """Return serializable snapshot of governance state."""
+        return {
+            "suppression": {name: field.value for name, field in self._fields.items()},
+        }
 
     def evaluate(
         self,

@@ -8,12 +8,13 @@ from __future__ import annotations
 
 import json
 import logging
-from pathlib import Path
+
+from shared.config import PROFILES_DIR
 
 log = logging.getLogger(__name__)
 
-CHRONICLE_PATH = Path("profiles/fortress-chronicle.jsonl")
-SESSIONS_PATH = Path("profiles/fortress-sessions.jsonl")
+CHRONICLE_PATH = PROFILES_DIR / "fortress-chronicle.jsonl"
+SESSIONS_PATH = PROFILES_DIR / "fortress-sessions.jsonl"
 
 
 def load_chronicle(limit: int = 50) -> list[dict]:
@@ -52,7 +53,7 @@ def build_query_context(
     """Build context string for advisor LLM from available data sources."""
     parts = [f"Operator query: {query}", ""]
 
-    chron = chronicle or load_chronicle(20)
+    chron = load_chronicle(20) if chronicle is None else chronicle
     if chron:
         parts.append("Recent chronicle entries:")
         for entry in chron[-10:]:
@@ -62,7 +63,7 @@ def build_query_context(
             )
         parts.append("")
 
-    sess = sessions or load_sessions(5)
+    sess = load_sessions(5) if sessions is None else sessions
     if sess:
         parts.append("Historical sessions:")
         for s in sess[-3:]:

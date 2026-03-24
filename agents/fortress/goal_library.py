@@ -7,7 +7,7 @@ and check functions (is this subgoal satisfied?).
 from __future__ import annotations
 
 from agents.fortress.goals import CompoundGoal, SubGoal
-from agents.fortress.schema import FastFortressState
+from agents.fortress.schema import FastFortressState, FullFortressState
 
 # --- Satisfaction predicates ---
 
@@ -21,7 +21,8 @@ def _has_enough_drink(state: FastFortressState) -> bool:
 
 
 def _has_beds(state: FastFortressState) -> bool:
-    # FastFortressState doesn't have buildings — assume not satisfied for founding goals
+    if isinstance(state, FullFortressState):
+        return state.buildings.beds >= state.population
     return False
 
 
@@ -34,11 +35,15 @@ def _no_threats(state: FastFortressState) -> bool:
 
 
 def _has_workshops(state: FastFortressState) -> bool:
-    return False  # FastFortressState doesn't track workshops
+    if isinstance(state, FullFortressState):
+        return len(state.workshops) >= 3
+    return False
 
 
 def _has_entrance(state: FastFortressState) -> bool:
-    return False  # requires FullFortressState with map data
+    if isinstance(state, FullFortressState):
+        return state.buildings.doors > 0
+    return False
 
 
 # --- Context selectors ---

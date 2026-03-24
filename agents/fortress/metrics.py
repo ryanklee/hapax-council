@@ -11,13 +11,13 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass, field
-from pathlib import Path
 
 from agents.fortress.schema import FastFortressState
+from shared.config import PROFILES_DIR
 
 log = logging.getLogger(__name__)
 
-SESSIONS_PATH = Path("profiles/fortress-sessions.jsonl")
+SESSIONS_PATH = PROFILES_DIR / "fortress-sessions.jsonl"
 
 
 @dataclass

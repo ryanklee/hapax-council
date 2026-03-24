@@ -13,11 +13,13 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 
 from agents.fortress.config import BridgeConfig
+from shared.config import PROFILES_DIR
 
 router = APIRouter(prefix="/api/fortress", tags=["fortress"])
 log = logging.getLogger(__name__)
 
 _bridge_config = BridgeConfig()
+GOVERNOR_STATE_DIR = Path("/dev/shm/hapax-fortress")
 
 
 def _read_state_file() -> dict | None:
@@ -58,52 +60,61 @@ async def get_fortress_events(limit: int = 50):
 
 @router.get("/governance")
 async def get_fortress_governance():
-    """Governance chain activity and suppression field levels.
-
-    Returns placeholder structure — populated when FortressGovernor is running.
-    """
-    return {
-        "chains": {
-            "fortress_planner": {"active": False, "last_action": None},
-            "military_commander": {"active": False, "last_action": None},
-            "resource_manager": {"active": False, "last_action": None},
-            "crisis_responder": {"active": False, "last_action": None},
-            "storyteller": {"active": False, "last_action": None},
-            "advisor": {"active": False, "last_action": None},
-        },
-        "suppression": {
-            "crisis_suppression": 0.0,
-            "military_alert": 0.0,
-            "resource_pressure": 0.0,
-            "planner_activity": 0.0,
-        },
-    }
+    """Governance chain activity and suppression field levels."""
+    path = GOVERNOR_STATE_DIR / "governance.json"
+    if not path.exists():
+        # Return placeholder when governor not running
+        return {
+            "chains": {
+                name: {"active": False, "last_action": None}
+                for name in (
+                    "fortress_planner",
+                    "military_commander",
+                    "resource_manager",
+                    "crisis_responder",
+                    "storyteller",
+                    "advisor",
+                    "creativity",
+                )
+            },
+            "suppression": {
+                "crisis_suppression": 0.0,
+                "military_alert": 0.0,
+                "resource_pressure": 0.0,
+                "planner_activity": 0.0,
+                "creativity_suppression": 0.0,
+            },
+        }
+    return json.loads(path.read_text())
 
 
 @router.get("/goals")
 async def get_fortress_goals():
-    """Active compound goals and subgoal states.
-
-    Returns placeholder — populated when GoalPlanner is running.
-    """
-    return {"goals": []}
+    """Active compound goals and subgoal states."""
+    path = GOVERNOR_STATE_DIR / "goals.json"
+    if not path.exists():
+        return {"goals": []}
+    return json.loads(path.read_text())
 
 
 @router.get("/metrics")
 async def get_fortress_metrics():
     """Current session metrics (live)."""
-    return {
-        "session_id": None,
-        "survival_days": 0,
-        "total_commands": 0,
-        "chain_metrics": {},
-    }
+    path = GOVERNOR_STATE_DIR / "metrics.json"
+    if not path.exists():
+        return {
+            "session_id": None,
+            "survival_days": 0,
+            "total_commands": 0,
+            "chain_metrics": {},
+        }
+    return json.loads(path.read_text())
 
 
 @router.get("/sessions")
 async def get_fortress_sessions(limit: int = 20):
     """Historical session list with survival times."""
-    sessions_path = Path("profiles/fortress-sessions.jsonl")
+    sessions_path = PROFILES_DIR / "fortress-sessions.jsonl"
     if not sessions_path.exists():
         return {"sessions": []}
     entries = []
@@ -119,7 +130,7 @@ async def get_fortress_sessions(limit: int = 20):
 @router.get("/sessions/{session_id}")
 async def get_fortress_session(session_id: str):
     """Detailed session record."""
-    sessions_path = Path("profiles/fortress-sessions.jsonl")
+    sessions_path = PROFILES_DIR / "fortress-sessions.jsonl"
     if not sessions_path.exists():
         raise HTTPException(status_code=404, detail="No sessions recorded")
     for line in sessions_path.read_text().strip().split("\n"):
@@ -136,7 +147,7 @@ async def get_fortress_session(session_id: str):
 @router.get("/chronicle")
 async def get_fortress_chronicle(limit: int = 50):
     """Narrative chronicle entries."""
-    chronicle_path = Path("profiles/fortress-chronicle.jsonl")
+    chronicle_path = PROFILES_DIR / "fortress-chronicle.jsonl"
     if not chronicle_path.exists():
         return {"entries": []}
     entries = []

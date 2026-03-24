@@ -9,14 +9,14 @@ from __future__ import annotations
 import json
 import logging
 import time
-from pathlib import Path
 
 from agents.fortress.episodes import FortressEpisode
 from agents.fortress.schema import FastFortressState
+from shared.config import PROFILES_DIR
 
 log = logging.getLogger(__name__)
 
-CHRONICLE_PATH = Path("profiles/fortress-chronicle.jsonl")
+CHRONICLE_PATH = PROFILES_DIR / "fortress-chronicle.jsonl"
 
 STORYTELLER_SYSTEM = (
     "You are a dwarf fortress chronicler. Write 1-3 sentences describing what happened"
