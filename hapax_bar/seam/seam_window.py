@@ -54,10 +54,14 @@ class SeamWindow(Astal.Window):
         self._revealer.set_child(self._panel)
         self.set_child(self._revealer)
 
-        # Escape to dismiss
+        # Escape or middle-click to dismiss
         key_ctrl = Gtk.EventControllerKey()
         key_ctrl.connect("key-pressed", self._on_key)
         self.add_controller(key_ctrl)
+
+        dismiss_click = Gtk.GestureClick(button=2)  # middle-click
+        dismiss_click.connect("pressed", lambda *_: self._dismiss())
+        self.add_controller(dismiss_click)
 
         self._panels: list[Gtk.Widget] = []
 

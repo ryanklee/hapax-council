@@ -21,6 +21,7 @@ local state = {
     started = false,
     fortress_ready = false,
     worldgen_started = false,
+    title_attempts = 0,
     error = nil,
 }
 
@@ -105,9 +106,19 @@ local function handle_title()
 
     -- No saves at all — create new world
     if newworld_idx then
-        dfhack.println("[hapax-lifecycle] No saved worlds. Creating new world...")
+        state.title_attempts = (state.title_attempts or 0) + 1
+        if state.title_attempts > 3 then
+            dfhack.println("[hapax-lifecycle] Title navigation failed after 3 attempts, stopping")
+            state.error = "title_navigation_failed"
+            state.started = false
+            return
+        end
+        dfhack.println(("[hapax-lifecycle] Creating new world (attempt %d)..."):format(state.title_attempts))
         title.selected = newworld_idx
+        -- Try both mechanisms
         title.game_start_proceed = 1
+        -- Also try simulateInput as fallback
+        gui.simulateInput(title, "SELECT")
         state.phase = "worldgen"
         return
     end
@@ -244,6 +255,8 @@ end
 local function start()
     state.started = true
     state.fortress_ready = false
+    state.worldgen_started = false
+    state.title_attempts = 0
     state.error = nil
 
     local screen = current_screen()
@@ -254,8 +267,13 @@ local function start()
         return
     end
 
-    local repeatUtil = require("repeat-util")
-    repeatUtil.scheduleEvery(GLOBAL_KEY, POLL_FRAMES, "frames", lifecycle_tick)
+    -- Delay polling start to let DF finish title screen initialization
+    dfhack.println("[hapax-lifecycle] Waiting 3s for title screen to stabilize...")
+    dfhack.timeout(180, "frames", function()
+        dfhack.println("[hapax-lifecycle] Starting navigation polling")
+        local repeatUtil = require("repeat-util")
+        repeatUtil.scheduleEvery(GLOBAL_KEY, POLL_FRAMES, "frames", lifecycle_tick)
+    end)
 end
 
 local function stop()

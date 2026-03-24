@@ -1,8 +1,0 @@
-pathable
-========
-
-Tags: dev
-
-  Highlights pathable tiles.
-
-This plugin provides a Lua API, but no direct commands. See pathable for details and gui/pathable for the user interface.

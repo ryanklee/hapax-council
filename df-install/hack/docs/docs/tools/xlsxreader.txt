@@ -1,8 +1,0 @@
-xlsxreader
-==========
-
-Tags: dev
-
-  Provides a Lua API for reading xlsx files.
-
-See xlsxreader for details.

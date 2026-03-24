@@ -1,8 +1,0 @@
-cxxrandom
-=========
-
-Tags: dev
-
-  Provides a Lua API for random distributions.
-
-See cxxrandom for details.

@@ -1,8 +1,0 @@
-luasocket
-=========
-
-Tags: dev
-
-  Provides a Lua API for accessing network sockets.
-
-See luasocket for details.

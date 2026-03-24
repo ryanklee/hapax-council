@@ -1,8 +1,0 @@
-building-hacks
-==============
-
-Tags: unavailable
-
-  Provides a Lua API for creating powered workshops.
-
-See building-hacks for more details.
