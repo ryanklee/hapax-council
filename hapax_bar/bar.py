@@ -39,25 +39,20 @@ def create_bar(
         primary: If True, shows all modules. If False, shows subset.
         seam_window: Seam layer window to toggle on stimmung field click.
     """
-    # Left: workspaces + submap + mpris
+    # Left: workspaces + submap + window title + mpris (spatial anchors)
     left = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
     left.append(WorkspacesModule(workspace_ids))
     left.append(SubmapModule())
+    left.append(WindowTitleModule(max_length=40 if primary else 30))
     if primary:
         left.append(MprisModule())
 
-    # Center: stimmung field (replaces text modules)
+    # Center: stimmung field only (pure ambient, no text)
     stimmung_field = StimmungField()
     if seam_window is not None:
         stimmung_field.set_seam_toggle(seam_window.toggle)
 
-    center = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
-    # Window title rendered subtly alongside stimmung field
-    title = WindowTitleModule(max_length=40 if primary else 30)
-    center.append(title)
-    center.append(stimmung_field)
-
-    # Right: minimal interaction points only
+    # Right: minimal interaction points
     right = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
     right.append(WorkingModeModule())
     right.append(VolumeModule())
@@ -70,7 +65,7 @@ def create_bar(
 
     centerbox = Gtk.CenterBox()
     centerbox.set_start_widget(left)
-    centerbox.set_center_widget(center)
+    centerbox.set_center_widget(stimmung_field)
     centerbox.set_end_widget(right)
 
     window = Astal.Window(
