@@ -901,6 +901,24 @@ class VisualLayerAggregator:
             signals.extend(map_gpu(gpu))
             self._ts_gpu = now
 
+        # Dead-letter queue check (local file, no HTTP)
+        try:
+            dl_path = Path.home() / ".cache" / "rag-ingest" / "dead-letter.jsonl"
+            if dl_path.exists():
+                dl_count = sum(1 for line in dl_path.read_text().splitlines() if line.strip())
+                if dl_count > 0:
+                    signals.append(
+                        SignalEntry(
+                            category=SignalCategory.HEALTH_INFRA,
+                            severity=SEVERITY_MEDIUM,
+                            title=f"{dl_count} dead-letter file{'s' if dl_count != 1 else ''}",
+                            detail="Permanently failed RAG ingestion — review with --retry-dead-letter",
+                            source_id="ingest-dead-letter",
+                        )
+                    )
+        except OSError:
+            pass
+
         self._fast_signals = signals
 
     async def poll_slow(self) -> None:
@@ -965,6 +983,35 @@ class VisualLayerAggregator:
                     connected=data.get("phone_kde_connected", False),
                     signals=[s.title for s in self._phone_signals],
                 )
+
+            # Music genre → secondary ambient text (when no scheduler content)
+            genre = data.get("music_genre", "")
+            if genre and not self._secondary_ambient_text:
+                self._secondary_ambient_text = genre
+
+            # LLM activity → enrich activity_label detail when CLAP silent
+            llm_act = data.get("llm_activity", "")
+            llm_conf = float(data.get("llm_confidence", 0.0))
+            prod = data.get("production_activity", "")
+            if llm_act and llm_act != "idle" and llm_conf >= 0.5:
+                if not prod or prod == "idle":
+                    self._secondary_ambient_text = f"{llm_act} (LLM {llm_conf:.0%})"
+
+            # Model disagreement signal — when local LLM and CLAP disagree
+            if llm_act and prod and llm_act != "idle" and prod != "idle" and llm_conf >= 0.5:
+                # Normalize for comparison (CLAP uses underscores, LLM uses plain)
+                llm_norm = llm_act.replace("_", " ").lower()
+                prod_norm = prod.replace("_", " ").lower()
+                if llm_norm != prod_norm and not llm_norm.startswith(prod_norm):
+                    self._perception_signals.append(
+                        SignalEntry(
+                            category=SignalCategory.PROFILE_STATE,
+                            severity=SEVERITY_LOW,
+                            title=f"Activity: {prod} vs {llm_act}",
+                            detail=f"CLAP={prod}, LLM={llm_act} ({llm_conf:.0%})",
+                            source_id="model-disagreement",
+                        )
+                    )
 
             # Phone media → ambient moments
             if data.get("phone_media_playing"):
@@ -1076,6 +1123,23 @@ class VisualLayerAggregator:
                         flow_state=episode.flow_state,
                         snapshot_count=episode.snapshot_count,
                     )
+                    # Emit watershed ripple for episode boundary
+                    dur_label = (
+                        f"{episode.duration_s / 3600:.1f}h"
+                        if episode.duration_s >= 3600
+                        else f"{episode.duration_s / 60:.0f}m"
+                        if episode.duration_s >= 60
+                        else f"{episode.duration_s:.0f}s"
+                    )
+                    self._perception_signals.append(
+                        SignalEntry(
+                            category=SignalCategory.PROFILE_STATE,
+                            severity=0.15,
+                            title=f"{episode.activity} · {dur_label} · flow {episode.flow_state}",
+                            detail=f"Episode closed ({episode.snapshot_count} snapshots)",
+                            source_id="episode-boundary",
+                        )
+                    )
             except Exception:
                 log.debug("Episode recording failed", exc_info=True)
 
@@ -1127,6 +1191,17 @@ class VisualLayerAggregator:
                             len(matches),
                             matches[0].score,
                             matches[0].pattern.prediction[:80],
+                        )
+                        # Surface top pattern as context_time signal
+                        top = matches[0]
+                        self._perception_signals.append(
+                            SignalEntry(
+                                category=SignalCategory.CONTEXT_TIME,
+                                severity=min(0.6, top.pattern.confidence),
+                                title=top.pattern.prediction[:60],
+                                detail=f"IF {top.pattern.condition[:60]} (conf {top.pattern.confidence:.0%})",
+                                source_id="pattern-prediction",
+                            )
                         )
             except Exception:
                 log.debug("Pattern consultation failed", exc_info=True)
@@ -1953,6 +2028,30 @@ class VisualLayerAggregator:
         # Activity label — what Hapax thinks operator is doing
         activity_label, activity_detail = self._infer_activity()
         state.activity_label = activity_label
+
+        # Enrich activity detail with flow decomposition when in flow
+        if self._flow_score >= 0.3 and self._last_perception_data:
+            pd = self._last_perception_data
+            contributors = []
+            gaze = pd.get("gaze_direction", "")
+            if gaze == "screen":
+                contributors.append("gaze")
+            posture = pd.get("posture", "")
+            if posture == "upright":
+                contributors.append("posture")
+            emotion = pd.get("top_emotion", "")
+            if emotion in ("neutral", "happy"):
+                contributors.append("calm")
+            rms = float(pd.get("audio_energy_rms", 0))
+            vad = float(pd.get("vad_confidence", 0))
+            if rms < 0.05 and vad < 0.3:
+                contributors.append("quiet")
+            if contributors:
+                flow_detail = " + ".join(contributors)
+                activity_detail = (
+                    f"{activity_detail} · {flow_detail}" if activity_detail else flow_detail
+                )
+
         state.activity_detail = activity_detail
 
         # Phase 2+3: temporal context and staleness
