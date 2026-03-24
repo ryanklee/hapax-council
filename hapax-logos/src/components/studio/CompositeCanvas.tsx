@@ -249,7 +249,7 @@ export function CompositeCanvas({
         ctx.restore();
       }
 
-      // --- Accumulation trails (offscreen canvas persists between frames) ---
+      // --- Accumulation trails (opaque offscreen canvas, no alpha gymnastics) ---
       const trail = p.trail;
       if (trail.count > 0 && trail.opacity > 0) {
         // Resize accumulation canvases to match
@@ -258,52 +258,53 @@ export function CompositeCanvas({
           accumCanvas.height = h;
           driftCanvas.width = w;
           driftCanvas.height = h;
+          // Initialize to black (opaque)
+          accumCtx.fillStyle = "#000";
+          accumCtx.fillRect(0, 0, w, h);
           lastAccumHead = 0;
         }
 
-        // Persistence derived from trail.count: higher count = longer trails
-        const persistence = 1 - 1 / (trail.count + 2);
+        // Decay rate: higher count = slower fade = longer trails
+        // count=2 → 0.20, count=4 → 0.12, count=7 → 0.08, count=10 → 0.06
+        const decayRate = 0.6 / (trail.count + 1);
+        const addRate = Math.min(decayRate * 1.5, 0.3);
         const isNewFrame = writeHead !== lastAccumHead;
 
-        // Decay and drift on new frames (before compositing so trail shows PAST only)
         if (isNewFrame) {
           lastAccumHead = writeHead;
 
-          // Decay old accumulation
-          accumCtx.save();
-          accumCtx.globalCompositeOperation = "destination-in";
-          accumCtx.fillStyle = `rgba(255,255,255,${persistence})`;
-          accumCtx.fillRect(0, 0, w, h);
-          accumCtx.restore();
-
-          // Spatial drift: shift old content
+          // Spatial drift: shift old content before decay
           if (trail.driftX !== 0 || trail.driftY !== 0) {
             driftCtx.clearRect(0, 0, w, h);
             driftCtx.drawImage(accumCanvas, 0, 0);
-            accumCtx.clearRect(0, 0, w, h);
+            accumCtx.fillStyle = "#000";
+            accumCtx.fillRect(0, 0, w, h);
             accumCtx.drawImage(driftCanvas, trail.driftX, trail.driftY);
           }
+
+          // Decay: paint semi-transparent black over old content
+          accumCtx.save();
+          accumCtx.globalAlpha = decayRate;
+          accumCtx.fillStyle = "#000";
+          accumCtx.fillRect(0, 0, w, h);
+          accumCtx.restore();
+
+          // Add current frame at low opacity (builds up over time)
+          accumCtx.save();
+          if (cachedTrailFilter !== "none") {
+            accumCtx.filter = cachedTrailFilter;
+          }
+          accumCtx.globalAlpha = addRate;
+          accumCtx.drawImage(main, 0, 0, w, h);
+          accumCtx.restore();
         }
 
-        // Composite accumulator (past frames only) onto main canvas
+        // Composite accumulator onto main canvas
         ctx.save();
         ctx.globalAlpha = trail.opacity;
         ctx.globalCompositeOperation = trail.blendMode as GlobalCompositeOperation;
         ctx.drawImage(accumCanvas, 0, 0);
         ctx.restore();
-
-        // THEN add current frame to accumulator for next frame's trail.
-        // Use source-over at reduced alpha to avoid additive saturation.
-        if (isNewFrame) {
-          accumCtx.save();
-          if (cachedTrailFilter !== "none") {
-            accumCtx.filter = cachedTrailFilter;
-          }
-          accumCtx.globalAlpha = 1 - persistence;
-          accumCtx.globalCompositeOperation = "source-over";
-          accumCtx.drawImage(main, 0, 0, w, h);
-          accumCtx.restore();
-        }
       }
 
       // --- Delayed overlay (smooth source if available, else delayed from live ring) ---
