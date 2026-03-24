@@ -58,16 +58,39 @@ class StimmungField(Gtk.Widget):
         self._consent_perceiving: bool = False
         self._guest_present: bool = False
         self._agent_speed: float = 0.1
+        self._engine_errors: int = 0
+        self._governance_score: float = 1.0
+        self._drift_count: int = 0
         self._stress_dampen: float = 1.0
         self._bg = (0.11, 0.12, 0.13)
         self._tick_id: int | None = None
         self._seam_toggle_callback: object = None
 
-        click = Gtk.GestureClick()
+        click = Gtk.GestureClick(button=2)  # middle-click only for seam toggle
         click.connect("pressed", self._on_click)
         self.add_controller(click)
         self.connect("realize", self._on_realize)
         self.connect("unrealize", self._on_unrealize)
+
+    def set_agent_speed(self, running_count: int) -> None:
+        """Set particle speed from agent activity count."""
+        if running_count == 0:
+            self._agent_speed = 0.1
+        elif running_count == 1:
+            self._agent_speed = 0.5
+        elif running_count <= 3:
+            self._agent_speed = 2.0
+        else:
+            self._agent_speed = 4.0
+
+    def set_engine_errors(self, count: int) -> None:
+        self._engine_errors = count
+
+    def set_governance_score(self, score: float) -> None:
+        self._governance_score = score
+
+    def set_drift_count(self, count: int) -> None:
+        self._drift_count = count
 
     def set_seam_toggle(self, callback: object) -> None:
         self._seam_toggle_callback = callback
@@ -144,6 +167,43 @@ class StimmungField(Gtk.Widget):
             stop.color = Gdk.RGBA(red=r, green=g, blue=b, alpha=1.0)
             stops.append(stop)
 
+        # Synthetic dimensions: engine errors, governance, drift
+        if self._engine_errors > 0:
+            err_stop = Gsk.ColorStop()
+            err_stop.offset = 0.05
+            err_intensity = min(self._engine_errors / 5.0, 1.0) * self._stress_dampen
+            err_stop.color = Gdk.RGBA(
+                red=bg_r + (0.98 - bg_r) * err_intensity * 0.5,
+                green=bg_g,
+                blue=bg_b,
+                alpha=1.0,
+            )
+            stops.append(err_stop)
+
+        if self._governance_score < 0.7:
+            gov_stop = Gsk.ColorStop()
+            gov_stop.offset = 0.85
+            gov_intensity = (0.7 - self._governance_score) / 0.7 * self._stress_dampen
+            gov_stop.color = Gdk.RGBA(
+                red=bg_r + (0.83 - bg_r) * gov_intensity * 0.4,
+                green=bg_g + (0.54 - bg_g) * gov_intensity * 0.4,
+                blue=bg_b + (0.61 - bg_b) * gov_intensity * 0.4,
+                alpha=1.0,
+            )
+            stops.append(gov_stop)
+
+        if self._drift_count > 10:
+            drift_stop = Gsk.ColorStop()
+            drift_stop.offset = 0.92
+            drift_intensity = min(self._drift_count / 50.0, 1.0) * self._stress_dampen
+            drift_stop.color = Gdk.RGBA(
+                red=bg_r + (1.0 - bg_r) * drift_intensity * 0.3,
+                green=bg_g + (0.50 - bg_g) * drift_intensity * 0.3,
+                blue=bg_b + (0.10 - bg_b) * drift_intensity * 0.3,
+                alpha=1.0,
+            )
+            stops.append(drift_stop)
+
         last = Gsk.ColorStop()
         last.offset = 1.0
         last.color = Gdk.RGBA(red=bg_r, green=bg_g, blue=bg_b, alpha=1.0)
@@ -198,7 +258,7 @@ class StimmungField(Gtk.Widget):
             return
         cx = w * 0.15
         cy = h / 2
-        radius = 6.0
+        radius = max(6.0, h * 0.3)  # Scale with bar height: 6px at 24px, ~10px at 32px
 
         if self._voice_state == "idle":
             r, g, b = 0.4, 0.37, 0.33

@@ -251,3 +251,28 @@ export function useDeleteInsightQuery() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["insightQueries"] }),
   });
 }
+
+// --- Fortress ---
+
+const FORTRESS = 5_000; // 5s for fortress state
+
+export const useFortressState = () =>
+  useQuery({ queryKey: ["fortressState"], queryFn: api.fortressState, refetchInterval: FORTRESS, retry: false });
+
+export const useFortressGovernance = () =>
+  useQuery({ queryKey: ["fortressGovernance"], queryFn: api.fortressGovernance, refetchInterval: 2_000, retry: false });
+
+export const useFortressGoals = () =>
+  useQuery({ queryKey: ["fortressGoals"], queryFn: api.fortressGoals, refetchInterval: FORTRESS, retry: false });
+
+export const useFortressEvents = () =>
+  useQuery({ queryKey: ["fortressEvents"], queryFn: api.fortressEvents, refetchInterval: FORTRESS, retry: false });
+
+export const useFortressMetrics = () =>
+  useQuery({ queryKey: ["fortressMetrics"], queryFn: api.fortressMetrics, refetchInterval: FORTRESS, retry: false });
+
+export const useFortressSessions = () =>
+  useQuery({ queryKey: ["fortressSessions"], queryFn: api.fortressSessions, refetchInterval: 60_000, retry: false });
+
+export const useFortressChronicle = () =>
+  useQuery({ queryKey: ["fortressChronicle"], queryFn: api.fortressChronicle, refetchInterval: FORTRESS, retry: false });

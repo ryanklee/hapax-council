@@ -11,6 +11,8 @@ import { GroundNudgePills } from "../ground/GroundNudgePills";
 import { useSignals } from "../../../contexts/ClassificationOverlayContext";
 import { useTerrainActions, useTerrainDisplay } from "../../../contexts/TerrainContext";
 import { useGroundStudio } from "../../../contexts/GroundStudioContext";
+import { useWorkingMode } from "../../../api/hooks";
+import { FortressDashboard } from "../fortress/FortressDashboard";
 import type { VisualLayerState } from "../../../api/types";
 
 interface GroundRegionProps {
@@ -27,6 +29,8 @@ export const GroundRegion = memo(function GroundRegion({ vl }: GroundRegionProps
     effectSourceId, smoothMode, compositeMode,
     presetIdx,
   } = useGroundStudio();
+  const { data: workingMode } = useWorkingMode();
+  const isFortress = workingMode?.mode === "fortress";
 
   /** CameraPip click -> advance to stratum */
   const handlePipClick = useCallback(() => {
@@ -48,6 +52,9 @@ export const GroundRegion = memo(function GroundRegion({ vl }: GroundRegionProps
     <Region name="ground" style={regionDepths.ground === "core" ? { zIndex: 1 } : undefined} stimmungStance={stimmungStance}>
       {(depth) => (
         <div className="h-full relative">
+          {/* Fortress mode: show fortress dashboard instead of cameras */}
+          {isFortress && <FortressDashboard depth={depth} />}
+
           {/* Surface: ambient canvas + time + camera pip */}
           <AmbientCanvas
             ambientText={vl?.ambient_text ?? ""}

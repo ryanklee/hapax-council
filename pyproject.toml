@@ -126,7 +126,7 @@ dev = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-addopts = "-m 'not llm and not contract'"
+addopts = "-m 'not llm and not contract and not e2e'"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks integration tests",
@@ -134,4 +134,5 @@ markers = [
     "llm: tests requiring live LLM access via LiteLLM (deselect with '-m \"not llm\"')",
     "research: tests for experiment/grounding research infrastructure (deselect with '-m \"not research\"')",
     "contract: boundary contract tests requiring full app + services (run with '-m contract')",
+    "e2e: end-to-end tests requiring live services + browser (run with '-m e2e')",
 ]

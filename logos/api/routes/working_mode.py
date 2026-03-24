@@ -24,8 +24,8 @@ class WorkingModeRequest(BaseModel):
     @field_validator("mode", mode="before")
     @classmethod
     def validate_mode(cls, v: str) -> str:
-        if v not in ("research", "rnd"):
-            raise ValueError("mode must be 'research' or 'rnd'")
+        if v not in ("research", "rnd", "fortress"):
+            raise ValueError("mode must be 'research', 'rnd', or 'fortress'")
         return v
 
 

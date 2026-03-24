@@ -1,11 +1,13 @@
-"""Hapax bar application — GTK4 + Astal layer-shell."""
+"""Hapax bar application — GTK4 + Astal layer-shell.
+
+Dual-bar architecture: Horizon (top) + Bedrock (bottom).
+"""
 
 from __future__ import annotations
 
 import sys
 from ctypes import CDLL
 
-# Must load gtk4-layer-shell before GTK4 init
 CDLL("libgtk4-layer-shell.so")
 
 import gi  # noqa: E402
@@ -26,29 +28,43 @@ gi.require_version("AstalMpris", "0.1")
 
 from gi.repository import Gdk, Gio, GLib, Gtk  # noqa: E402
 
-from hapax_bar.bar import create_bar  # noqa: E402
-from hapax_bar.logos_client import fetch_gpu, fetch_health, poll_api  # noqa: E402
+from hapax_bar.bedrock import create_bedrock  # noqa: E402
+from hapax_bar.horizon import create_horizon  # noqa: E402
+from hapax_bar.logos_client import _fetch_json, fetch_gpu, fetch_health, poll_api  # noqa: E402
+from hapax_bar.seam.controls_panel import ControlsPanel  # noqa: E402
+from hapax_bar.seam.metrics_panel import MetricsPanel  # noqa: E402
 from hapax_bar.seam.seam_window import SeamWindow  # noqa: E402
+from hapax_bar.seam.session_panel import SessionPanel  # noqa: E402
+from hapax_bar.seam.stimmung_detail import StimmungDetailPanel  # noqa: E402
+from hapax_bar.seam.temporal_panel import TemporalPanel  # noqa: E402
+from hapax_bar.seam.voice_panel import VoicePanel  # noqa: E402
 from hapax_bar.socket_server import SocketServer  # noqa: E402
 from hapax_bar.stimmung import StimmungState  # noqa: E402
 from hapax_bar.theme import load_initial_theme, switch_theme  # noqa: E402
 
 
 class HapaxBarApp(Gtk.Application):
-    """Main application. Creates bar windows, seam layer, and stimmung wiring."""
+    """Dual-bar application: Horizon (top) + Bedrock (bottom)."""
 
     def __init__(self) -> None:
         super().__init__(
             application_id="org.hapax.bar",
             flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE,
         )
-        self._bars: list = []
+        self._windows: list = []
         self._stimmung_fields: list = []
+        self._activity_labels: list = []
+        self._nudge_badges: list = []
         self._socket: SocketServer | None = None
-        self._seam: SeamWindow | None = None
         self._stimmung: StimmungState | None = None
         self._last_health: dict = {}
         self._last_gpu: dict = {}
+        self._engine_errors: int = 0
+        self._governance_score: float = 1.0
+        self._drift_count: int = 0
+        self._metrics_panels: list = []
+        self._stimmung_panels: list = []
+        self._voice_panels: list = []
 
     def do_command_line(self, command_line: Gio.ApplicationCommandLine) -> int:
         if command_line.get_is_remote():
@@ -56,50 +72,70 @@ class HapaxBarApp(Gtk.Application):
 
         load_initial_theme()
 
-        # Create seam layer (shared across monitors)
-        self._seam = SeamWindow()
-        self.add_window(self._seam)
-
-        # Create stimmung state reader
         self._stimmung = StimmungState()
         self._stimmung.subscribe(self._on_stimmung_update)
         self._stimmung.start_polling()
 
-        # Enumerate monitors and create bars
         display = Gdk.Display.get_default()
         monitors = display.get_monitors() if display else None
+        n_monitors = monitors.get_n_items() if monitors else 1
 
-        if monitors is not None and monitors.get_n_items() >= 2:
-            win1, field1 = create_bar(
-                monitor_index=0,
-                workspace_ids=[1, 2, 3, 4, 5],
-                primary=True,
-                seam_window=self._seam,
+        for i in range(min(n_monitors, 2)):
+            primary = i == 0
+            ws_ids = [1, 2, 3, 4, 5] if i == 0 else [11, 12, 13, 14, 15]
+
+            horizon_seam = SeamWindow(position="top")
+            horizon_seam.add_panel(TemporalPanel())
+            self.add_window(horizon_seam)
+            self._windows.append(horizon_seam)
+
+            bedrock_seam = SeamWindow(position="bottom")
+            mp = MetricsPanel()
+            sd = StimmungDetailPanel()
+            vp = VoicePanel()
+            bedrock_seam.add_panel(mp)
+            bedrock_seam.add_panel(sd)
+            bedrock_seam.add_panel(vp)
+            bedrock_seam.add_panel(ControlsPanel())
+            bedrock_seam.add_panel(SessionPanel())
+            if primary:
+                self._metrics_panels.append(mp)
+                self._stimmung_panels.append(sd)
+                self._voice_panels.append(vp)
+            self.add_window(bedrock_seam)
+            self._windows.append(bedrock_seam)
+
+            horizon, activity_label, nudge_badge = create_horizon(
+                monitor_index=i if n_monitors >= 2 else None,
+                workspace_ids=ws_ids,
+                primary=primary,
+                seam_toggle=horizon_seam.toggle,
             )
-            self._bars.append(win1)
-            self._stimmung_fields.append(field1)
-            self.add_window(win1)
+            self.add_window(horizon)
+            self._windows.append(horizon)
+            if activity_label:
+                self._activity_labels.append(activity_label)
+            if nudge_badge:
+                self._nudge_badges.append(nudge_badge)
 
-            win2, field2 = create_bar(
-                monitor_index=1,
-                workspace_ids=[11, 12, 13, 14, 15],
-                primary=False,
-                seam_window=self._seam,
+            bedrock, stimmung_field = create_bedrock(
+                monitor_index=i if n_monitors >= 2 else None,
+                primary=primary,
+                seam_window=bedrock_seam,
             )
-            self._bars.append(win2)
-            self._stimmung_fields.append(field2)
-            self.add_window(win2)
-        else:
-            win, field = create_bar(primary=True, seam_window=self._seam)
-            self._bars.append(win)
-            self._stimmung_fields.append(field)
-            self.add_window(win)
+            self.add_window(bedrock)
+            self._windows.append(bedrock)
+            self._stimmung_fields.append(stimmung_field)
 
-        # Poll Logos API for seam layer data
+        # API polls
         poll_api(fetch_health, 30_000, self._on_health)
         poll_api(fetch_gpu, 30_000, self._on_gpu)
+        poll_api(self._fetch_agent_count, 10_000, self._on_agent_activity)
+        poll_api(self._fetch_engine, 30_000, self._on_engine)
+        poll_api(self._fetch_governance, 60_000, self._on_governance)
+        poll_api(self._fetch_nudge_count, 60_000, self._on_nudges)
+        poll_api(self._fetch_drift, 300_000, self._on_drift)
 
-        # Control socket
         self._socket = SocketServer()
         self._socket.register("theme", self._handle_theme)
         self._socket.register("stimmung", self._handle_stimmung_push)
@@ -110,25 +146,75 @@ class HapaxBarApp(Gtk.Application):
     def _on_stimmung_update(self, state: StimmungState) -> None:
         for field in self._stimmung_fields:
             field.update_stimmung(state)
-        if self._seam:
-            self._seam.update_data(self._last_health, self._last_gpu, state)
+            field.set_engine_errors(self._engine_errors)
+            field.set_governance_score(self._governance_score)
+            field.set_drift_count(self._drift_count)
+        for label in self._activity_labels:
+            label.update(state.activity_mode)
+        for sd in self._stimmung_panels:
+            sd.update(state)
+        for vp in self._voice_panels:
+            vp.update(state)
 
     def _on_health(self, data: dict) -> None:
         self._last_health = data
-        if self._seam and self._stimmung:
-            self._seam.update_data(data, self._last_gpu, self._stimmung)
+        for mp in self._metrics_panels:
+            mp.update(data, self._last_gpu)
 
     def _on_gpu(self, data: dict) -> None:
         self._last_gpu = data
-        if self._seam and self._stimmung:
-            self._seam.update_data(self._last_health, data, self._stimmung)
+        for mp in self._metrics_panels:
+            mp.update(self._last_health, data)
+
+    @staticmethod
+    def _fetch_agent_count() -> dict:
+        data = _fetch_json("/api/agents/runs/current")
+        if data and isinstance(data, list):
+            return {"running": len(data)}
+        return {"running": 0}
+
+    def _on_agent_activity(self, data: dict) -> None:
+        for field in self._stimmung_fields:
+            field.set_agent_speed(data.get("running", 0))
+
+    @staticmethod
+    def _fetch_engine() -> dict:
+        return _fetch_json("/api/engine/status") or {"errors": 0}
+
+    def _on_engine(self, data: dict) -> None:
+        self._engine_errors = data.get("errors", 0)
+
+    @staticmethod
+    def _fetch_governance() -> dict:
+        return _fetch_json("/api/governance/heartbeat") or {"score": 1.0}
+
+    def _on_governance(self, data: dict) -> None:
+        self._governance_score = data.get("score", 1.0)
+
+    @staticmethod
+    def _fetch_nudge_count() -> dict:
+        data = _fetch_json("/api/nudges")
+        if data and isinstance(data, list):
+            return {"count": len(data)}
+        return {"count": 0}
+
+    def _on_nudges(self, data: dict) -> None:
+        count = data.get("count", 0)
+        for badge in self._nudge_badges:
+            badge.update(count)
+
+    @staticmethod
+    def _fetch_drift() -> dict:
+        return _fetch_json("/api/drift") or {"drift_count": 0}
+
+    def _on_drift(self, data: dict) -> None:
+        self._drift_count = data.get("drift_count", 0)
 
     def _handle_theme(self, msg: dict) -> bool:
         switch_theme(msg.get("mode", "rnd"))
         return False
 
     def _handle_stimmung_push(self, msg: dict) -> bool:
-        # Socket push for instant stimmung update (supplements file polling)
         if self._stimmung:
             stance = msg.get("stance")
             if stance:

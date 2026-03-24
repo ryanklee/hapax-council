@@ -262,8 +262,8 @@ window.bedrock label {
     background-color: var(--bg-secondary);
     border: 1px solid var(--border);
     border-radius: 4px;
-    padding: 12px 16px;
-    min-width: 500px;
+    padding: 4px 8px;
+    min-width: 400px;
     /* max-width not supported in GTK4 CSS */
 }
 
@@ -289,4 +289,66 @@ window.bedrock label {
 .stimmung-dims {
     font-size: 10px;
     color: var(--text-dim);
+}
+
+/* Activity label */
+.activity-label {
+    padding: 0 4px;
+}
+
+.activity-text {
+    font-size: 10px;
+    color: var(--text-dim);
+    font-style: italic;
+}
+
+/* Nudge badge */
+.nudge-badge {
+    padding: 0 4px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+.nudge-badge.low {
+    color: var(--green-400);
+}
+
+.nudge-badge.warning {
+    color: var(--orange-400);
+}
+
+.nudge-badge.critical {
+    color: var(--red-400);
+}
+
+/* Compact seam internals */
+.seam-panel > * {
+    padding: 2px 0;
+}
+
+.metrics-panel,
+.stimmung-detail,
+.voice-panel,
+.session-panel,
+.temporal-panel {
+    padding: 0;
+    margin: 0;
+}
+
+.seam-button {
+    padding: 2px 6px;
+    min-height: 20px;
+    font-size: 10px;
+}
+
+/* Temporal ribbon */
+.temporal-ribbon {
+    background: transparent;
+    min-width: 80px;
+}
+
+/* Cost whisper */
+.cost-whisper {
+    background: transparent;
+    min-width: 12px;
 }

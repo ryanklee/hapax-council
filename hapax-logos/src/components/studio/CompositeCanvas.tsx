@@ -53,6 +53,9 @@ export function CompositeCanvas({
     let smoothWriteHead = 0;
     let smoothPending = false;
 
+    // Trail state
+    let lastTrailHead = 0;
+
     // Stutter state
     let tick = 0;
     let displayIdx = 0;
@@ -68,7 +71,7 @@ export function CompositeCanvas({
     // Filter string cache — avoid per-frame string allocation
     let lastHueQ = -1;
     let cachedMainFilter = "";
-    let cachedTrailFilter = "";
+    // cachedTrailFilter reserved for trail hue-rotation (currently trail uses p.trail.filter directly)
     let cachedOverlayFilter = "";
 
     const fetchFrame = () => {
@@ -125,8 +128,8 @@ export function CompositeCanvas({
         const effectiveSmoothFilter = smoothFilterRef.current ?? p.overlay?.filter ?? "none";
         cachedMainFilter = isNeonP && effectiveLiveFilter !== "none"
           ? `${effectiveLiveFilter} hue-rotate(${hueQ}deg)` : effectiveLiveFilter;
-        cachedTrailFilter = isNeonP && p.trail.filter !== "none"
-          ? `${p.trail.filter} hue-rotate(${hueQ}deg)` : p.trail.filter;
+        // Trail filter hue rotation computed but not applied (direct p.trail.filter used)
+        void (isNeonP && p.trail.filter);
         cachedOverlayFilter = isNeonP && effectiveSmoothFilter !== "none"
           ? `${effectiveSmoothFilter} hue-rotate(${hueQ + 120}deg)` : effectiveSmoothFilter;
       }
@@ -167,25 +170,27 @@ export function CompositeCanvas({
       }
 
       const idx = Math.abs(displayIdx) % available;
-      ctx.clearRect(0, 0, w, h);
 
-      // --- Ghost trails ---
-      // Space ghost frames further apart for visible temporal difference
+      // --- Trail fade: dim previous frame instead of clearing ---
       const trail = p.trail;
-      const trailSpacing = Math.max(3, Math.floor(available / (trail.count + 1)));
-      for (let g = trail.count; g >= 1; g--) {
-        const gi = (idx - g * trailSpacing + available * 100) % available;
-        const ghost = frameRing[gi];
-        if (!ghost) continue;
-        ctx.save();
-        // Use cached trail filter (includes Neon hue rotation)
-        if (cachedTrailFilter !== "none") {
-          ctx.filter = cachedTrailFilter;
+      const trailActive = trail.count > 0 && trail.opacity > 0;
+      if (trailActive) {
+        // Only fade on new fetch frames (~10fps), not every rAF.
+        // This avoids sub-pixel alpha precision issues and gives
+        // a usable alpha range (0.01–0.10 per fetch = 1–10s half-life).
+        if (writeHead !== lastTrailHead) {
+          // count=10 → 0.015/fetch → half-life ~4.5s at 10fps
+          // count=4  → 0.03/fetch  → half-life ~2.3s
+          // count=2  → 0.05/fetch  → half-life ~1.4s
+          const fadeRate = 0.15 / (trail.count + 1);
+          ctx.save();
+          ctx.globalAlpha = fadeRate;
+          ctx.fillStyle = "#000";
+          ctx.fillRect(0, 0, w, h);
+          ctx.restore();
         }
-        ctx.globalAlpha = trail.opacity * (1 - g / (trail.count + 1));
-        ctx.globalCompositeOperation = trail.blendMode as GlobalCompositeOperation;
-        ctx.drawImage(ghost, trail.driftX * g, trail.driftY * g, w, h);
-        ctx.restore();
+      } else {
+        ctx.clearRect(0, 0, w, h);
       }
 
       // --- Main frame ---
@@ -194,6 +199,18 @@ export function CompositeCanvas({
 
       // Use cached main filter (includes Neon hue rotation)
       const mainFilter = cachedMainFilter;
+
+      // When trails active, draw main at reduced opacity so previous content shows through.
+      // Only reduce on NEW frames; between fetches, skip re-draw so trails can fade.
+      const isNewFrame = writeHead !== lastTrailHead;
+      if (trailActive && isNewFrame) {
+        lastTrailHead = writeHead;
+      }
+      const drawMain = !trailActive || isNewFrame;
+      // Main alpha: higher trail.opacity = more transparent main = more visible trails
+      const mainAlpha = trailActive ? (1 - trail.opacity * 0.65) : 1;
+
+      if (!drawMain) return; // Between fetches with trails: just fade, don't redraw
 
       const warpCfg = p.warp;
       if (warpCfg && warpCfg.sliceCount > 0) {
@@ -208,6 +225,7 @@ export function CompositeCanvas({
         const sliceH = Math.ceil(h / warpCfg.sliceCount);
 
         ctx.save();
+        ctx.globalAlpha = mainAlpha;
         if (mainFilter !== "none") {
           ctx.filter = mainFilter;
         }
@@ -242,6 +260,7 @@ export function CompositeCanvas({
         const scale = warpCfg.zoom + Math.sin(t * 0.2) * warpCfg.zoomBreath;
 
         ctx.save();
+        ctx.globalAlpha = mainAlpha;
         if (mainFilter !== "none") {
           ctx.filter = mainFilter;
         }
@@ -254,6 +273,7 @@ export function CompositeCanvas({
       } else {
         // No warp — simple draw
         ctx.save();
+        ctx.globalAlpha = mainAlpha;
         if (mainFilter !== "none") {
           ctx.filter = mainFilter;
         }

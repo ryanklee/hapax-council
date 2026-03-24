@@ -55,6 +55,29 @@ if [ "$WT_COUNT" -gt 1 ]; then
   done
 fi
 
+# Dev server worktree mismatch detection
+# If a Vite dev server is running from a different worktree, warn loudly.
+MY_WORKTREE="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [ -n "$MY_WORKTREE" ]; then
+  VITE_PID="$(pgrep -f 'vite.*--port' 2>/dev/null | head -1 || true)"
+  if [ -z "$VITE_PID" ]; then
+    VITE_PID="$(pgrep -f 'node.*vite' 2>/dev/null | head -1 || true)"
+  fi
+  if [ -n "$VITE_PID" ]; then
+    VITE_CWD="$(readlink /proc/"$VITE_PID"/cwd 2>/dev/null || true)"
+    VITE_WORKTREE="$(cd "$VITE_CWD" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null || echo "$VITE_CWD")"
+    if [ -n "$VITE_WORKTREE" ] && [ "$VITE_WORKTREE" != "$MY_WORKTREE" ]; then
+      echo ""
+      echo "⚠ DEV SERVER WORKTREE MISMATCH"
+      echo "  Vite is running from: $VITE_WORKTREE"
+      echo "  You are working in:   $MY_WORKTREE"
+      echo "  UI changes in this worktree will NOT be visible!"
+      echo "  Fix: copy changed files to the serving worktree, or restart vite from here."
+      echo ""
+    fi
+  fi
+fi
+
 # Concurrent Claude sessions in same repo
 if [ -n "$GIT_COMMON_ABS" ]; then
   CONCURRENT=""
