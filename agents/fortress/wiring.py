@@ -80,25 +80,24 @@ class FortressGovernor:
         commands: list[FortressCommand] = []
 
         # --- Crisis first (L4, top of subsumption) ---
-        if isinstance(state, FullFortressState):
-            crisis_veto, crisis_action = self._crisis.evaluate(state)
-            if crisis_action.action != "no_action":
-                self._fields["crisis_suppression"].set_target(1.0, now)
-                commands.append(
-                    FortressCommand(
-                        id="",
-                        action="military",
-                        chain="crisis_responder",
-                        params={"operation": crisis_action.action},
-                    )
+        # Crisis works on FastFortressState (food/drink/threats/stress)
+        crisis_veto, crisis_action = self._crisis.evaluate(state)
+        if crisis_action.action != "no_action":
+            self._fields["crisis_suppression"].set_target(1.0, now)
+            commands.append(
+                FortressCommand(
+                    id="",
+                    action="military",
+                    chain="crisis_responder",
+                    params={"operation": crisis_action.action},
                 )
-            else:
-                self._fields["crisis_suppression"].set_target(0.0, now)
+            )
+        else:
+            self._fields["crisis_suppression"].set_target(0.0, now)
 
-        # --- Military (L2) — suppressed by resource_pressure ---
+        # --- Military (L2) — suppressed by resource_pressure (needs FullFortressState) ---
         if isinstance(state, FullFortressState):
             resource_supp = levels.get("resource_pressure", 0.0)
-            # Only evaluate if not fully suppressed
             if resource_supp < self._config.suppression.suppression_ceiling:
                 mil_veto, mil_action = self._military.evaluate(state)
                 if mil_action.action != "no_action" and mil_veto.allowed:
@@ -116,27 +115,25 @@ class FortressGovernor:
                 else:
                     self._fields["military_alert"].set_target(0.0, now)
 
-        # --- Resource manager (L0) — suppressed by crisis, planner ---
-        if isinstance(state, FullFortressState):
-            crisis_supp = levels.get("crisis_suppression", 0.0)
-            planner_supp = levels.get("planner_activity", 0.0)
-            combined_supp = max(crisis_supp, planner_supp)
-            if combined_supp < self._config.suppression.suppression_ceiling:
-                res_veto, res_action = self._resource.evaluate(state)
-                if res_action.action != "no_action" and res_veto.allowed:
-                    # Signal resource pressure if food critical
-                    if state.food_count < state.population * self._config.food_critical_threshold:
-                        self._fields["resource_pressure"].set_target(0.8, now)
-                    else:
-                        self._fields["resource_pressure"].set_target(0.0, now)
-                    commands.append(
-                        FortressCommand(
-                            id="",
-                            action="order",
-                            chain="resource_manager",
-                            params={"operation": res_action.action},
-                        )
+        # --- Resource manager (L0) — works on FastFortressState ---
+        crisis_supp = levels.get("crisis_suppression", 0.0)
+        planner_supp = levels.get("planner_activity", 0.0)
+        combined_supp = max(crisis_supp, planner_supp)
+        if combined_supp < self._config.suppression.suppression_ceiling:
+            res_veto, res_action = self._resource.evaluate(state)
+            if res_action.action != "no_action" and res_veto.allowed:
+                if state.food_count < state.population * self._config.food_critical_threshold:
+                    self._fields["resource_pressure"].set_target(0.8, now)
+                else:
+                    self._fields["resource_pressure"].set_target(0.0, now)
+                commands.append(
+                    FortressCommand(
+                        id="",
+                        action="order",
+                        chain="resource_manager",
+                        params={"operation": res_action.action},
                     )
+                )
 
         # --- Planner (L1) — suppressed by crisis, military ---
         if isinstance(state, FullFortressState):

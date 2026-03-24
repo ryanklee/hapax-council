@@ -106,7 +106,19 @@ class FortressDaemon:
             commands = self._governor.evaluate(state)
             cycle_count += 1
 
-            # Log when commands are produced or every 30s
+            # Dedup: skip commands identical to last cycle
+            new_commands = []
+            for cmd in commands:
+                key = f"{cmd.chain}:{cmd.action}:{cmd.params}"
+                if key != getattr(self, "_last_cmd_key", ""):
+                    new_commands.append(cmd)
+            if new_commands:
+                self._last_cmd_key = (
+                    f"{new_commands[0].chain}:{new_commands[0].action}:{new_commands[0].params}"
+                )
+            commands = new_commands
+
+            # Log every 30s or when NEW commands are produced
             now_mono = time.monotonic()
             if commands or (now_mono - getattr(self, "_last_log_time", 0)) > 30:
                 self._last_log_time = now_mono
@@ -128,7 +140,7 @@ class FortressDaemon:
                 self._creativity_metrics.record_action(
                     cmd.chain, has_semantic_ref=(cmd.chain == "creativity")
                 )
-                log.debug("  -> [%s] %s %s", cmd.chain, cmd.action, cmd.params)
+                log.info("  -> [%s] %s %s", cmd.chain, cmd.action, cmd.params)
 
             # Episode lifecycle
             episode = self._episode_builder.observe(state)

@@ -227,6 +227,8 @@ class TestResourceChain(unittest.TestCase):
     def test_food_production_priority(self) -> None:
         state = _base_full(
             population=50,
+            food_count=100,
+            drink_count=500,
             stockpiles=StockpileSummary(food=100, drink=500, weapons=10),
         )
         _, sel = self.chain.evaluate(state)
@@ -235,6 +237,8 @@ class TestResourceChain(unittest.TestCase):
     def test_drink_production_when_food_ok(self) -> None:
         state = _base_full(
             population=50,
+            food_count=600,
+            drink_count=100,
             stockpiles=StockpileSummary(food=600, drink=100, weapons=10),
         )
         _, sel = self.chain.evaluate(state)
@@ -349,6 +353,7 @@ class TestCrisisChain(unittest.TestCase):
         state = _base_full(
             active_threats=35,
             population=50,
+            food_count=100,
             stockpiles=StockpileSummary(food=100, weapons=10),
         )
         veto, sel = self.chain.evaluate(state)

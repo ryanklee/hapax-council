@@ -17,7 +17,7 @@ local COMMANDS_FILE = STATE_DIR .. "/commands.json"
 local RESULTS_FILE = STATE_DIR .. "/results.json"
 
 local FAST_INTERVAL = 120   -- ticks (1 in-game day)
-local FULL_INTERVAL = 1200  -- ticks (1 season)
+local FULL_INTERVAL = 240   -- ticks (2 in-game days) — chains need unit data frequently
 local CMD_INTERVAL = 10     -- ticks
 
 local event_buffer = {}
