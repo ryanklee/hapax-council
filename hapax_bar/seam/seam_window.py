@@ -51,7 +51,7 @@ class SeamWindow(Astal.Window):
         if is_top:
             self._revealer.set_margin_top(28)
         else:
-            self._revealer.set_margin_bottom(36)
+            self._revealer.set_margin_bottom(34)
 
         self.set_child(self._revealer)
 
