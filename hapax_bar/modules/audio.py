@@ -18,7 +18,7 @@ class _AudioEndpoint(Gtk.Box):
             css_classes=["module", "audio"] + (css_extra or []),
         )
         self._prefix = prefix
-        self._label = Gtk.Label()
+        self._label = Gtk.Label(use_markup=True)
         self.append(self._label)
         self._endpoint: AstalWp.Endpoint | None = None
 

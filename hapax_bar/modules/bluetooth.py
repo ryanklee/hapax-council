@@ -50,16 +50,16 @@ class BluetoothIndicator(Gtk.Label):
     """Shows BT:N (connected count). Dim when 0."""
 
     def __init__(self) -> None:
-        super().__init__(css_classes=["module", "sysind"])
+        super().__init__(css_classes=["module", "sysind"], use_markup=True)
         self._update()
         GLib.timeout_add(10_000, self._update)
 
     def _update(self) -> bool:
         connected, _ = _bt_status()
         if connected > 0:
-            self.set_label(f"BT:{connected}")
-            self.set_css_classes(["module", "sysind"])
+            self.set_markup(
+                f'<span foreground="#83a598">BT:</span><span foreground="#b8bb26">{connected}</span>'
+            )
         else:
-            self.set_label("BT:0")
-            self.set_css_classes(["module", "sysind", "dim"])
+            self.set_markup('<span foreground="#665c54">BT:0</span>')
         return GLib.SOURCE_CONTINUE

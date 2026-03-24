@@ -14,7 +14,7 @@ class MprisModule(Gtk.Box):
             css_classes=["module", "mpris"],
         )
         self._max_length = max_length
-        self._label = Gtk.Label()
+        self._label = Gtk.Label(use_markup=True)
         self.append(self._label)
         self._player: AstalMpris.Player | None = None
 

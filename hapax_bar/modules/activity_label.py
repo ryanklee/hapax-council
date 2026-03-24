@@ -13,7 +13,7 @@ class ActivityLabel(Gtk.Box):
             orientation=Gtk.Orientation.HORIZONTAL,
             css_classes=["module", "activity-label"],
         )
-        self._label = Gtk.Label(css_classes=["activity-text"])
+        self._label = Gtk.Label(css_classes=["activity-text"], use_markup=True)
         self.append(self._label)
         self.set_visible(False)
 
@@ -22,4 +22,13 @@ class ActivityLabel(Gtk.Box):
             self.set_visible(False)
             return
         self.set_visible(True)
-        self._label.set_label(f"\u00b7 {activity_mode}")
+        mode_colors = {
+            "coding": "#83a598",  # blue — digital work
+            "creative": "#fe8019",  # orange — production
+            "reading": "#b8bb26",  # green — learning
+            "admin": "#fabd2f",  # yellow — tasks
+        }
+        c = mode_colors.get(activity_mode, "#665c54")
+        self._label.set_markup(
+            f'<span foreground="#665c54">\u00b7</span> <span foreground="{c}">{activity_mode}</span>'
+        )
