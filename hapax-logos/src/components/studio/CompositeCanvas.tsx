@@ -169,26 +169,7 @@ export function CompositeCanvas({
       const idx = Math.abs(displayIdx) % available;
       ctx.clearRect(0, 0, w, h);
 
-      // --- Ghost trails ---
-      // Space ghost frames further apart for visible temporal difference
-      const trail = p.trail;
-      const trailSpacing = Math.max(3, Math.floor(available / (trail.count + 1)));
-      for (let g = trail.count; g >= 1; g--) {
-        const gi = (idx - g * trailSpacing + available * 100) % available;
-        const ghost = frameRing[gi];
-        if (!ghost) continue;
-        ctx.save();
-        // Use cached trail filter (includes Neon hue rotation)
-        if (cachedTrailFilter !== "none") {
-          ctx.filter = cachedTrailFilter;
-        }
-        ctx.globalAlpha = trail.opacity * (1 - g / (trail.count + 1));
-        ctx.globalCompositeOperation = trail.blendMode as GlobalCompositeOperation;
-        ctx.drawImage(ghost, trail.driftX * g, trail.driftY * g, w, h);
-        ctx.restore();
-      }
-
-      // --- Main frame ---
+      // --- Main frame (drawn first so trails composite on top) ---
       const main = frameRing[idx];
       if (!main) return;
 
@@ -258,6 +239,23 @@ export function CompositeCanvas({
           ctx.filter = mainFilter;
         }
         ctx.drawImage(main, 0, 0, w, h);
+        ctx.restore();
+      }
+
+      // --- Ghost trails (composited on top of main frame) ---
+      const trail = p.trail;
+      const trailSpacing = Math.max(3, Math.floor(available / (trail.count + 1)));
+      for (let g = trail.count; g >= 1; g--) {
+        const gi = (idx - g * trailSpacing + available * 100) % available;
+        const ghost = frameRing[gi];
+        if (!ghost) continue;
+        ctx.save();
+        if (cachedTrailFilter !== "none") {
+          ctx.filter = cachedTrailFilter;
+        }
+        ctx.globalAlpha = trail.opacity * (1 - g / (trail.count + 1));
+        ctx.globalCompositeOperation = trail.blendMode as GlobalCompositeOperation;
+        ctx.drawImage(ghost, trail.driftX * g, trail.driftY * g, w, h);
         ctx.restore();
       }
 
