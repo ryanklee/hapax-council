@@ -1,129 +1,81 @@
-import { useState, useCallback, useRef } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { QueryInput } from "../components/insight/QueryInput";
 import {
   QueryResultList,
   type ResultEntry,
 } from "../components/insight/QueryResultList";
 import { RefinementInput } from "../components/insight/RefinementInput";
-import { connectSSE } from "../api/sse";
-import { sseUrl } from "../api/client";
+import {
+  useInsightQueries,
+  useRunInsightQuery,
+  useRefineInsightQuery,
+  useDeleteInsightQuery,
+} from "../api/hooks";
 import { Sparkles } from "lucide-react";
 
 export function InsightPage() {
-  const [results, setResults] = useState<ResultEntry[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const controllerRef = useRef<AbortController | null>(null);
+  const [hasRunning, setHasRunning] = useState(false);
+  const { data } = useInsightQueries(hasRunning);
+  const runQuery = useRunInsightQuery();
+  const refineQuery = useRefineInsightQuery();
+  const deleteQuery = useDeleteInsightQuery();
 
-  const runQuery = useCallback(
-    (
-      query: string,
-      refine?: { prior_result: string; agent_type: string },
-    ) => {
-      setIsLoading(true);
+  const queries = data?.queries ?? [];
+  const isLoading = runQuery.isPending || refineQuery.isPending;
 
-      const id = `q-${Date.now()}`;
-      const entry: ResultEntry = {
-        id,
-        query,
-        markdown: "",
-        isStreaming: true,
-      };
+  // Track whether any query is running (drives fast polling)
+  const anyRunning = queries.some((q) => q.status === "running");
+  if (anyRunning !== hasRunning) setHasRunning(anyRunning);
 
-      setResults((prev) => [...prev, entry]);
-
-      const url = refine ? sseUrl("/query/refine") : sseUrl("/query/run");
-      const body = refine
-        ? {
-            query,
-            prior_result: refine.prior_result,
-            agent_type: refine.agent_type,
-          }
-        : { query };
-
-      controllerRef.current = connectSSE(url, {
-        body,
-        onEvent: (event) => {
-          try {
-            const data = JSON.parse(event.data) as Record<string, unknown>;
-
-            if (event.event === "text_delta") {
-              setResults((prev) =>
-                prev.map((r) =>
-                  r.id === id
-                    ? { ...r, markdown: r.markdown + String(data.content ?? "") }
-                    : r,
-                ),
-              );
-            } else if (event.event === "done") {
-              setResults((prev) =>
-                prev.map((r) =>
-                  r.id === id
-                    ? {
-                        ...r,
-                        isStreaming: false,
-                        metadata: data as ResultEntry["metadata"],
-                      }
-                    : r,
-                ),
-              );
-              setIsLoading(false);
-            } else if (event.event === "error") {
-              setResults((prev) =>
-                prev.map((r) =>
-                  r.id === id
-                    ? {
-                        ...r,
-                        isStreaming: false,
-                        markdown:
-                          r.markdown +
-                          `\n\n> **Error:** ${String(data.message ?? "Unknown error")}`,
-                      }
-                    : r,
-                ),
-              );
-              setIsLoading(false);
-            }
-          } catch {
-            // Ignore malformed events
-          }
-        },
-        onDone: () => setIsLoading(false),
-        onError: (err) => {
-          setResults((prev) =>
-            prev.map((r) =>
-              r.id === id
-                ? {
-                    ...r,
-                    isStreaming: false,
-                    markdown: `> **Error:** ${err.message}`,
-                  }
-                : r,
-            ),
-          );
-          setIsLoading(false);
-        },
-      });
-    },
-    [],
+  // Map backend records to ResultEntry shape for existing components
+  const results: ResultEntry[] = useMemo(
+    () =>
+      // queries are newest-first from API, reverse for chronological display
+      [...queries].reverse().map((q) => ({
+        id: q.id,
+        query: q.query,
+        markdown: q.error ? `> **Error:** ${q.error}` : q.markdown,
+        isStreaming: q.status === "running",
+        error: q.error,
+        metadata:
+          q.status === "done" && q.elapsed_ms != null
+            ? {
+                agent_used: q.agent_type,
+                tokens_in: q.tokens_in ?? 0,
+                tokens_out: q.tokens_out ?? 0,
+                elapsed_ms: q.elapsed_ms,
+              }
+            : undefined,
+      })),
+    [queries],
   );
 
   const handleQuery = useCallback(
-    (query: string) => runQuery(query),
+    (query: string) => {
+      runQuery.mutate(query);
+    },
     [runQuery],
   );
 
   const handleRefine = useCallback(
     (query: string) => {
-      const lastDone = [...results]
-        .reverse()
-        .find((r) => !r.isStreaming && r.metadata);
+      const lastDone = queries.find((q) => q.status === "done");
       if (!lastDone) return;
-      runQuery(query, {
-        prior_result: lastDone.markdown,
-        agent_type: lastDone.metadata!.agent_used,
+      refineQuery.mutate({
+        query,
+        parentId: lastDone.id,
+        priorResult: lastDone.markdown,
+        agentType: lastDone.agent_type,
       });
     },
-    [results, runQuery],
+    [queries, refineQuery],
+  );
+
+  const handleDelete = useCallback(
+    (id: string) => {
+      deleteQuery.mutate(id);
+    },
+    [deleteQuery],
   );
 
   const lastResult = results[results.length - 1];
@@ -145,7 +97,7 @@ export function InsightPage() {
         )}
 
         <div className="flex-1 overflow-y-auto">
-          <QueryResultList results={results} />
+          <QueryResultList results={results} onDelete={handleDelete} />
           {showRefinement && (
             <RefinementInput onSubmit={handleRefine} isLoading={isLoading} />
           )}

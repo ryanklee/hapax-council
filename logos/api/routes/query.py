@@ -1,15 +1,21 @@
-"""Query endpoints — natural language system introspection with SSE streaming."""
+"""Query endpoints — persistent insight queries with background execution."""
 
 from __future__ import annotations
 
-import json
 import logging
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, field_validator
-from sse_starlette.sse import EventSourceResponse
 
-from logos.query_dispatch import classify_query, get_agent_list, run_query
+from logos.data.insight_queries import (
+    _MAX_CONCURRENT,
+    active_count,
+    delete,
+    get,
+    load_all,
+    start,
+)
+from logos.query_dispatch import get_agent_list
 
 log = logging.getLogger(__name__)
 
@@ -29,6 +35,7 @@ class QueryRunRequest(BaseModel):
 
 class QueryRefineRequest(BaseModel):
     query: str
+    parent_id: str
     prior_result: str
     agent_type: str
 
@@ -56,85 +63,58 @@ async def list_query_agents():
 
 @router.post("/run")
 async def run_query_endpoint(req: QueryRunRequest):
-    """Run a natural language query with auto-classification.
-
-    Returns an SSE stream with events: status, text_delta, done, error.
-    """
-
-    async def event_generator():
-        try:
-            agent_type = classify_query(req.query)
-            yield {
-                "event": "status",
-                "data": json.dumps({"phase": "querying", "agent": agent_type}),
-            }
-
-            result = await run_query(agent_type, req.query)
-
-            yield {
-                "event": "text_delta",
-                "data": json.dumps({"content": result.markdown}),
-            }
-            yield {
-                "event": "done",
-                "data": json.dumps(
-                    {
-                        "agent_used": result.agent_type,
-                        "tokens_in": result.tokens_in,
-                        "tokens_out": result.tokens_out,
-                        "elapsed_ms": result.elapsed_ms,
-                    }
-                ),
-            }
-        except Exception:
-            log.exception("Query failed")
-            yield {
-                "event": "error",
-                "data": json.dumps({"message": "Internal error processing query"}),
-            }
-
-    return EventSourceResponse(event_generator())
+    """Start a background insight query. Returns immediately with the query ID."""
+    if active_count() >= _MAX_CONCURRENT:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many concurrent queries (max {_MAX_CONCURRENT})",
+        )
+    record = start(req.query)
+    return {"id": record["id"], "status": record["status"]}
 
 
 @router.post("/refine")
 async def refine_query_endpoint(req: QueryRefineRequest):
-    """Refine a prior query result with follow-up context."""
-    if req.agent_type not in {a.agent_type for a in get_agent_list()}:
+    """Start a refinement query with prior context."""
+    agent_types = {a.agent_type for a in get_agent_list()}
+    if req.agent_type not in agent_types:
         raise HTTPException(status_code=400, detail=f"Unknown agent type: {req.agent_type}")
 
-    async def event_generator():
-        try:
-            yield {
-                "event": "status",
-                "data": json.dumps({"phase": "querying", "agent": req.agent_type}),
-            }
+    if active_count() >= _MAX_CONCURRENT:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many concurrent queries (max {_MAX_CONCURRENT})",
+        )
 
-            result = await run_query(
-                req.agent_type,
-                req.query,
-                prior_context=req.prior_result,
-            )
+    record = start(
+        req.query,
+        parent_id=req.parent_id,
+        prior_context=req.prior_result,
+        agent_type_override=req.agent_type,
+    )
+    return {"id": record["id"], "status": record["status"]}
 
-            yield {
-                "event": "text_delta",
-                "data": json.dumps({"content": result.markdown}),
-            }
-            yield {
-                "event": "done",
-                "data": json.dumps(
-                    {
-                        "agent_used": result.agent_type,
-                        "tokens_in": result.tokens_in,
-                        "tokens_out": result.tokens_out,
-                        "elapsed_ms": result.elapsed_ms,
-                    }
-                ),
-            }
-        except Exception:
-            log.exception("Refine query failed")
-            yield {
-                "event": "error",
-                "data": json.dumps({"message": "Internal error processing query"}),
-            }
 
-    return EventSourceResponse(event_generator())
+@router.get("/list")
+async def list_queries():
+    """List all persisted insight queries, newest first."""
+    records = load_all()
+    records.reverse()
+    return {"queries": records}
+
+
+@router.get("/{query_id}")
+async def get_query(query_id: str):
+    """Get a single insight query by ID."""
+    record = get(query_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Query not found")
+    return record
+
+
+@router.delete("/{query_id}")
+async def delete_query(query_id: str):
+    """Delete an insight query. Cancels it if still running."""
+    if not delete(query_id):
+        raise HTTPException(status_code=404, detail="Query not found")
+    return {"deleted": query_id}

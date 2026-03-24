@@ -123,6 +123,19 @@ export const api = {
   profileDimension: (dim: string) => get<unknown>(`/profile/${dim}`),
   profilePending: () => get<unknown>("/profile/facts/pending"),
 
+  // --- Insight Queries (HTTP-only, background execution) ---
+  insightQueries: () => get<import("./types").InsightQueryList>("/query/list"),
+  insightQuery: (id: string) => get<import("./types").InsightQuery>(`/query/${id}`),
+  runInsightQuery: (query: string) => post<{ id: string; status: string }>("/query/run", { query }),
+  refineInsightQuery: (query: string, parentId: string, priorResult: string, agentType: string) =>
+    post<{ id: string; status: string }>("/query/refine", {
+      query,
+      parent_id: parentId,
+      prior_result: priorResult,
+      agent_type: agentType,
+    }),
+  deleteInsightQuery: (id: string) => del<{ deleted: string }>(`/query/${id}`),
+
   // POST/DELETE helpers for mutations
   post,
   del,
