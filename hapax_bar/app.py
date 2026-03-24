@@ -62,6 +62,9 @@ class HapaxBarApp(Gtk.Application):
         self._engine_errors: int = 0
         self._governance_score: float = 1.0
         self._drift_count: int = 0
+        self._metrics_panels: list = []
+        self._stimmung_panels: list = []
+        self._voice_panels: list = []
 
     def do_command_line(self, command_line: Gio.ApplicationCommandLine) -> int:
         if command_line.get_is_remote():
@@ -87,11 +90,18 @@ class HapaxBarApp(Gtk.Application):
             self._windows.append(horizon_seam)
 
             bedrock_seam = SeamWindow(position="bottom")
-            bedrock_seam.add_panel(MetricsPanel())
-            bedrock_seam.add_panel(StimmungDetailPanel())
-            bedrock_seam.add_panel(VoicePanel())
+            mp = MetricsPanel()
+            sd = StimmungDetailPanel()
+            vp = VoicePanel()
+            bedrock_seam.add_panel(mp)
+            bedrock_seam.add_panel(sd)
+            bedrock_seam.add_panel(vp)
             bedrock_seam.add_panel(ControlsPanel())
             bedrock_seam.add_panel(SessionPanel())
+            if primary:
+                self._metrics_panels.append(mp)
+                self._stimmung_panels.append(sd)
+                self._voice_panels.append(vp)
             self.add_window(bedrock_seam)
             self._windows.append(bedrock_seam)
 
@@ -141,12 +151,20 @@ class HapaxBarApp(Gtk.Application):
             field.set_drift_count(self._drift_count)
         for label in self._activity_labels:
             label.update(state.activity_mode)
+        for sd in self._stimmung_panels:
+            sd.update(state)
+        for vp in self._voice_panels:
+            vp.update(state)
 
     def _on_health(self, data: dict) -> None:
         self._last_health = data
+        for mp in self._metrics_panels:
+            mp.update(data, self._last_gpu)
 
     def _on_gpu(self, data: dict) -> None:
         self._last_gpu = data
+        for mp in self._metrics_panels:
+            mp.update(self._last_health, data)
 
     @staticmethod
     def _fetch_agent_count() -> dict:
