@@ -14,15 +14,16 @@ class SeamWindow(Astal.Window):
 
     def __init__(self, position: str = "top") -> None:
         is_top = position == "top"
-        anchor = (
-            (Astal.WindowAnchor.TOP if is_top else Astal.WindowAnchor.BOTTOM)
-            | Astal.WindowAnchor.LEFT
-            | Astal.WindowAnchor.RIGHT
-        )
-
+        # Fullscreen overlay — anchor all 4 edges, transparent background.
+        # Content panel positioned at the correct edge via valign + margin.
+        # This is the only way to get natural content height with full width
+        # on layer-shell (partial anchoring forces the surface to stretch).
         super().__init__(
             namespace=f"hapax-seam-{position}",
-            anchor=anchor,
+            anchor=Astal.WindowAnchor.TOP
+            | Astal.WindowAnchor.BOTTOM
+            | Astal.WindowAnchor.LEFT
+            | Astal.WindowAnchor.RIGHT,
             exclusivity=Astal.Exclusivity.IGNORE,
             keymode=Astal.Keymode.EXCLUSIVE,
             css_classes=["seam-overlay"],
@@ -43,6 +44,7 @@ class SeamWindow(Astal.Window):
             ),
             transition_duration=200,
             reveal_child=False,
+            valign=Gtk.Align.START if is_top else Gtk.Align.END,
             child=self._panel,
         )
 
