@@ -136,6 +136,15 @@ export const api = {
     }),
   deleteInsightQuery: (id: string) => del<{ deleted: string }>(`/query/${id}`),
 
+  // --- Fortress (HTTP-only) ---
+  fortressState: () => get<import("./types").FortressState>("/fortress/state"),
+  fortressGovernance: () => get<import("./types").FortressGovernance>("/fortress/governance"),
+  fortressGoals: () => get<import("./types").FortressGoals>("/fortress/goals"),
+  fortressEvents: () => get<import("./types").FortressEvents>("/fortress/events"),
+  fortressMetrics: () => get<import("./types").FortressMetrics>("/fortress/metrics"),
+  fortressSessions: () => get<import("./types").FortressSessions>("/fortress/sessions"),
+  fortressChronicle: () => get<import("./types").FortressChronicle>("/fortress/chronicle"),
+
   // POST/DELETE helpers for mutations
   post,
   del,

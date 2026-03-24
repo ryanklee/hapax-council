@@ -300,7 +300,7 @@ export interface ChatModelsResponse {
 // --- Working Mode ---
 
 export interface WorkingModeResponse {
-  mode: "research" | "rnd";
+  mode: "research" | "rnd" | "fortress";
   switched_at: string | null;
 }
 
@@ -595,4 +595,96 @@ export interface InsightQuery {
 
 export interface InsightQueryList {
   queries: InsightQuery[];
+}
+
+// --- Fortress types ---
+
+export interface FortressEvent {
+  type: string;
+  [key: string]: unknown;
+}
+
+export interface FortressState {
+  timestamp: number;
+  game_tick: number;
+  year: number;
+  season: number;
+  month: number;
+  day: number;
+  fortress_name: string;
+  paused: boolean;
+  population: number;
+  food_count: number;
+  drink_count: number;
+  active_threats: number;
+  job_queue_length: number;
+  idle_dwarf_count: number;
+  most_stressed_value: number;
+  pending_events: FortressEvent[];
+}
+
+export interface FortressChainStatus {
+  active: boolean;
+  last_action: string | null;
+}
+
+export interface FortressGovernance {
+  chains: Record<string, FortressChainStatus>;
+  suppression: Record<string, number>;
+}
+
+export interface FortressGoalSubgoal {
+  id: string;
+  description: string;
+  chain: string;
+  state: string;
+}
+
+export interface FortressGoal {
+  id: string;
+  description: string;
+  priority: number;
+  state: string;
+  subgoals: FortressGoalSubgoal[];
+}
+
+export interface FortressGoals {
+  goals: FortressGoal[];
+}
+
+export interface FortressEvents {
+  events: FortressEvent[];
+}
+
+export interface FortressMetrics {
+  session_id: string | null;
+  survival_days: number;
+  total_commands: number;
+  chain_metrics: Record<string, { issued: number; vetoed: number }>;
+}
+
+export interface FortressSession {
+  session_id: string;
+  fortress_name: string;
+  survival_days: number;
+  survival_years: number;
+  peak_population: number;
+  cause_of_death: string;
+}
+
+export interface FortressSessions {
+  sessions: FortressSession[];
+}
+
+export interface FortressChronicleEntry {
+  fortress_name: string;
+  year: number;
+  season: number;
+  trigger: string;
+  narrative: string;
+  population: number;
+}
+
+export interface FortressChronicle {
+  entries: FortressChronicleEntry[];
 }
