@@ -59,7 +59,7 @@ export function Region({ name, children, className = "", style, stimmungStance }
       // Don't cycle if clicking interactive content in stratum/core
       if (depth !== "surface") {
         const target = e.target as HTMLElement;
-        if (target.closest("button, a, input, textarea, [role=button]")) return;
+        if (target.closest("button, a, input, textarea, [role=button], [role=application]")) return;
       }
 
       if (depth === "surface") {
