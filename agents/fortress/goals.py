@@ -159,8 +159,16 @@ class GoalPlanner:
                 log.info("Goal %s completed", goal.id)
                 continue
 
-            selected_ids = set(goal.context_selector(state))
             sg_map = {sg.id: sg for sg in goal.subgoals}
+
+            # Re-check all ACTIVE subgoals for satisfaction (even if no longer selected)
+            for sg in goal.subgoals:
+                if self._tracker.subgoal_state(goal.id, sg.id) == GoalState.ACTIVE and sg.check(
+                    state
+                ):
+                    self._tracker.mark_subgoal(goal.id, sg.id, GoalState.COMPLETED)
+
+            selected_ids = set(goal.context_selector(state))
 
             for sg_id in sorted(selected_ids):
                 sg = sg_map.get(sg_id)

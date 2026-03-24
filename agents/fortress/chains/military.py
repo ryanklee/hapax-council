@@ -28,8 +28,8 @@ def _equipment_available(state: FullFortressState) -> bool:
 
 
 def _food_critical_no_draft(state: FullFortressState) -> bool:
-    """Block military drafting when food is critically low."""
-    return state.stockpiles.food > state.population * 5
+    """Block military drafting when food is critically low (< 2 per capita)."""
+    return state.food_count >= state.population * 2
 
 
 def _threat_full_assault(state: FullFortressState) -> bool:

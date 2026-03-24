@@ -21,8 +21,8 @@ def _has_enough_drink(state: FastFortressState) -> bool:
 
 
 def _has_beds(state: FastFortressState) -> bool:
-    # simplified: check via building count
-    return True  # placeholder until buildings tracked
+    # FastFortressState doesn't have buildings — assume not satisfied for founding goals
+    return False
 
 
 def _has_military(state: FastFortressState) -> bool:
@@ -31,6 +31,14 @@ def _has_military(state: FastFortressState) -> bool:
 
 def _no_threats(state: FastFortressState) -> bool:
     return state.active_threats == 0
+
+
+def _has_workshops(state: FastFortressState) -> bool:
+    return False  # FastFortressState doesn't track workshops
+
+
+def _has_entrance(state: FastFortressState) -> bool:
+    return False  # requires FullFortressState with map data
 
 
 # --- Context selectors ---
@@ -123,13 +131,13 @@ PREPARE_FOR_SIEGE = CompoundGoal(
             description="Forge weapons and armor",
             chain="resource_manager",
             preconditions=("establish_military",),
-            check=lambda s: True,  # simplified
+            check=lambda s: False,  # requires weapon count check via FullFortressState
         ),
         SubGoal(
             id="build_defenses",
             description="Construct entrance defenses",
             chain="fortress_planner",
-            check=lambda s: True,  # simplified
+            check=lambda s: False,  # requires entrance defense check
         ),
     ),
 )
@@ -144,14 +152,14 @@ FOUND_FORTRESS = CompoundGoal(
             id="dig_entrance",
             description="Dig entrance and stairwell",
             chain="fortress_planner",
-            check=lambda s: True,
+            check=_has_entrance,
         ),
         SubGoal(
             id="build_workshops",
             description="Build essential workshops",
             chain="fortress_planner",
             preconditions=("dig_entrance",),
-            check=lambda s: True,
+            check=_has_workshops,
         ),
         SubGoal(
             id="start_farming",

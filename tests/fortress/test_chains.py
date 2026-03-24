@@ -171,7 +171,8 @@ class TestMilitaryChain(unittest.TestCase):
     def test_food_critical_veto(self) -> None:
         state = _base_full(
             population=20,
-            stockpiles=StockpileSummary(weapons=5, food=50, drink=100),
+            food_count=10,
+            stockpiles=StockpileSummary(weapons=5, food=10, drink=100),
         )
         veto, _ = self.chain.evaluate(state)
         self.assertFalse(veto.allowed)
