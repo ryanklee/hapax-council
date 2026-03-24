@@ -14,19 +14,26 @@ class SeamWindow(Astal.Window):
 
     def __init__(self, position: str = "top") -> None:
         is_top = position == "top"
-        anchor = (
-            (Astal.WindowAnchor.TOP if is_top else Astal.WindowAnchor.BOTTOM)
-            | Astal.WindowAnchor.LEFT
-            | Astal.WindowAnchor.RIGHT
-        )
-
+        # Fullscreen overlay — anchor all 4 edges, transparent background.
+        # Content panel positioned at the correct edge via valign + margin.
+        # This is the only way to get natural content height with full width
+        # on layer-shell (partial anchoring forces the surface to stretch).
         super().__init__(
             namespace=f"hapax-seam-{position}",
-            anchor=anchor,
+            anchor=Astal.WindowAnchor.TOP
+            | Astal.WindowAnchor.BOTTOM
+            | Astal.WindowAnchor.LEFT
+            | Astal.WindowAnchor.RIGHT,
             exclusivity=Astal.Exclusivity.IGNORE,
             keymode=Astal.Keymode.EXCLUSIVE,
             css_classes=["seam-overlay"],
             visible=False,
+        )
+
+        self._panel = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=0,
+            css_classes=["seam-panel"],
         )
 
         self._revealer = Gtk.Revealer(
@@ -39,25 +46,24 @@ class SeamWindow(Astal.Window):
             reveal_child=False,
             halign=Gtk.Align.CENTER,
             valign=Gtk.Align.START if is_top else Gtk.Align.END,
+            child=self._panel,
         )
 
         if is_top:
             self._revealer.set_margin_top(28)
         else:
-            self._revealer.set_margin_bottom(36)
+            self._revealer.set_margin_bottom(34)
 
-        self._panel = Gtk.Box(
-            orientation=Gtk.Orientation.VERTICAL,
-            spacing=8,
-            css_classes=["seam-panel"],
-        )
-        self._revealer.set_child(self._panel)
         self.set_child(self._revealer)
 
-        # Escape to dismiss
+        # Escape or middle-click to dismiss
         key_ctrl = Gtk.EventControllerKey()
         key_ctrl.connect("key-pressed", self._on_key)
         self.add_controller(key_ctrl)
+
+        dismiss_click = Gtk.GestureClick(button=2)  # middle-click
+        dismiss_click.connect("pressed", lambda *_: self._dismiss())
+        self.add_controller(dismiss_click)
 
         self._panels: list[Gtk.Widget] = []
 
@@ -72,12 +78,13 @@ class SeamWindow(Astal.Window):
         if self.get_visible():
             self._dismiss()
         else:
-            # Refresh all panels before revealing
+            # Refresh panels that support no-arg refresh
             for panel in self._panels:
-                if hasattr(panel, "refresh"):
-                    panel.refresh()
-                elif hasattr(panel, "update"):
-                    panel.update()
+                try:
+                    if hasattr(panel, "refresh"):
+                        panel.refresh()
+                except TypeError:
+                    pass
             self.set_visible(True)
             self.present()
             GLib.idle_add(lambda: self._revealer.set_reveal_child(True) or False)

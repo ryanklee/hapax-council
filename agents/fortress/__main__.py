@@ -12,6 +12,7 @@ import asyncio
 import json
 import logging
 import signal
+import time
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,7 @@ from agents.fortress.goals import GoalPlanner
 from agents.fortress.metrics import FortressSessionTracker
 from agents.fortress.narrative import format_narrative_fallback, write_chronicle_entry
 from agents.fortress.schema import FastFortressState, FortressPosition
+from agents.fortress.tactical import TacticalContext, encode_tactical
 from agents.fortress.wiring import FortressGovernor
 
 log = logging.getLogger(__name__)
@@ -57,7 +59,9 @@ class FortressDaemon:
         self._tracker = FortressSessionTracker()
         self._goal_planner = GoalPlanner(goals=list(DEFAULT_GOALS))
         self._creativity_metrics = CreativityMetrics()
+        self._tactical_ctx = TacticalContext()
         self._running = True
+        self._cmd_cooldowns: dict[str, float] = {}
         self._started = False
         self._last_game_day = -1
 
@@ -71,26 +75,82 @@ class FortressDaemon:
 
     async def _governance_loop(self) -> None:
         """Main loop: read state -> evaluate -> dispatch -> episodes -> metrics."""
+        last_tick = -1
+        cycle_count = 0
+
         while self._running:
             state = self._bridge.read_state()
             if state is None:
+                if cycle_count % 10 == 0:
+                    log.debug("No state available (DF not running or bridge stopped)")
+                # If we haven't started yet, try unpausing (game may be paused,
+                # causing state to go stale because bridge only exports on ticks)
+                if not self._started and self._bridge._config.state_path.exists():
+                    log.info("State stale but file exists — sending unpause")
+                    self._bridge.send_command("pause", state=False)
                 await asyncio.sleep(IDLE_POLL_INTERVAL)
+                cycle_count += 1
                 continue
 
-            # First state: initialize session
+            # First state: initialize session + unpause game
             if not self._started:
                 self._start_session(state)
+                self._bridge.send_command("pause", state=False)
+                log.info("Game unpaused")
+
+            # Skip if game tick unchanged (paused or same state)
+            if state.game_tick == last_tick:
+                await asyncio.sleep(GOVERNANCE_INTERVAL)
+                cycle_count += 1
+                continue
+            last_tick = state.game_tick
 
             # Governor evaluation
             commands = self._governor.evaluate(state)
+            cycle_count += 1
 
-            # Dispatch commands through bridge
+            # Dedup with 30s cooldown: same command can re-fire after window expires
+            dedup_window = 30.0
+            now_dedup = time.monotonic()
+            new_commands = []
             for cmd in commands:
-                self._bridge.send_command(cmd.action, **cmd.params)
+                key = f"{cmd.chain}:{cmd.action}:{cmd.params}"
+                last_time = self._cmd_cooldowns.get(key, 0.0)
+                if (now_dedup - last_time) >= dedup_window:
+                    new_commands.append(cmd)
+                    self._cmd_cooldowns[key] = now_dedup
+            commands = new_commands
+
+            # Log every 30s or when NEW commands are produced
+            now_mono = time.monotonic()
+            if commands or (now_mono - getattr(self, "_last_log_time", 0)) > 30:
+                self._last_log_time = now_mono
+                log.info(
+                    "Tick %d | Pop %d | Food %d | Drink %d | Threats %d | Cmds %d | Total %d",
+                    state.game_tick,
+                    state.population,
+                    state.food_count,
+                    state.drink_count,
+                    state.active_threats,
+                    len(commands),
+                    self._tracker.total_commands,
+                )
+
+            # Dispatch commands through bridge — tactical encoding
+            for cmd in commands:
+                tactical_actions = encode_tactical(cmd, state, self._tactical_ctx)
+                if tactical_actions:
+                    for ta in tactical_actions:
+                        action = ta.pop("action")
+                        self._bridge.send_command(action, **ta)
+                else:
+                    # Passthrough: send symbolic command
+                    self._bridge.send_command(cmd.action, **cmd.params)
                 self._tracker.record_command(cmd.chain)
                 self._creativity_metrics.record_action(
                     cmd.chain, has_semantic_ref=(cmd.chain == "creativity")
                 )
+                log.info("  -> [%s] %s %s", cmd.chain, cmd.action, cmd.params)
 
             # Episode lifecycle
             episode = self._episode_builder.observe(state)
@@ -122,15 +182,19 @@ class FortressDaemon:
             await asyncio.sleep(GOVERNANCE_INTERVAL)
 
     async def _maintenance_loop(self) -> None:
-        """Slow loop: goal timeouts, spatial memory maintenance."""
+        """Slow loop: goal timeouts, spatial memory maintenance, cooldown pruning."""
         while self._running:
             await asyncio.sleep(MAINTENANCE_INTERVAL)
+            # Prune old cooldown entries (older than 5 minutes)
+            now = time.monotonic()
+            self._cmd_cooldowns = {k: v for k, v in self._cmd_cooldowns.items() if (now - v) < 300}
             # Goal timeout checks could go here
             # Spatial memory consolidation/pruning could go here
 
     def _start_session(self, state: FastFortressState) -> None:
         """Initialize session components on first state read."""
         self._tracker.start(state)
+        self._episode_builder = FortressEpisodeBuilder(session_id=self._tracker.session_id)
         self._started = True
 
         # Activate founding goal for new fortresses (small population)

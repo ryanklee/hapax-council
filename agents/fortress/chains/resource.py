@@ -1,12 +1,13 @@
 """Resource Manager governance chain.
 
 Decides production priorities: food, drink, equipment.
-Suppression wiring (resource_pressure field) added in Batch 4.
+Works with both FastFortressState (food_count/drink_count) and
+FullFortressState (stockpiles + workshops).
 """
 
 from __future__ import annotations
 
-from agents.fortress.schema import FullFortressState
+from agents.fortress.schema import FastFortressState, FullFortressState
 from agents.hapax_voice.governance import (
     Candidate,
     FallbackChain,
@@ -17,21 +18,25 @@ from agents.hapax_voice.governance import (
 )
 
 
-def _workshop_available(state: FullFortressState) -> bool:
-    """Allow orders only if at least one workshop exists."""
-    return len(state.workshops) > 0
+def _workshop_available(state: FastFortressState) -> bool:
+    """Allow orders only if workshops exist (skip check for fast state)."""
+    if isinstance(state, FullFortressState):
+        return len(state.workshops) > 0
+    return True  # Assume workshops exist when we can't check
 
 
-def _needs_food(state: FullFortressState) -> bool:
-    return state.stockpiles.food < state.population * 10
+def _needs_food(state: FastFortressState) -> bool:
+    return state.food_count < state.population * 10
 
 
-def _needs_drink(state: FullFortressState) -> bool:
-    return state.stockpiles.drink < state.population * 5
+def _needs_drink(state: FastFortressState) -> bool:
+    return state.drink_count < state.population * 5
 
 
-def _needs_equipment(state: FullFortressState) -> bool:
-    return state.stockpiles.weapons < state.population // 5
+def _needs_equipment(state: FastFortressState) -> bool:
+    if isinstance(state, FullFortressState):
+        return state.stockpiles.weapons < state.population // 5
+    return False  # Can't check without full state
 
 
 class ResourceManagerChain:
@@ -40,7 +45,7 @@ class ResourceManagerChain:
     CHAIN_NAME = "resource_manager"
 
     def __init__(self) -> None:
-        self._veto_chain: VetoChain[FullFortressState] = VetoChain(
+        self._veto_chain: VetoChain[FastFortressState] = VetoChain(
             [
                 Veto(
                     "workshop_available",
@@ -49,7 +54,7 @@ class ResourceManagerChain:
                 ),
             ]
         )
-        self._fallback: FallbackChain[FullFortressState, str] = FallbackChain(
+        self._fallback: FallbackChain[FastFortressState, str] = FallbackChain(
             candidates=[
                 Candidate("food_production", _needs_food, "food_production"),
                 Candidate("drink_production", _needs_drink, "drink_production"),
@@ -58,7 +63,7 @@ class ResourceManagerChain:
             default="no_action",
         )
 
-    def evaluate(self, state: FullFortressState) -> tuple[VetoResult, Selected[str]]:
+    def evaluate(self, state: FastFortressState) -> tuple[VetoResult, Selected[str]]:
         """Evaluate vetoes and select production priority."""
         veto_result = self._veto_chain.evaluate(state)
         if not veto_result.allowed:
