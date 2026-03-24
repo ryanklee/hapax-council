@@ -1,6 +1,7 @@
 """Seam layer — edge-anchored overlay for detail-on-demand.
 
 Parameterized by position (top/bottom). Each bar gets its own seam window.
+Auto-dismisses on Escape, click-outside (focus loss), or second toggle.
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ class SeamWindow(Astal.Window):
             namespace=f"hapax-seam-{position}",
             anchor=anchor,
             exclusivity=Astal.Exclusivity.IGNORE,
-            keymode=Astal.Keymode.ON_DEMAND,
+            keymode=Astal.Keymode.EXCLUSIVE,
             css_classes=["seam-overlay"],
             visible=False,
         )
@@ -53,21 +54,40 @@ class SeamWindow(Astal.Window):
         self._revealer.set_child(self._panel)
         self.set_child(self._revealer)
 
+        # Escape to dismiss
         key_ctrl = Gtk.EventControllerKey()
         key_ctrl.connect("key-pressed", self._on_key)
         self.add_controller(key_ctrl)
+
+        # Auto-dismiss after timeout (seam is transient)
+        self._dismiss_timer: int | None = None
 
     def add_panel(self, widget: Gtk.Widget) -> None:
         self._panel.append(widget)
 
     def toggle(self) -> None:
         if self.get_visible():
-            self._revealer.set_reveal_child(False)
-            GLib.timeout_add(250, self._hide)
+            self._dismiss()
         else:
             self.set_visible(True)
             self.present()
             GLib.idle_add(lambda: self._revealer.set_reveal_child(True) or False)
+            # Auto-dismiss after 10 seconds of inactivity
+            if self._dismiss_timer is not None:
+                GLib.source_remove(self._dismiss_timer)
+            self._dismiss_timer = GLib.timeout_add(10_000, self._auto_dismiss)
+
+    def _dismiss(self) -> None:
+        if self._dismiss_timer is not None:
+            GLib.source_remove(self._dismiss_timer)
+            self._dismiss_timer = None
+        self._revealer.set_reveal_child(False)
+        GLib.timeout_add(250, self._hide)
+
+    def _auto_dismiss(self) -> bool:
+        self._dismiss_timer = None
+        self._dismiss()
+        return False
 
     def _hide(self) -> bool:
         if not self._revealer.get_reveal_child():
@@ -82,7 +102,6 @@ class SeamWindow(Astal.Window):
         _state: Gdk.ModifierType,
     ) -> bool:
         if keyval == Gdk.KEY_Escape:
-            self._revealer.set_reveal_child(False)
-            GLib.timeout_add(250, self._hide)
+            self._dismiss()
             return True
         return False
