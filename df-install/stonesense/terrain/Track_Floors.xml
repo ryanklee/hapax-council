@@ -1,0 +1,107 @@
+<?xml version="1.0"?>
+<!-- special props -->
+<floors file="floors.png">
+    <!-- construct (wood planks) -->
+    <floor sheetIndex="10" color="material">
+        <terrain shape="FLOOR" special="TRACK" material="CONSTRUCTION" />
+        <terrain shape="RAMP" special="TRACK" material="CONSTRUCTION" />
+        <material value="Wood" />
+        <subsprite sheetIndex="18" mud_min="10" />
+        <subsprite sheetIndex="0" variationtype="sixteen" file="Track_Floors.png" color="material" />
+    </floor>
+    <!-- construct -->
+    <floor sheetIndex="36">
+        <terrain shape="FLOOR" special="TRACK" material="CONSTRUCTION" />
+        <terrain shape="RAMP" special="TRACK" material="CONSTRUCTION" />
+        <material value="GreenGlass" />
+        <subsprite sheetIndex="18" mud_min="10" />
+        <subsprite sheetIndex="0" variationtype="sixteen" file="Track_Floors.png" color="material" />
+    </floor>
+    <!-- construct -->
+    <floor sheetIndex="35">
+        <terrain shape="FLOOR" special="TRACK" material="CONSTRUCTION" />
+        <terrain shape="RAMP" special="TRACK" material="CONSTRUCTION" />
+        <material value="ClearGlass" />
+        <material value="CrystalGlass" />
+        <subsprite sheetIndex="18" mud_min="10" />
+        <subsprite sheetIndex="0" variationtype="sixteen" file="Track_Floors.png" color="material" />
+    </floor>
+    <floor sheetIndex="56">
+        <terrain shape="FLOOR" special="TRACK" material="CONSTRUCTION" />
+        <terrain shape="RAMP" special="TRACK" material="CONSTRUCTION" />
+        <material value="Stone">
+            <subtype value="RUTILE" />
+        </material>
+        <subsprite sheetIndex="18" mud_min="10" />
+        <subsprite sheetIndex="0" variationtype="sixteen" file="Track_Floors.png" color="material" />
+    </floor>
+    <!-- construct -->
+    <floor sheetIndex="38" color="material">
+        <terrain shape="FLOOR" special="TRACK" material="CONSTRUCTION" />
+        <terrain shape="RAMP" special="TRACK" material="CONSTRUCTION" />
+        <material value="Metal">
+            <subtype value="IRON" />
+            <subtype value="GOLD" />
+            <subtype value="SILVER" />
+            <subtype value="COPPER" />
+            <subtype value="NICKEL" />
+            <subtype value="ZINC" />
+            <subtype value="BRONZE" />
+            <subtype value="BRASS" />
+            <subtype value="STEEL" />
+            <subtype value="PIG_IRON" />
+            <subtype value="PLATINUM" />
+            <subtype value="ELECTRUM" />
+            <subtype value="TIN" />
+            <subtype value="PEWTER_FINE" />
+            <subtype value="PEWTER_TRIFLE" />
+            <subtype value="PEWTER_LAY" />
+            <subtype value="LEAD" />
+            <subtype value="ALUMINUM" />
+            <subtype value="NICKEL_SILVER" />
+            <subtype value="BILLON" />
+            <subtype value="STERLING_SILVER" />
+            <subtype value="BLACK_BRONZE" />
+            <subtype value="ROSE_GOLD" />
+            <subtype value="BISMUTH" />
+            <subtype value="BISMUTH_BRONZE" />
+            <subtype value="ADAMANTINE" />
+        </material>
+        <subsprite sheetIndex="18" mud_min="10" />
+        <subsprite sheetIndex="0" variationtype="sixteen" file="Track_Floors.png" color="material" />
+    </floor>
+    <!-- construct -->
+    <floor sheetIndex="1" color="material">
+        <terrain shape="FLOOR" special="TRACK" material="CONSTRUCTION" />
+        <terrain shape="RAMP" special="TRACK" material="CONSTRUCTION" />
+        <subsprite sheetIndex="18" mud_min="10" />
+        <subsprite sheetIndex="0" variationtype="sixteen" file="Track_Floors.png" color="material" />
+    </floor>
+    <!--constructed ice floor track-->
+    <floor sheetIndex="54">
+        <material value="Ice" />
+        <terrain shape="FLOOR" special="TRACK" material="CONSTRUCTION" />
+        <terrain shape="RAMP" special="TRACK" material="CONSTRUCTION" />
+        <subsprite sheetIndex="18" mud_min="10" />
+        <subsprite sheetIndex="0" variationtype="sixteen" file="Track_Floors.png" color="material" />
+    </floor>
+    <!-- ice -->
+    <floor sheetIndex="53">
+        <terrain shape="RAMP" special="TRACK" material="FROZEN_LIQUID" />
+        <subsprite sheetIndex="18" mud_min="10" />
+        <subsprite sheetIndex="0" variationtype="sixteen" file="Track_Floors.png" color="material" />
+    </floor>
+    <!-- sm stone -->
+    <floor sheetIndex="20" color="material">
+        <terrain shape="FLOOR" special="TRACK" material="STONE" />
+        <terrain shape="FLOOR" special="TRACK" material="LAVA_STONE" />
+        <terrain shape="FLOOR" special="TRACK" material="FEATURE" />
+        <terrain shape="FLOOR" special="TRACK" material="MINERAL" />
+        <terrain shape="RAMP" special="TRACK" material="STONE" />
+        <terrain shape="RAMP" special="TRACK" material="LAVA_STONE" />
+        <terrain shape="RAMP" special="TRACK" material="FEATURE" />
+        <terrain shape="RAMP" special="TRACK" material="MINERAL" />
+        <subsprite sheetIndex="18" mud_min="10" />
+        <subsprite sheetIndex="0" variationtype="sixteen" file="Track_Floors.png" color="material" />
+    </floor>
+</floors>

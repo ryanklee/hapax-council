@@ -1,0 +1,16 @@
+gui/clone-uniform
+=================
+
+Tags: unavailable
+
+Command: "gui/clone-uniform"
+
+  Duplicate an existing military uniform.
+
+When invoked, this tool duplicates the currently selected uniform template and selects the newly created copy. Activate in the Uniforms page of the military screen with the cursor in the leftmost list.
+
+
+Usage
+-----
+
+   gui/clone-uniform

@@ -1,0 +1,14 @@
+showmood
+========
+
+Tags: fort | armok | inspection | jobs | units
+
+Command: "showmood"
+
+  Shows all items needed for the active strange mood.
+
+
+Usage
+-----
+
+   showmood

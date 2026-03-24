@@ -1,0 +1,12 @@
+About DFHack
+============
+
+These pages contain information about the general DFHack project.
+
+* List of authors
+
+* Licenses
+
+* Removed tools
+
+* Changelog

@@ -1,0 +1,16 @@
+gui/unit-syndromes
+==================
+
+Tags: fort | inspection | units
+
+Command: "gui/unit-syndromes"
+
+  Inspect syndrome details.
+
+This tool can list the syndromes affecting game units and the remaining and maximum duration of those syndromes, along with (optionally) substantial detail about the effects.
+
+
+Usage
+-----
+
+   gui/unit-syndromes

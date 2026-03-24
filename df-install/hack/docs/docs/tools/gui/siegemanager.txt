@@ -1,0 +1,16 @@
+gui/siegemanager
+================
+
+Tags: buildings | interface | productivity
+
+Command: "gui/siegemanager"
+
+  Manage siege engines at a glance
+
+This interface provides a list of siege engines, their ammo count, and current active jobs whilst providing shortcuts to configure their firing/standy mode and view them in-world.
+
+
+Usage
+-----
+
+   gui/siegemanager

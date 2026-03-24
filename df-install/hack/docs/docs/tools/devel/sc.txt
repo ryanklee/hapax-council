@@ -1,0 +1,27 @@
+devel/sc
+========
+
+Tags: dev
+
+Command: "devel/sc"
+
+  Scan DF structures for errors.
+
+Size Check: scans structures for invalid vectors, misaligned structures, and unidentified enum values.
+
+Note:
+
+  This script can take a very long time to complete, and DF may be unresponsive while it is running. You can use kill-lua to interrupt this script.
+
+
+Usage
+-----
+
+"devel/sc"
+   Scan "world".
+
+"devel/sc -all"
+   Scan all globals.
+
+"devel/sc <expr>"
+   Scan the result of the given expression.

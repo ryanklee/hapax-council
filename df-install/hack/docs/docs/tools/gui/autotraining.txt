@@ -1,0 +1,16 @@
+gui/autotraining
+================
+
+Tags: fort | auto | interface
+
+Command: "gui/autotraining"
+
+  GUI interface for ``autotraining``
+
+This is an in-game configuration interface for autotraining. You can pick squads for training, select ignored units, and set the needs threshold.
+
+
+Usage
+-----
+
+   gui/autotraining

@@ -1,0 +1,16 @@
+hotkey-notes
+============
+
+Tags: unavailable
+
+Command: "hotkey-notes"
+
+  Show info on DF map location hotkeys.
+
+This command lists the key (e.g. "F1"), name, and jump position of the map location hotkeys you set in the "H" menu.
+
+
+Usage
+-----
+
+   hotkey-notes

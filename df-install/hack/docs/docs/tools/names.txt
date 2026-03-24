@@ -1,0 +1,18 @@
+names
+=====
+
+Tags: unavailable
+
+Command: "names"
+
+  Rename units or items with the DF name generator.
+
+This tool allows you to rename the selected unit or item (including artifacts) with the native Dwarf Fortress name generation interface.
+
+To modify or remove the first name, press "f" and edit.
+
+
+Usage
+-----
+
+   names

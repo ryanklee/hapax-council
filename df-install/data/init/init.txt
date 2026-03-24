@@ -1,0 +1,120 @@
+WARNING: Do NOT copy over the init.txt from an earlier version of DF.
+Always read the file carefully, including the comments.
+
+In general, you can copy savegames and mods from older DF versions, but you should not copy anything else.  You should not, under any circumstances, unpack a new DF on top of an older one.
+
+
+Change this to turn sound off.
+
+[SOUND:YES]
+
+The sound volume runs from 0 (off) to 255 (full).  You can set the volume from the ESC options menu as well.
+
+[MASTER_VOLUME:255]
+[MUSIC_VOLUME:255]
+[AMBIENCE_VOLUME:230]
+[SFX_VOLUME:204]
+[MUSIC_VOLUME_ADV:217]
+[AMBIENCE_VOLUME_ADV:240]
+[SFX_VOLUME_ADV:230]
+
+Time in seconds on average between songs and interludes.  The default of 240 gives a range of 180 to 300 seconds, which is 3 to 5 minutes.  Can be anywhere from 10 to 600.
+
+[AVERAGE_TIME_BETWEEN_SONGS:240]
+
+This lets you set the starting windowed/fullscreen setting.  Can be YES, NO or PROMPT.
+
+[WINDOWED:NO]
+
+This is the size and font for windowed mode.  Changing to the 800x600 font might make you happier.
+
+[WINDOWEDX:1200]
+[WINDOWEDY:800]
+[FONT:curses_640x300.png]
+
+You may disable window resizing if you wish.
+
+[RESIZABLE:YES]
+
+Full screen info.  The 0s below mean that the game will choose a resolution for you, but you can set it yourself as well.
+
+[FULLSCREENX:0]
+[FULLSCREENY:0]
+[FULLFONT:curses_640x300.png]
+
+This font is used during the initial load sequence and menus.
+
+[BASIC_FONT:curses_640x300.png]
+
+If this is set to YES, the game will try to enlarge the interface to the desired size if the window is large enough to accommodate it.  If the window is too small, nothing will happen.  The game will err on the side of making the grid larger.
+
+[INTERFACE_SCALING_TO_DESIRED_GRID:YES]
+[INTERFACE_SCALING_DESIRED_GRID_WIDTH:170]
+[INTERFACE_SCALING_DESIRED_GRID_HEIGHT:64]
+
+If INTERFACE_SCALING_TO_DESIRED_GRID is set to NO, the game will scale the interface using a fixed percentage.  The game increases the font one pixel at a time and will err on the side of making the grid larger.
+
+[INTERFACE_SCALING_PERCENTAGE:100]
+
+For wider monitors, restrict the width of the interface-heavy screens to a percentage of the total width.  Does not affect the main play area.  Some elements like the elevation bar and minimap may go outside this range (rather than cut the screen in half.)
+
+[MAXIMUM_INTERFACE_PERCENTAGE:100]
+
+Change this to YES if you want to see an FPS counter at the top left.
+
+[FPS:NO]
+
+Use this to set the maximum frame rate during play.  The movies are always capped at 100.  A frame in this case is not graphical but related to the movement speed of a creature.  A healthy, unencumbered dwarven peasant takes one step every 10 frames.
+
+You may set FPS_CAP to 0 to make it uncapped.
+
+[FPS_CAP:100]
+
+Use this to set the maximum graphical frame refresh rate during play.
+
+[G_FPS_CAP:50]
+
+This controls the number of milliseconds that must pass before a held key sends an initial repeat press to the game.  You might need to adjust this.
+
+[KEY_HOLD_MS:250]
+
+This controls the number of milliseconds that must pass before a held key sends a repeat press to the game after the repeat process has begun.
+
+[KEY_REPEAT_MS:150]
+
+If you set KEY_REPEAT_ACCEL_LIMIT above one, then after KEY_REPEAT_ACCEL_START repetitions the repetition delay will smoothly decrease until repetition is this number of times faster than at the start.
+
+[KEY_REPEAT_ACCEL_LIMIT:8]
+[KEY_REPEAT_ACCEL_START:10]
+
+This controls the number of milliseconds between macro instructions.
+
+[MACRO_MS:15]
+
+This controls the number of milliseconds that must pass before input works again after the view recenters on an event in dwarf mode.
+
+[RECENTER_INTERFACE_SHUTDOWN_MS:0]
+
+Change this to NO if you want to leave save uncompressed (you might want to do this if you are experience save corruption).
+
+[COMPRESSED_SAVES:YES]
+
+Change this to YES to start with the classic ASCII tileset.
+
+[USE_CLASSIC_ASCII:YES]
+
+If set to SOFTWARE or 2D, this will force the game to use software rendering; if set to AUTO, STANDARD or anything else, SDL2 will try to auto-select based on the system the game is being run on.
+
+[PRINT_MODE:AUTO]
+
+If this is set to NEAREST, the game will apply nearest-neighbor scaling to textures. If set to LANCZOS, it'll use lanczos scaling, which looks fuzzier but better at certain zooms. AUTO, the default, will try to select whichever one is more appropriate depending on the zoom level.
+
+[TEXTURE_PARAM:AUTO]
+
+For the Premium version, various logs are shown on the main screen which we omit in the Classic version.
+
+[TITLE_SHOW_GRAPHICS_LOGOS:NO]
+
+Put the title music identifier here.  The music objects define later behavior, but the game needs initial guidance before objects are selected.
+
+[TITLE_MUSIC:CLASSIC_TITLE_THEME]

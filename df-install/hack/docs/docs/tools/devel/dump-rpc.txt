@@ -1,0 +1,16 @@
+devel/dump-rpc
+==============
+
+Tags: dev
+
+Command: "devel/dump-rpc"
+
+  Dump RPC endpoint info.
+
+Write RPC endpoint information to the specified file.
+
+
+Usage
+-----
+
+   devel/dump-rpc <filename>

@@ -1,0 +1,34 @@
+DFHack development guide
+========================
+
+These are pages relevant to people developing for DFHack.
+
+* DFHack development overview
+
+* Building DFHack
+
+* How to contribute to DFHack
+
+* DFHack documentation system
+
+* DFHack API concepts
+
+* DFHack Lua API Reference
+
+* DFHack overlay dev guide
+
+* DF data definitions (DF-structures)
+
+* DFHack Data Identity System
+
+* GitHub workflows
+
+* Release process
+
+* Memory research
+
+* Patching the DF binary
+
+* DFHack remote interface
+
+* Development changelog

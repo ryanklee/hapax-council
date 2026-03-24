@@ -1,0 +1,20 @@
+devel/light
+===========
+
+Tags: unavailable
+
+Command: "devel/light"
+
+  Experiment with lighting overlays.
+
+This is an experimental lighting engine for DF, using the rendermax plugin.
+
+Press "~" to recalculate lighting. Press "`" to exit.
+
+
+Usage
+-----
+
+   devel/light [static]
+
+Pass "static" to not recalculate lighting when in game.

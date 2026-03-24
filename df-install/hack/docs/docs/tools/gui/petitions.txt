@@ -1,0 +1,16 @@
+gui/petitions
+=============
+
+Tags: fort | inspection
+
+Command: "gui/petitions"
+
+  List guildhall and temple agreements.
+
+Show your fort's petitions, both pending and fulfilled.
+
+
+Usage
+-----
+
+   gui/petitions

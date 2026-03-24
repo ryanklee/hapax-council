@@ -1,0 +1,16 @@
+binpatch
+========
+
+Tags: unavailable
+
+Command: "binpatch"
+
+  Applies or removes binary patches.
+
+See Patching the DF binary for more info.
+
+
+Usage
+-----
+
+   binpatch check|apply|remove <patchname>

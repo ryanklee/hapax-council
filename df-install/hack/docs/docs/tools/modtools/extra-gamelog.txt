@@ -1,0 +1,16 @@
+modtools/extra-gamelog
+======================
+
+Tags: unavailable
+
+Command: "modtools/extra-gamelog"
+
+  Write info to the gamelog for Soundsense.
+
+This script writes extra information to the gamelog. This is useful for tools like Soundsense.
+
+
+Usage
+-----
+
+   modtools/extra-gamelog enable

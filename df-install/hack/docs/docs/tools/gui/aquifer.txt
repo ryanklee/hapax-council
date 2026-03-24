@@ -1,0 +1,20 @@
+gui/aquifer
+===========
+
+Tags: fort | armok | map
+
+Command: "gui/aquifer"
+
+  View, add, remove, or modify aquifers.
+
+This is the interactive GUI for the aquifer tool. While gui/aquifer is open, aquifer tiles will be highlighted as per the dig.warmdamp overlay (but unlike that overlay, only aquifer tiles are highlighted, not "just damp" tiles or warm tiles). Note that "just damp" tiles will still be highlighted if they are otherwise already visible.
+
+You can draw boxes around areas of tiles to alter their aquifer properties, or you can use the "Ctrl""A" shortcut to affect entire layers at a time.
+
+If you want to see where the aquifer tiles are so you can designate digging, please run gui/reveal. If you only want to see the aquifer tiles and not reveal the caverns or other tiles, please run gui/reveal --aquifers-only instead.
+
+
+Usage
+-----
+
+   gui/aquifer

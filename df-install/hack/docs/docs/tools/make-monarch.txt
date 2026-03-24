@@ -1,0 +1,16 @@
+make-monarch
+============
+
+Tags: fort | armok | units
+
+Command: "make-monarch"
+
+  Crown the selected unit as a monarch.
+
+This tool can make the selected unit king or queen of your civilization.
+
+
+Usage
+-----
+
+   make-monarch

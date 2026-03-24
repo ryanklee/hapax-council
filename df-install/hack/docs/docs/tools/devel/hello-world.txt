@@ -1,0 +1,16 @@
+devel/hello-world
+=================
+
+Tags: dev
+
+Command: "devel/hello-world"
+
+  A basic GUI example script.
+
+A basic example for testing, or to start your own script from.
+
+
+Usage
+-----
+
+   devel/hello-world

@@ -1,0 +1,16 @@
+devel/watch-minecarts
+=====================
+
+Tags: unavailable
+
+Command: "devel/watch-minecarts"
+
+  Inspect minecart coordinates and speeds.
+
+When running, this tool will log minecart coordinates and speeds to the console.
+
+
+Usage
+-----
+
+   devel/watch-minecarts start|stop

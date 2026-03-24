@@ -1,0 +1,16 @@
+ghostly
+=======
+
+Tags: adventure | armok | units
+
+Command: "ghostly"
+
+  Toggles an adventurer's ghost status.
+
+This is useful for walking through walls, avoiding attacks, or recovering after a death.
+
+
+Usage
+-----
+
+   ghostly

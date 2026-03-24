@@ -1,0 +1,12 @@
+User guides
+===========
+
+These pages are detailed guides covering DFHack tools.
+
+* DFHack modding guide
+
+* Quickfort blueprint library
+
+* Quickfort blueprint creation guide
+
+* Stonesense art creation guide

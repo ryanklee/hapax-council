@@ -1,0 +1,10 @@
+modtools/raw-lint
+=================
+
+Tags: unavailable
+
+Command: "modtools/raw-lint"
+
+  Check for errors in raw files.
+
+Checks for simple issues with raw files. Can be run automatically.

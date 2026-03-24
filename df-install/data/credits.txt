@@ -1,0 +1,71 @@
+*Created By
+Tarn and Zach Adams
+*Artwork
+Jacob Bowman
+Carolyn Jong
+Michal Madej
+Neoriceisgood
+Patrick Schroeder
+*Audio/Music Lead
+Omar Dabbous
+*Composers
+Dabu
+Simon Swerwer
+Agueda Macias
+*Programmer
+Ana "Putnam"
+-
+&Kitfox Games
+*Captain
+Tanya X. Short
+*Commmunications
+Alexandra Orlando
+Victoria Tran
+Fiona Martin
+*Illustrator
+Thea Kent
+*Trailers
+Xin Ran Liu
+-
+*Initial Playtesting
+Alan Ames
+Alex Mooney
+Martin Packman
+Robyn Ringland
+Zonk
+*Lots of HTML/IT stuff
+Martin Packman
+*First Mac port
+Matthew Moss
+eli
+*SDL port, additional changes
+Bernard Helyer
+*OpenGL upgrade to this millenium, additional changes
+Svein Ove Aas
+*Additional changes for the SDL Port
+Theodorick Grau
+*DF 2010 Playtesting
+Svein Ove Aas
+Aquillion
+Kyle Brodzky
+Richard Jensen
+Nathan Miller aka Rainseeker
+Alex Mooney
+Robyn Ringland
+Chris Rogers
+*Bug Tracker Managers
+Anthony Drawdy
+Knight Otu
+Logical2u
+Chris Rogers
+lethosor
+*Premium DF Playtesting
+clinodev
+Rose
+*UX Advisor
+Tuuli Saarinen
+*Special Thanks
+Thank you to all of our supporters over the years,
+and everybody who has helped out on the forum and
+elsewhere to keep the project afloat these two
+decades.

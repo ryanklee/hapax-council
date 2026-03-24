@@ -1,0 +1,16 @@
+gui/autobutcher
+===============
+
+Tags: fort | auto | fps | animals
+
+Command: "gui/autobutcher"
+
+  Automatically butcher excess livestock.
+
+This is an in-game interface for autobutcher, which allows you to set thresholds for how many animals you want to keep and the extras will be automatically butchered.
+
+
+Usage
+-----
+
+   gui/autobutcher

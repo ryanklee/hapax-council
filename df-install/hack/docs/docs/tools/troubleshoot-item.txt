@@ -1,0 +1,16 @@
+troubleshoot-item
+=================
+
+Tags: fort | inspection | items
+
+Command: "troubleshoot-item"
+
+  Inspect properties of the selected item.
+
+This tool lets you inspect internal properties of the selected item. This is useful for troubleshooting issues such as dwarves refusing to touch certain items.
+
+
+Usage
+-----
+
+   troubleshoot-item

@@ -1,0 +1,16 @@
+view-unit-reports
+=================
+
+Tags: unavailable
+
+Command: "view-unit-reports"
+
+  Show combat reports for a unit.
+
+Show combat reports specifically for the selected unit. You can select a unit with the cursor in "v" mode, from the list in "u" mode, or from the unit/corpse/splatter list in "k" mode. You can also select the newest unit with a particular race when looking at a race-specific blood spatter in "k" mode.
+
+
+Usage
+-----
+
+   view-unit-reports

@@ -1,0 +1,14 @@
+clear-smoke
+===========
+
+Tags: fort | armok | fps | map
+
+Command: "clear-smoke"
+
+  Removes all smoke from the map.
+
+
+Usage
+-----
+
+   clear-smoke

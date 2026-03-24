@@ -1,0 +1,24 @@
+gui/guide-path
+==============
+
+Tags: unavailable
+
+Command: "gui/guide-path"
+
+  Visualize minecart guide paths.
+
+This tool displays the cached path that will be used by the minecart guide order. The game computes this path when the order is executed for the first time, so you have to wait for a dwarf to have started pushing the minecart at least once before you can visualize the path.
+
+To use, select a Guide order in the Hauling menu with the cursor and run this tool.
+
+
+Usage
+-----
+
+   gui/guide-path
+
+
+Screenshot
+----------
+
+[image]

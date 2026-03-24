@@ -1,0 +1,16 @@
+gui/kitchen-info
+================
+
+Tags: unavailable
+
+Command: "gui/kitchen-info"
+
+  Show food item uses in the kitchen status screen.
+
+This tool is an overlay that adds more info to the Kitchen screen, such as the potential alternate uses of the items that you could mark for cooking.
+
+
+Usage
+-----
+
+   enable gui/kitchen-info

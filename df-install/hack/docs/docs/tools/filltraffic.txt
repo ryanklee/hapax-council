@@ -1,0 +1,67 @@
+filltraffic
+===========
+
+Tags: fort | design | productivity | map
+
+Command: "filltraffic"
+
+  Set traffic designations using flood-fill starting at the cursor.
+
+Command: "alltraffic"
+
+  Set traffic designations for every single tile of the map.
+
+Command: "restrictice"
+
+  Restrict traffic on all tiles on top of visible ice.
+
+Command: "restrictliquids"
+
+  Restrict traffic on all visible tiles with liquid.
+
+
+Usage
+-----
+
+   filltraffic <designation> [<options>]
+   alltraffic <designation>
+   restrictice
+   restrictliquids
+
+For "filltraffic", flood filling stops at walls and doors.
+
+
+Examples
+--------
+
+"filltraffic H"
+   When used in a room with doors, it will set traffic to HIGH in just that room.
+
+
+Options
+-------
+
+Traffic designations:
+
+H:
+   High Traffic.
+
+N:
+   Normal Traffic.
+
+L:
+   Low Traffic.
+
+R:
+   Restricted Traffic.
+
+Filltraffic extra options:
+
+X:
+   Fill across z-levels.
+
+B:
+   Include buildings and stockpiles.
+
+P:
+   Include empty space.

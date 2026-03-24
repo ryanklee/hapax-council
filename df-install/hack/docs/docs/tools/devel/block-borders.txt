@@ -1,0 +1,16 @@
+devel/block-borders
+===================
+
+Tags: dev | map
+
+Command: "devel/block-borders"
+
+  Outline map blocks on the map screen.
+
+This tool displays an overlay that highlights the borders of map blocks. See Maps API for details on map blocks.
+
+
+Usage
+-----
+
+   devel/block-borders

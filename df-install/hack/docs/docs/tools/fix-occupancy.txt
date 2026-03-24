@@ -1,0 +1,8 @@
+fix-occupancy
+=============
+
+Tags: dev
+
+  Provides the backend logic for fix/occupancy.
+
+This plugin provides the backend logic for fix/occupancy.

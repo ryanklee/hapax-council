@@ -1,0 +1,16 @@
+fix/sleepers
+============
+
+Tags: adventure | bugfix
+
+Command: "fix/sleepers"
+
+  Fixes sleeping units belonging to a camp that never wake up.
+
+Fixes Bug 6798. This bug is characterized by sleeping units who refuse to awaken in adventure mode regardless of talking to them, hitting them, or waiting so long you die of thirst. If you come across one or more bugged sleepers in adventure mode, simply run the script and all nearby sleepers will be cured.
+
+
+Usage
+-----
+
+   fix/sleepers
