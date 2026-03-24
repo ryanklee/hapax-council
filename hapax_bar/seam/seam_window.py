@@ -72,12 +72,13 @@ class SeamWindow(Astal.Window):
         if self.get_visible():
             self._dismiss()
         else:
-            # Refresh all panels before revealing
+            # Refresh panels that support no-arg refresh
             for panel in self._panels:
-                if hasattr(panel, "refresh"):
-                    panel.refresh()
-                elif hasattr(panel, "update"):
-                    panel.update()
+                try:
+                    if hasattr(panel, "refresh"):
+                        panel.refresh()
+                except TypeError:
+                    pass
             self.set_visible(True)
             self.present()
             GLib.idle_add(lambda: self._revealer.set_reveal_child(True) or False)
