@@ -261,12 +261,13 @@ export function CompositeCanvas({
           lastAccumHead = 0;
         }
 
-        // Only update accumulator when a new frame arrives from fetch
-        if (writeHead !== lastAccumHead) {
-          lastAccumHead = writeHead;
+        // Persistence derived from trail.count: higher count = longer trails
+        const persistence = 1 - 1 / (trail.count + 2);
+        const isNewFrame = writeHead !== lastAccumHead;
 
-          // Persistence derived from trail.count: higher count = longer trails
-          const persistence = 1 - 1 / (trail.count + 2);
+        // Decay and drift on new frames (before compositing so trail shows PAST only)
+        if (isNewFrame) {
+          lastAccumHead = writeHead;
 
           // Decay old accumulation
           accumCtx.save();
@@ -275,30 +276,34 @@ export function CompositeCanvas({
           accumCtx.fillRect(0, 0, w, h);
           accumCtx.restore();
 
-          // Spatial drift: shift old content before adding new frame
+          // Spatial drift: shift old content
           if (trail.driftX !== 0 || trail.driftY !== 0) {
             driftCtx.clearRect(0, 0, w, h);
             driftCtx.drawImage(accumCanvas, 0, 0);
             accumCtx.clearRect(0, 0, w, h);
             accumCtx.drawImage(driftCanvas, trail.driftX, trail.driftY);
           }
-
-          // Add current frame to accumulator
-          accumCtx.save();
-          if (cachedTrailFilter !== "none") {
-            accumCtx.filter = cachedTrailFilter;
-          }
-          accumCtx.globalCompositeOperation = trail.blendMode as GlobalCompositeOperation;
-          accumCtx.drawImage(main, 0, 0, w, h);
-          accumCtx.restore();
         }
 
-        // Composite accumulator onto main canvas
+        // Composite accumulator (past frames only) onto main canvas
         ctx.save();
         ctx.globalAlpha = trail.opacity;
         ctx.globalCompositeOperation = trail.blendMode as GlobalCompositeOperation;
         ctx.drawImage(accumCanvas, 0, 0);
         ctx.restore();
+
+        // THEN add current frame to accumulator for next frame's trail.
+        // Use source-over at reduced alpha to avoid additive saturation.
+        if (isNewFrame) {
+          accumCtx.save();
+          if (cachedTrailFilter !== "none") {
+            accumCtx.filter = cachedTrailFilter;
+          }
+          accumCtx.globalAlpha = 1 - persistence;
+          accumCtx.globalCompositeOperation = "source-over";
+          accumCtx.drawImage(main, 0, 0, w, h);
+          accumCtx.restore();
+        }
       }
 
       // --- Delayed overlay (smooth source if available, else delayed from live ring) ---
