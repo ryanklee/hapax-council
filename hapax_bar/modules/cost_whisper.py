@@ -17,8 +17,8 @@ class CostWhisper(Gtk.DrawingArea):
 
     def __init__(self) -> None:
         super().__init__(css_classes=["module", "cost-whisper"])
-        self.set_content_width(12)
-        self.set_content_height(24)
+        self.set_content_width(20)
+        self.set_content_height(32)
 
         self._budget_remaining_pct: float = 100.0
         self._spend_today: float = 0.0
@@ -51,15 +51,20 @@ class CostWhisper(Gtk.DrawingArea):
 
         # Fill from bottom
         fill_h = h * pct
+        # ISA-101: gray when good, color only in warning/critical
         if pct > 0.75:
-            r, g, b = 0.72, 0.73, 0.15  # green-400
+            r, g, b = 0.40, 0.37, 0.33  # gray — "going gray" = healthy
+            alpha = 0.25
         elif pct > 0.50:
-            r, g, b = 0.60, 0.55, 0.30  # neutral
+            r, g, b = 0.50, 0.48, 0.35  # slightly warm gray
+            alpha = 0.35
         elif pct > 0.25:
-            r, g, b = 0.98, 0.74, 0.18  # yellow-400
+            r, g, b = 0.98, 0.74, 0.18  # amber — warning
+            alpha = 0.55
         else:
-            r, g, b = 0.98, 0.29, 0.20  # red-400
+            r, g, b = 0.98, 0.29, 0.20  # red — critical
+            alpha = 0.70
 
-        cr.set_source_rgba(r, g, b, 0.5)
+        cr.set_source_rgba(r, g, b, alpha)
         cr.rectangle(0, h - fill_h, w, fill_h)
         cr.fill()

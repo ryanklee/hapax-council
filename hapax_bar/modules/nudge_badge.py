@@ -25,11 +25,14 @@ class NudgeBadge(Gtk.Box):
         self.set_visible(True)
         self._label.set_label(f"\u25cf{count}")
 
+        # ISA-101: gray when low (normal), color only for elevated counts
         classes = ["module", "nudge-badge"]
         if count >= 11:
             classes.append("critical")
         elif count >= 6:
             classes.append("warning")
+        elif count >= 3:
+            classes.append("low")  # green — mild attention
         else:
-            classes.append("low")
+            classes.append("dim")  # gray — normal, going gray
         self.set_css_classes(classes)

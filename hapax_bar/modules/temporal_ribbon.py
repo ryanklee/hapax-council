@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import time
 from datetime import UTC, datetime
 
@@ -95,8 +96,8 @@ class TemporalRibbon(Gtk.DrawingArea):
 
         # Draw circadian background
         pat = cairo.LinearGradient(0, 0, w, 0)
-        pat.add_color_stop_rgba(0, r * 0.7, g * 0.7, b * 0.7, 0.6)
-        pat.add_color_stop_rgba(1, r, g, b, 0.6)
+        pat.add_color_stop_rgba(0, r * 0.7, g * 0.7, b * 0.7, 0.85)
+        pat.add_color_stop_rgba(1, r, g, b, 0.85)
         cr.set_source(pat)
         cr.rectangle(0, 0, w, h)
         cr.fill()
@@ -104,7 +105,7 @@ class TemporalRibbon(Gtk.DrawingArea):
         # Session duration fill (faint, from left)
         session_hours = (time.monotonic() - self._start_time) / 3600
         fill_pct = min(session_hours / 8, 1.0)  # Full at 8 hours
-        cr.set_source_rgba(0.5, 0.4, 0.2, 0.15)
+        cr.set_source_rgba(0.5, 0.4, 0.2, 0.35)
         cr.rectangle(0, 0, w * fill_pct, h)
         cr.fill()
 
@@ -112,7 +113,14 @@ class TemporalRibbon(Gtk.DrawingArea):
         if self._next_event_minutes is not None and self._next_event_minutes < 60:
             event_pct = self._next_event_minutes / 60
             event_w = w * 0.4 * event_pct
-            cr.set_source_rgba(0.51, 0.65, 0.60, 0.4)  # blue-400
+            # Event urgency: blue when > 5min, orange when < 5min
+            if self._next_event_minutes < 5:
+                er, eg, eb = 1.0, 0.50, 0.10  # orange-400
+                event_alpha = 0.7 + 0.15 * math.sin(time.monotonic() * math.pi)  # breathing
+            else:
+                er, eg, eb = 0.51, 0.65, 0.60  # blue-400
+                event_alpha = 0.65
+            cr.set_source_rgba(er, eg, eb, event_alpha)
             cr.rectangle(w - event_w, 0, event_w, h)
             cr.fill()
             # Event name if close

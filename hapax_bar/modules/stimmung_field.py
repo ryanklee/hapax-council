@@ -24,11 +24,12 @@ if TYPE_CHECKING:
     from hapax_bar.stimmung import StimmungState
 
 # Breathing parameters per stance (§6.1)
+# Nominal has a tiny breath so the field is never fully static ("alive")
 BREATHING: dict[str, tuple[float, float]] = {
-    "nominal": (0.0, 0.0),
-    "cautious": (8.0, 0.05),
-    "degraded": (4.0, 0.10),
-    "critical": (0.6, 0.15),
+    "nominal": (12.0, 0.015),
+    "cautious": (8.0, 0.06),
+    "degraded": (4.0, 0.12),
+    "critical": (0.6, 0.18),
 }
 
 # Dimension → (gradient_position, (r, g, b) when elevated)
@@ -159,13 +160,23 @@ class StimmungField(Gtk.Widget):
             elif dim_name == "perception_confidence":
                 value = max(0, 0.5 - value)
             intensity = min(value * 2.0, 1.0) * self._stress_dampen
-            r = bg_r + (cr - bg_r) * intensity * 0.4
-            g = bg_g + (cg - bg_g) * intensity * 0.4
-            b = bg_b + (cb - bg_b) * intensity * 0.4
+            r = bg_r + (cr - bg_r) * intensity * 0.6
+            g = bg_g + (cg - bg_g) * intensity * 0.6
+            b = bg_b + (cb - bg_b) * intensity * 0.6
             stop = Gsk.ColorStop()
             stop.offset = position
             stop.color = Gdk.RGBA(red=r, green=g, blue=b, alpha=1.0)
             stops.append(stop)
+
+        # Baseline tint at center — faint accent so field is never fully dead
+        # Uses warm amber (R&D) or cool blue (Research) at ~3% intensity
+        tint_r = bg_r + 0.03 * (0.98 - bg_r)  # faint warm tint
+        tint_g = bg_g + 0.02 * (0.74 - bg_g)
+        tint_b = bg_b + 0.01
+        tint_stop = Gsk.ColorStop()
+        tint_stop.offset = 0.5
+        tint_stop.color = Gdk.RGBA(red=tint_r, green=tint_g, blue=tint_b, alpha=1.0)
+        stops.append(tint_stop)
 
         # Synthetic dimensions: engine errors, governance, drift
         if self._engine_errors > 0:
@@ -228,29 +239,37 @@ class StimmungField(Gtk.Widget):
     def _draw_particles(self, cr: cairo.Context, w: int, h: int, t: float) -> None:
         count = int(_PARTICLE_COUNT * self._stress_dampen)
         speed = max(0.1, self._agent_speed) * 15.0
+        # Semantic color: green at low agent load, shifts orange as load rises
+        load_t = min(self._agent_speed / 4.0, 1.0)
+        pr = 0.45 + load_t * 0.50  # 0.45 (green-ish) → 0.95 (orange)
+        pg = 0.55 - load_t * 0.15  # 0.55 → 0.40
+        pb = 0.20 - load_t * 0.10  # 0.20 → 0.10
         for i in range(count):
             bx, by = _particles[i]
             px = (bx * w + t * speed + i * 107) % w
             py = by * h + 2 * math.sin(t * 0.8 + i * 1.1)
-            alpha = (0.15 + 0.1 * math.sin(t * 1.5 + i)) * self._stress_dampen
-            rad = cairo.RadialGradient(px, py, 0, px, py, 4)
-            rad.add_color_stop_rgba(0.0, 0.7, 0.5, 0.3, alpha)
-            rad.add_color_stop_rgba(1.0, 0.7, 0.5, 0.3, 0.0)
+            alpha = (0.30 + 0.15 * math.sin(t * 1.5 + i)) * self._stress_dampen
+            rad = cairo.RadialGradient(px, py, 0, px, py, 6)
+            rad.add_color_stop_rgba(0.0, pr, pg, pb, alpha)
+            rad.add_color_stop_rgba(1.0, pr, pg, pb, 0.0)
             cr.set_source(rad)
-            cr.arc(px, py, 4, 0, 2 * math.pi)
+            cr.arc(px, py, 6, 0, 2 * math.pi)
             cr.fill()
 
     def _draw_consent_beacon(self, cr: cairo.Context, h: int) -> None:
+        beacon_w = 16  # wide enough to notice at a glance
         if self._consent_recording or self._guest_present:
             alpha = 1.0
             if self._guest_present:
-                alpha = 0.7 + 0.3 * math.sin(self._t * 4)
+                # Spatial pulse: beacon width oscillates ±3px when guest present
+                beacon_w += int(3 * math.sin(self._t * 5))
+                alpha = 0.8 + 0.2 * math.sin(self._t * 4)
             cr.set_source_rgba(0.98, 0.29, 0.20, alpha)
-            cr.rectangle(0, 0, 8, h)
+            cr.rectangle(0, 0, beacon_w, h)
             cr.fill()
         elif self._consent_perceiving:
-            cr.set_source_rgba(0.98, 0.74, 0.18, 0.4)
-            cr.rectangle(0, 0, 8, h)
+            cr.set_source_rgba(0.98, 0.74, 0.18, 0.45)
+            cr.rectangle(0, 0, beacon_w, h)
             cr.fill()
 
     def _draw_voice_orb(self, cr: cairo.Context, w: int, h: int, t: float) -> None:

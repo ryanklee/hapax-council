@@ -25,7 +25,9 @@ local tick_counter = 0
 
 -- Ensure output directory exists
 local function ensure_dir()
-    os.execute("mkdir -p " .. STATE_DIR)
+    if not dfhack.filesystem.isdir(STATE_DIR) then
+        dfhack.filesystem.mkdir_recursive(STATE_DIR)
+    end
 end
 
 -- Atomic write: write to .tmp, rename to final
