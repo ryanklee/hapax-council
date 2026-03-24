@@ -53,8 +53,12 @@ export function CompositeCanvas({
     let smoothWriteHead = 0;
     let smoothPending = false;
 
-    // Trail state
-    let lastTrailHead = 0;
+    // Trail accumulation: offscreen canvases for proper blend/filter/drift
+    const accumCanvas = document.createElement("canvas");
+    const accumCtx = accumCanvas.getContext("2d")!;
+    const driftCanvas = document.createElement("canvas");
+    const driftCtx = driftCanvas.getContext("2d")!;
+    let lastAccumHead = 0;
 
     // Stutter state
     let tick = 0;
@@ -71,7 +75,7 @@ export function CompositeCanvas({
     // Filter string cache — avoid per-frame string allocation
     let lastHueQ = -1;
     let cachedMainFilter = "";
-    // cachedTrailFilter reserved for trail hue-rotation (currently trail uses p.trail.filter directly)
+    let cachedTrailFilter = "";
     let cachedOverlayFilter = "";
 
     const fetchFrame = () => {
@@ -123,14 +127,14 @@ export function CompositeCanvas({
       const hueQ = Math.round(hueAccum / 10) * 10;
       if (hueQ !== lastHueQ) {
         lastHueQ = hueQ;
-        const isNeonP = p.name === "Neon";
+        const isNeonLike = p.name === "Neon" || p.name === "Feedback";
         const effectiveLiveFilter = liveFilterRef.current ?? p.colorFilter;
         const effectiveSmoothFilter = smoothFilterRef.current ?? p.overlay?.filter ?? "none";
-        cachedMainFilter = isNeonP && effectiveLiveFilter !== "none"
+        cachedMainFilter = isNeonLike && effectiveLiveFilter !== "none"
           ? `${effectiveLiveFilter} hue-rotate(${hueQ}deg)` : effectiveLiveFilter;
-        // Trail filter hue rotation computed but not applied (direct p.trail.filter used)
-        void (isNeonP && p.trail.filter);
-        cachedOverlayFilter = isNeonP && effectiveSmoothFilter !== "none"
+        cachedTrailFilter = isNeonLike && p.trail.filter !== "none"
+          ? `${p.trail.filter} hue-rotate(${hueQ + 60}deg)` : p.trail.filter;
+        cachedOverlayFilter = isNeonLike && effectiveSmoothFilter !== "none"
           ? `${effectiveSmoothFilter} hue-rotate(${hueQ + 120}deg)` : effectiveSmoothFilter;
       }
 
@@ -171,46 +175,17 @@ export function CompositeCanvas({
 
       const idx = Math.abs(displayIdx) % available;
 
-      // --- Trail fade: dim previous frame instead of clearing ---
-      const trail = p.trail;
-      const trailActive = trail.count > 0 && trail.opacity > 0;
-      if (trailActive) {
-        // Only fade on new fetch frames (~10fps), not every rAF.
-        // This avoids sub-pixel alpha precision issues and gives
-        // a usable alpha range (0.01–0.10 per fetch = 1–10s half-life).
-        if (writeHead !== lastTrailHead) {
-          // count=10 → 0.015/fetch → half-life ~4.5s at 10fps
-          // count=4  → 0.03/fetch  → half-life ~2.3s
-          // count=2  → 0.05/fetch  → half-life ~1.4s
-          const fadeRate = 0.15 / (trail.count + 1);
-          ctx.save();
-          ctx.globalAlpha = fadeRate;
-          ctx.fillStyle = "#000";
-          ctx.fillRect(0, 0, w, h);
-          ctx.restore();
-        }
-      } else {
-        ctx.clearRect(0, 0, w, h);
-      }
+      // --- Always clear — accumulator handles persistence ---
+      ctx.clearRect(0, 0, w, h);
 
       // --- Main frame ---
       const main = frameRing[idx];
       if (!main) return;
 
-      // Use cached main filter (includes Neon hue rotation)
       const mainFilter = cachedMainFilter;
-
-      // When trails active, draw main at reduced opacity so previous content shows through.
-      // Only reduce on NEW frames; between fetches, skip re-draw so trails can fade.
-      const isNewFrame = writeHead !== lastTrailHead;
-      if (trailActive && isNewFrame) {
-        lastTrailHead = writeHead;
-      }
-      const drawMain = !trailActive || isNewFrame;
-      // Main alpha: higher trail.opacity = more transparent main = more visible trails
+      const trail = p.trail;
+      const trailActive = trail.count > 0 && trail.opacity > 0;
       const mainAlpha = trailActive ? (1 - trail.opacity * 0.65) : 1;
-
-      if (!drawMain) return; // Between fetches with trails: just fade, don't redraw
 
       const warpCfg = p.warp;
       if (warpCfg && warpCfg.sliceCount > 0) {
@@ -278,6 +253,60 @@ export function CompositeCanvas({
           ctx.filter = mainFilter;
         }
         ctx.drawImage(main, 0, 0, w, h);
+        ctx.restore();
+      }
+
+      // --- Trail accumulator (offscreen canvas with proper blend/filter/drift) ---
+      if (trailActive) {
+        // Resize accumulation canvases to match main canvas
+        if (accumCanvas.width !== w || accumCanvas.height !== h) {
+          accumCanvas.width = w;
+          accumCanvas.height = h;
+          driftCanvas.width = w;
+          driftCanvas.height = h;
+          // Initialize to black (opaque)
+          accumCtx.fillStyle = "#000";
+          accumCtx.fillRect(0, 0, w, h);
+          lastAccumHead = 0;
+        }
+
+        const isNewFrame = writeHead !== lastAccumHead;
+        if (isNewFrame) {
+          lastAccumHead = writeHead;
+
+          // Spatial drift: shift old accumulated content before decay
+          if (trail.driftX !== 0 || trail.driftY !== 0) {
+            driftCtx.clearRect(0, 0, w, h);
+            driftCtx.drawImage(accumCanvas, 0, 0);
+            accumCtx.fillStyle = "#000";
+            accumCtx.fillRect(0, 0, w, h);
+            accumCtx.drawImage(driftCanvas, trail.driftX, trail.driftY);
+          }
+
+          // Decay: paint semi-transparent black over old content
+          const fadeRate = 0.15 / (trail.count + 1);
+          accumCtx.save();
+          accumCtx.globalAlpha = fadeRate;
+          accumCtx.fillStyle = "#000";
+          accumCtx.fillRect(0, 0, w, h);
+          accumCtx.restore();
+
+          // Accumulate: add current frame at low opacity with trail filter
+          const addRate = Math.min(fadeRate * 1.5, 0.3);
+          accumCtx.save();
+          if (cachedTrailFilter !== "none") {
+            accumCtx.filter = cachedTrailFilter;
+          }
+          accumCtx.globalAlpha = addRate;
+          accumCtx.drawImage(main, 0, 0, w, h);
+          accumCtx.restore();
+        }
+
+        // Composite accumulator onto main canvas using trail blend mode
+        ctx.save();
+        ctx.globalAlpha = trail.opacity;
+        ctx.globalCompositeOperation = trail.blendMode as GlobalCompositeOperation;
+        ctx.drawImage(accumCanvas, 0, 0);
         ctx.restore();
       }
 
