@@ -69,13 +69,15 @@ class FortressGovernor:
     ) -> list[FortressCommand]:
         """Run one governance evaluation cycle.
 
-        1. Tick suppression fields
-        2. Evaluate crisis chain (highest priority)
-        3. Update crisis_suppression based on crisis output
-        4. Evaluate other chains with suppression applied
-        5. Collect and return commands
+        Caches last FullFortressState so planner/military chains can
+        evaluate even when the bridge sends FastFortressState.
         """
         now = time.monotonic()
+
+        # Cache full state for chains that need it
+        if isinstance(state, FullFortressState):
+            self._last_full_state = state
+        full = getattr(self, "_last_full_state", None)
         levels = self.tick_suppression(now)
         commands: list[FortressCommand] = []
 
@@ -95,11 +97,11 @@ class FortressGovernor:
         else:
             self._fields["crisis_suppression"].set_target(0.0, now)
 
-        # --- Military (L2) — suppressed by resource_pressure (needs FullFortressState) ---
-        if isinstance(state, FullFortressState):
+        # --- Military (L2) — suppressed by resource_pressure (uses cached full state) ---
+        if full is not None:
             resource_supp = levels.get("resource_pressure", 0.0)
             if resource_supp < self._config.suppression.suppression_ceiling:
-                mil_veto, mil_action = self._military.evaluate(state)
+                mil_veto, mil_action = self._military.evaluate(full)
                 if mil_action.action != "no_action" and mil_veto.allowed:
                     self._fields["military_alert"].set_target(
                         0.5 if mil_action.action == "defensive_position" else 1.0, now
@@ -135,13 +137,13 @@ class FortressGovernor:
                     )
                 )
 
-        # --- Planner (L1) — suppressed by crisis, military ---
-        if isinstance(state, FullFortressState):
+        # --- Planner (L1) — suppressed by crisis, military (uses cached full state) ---
+        if full is not None:
             crisis_supp = levels.get("crisis_suppression", 0.0)
             military_supp = levels.get("military_alert", 0.0)
             combined_supp = max(crisis_supp, military_supp)
             if combined_supp < self._config.suppression.suppression_ceiling:
-                plan_veto, plan_action = self._planner.evaluate(state)
+                plan_veto, plan_action = self._planner.evaluate(full)
                 if plan_action.action != "no_action" and plan_veto.allowed:
                     self._fields["planner_activity"].set_target(0.5, now)
                     commands.append(
@@ -159,8 +161,8 @@ class FortressGovernor:
         story_veto, story_action = self._storyteller.evaluate(state)
         # Storyteller produces narrative, not game commands — handled separately
 
-        # --- Creativity (L3.5) — gated by safety + suppression ---
-        if isinstance(state, FullFortressState):
+        # --- Creativity (L3.5) — gated by safety + suppression (uses cached full state) ---
+        if full is not None:
             max_lower = max(
                 levels.get("crisis_suppression", 0.0),
                 levels.get("military_alert", 0.0),
@@ -170,7 +172,7 @@ class FortressGovernor:
 
             creativity_supp = levels.get("creativity_suppression", 0.0)
             if creativity_supp < self._config.suppression.creativity_ceiling:
-                creat_veto, creat_action = self._creativity.evaluate(state)
+                creat_veto, creat_action = self._creativity.evaluate(full)
                 if creat_action.action != "no_action" and creat_veto.allowed:
                     commands.append(
                         FortressCommand(

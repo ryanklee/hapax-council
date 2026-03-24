@@ -59,6 +59,7 @@ class FortressDaemon:
         self._goal_planner = GoalPlanner(goals=list(DEFAULT_GOALS))
         self._creativity_metrics = CreativityMetrics()
         self._running = True
+        self._cmd_cooldowns: dict[str, float] = {}
         self._started = False
         self._last_game_day = -1
 
@@ -106,16 +107,16 @@ class FortressDaemon:
             commands = self._governor.evaluate(state)
             cycle_count += 1
 
-            # Dedup: skip commands identical to last cycle
+            # Dedup with 30s cooldown: same command can re-fire after window expires
+            dedup_window = 30.0
+            now_dedup = time.monotonic()
             new_commands = []
             for cmd in commands:
                 key = f"{cmd.chain}:{cmd.action}:{cmd.params}"
-                if key != getattr(self, "_last_cmd_key", ""):
+                last_time = self._cmd_cooldowns.get(key, 0.0)
+                if (now_dedup - last_time) >= dedup_window:
                     new_commands.append(cmd)
-            if new_commands:
-                self._last_cmd_key = (
-                    f"{new_commands[0].chain}:{new_commands[0].action}:{new_commands[0].params}"
-                )
+                    self._cmd_cooldowns[key] = now_dedup
             commands = new_commands
 
             # Log every 30s or when NEW commands are produced
