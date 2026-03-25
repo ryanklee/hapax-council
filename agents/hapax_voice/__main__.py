@@ -715,6 +715,7 @@ class VoiceDaemon:
 
     def _setup_tap_governance(self) -> None:
         """Wire tap gesture dispatch — double-tap toggles session, triple-tap scans."""
+        self._loop: asyncio.AbstractEventLoop | None = None
         self._prev_tap_gesture = "none"
 
     def _check_tap_gesture(self) -> None:
@@ -728,7 +729,8 @@ class VoiceDaemon:
             cmd = {"double_tap": "toggle", "triple_tap": "scan"}.get(gesture)
             if cmd is not None:
                 log.info("Tap gesture detected: %s → hotkey %s", gesture, cmd)
-                asyncio.run_coroutine_threadsafe(self._handle_hotkey(cmd), self._loop)
+                if self._loop is not None:
+                    asyncio.run_coroutine_threadsafe(self._handle_hotkey(cmd), self._loop)
         self._prev_tap_gesture = gesture
 
     # ------------------------------------------------------------------

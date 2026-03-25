@@ -684,6 +684,9 @@ class VisionBackend:
         # Overhead hand zones from per-camera cache
         overhead = self._cache._per_camera_behaviors.get("overhead", {})
         hand_zones = overhead.get("hand_zones", "")
+        hand_zones_ts = overhead.get("hand_zones_ts", 0.0)
+        if now - hand_zones_ts > 30.0:  # 30s staleness (2 overhead cycles)
+            hand_zones = ""
         self._b_hand_zones.update(hand_zones, now)
 
         # Scene inventory snapshot
@@ -1774,7 +1777,7 @@ class VisionBackend:
                 # Store overhead hand zones in per-camera cache
                 if role == "overhead" and hand_zones:
                     with self._cache._lock:
-                        per_cam = self._cache._per_camera_behaviors.get("overhead", {})
+                        per_cam = self._cache._per_camera_behaviors.setdefault("overhead", {})
                         per_cam["hand_zones"] = ",".join(hand_zones)
                         per_cam["hand_zones_ts"] = time.monotonic()
 

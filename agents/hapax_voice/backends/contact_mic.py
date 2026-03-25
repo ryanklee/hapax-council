@@ -405,6 +405,13 @@ class ContactMicBackend:
                         current_gesture = _classify_gesture(gesture_onset_burst)
                         gesture_onset_burst.clear()
 
+                    # Auto-expire gesture if no new onset within 3× timeout
+                    if (
+                        current_gesture != "none"
+                        and (now - last_gesture_check) >= _GESTURE_TIMEOUT_S * 3
+                    ):
+                        current_gesture = "none"
+
                     self._cache.update(
                         desk_activity=activity,
                         desk_energy=smoothed_energy,

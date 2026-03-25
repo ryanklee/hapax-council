@@ -329,7 +329,12 @@ def _find_unprocessed_files(
 def _extract_timestamp_from_filename(filename: str) -> str:
     """Extract ISO timestamp from rec-YYYYMMDD-HHMMSS.flac filename."""
     try:
-        parts = filename.replace("rec-", "").replace(".flac", "")
+        parts = filename
+        for prefix in ("contact-rec-", "rec-"):
+            if parts.startswith(prefix):
+                parts = parts[len(prefix) :]
+                break
+        parts = parts.replace(".flac", "")
         date_part, time_part = parts.split("-")
         return (
             f"{date_part[:4]}-{date_part[4:6]}-{date_part[6:8]}"
