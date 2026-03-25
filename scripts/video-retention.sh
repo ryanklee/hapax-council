@@ -67,10 +67,12 @@ done < <(find "$VIDEO_DIR" -type f \( -name "*.mkv" -o -name "*.mp4" -o -name "*
 
 # Count files approaching retention window (within 6h of expiry) — warning for unprocessed
 approaching=0
-while IFS= read -r -d '' file; do
-    [ -f "${file}.processed" ] && continue
-    approaching=$((approaching + 1))
-done < <(find "$VIDEO_DIR" -type f \( -name "*.mkv" -o -name "*.mp4" -o -name "*.ts" \) -mmin +$(( (EFFECTIVE_RETAIN - 6) * 60 )) -not -mmin +$((EFFECTIVE_RETAIN * 60)) -print0 2>/dev/null)
+if [ "$EFFECTIVE_RETAIN" -gt 6 ]; then
+    while IFS= read -r -d '' file; do
+        [ -f "${file}.processed" ] && continue
+        approaching=$((approaching + 1))
+    done < <(find "$VIDEO_DIR" -type f \( -name "*.mkv" -o -name "*.mp4" -o -name "*.ts" \) -mmin +$(( (EFFECTIVE_RETAIN - 6) * 60 )) -not -mmin +$((EFFECTIVE_RETAIN * 60)) -print0 2>/dev/null)
+fi
 
 # Remove empty directories
 find "$VIDEO_DIR" -mindepth 1 -type d -empty -delete 2>/dev/null || true

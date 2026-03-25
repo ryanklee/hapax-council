@@ -168,3 +168,38 @@ class TestClassifyFromPerception:
         agg = _aggregate_perception_minutes(minutes)
         result = _classify_from_perception(agg)
         assert result.value_score == 0.7  # 0.6 base + 0.1 transition bonus
+
+    def test_production_session_beats_conversation(self):
+        """Production with a consented guest should be production_session, not conversation."""
+        agg = _aggregate_perception_minutes(
+            [
+                _minute(
+                    activity="producing",
+                    flow_mean=0.7,
+                    operator_present=True,
+                    person_count_max=2,
+                    consent_phase="consent_granted",
+                ),
+            ]
+            * 5
+        )
+        result = _classify_from_perception(agg)
+        assert result.category == "production_session"
+        assert result.value_score == 1.0
+
+    def test_ssim_clamped_to_valid_range(self):
+        """ssim must stay in [0.0, 1.0] even with high audio energy."""
+        agg = _aggregate_perception_minutes(
+            [_minute(audio_mean=1.5, activity="producing", flow_mean=0.7)] * 5
+        )
+        result = _classify_from_perception(agg)
+        assert 0.0 <= result.ssim <= 1.0
+        assert 0.0 <= result.motion_score <= 1.0
+
+
+class TestAggregateEmpty:
+    def test_empty_list_no_division_error(self):
+        agg = _aggregate_perception_minutes([])
+        assert agg["operator_present"] is False
+        assert agg["flow_score_mean"] == 0.0
+        assert agg["activity_mode"] == ""
