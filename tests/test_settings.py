@@ -48,3 +48,24 @@ def test_secret_str_hides_api_key():
         s = CouncilSettings()
     assert "sk-secret-key-123" not in str(s.litellm)
     assert s.litellm.api_key.get_secret_value() == "sk-secret-key-123"
+
+
+def test_settings_validation_error_gives_clear_message():
+    """Bad env var produces clear error, not bare traceback."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    result = subprocess.run(
+        [sys.executable, "-c", "import shared.config"],
+        env={
+            "HAPAX_USE_SETTINGS": "1",
+            "ENGINE_DEBOUNCE_MS": "999999",
+            "PATH": os.environ.get("PATH", ""),
+        },
+        capture_output=True,
+        text=True,
+        cwd=str(Path(__file__).parent.parent),
+    )
+    assert result.returncode != 0
+    assert "Settings validation failed" in result.stderr

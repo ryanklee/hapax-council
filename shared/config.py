@@ -21,7 +21,14 @@ _USE_SETTINGS = os.environ.get("HAPAX_USE_SETTINGS", "") == "1"
 if _USE_SETTINGS:
     from shared.settings import CouncilSettings
 
-    _settings = CouncilSettings()
+    try:
+        _settings = CouncilSettings()
+    except Exception as _exc:
+        import sys
+
+        print(f"FATAL: Settings validation failed:\n{_exc}", file=sys.stderr)
+        print("Fix the environment variable or unset HAPAX_USE_SETTINGS.", file=sys.stderr)
+        raise SystemExit(1) from _exc
 
 # ── Environment ──────────────────────────────────────────────────────────────
 
