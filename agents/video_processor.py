@@ -538,6 +538,21 @@ def _perception_mode(values: list[str]) -> str:
 
 def _aggregate_perception_minutes(minutes: list[dict]) -> dict:
     """Aggregate perception minute summaries over a segment window."""
+    if not minutes:
+        return {
+            "operator_present": False,
+            "operator_present_ratio": 0.0,
+            "person_count_max": 0,
+            "flow_score_mean": 0.0,
+            "flow_score_peak": 0.0,
+            "activity_mode": "",
+            "audio_energy_mean": 0.0,
+            "voice_active": False,
+            "consent_phase": "no_guest",
+            "stress_elevated": False,
+            "hr_mean": 0.0,
+            "activity_changed": False,
+        }
     n = len(minutes)
     return {
         "operator_present": any(m.get("operator_present", False) for m in minutes),
@@ -568,12 +583,12 @@ def _classify_from_perception(agg: dict) -> SegmentClassification:
     consent = agg["consent_phase"]
     activity_changed = agg["activity_changed"]
 
-    if person_count > 1 and consent == "consent_granted":
-        category = "conversation"
-        score = 0.8
-    elif present and activity == "producing" and flow_peak > 0.5:
+    if present and activity == "producing" and flow_peak > 0.5:
         category = "production_session"
         score = 1.0
+    elif person_count > 1 and consent == "consent_granted":
+        category = "conversation"
+        score = 0.8
     elif present and activity in ("coding", "meeting", "producing") and flow_mean > 0.3:
         category = "active_work"
         score = 0.6
@@ -597,9 +612,9 @@ def _classify_from_perception(agg: dict) -> SegmentClassification:
         value_score=round(score, 2),
         people_count=person_count,
         max_people=person_count,
-        motion_score=round(agg.get("audio_energy_mean", 0.0), 4),
+        motion_score=round(min(1.0, agg.get("audio_energy_mean", 0.0)), 4),
         scene_change=activity_changed,
-        ssim=round(1.0 - agg.get("audio_energy_mean", 0.0), 4),
+        ssim=round(max(0.0, min(1.0, 1.0 - agg.get("audio_energy_mean", 0.0))), 4),
     )
 
 
