@@ -63,6 +63,27 @@ export interface CompositePreset {
   overlays: OverlayType[]; // CSS overlays (kept for non-canvas elements if needed)
   cellAnimation?: string;
   livePullIntervalMs?: number;
+
+  noise?: {
+    enabled: boolean;
+    intensity: number; // 0-1, overlay alpha
+    animated: boolean; // regenerate grain every 2-3 frames (scintillation)
+  };
+
+  bloom?: {
+    enabled: boolean;
+    threshold: number; // 0-1, brightness cutoff (maps to CSS brightness() param)
+    radius: number; // blur radius in px (at 1/4 resolution)
+    alpha: number; // composite opacity
+  };
+
+  strobe?: {
+    chance: number; // per-tick probability (0-0.1)
+    color: string; // rgba() string
+    duration: number; // ticks
+  };
+
+  circularMask?: boolean; // hard circular clip (Night Vision tube viewport)
 }
 
 const NO_EFFECTS: CompositePreset["effects"] = {
