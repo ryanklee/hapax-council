@@ -1,0 +1,178 @@
+{
+  "$defs": {
+    "SensorReading": {
+      "properties": {
+        "type": {
+          "title": "Type",
+          "type": "string"
+        },
+        "ts": {
+          "title": "Ts",
+          "type": "string"
+        },
+        "bpm": {
+          "anyOf": [
+            {
+              "maximum": 300,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bpm"
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Confidence"
+        },
+        "rmssd_ms": {
+          "anyOf": [
+            {
+              "maximum": 500,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rmssd Ms"
+        },
+        "eda_value": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Eda Value"
+        },
+        "eda_event": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Eda Event"
+        },
+        "duration_seconds": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Duration Seconds"
+        },
+        "temp_c": {
+          "anyOf": [
+            {
+              "maximum": 45,
+              "minimum": 20,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Temp C"
+        },
+        "state": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "State"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "type",
+        "ts"
+      ],
+      "title": "SensorReading",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "ts": {
+      "minimum": 0,
+      "title": "Ts",
+      "type": "integer"
+    },
+    "device_id": {
+      "title": "Device Id",
+      "type": "string"
+    },
+    "readings": {
+      "items": {
+        "$ref": "#/$defs/SensorReading"
+      },
+      "maxItems": 500,
+      "title": "Readings",
+      "type": "array"
+    },
+    "battery_pct": {
+      "anyOf": [
+        {
+          "maximum": 100,
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Battery Pct"
+    }
+  },
+  "required": [
+    "ts",
+    "device_id",
+    "readings"
+  ],
+  "title": "SensorPayload",
+  "type": "object"
+}

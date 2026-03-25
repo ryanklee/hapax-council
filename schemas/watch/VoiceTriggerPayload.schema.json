@@ -1,0 +1,25 @@
+{
+  "properties": {
+    "device_id": {
+      "title": "Device Id",
+      "type": "string"
+    },
+    "ts": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ts"
+    }
+  },
+  "required": [
+    "device_id"
+  ],
+  "title": "VoiceTriggerPayload",
+  "type": "object"
+}

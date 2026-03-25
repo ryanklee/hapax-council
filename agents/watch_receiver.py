@@ -99,6 +99,7 @@ class HealthSummaryPayload(BaseModel):
 
 class VoiceTriggerPayload(BaseModel):
     device_id: str
+    ts: int | None = None  # Client timestamp (epoch ms); falls back to server clock
 
 
 class GesturePayload(BaseModel):
@@ -357,10 +358,13 @@ def create_app() -> FastAPI:
     async def voice_trigger(payload: VoiceTriggerPayload) -> dict[str, str]:
         if payload.device_id not in ALLOWED_DEVICE_IDS:
             raise HTTPException(status_code=403, detail="Unknown device")
+        triggered_at = (
+            datetime.fromtimestamp(payload.ts / 1000, tz=UTC) if payload.ts else datetime.now(UTC)
+        )
         _atomic_write(
             _get_watch_state_dir() / "voice_trigger.json",
             {
-                "triggered_at": datetime.now(UTC).isoformat(),
+                "triggered_at": triggered_at.isoformat(),
                 "device_id": payload.device_id,
             },
         )

@@ -1,0 +1,23 @@
+{
+  "properties": {
+    "device_id": {
+      "title": "Device Id",
+      "type": "string"
+    },
+    "gesture": {
+      "title": "Gesture",
+      "type": "string"
+    },
+    "timestamp": {
+      "title": "Timestamp",
+      "type": "string"
+    }
+  },
+  "required": [
+    "device_id",
+    "gesture",
+    "timestamp"
+  ],
+  "title": "GesturePayload",
+  "type": "object"
+}

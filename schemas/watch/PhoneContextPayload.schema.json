@@ -1,0 +1,58 @@
+{
+  "properties": {
+    "device_id": {
+      "title": "Device Id",
+      "type": "string"
+    },
+    "ts": {
+      "minimum": 0,
+      "title": "Ts",
+      "type": "integer"
+    },
+    "activity_type": {
+      "default": "still",
+      "title": "Activity Type",
+      "type": "string"
+    },
+    "activity_confidence": {
+      "default": 0.0,
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "Activity Confidence",
+      "type": "number"
+    },
+    "screen_on": {
+      "default": false,
+      "title": "Screen On",
+      "type": "boolean"
+    },
+    "ringer_mode": {
+      "default": "normal",
+      "title": "Ringer Mode",
+      "type": "string"
+    },
+    "battery_pct": {
+      "default": 100,
+      "maximum": 100,
+      "minimum": 0,
+      "title": "Battery Pct",
+      "type": "integer"
+    },
+    "charging": {
+      "default": false,
+      "title": "Charging",
+      "type": "boolean"
+    },
+    "network_type": {
+      "default": "none",
+      "title": "Network Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "device_id",
+    "ts"
+  ],
+  "title": "PhoneContextPayload",
+  "type": "object"
+}
