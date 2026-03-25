@@ -203,7 +203,7 @@ class ContactMicBackend:
         self._cache = _ContactMicCache()
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
-        self._stream: pyaudio.Stream | None = None
+        self._stream: object | None = None  # pyaudio.Stream (optional dep)
 
         # Behaviors (created once, updated in contribute)
         self._b_activity: Behavior[str] = Behavior("idle")
