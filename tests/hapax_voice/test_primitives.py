@@ -184,6 +184,21 @@ class TestEvent:
         unsub2()
         assert ev.subscriber_count == 0
 
+    def test_self_unsubscribe_does_not_skip_subsequent(self):
+        event: Event[str] = Event()
+        calls: list[str] = []
+
+        def sub_a(ts: float, val: str) -> None:
+            calls.append("a")
+            unsub_a()
+
+        unsub_a = event.subscribe(sub_a)
+        event.subscribe(lambda ts, val: calls.append("b"))
+        event.subscribe(lambda ts, val: calls.append("c"))
+
+        event.emit(1.0, "test")
+        assert calls == ["a", "b", "c"], f"Expected all three, got {calls}"
+
 
 # ------------------------------------------------------------------
 # Behavior integration with PerceptionEngine
