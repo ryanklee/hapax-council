@@ -176,12 +176,10 @@ export function CompositeCanvas({
 
       if (warpCfg && warpCfg.sliceCount > 0) {
         const t = tick * 0.04;
-        const panX = Math.sin(t) * warpCfg.panX;
-        const panY =
-          Math.sin(t * 0.7) * (warpCfg.panY * 0.64) +
-          Math.sin(t * 0.3) * (warpCfg.panY * 0.36);
-        const rot = Math.sin(t * 0.5) * warpCfg.rotate;
-        const scale = warpCfg.zoom + Math.sin(t * 0.2) * warpCfg.zoomBreath;
+        const panX = (Math.sin(t) * 0.5 + Math.sin(t * 0.618) * 0.3 + Math.sin(t * 0.237) * 0.2) * warpCfg.panX;
+        const panY = (Math.sin(t * 0.7) * 0.5 + Math.sin(t * 0.432) * 0.3 + Math.sin(t * 0.166) * 0.2) * warpCfg.panY;
+        const rot = (Math.sin(t * 0.5) * 0.6 + Math.sin(t * 0.309) * 0.4) * warpCfg.rotate;
+        const scale = warpCfg.zoom + (Math.sin(t * 0.2) * 0.6 + Math.sin(t * 0.124) * 0.4) * warpCfg.zoomBreath;
         const sliceH = Math.ceil(h / warpCfg.sliceCount);
 
         target.save();
@@ -212,10 +210,10 @@ export function CompositeCanvas({
         target.restore();
       } else if (warpCfg) {
         const t = tick * 0.04;
-        const panX = Math.sin(t) * warpCfg.panX;
-        const panY = Math.sin(t * 0.7) * warpCfg.panY;
-        const rot = Math.sin(t * 0.5) * warpCfg.rotate;
-        const scale = warpCfg.zoom + Math.sin(t * 0.2) * warpCfg.zoomBreath;
+        const panX = (Math.sin(t) * 0.5 + Math.sin(t * 0.618) * 0.3 + Math.sin(t * 0.237) * 0.2) * warpCfg.panX;
+        const panY = (Math.sin(t * 0.7) * 0.5 + Math.sin(t * 0.432) * 0.3 + Math.sin(t * 0.166) * 0.2) * warpCfg.panY;
+        const rot = (Math.sin(t * 0.5) * 0.6 + Math.sin(t * 0.309) * 0.4) * warpCfg.rotate;
+        const scale = warpCfg.zoom + (Math.sin(t * 0.2) * 0.6 + Math.sin(t * 0.124) * 0.4) * warpCfg.zoomBreath;
 
         target.save();
         target.globalAlpha = alpha;
