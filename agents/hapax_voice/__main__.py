@@ -316,7 +316,10 @@ class VoiceDaemon:
 
         self._noise_reference = NoiseReference(
             room_sources=[
-                "HD Pro Webcam C920",  # any C920 mic — room noise reference
+                "HD Pro Webcam C920",  # any C920 mic — airborne noise reference
+            ],
+            structure_sources=[
+                "Contact Microphone",  # Cortado contact mic — structure-borne reference
             ],
         )
         self._noise_reference.start()
