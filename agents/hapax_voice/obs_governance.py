@@ -155,8 +155,9 @@ def build_obs_fallback_chain(cfg: OBSConfig | None = None) -> FallbackChain[Fuse
     Priority order (first eligible wins):
       1. rapid_cut: energy >= 0.8 AND arousal >= 0.7 (peak energy moments)
       2. face_cam: energy >= 0.5 AND arousal >= 0.5 (engaged performance)
-      3. gear_closeup: energy >= 0.2 (active but calm — building/sustain)
-      4. wide_ambient (default — silence/low energy)
+      3. instrument_focus: desk_activity in (scratching, drumming, tapping)
+      4. gear_closeup: energy >= 0.2 (active but calm — building/sustain)
+      5. wide_ambient (default — silence/low energy)
     """
     c = cfg or OBSConfig()
     return FallbackChain(
@@ -183,6 +184,15 @@ def build_obs_fallback_chain(cfg: OBSConfig | None = None) -> FallbackChain[Fuse
                     and ctx.get_sample("emotion_arousal").value >= a
                 ),
                 action=OBSScene.FACE_CAM,
+            ),
+            Candidate(
+                name="instrument_focus",
+                predicate=lambda ctx: (
+                    ctx.get_sample("desk_activity").value in ("scratching", "drumming", "tapping")
+                    if "desk_activity" in ctx.samples
+                    else False
+                ),
+                action=OBSScene.GEAR_CLOSEUP,
             ),
             Candidate(
                 name="gear_closeup",

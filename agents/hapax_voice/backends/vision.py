@@ -85,12 +85,26 @@ def _infer_cross_modal_activity(
     audio_activity: str,
     audio_genre: str,
     audio_energy: float,
+    desk_activity: str = "",
 ) -> tuple[str, float]:
     """Infer activity from cross-camera + audio evidence.
 
     Returns ``(activity, confidence)`` using rule-based pattern matching
     ordered by specificity.
     """
+    # ── Overhead zone + desk activity fusion (highest specificity) ─────
+    overhead = per_camera_behaviors.get("overhead", {})
+    hand_zones = overhead.get("hand_zones", "")
+
+    if "turntable" in hand_zones and desk_activity == "scratching":
+        return ("scratching", 0.95)
+    if "pads" in hand_zones and desk_activity in ("drumming", "tapping"):
+        return ("playing_pads", 0.90)
+    if "keyboard" in hand_zones and desk_activity == "typing":
+        return ("coding", 0.90)
+    if "mixer" in hand_zones and desk_activity == "tapping":
+        return ("mixing", 0.85)
+
     op = per_camera_behaviors.get("operator", {})
 
     # All detected objects across cameras
@@ -167,6 +181,9 @@ class _VisionCache:
         self._audio_genre: str = "unknown"
         self._audio_energy: float = 0.0
 
+        # Desk activity injected externally for overhead zone fusion
+        self._desk_activity: str = ""
+
         # Enrichment ring buffers — majority-vote temporal smoothing
         self._gaze_ring: deque[str] = deque(maxlen=5)
         self._emotion_ring: deque[str] = deque(maxlen=5)
@@ -193,6 +210,11 @@ class _VisionCache:
             self._audio_activity = activity
             self._audio_genre = genre
             self._audio_energy = energy
+
+    def set_desk_context(self, *, desk_activity: str) -> None:
+        """Inject desk activity for cross-modal fusion."""
+        with self._lock:
+            self._desk_activity = desk_activity
 
     def _fused_read(self) -> dict:
         """Fuse per-camera behaviors using consensus voting and camera specialization.
@@ -277,6 +299,7 @@ class _VisionCache:
             self._audio_activity,
             self._audio_genre,
             self._audio_energy,
+            desk_activity=self._desk_activity,
         )
 
         return {
@@ -530,6 +553,7 @@ class VisionBackend:
         self._b_scene_inventory: Behavior[str] = Behavior("{}")
         self._b_per_camera_scenes: Behavior[str] = Behavior("{}")  # JSON dict
         self._b_room_occupancy: Behavior[int] = Behavior(0)
+        self._b_hand_zones: Behavior[str] = Behavior("")
 
         # Gaze temporal smoother: 3-of-5 majority vote to reduce jitter
         self._gaze_history: deque[str] = deque(maxlen=5)
@@ -560,6 +584,7 @@ class VisionBackend:
                 "scene_inventory",
                 "per_camera_scenes",
                 "room_occupancy",
+                "overhead_hand_zones",
             }
         )
 
@@ -629,6 +654,10 @@ class VisionBackend:
             activity=audio_activity, genre=audio_genre, energy=audio_energy
         )
 
+        # Inject desk activity for overhead zone fusion
+        desk_activity = str(behaviors.get("desk_activity", Behavior("")).value)
+        self._cache.set_desk_context(desk_activity=desk_activity)
+
         now = time.monotonic()
         cached = self._cache.read()
 
@@ -651,6 +680,14 @@ class VisionBackend:
         pcs = cached.get("per_camera_scenes", {})
         self._b_per_camera_scenes.update(json.dumps(pcs) if pcs else "{}", now)
         self._b_room_occupancy.update(cached.get("room_occupancy", 0), now)
+
+        # Overhead hand zones from per-camera cache
+        overhead = self._cache._per_camera_behaviors.get("overhead", {})
+        hand_zones = overhead.get("hand_zones", "")
+        hand_zones_ts = overhead.get("hand_zones_ts", 0.0)
+        if now - hand_zones_ts > 30.0:  # 30s staleness (2 overhead cycles)
+            hand_zones = ""
+        self._b_hand_zones.update(hand_zones, now)
 
         # Scene inventory snapshot
         try:
@@ -678,6 +715,7 @@ class VisionBackend:
         behaviors["scene_inventory"] = self._b_scene_inventory
         behaviors["per_camera_scenes"] = self._b_per_camera_scenes
         behaviors["room_occupancy"] = self._b_room_occupancy
+        behaviors["overhead_hand_zones"] = self._b_hand_zones
 
     def _smooth_gaze(self, raw_gaze: str) -> str:
         """3-of-5 majority vote smoother to reduce per-frame gaze jitter."""
@@ -757,7 +795,7 @@ class VisionBackend:
                 base_options = mp.tasks.BaseOptions(model_asset_path=str(model_path))
                 options = GestureRecognizerOptions(
                     base_options=base_options,
-                    num_hands=1,
+                    num_hands=2,
                 )
                 self._gesture_recognizer = GestureRecognizer.create_from_options(options)
                 self._gesture_available = True
@@ -775,6 +813,30 @@ class VisionBackend:
             log.debug("Hand gesture recognition failed: %s", exc)
             self._gesture_available = False
         return "none"
+
+    def _run_overhead_hand_zones(self, frame: np.ndarray) -> list[str]:
+        """Detect hands in overhead frame and map centroids to instrument zones."""
+        import mediapipe as mp
+
+        from shared.cameras import point_in_zone
+
+        if not getattr(self, "_gesture_recognizer", None):
+            self._run_hand_gesture(frame)  # triggers lazy init
+        if not getattr(self, "_gesture_available", False):
+            return []
+
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+        result = self._gesture_recognizer.recognize(mp_image)
+
+        zones: list[str] = []
+        for hand_landmarks in result.hand_landmarks:
+            cx = int(sum(lm.x for lm in hand_landmarks) / len(hand_landmarks) * frame.shape[1])
+            cy = int(sum(lm.y for lm in hand_landmarks) / len(hand_landmarks) * frame.shape[0])
+            zone = point_in_zone(cx, cy)
+            if zone != "unknown":
+                zones.append(zone)
+        return zones
 
     # Custom scene labels for zero-shot SigLIP 2 classification
     _SCENE_LABELS = [
@@ -1685,6 +1747,14 @@ class VisionBackend:
                         if heuristic != "unknown":
                             detected_action = heuristic
 
+                # ── Overhead hand zone detection ──────────────────────
+                if role == "overhead":
+                    try:
+                        hand_zones = self._run_overhead_hand_zones(frame)
+                    except Exception:
+                        log.debug("Overhead hand zone detection failed", exc_info=True)
+                        hand_zones = []
+
                 self._cache._current_role = role
                 self._cache.update(
                     detected_objects=json.dumps(objects),
@@ -1703,6 +1773,13 @@ class VisionBackend:
                     operator_confirmed=operator_confirmed,
                     scene_state_clip=scene_state_clip,
                 )
+
+                # Store overhead hand zones in per-camera cache
+                if role == "overhead" and hand_zones:
+                    with self._cache._lock:
+                        per_cam = self._cache._per_camera_behaviors.setdefault("overhead", {})
+                        per_cam["hand_zones"] = ",".join(hand_zones)
+                        per_cam["hand_zones_ts"] = time.monotonic()
 
                 # Route per-person enrichments to SceneInventory entities
                 # Any Brio-class camera can enrich persons (multi-perspective)

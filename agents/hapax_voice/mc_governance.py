@@ -110,8 +110,9 @@ def build_mc_veto_chain(
 ) -> VetoChain[FusedContext]:
     """Construct the MC-specific VetoChain.
 
-    Four vetoes, all evaluated (order-independent, deny-wins):
+    Five vetoes, all evaluated (order-independent, deny-wins):
       - speech_clear: block throws during detected speech
+      - desk_allows_throw: block during scratching/typing (contact mic)
       - energy_sufficient: block when audio energy too low
       - spacing_respected: minimum cooldown between throws
       - transport_active: block when transport stopped
@@ -122,6 +123,14 @@ def build_mc_veto_chain(
             Veto(
                 name="speech_clear",
                 predicate=lambda ctx, t=c.speech_vad_threshold: speech_clear(ctx, t),
+            ),
+            Veto(
+                name="desk_allows_throw",
+                predicate=lambda ctx: (
+                    ctx.get_sample("desk_activity").value not in ("scratching", "typing")
+                    if "desk_activity" in ctx.samples
+                    else True
+                ),
             ),
             Veto(
                 name="energy_sufficient",
