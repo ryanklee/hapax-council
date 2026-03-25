@@ -136,13 +136,15 @@ PREPARE_FOR_SIEGE = CompoundGoal(
             description="Forge weapons and armor",
             chain="resource_manager",
             preconditions=("establish_military",),
-            check=lambda s: False,  # requires weapon count check via FullFortressState
+            check=lambda s: hasattr(s, "stockpiles") and s.stockpiles.weapons >= 5,
         ),
         SubGoal(
             id="build_defenses",
             description="Construct entrance defenses",
             chain="fortress_planner",
-            check=lambda s: False,  # requires entrance defense check
+            check=lambda s: (
+                hasattr(s, "buildings") and (s.buildings.weapon_racks > 0 or s.buildings.doors >= 3)
+            ),
         ),
     ),
 )
@@ -247,7 +249,7 @@ HANDLE_STRANGE_MOOD = CompoundGoal(
             id="provide_materials",
             description="Ensure required materials available",
             chain="resource_manager",
-            check=lambda s: False,  # resolved when mood ends
+            check=lambda s: not (hasattr(s, "strange_moods") and len(s.strange_moods) > 0),
         ),
     ),
 )
@@ -262,7 +264,7 @@ MANAGE_TRADE = CompoundGoal(
             id="prepare_trade_goods",
             description="Move goods to trade depot",
             chain="resource_manager",
-            check=lambda s: False,
+            check=lambda s: hasattr(s, "buildings") and s.buildings.trade_depot > 0,
         ),
     ),
 )
@@ -277,7 +279,7 @@ HANDLE_MANDATE = CompoundGoal(
             id="produce_mandated_item",
             description="Craft mandated items",
             chain="resource_manager",
-            check=lambda s: False,
+            check=lambda s: not any(e.type == "mandate" for e in s.pending_events),
         ),
     ),
 )

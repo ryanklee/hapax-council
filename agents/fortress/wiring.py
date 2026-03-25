@@ -10,7 +10,6 @@ import logging
 import time
 from typing import Any
 
-from agents.fortress.chains.advisor import AdvisorChain
 from agents.fortress.chains.creativity import CreativityChain
 from agents.fortress.chains.crisis import CrisisResponderChain
 from agents.fortress.chains.military import MilitaryCommanderChain
@@ -37,12 +36,12 @@ class FortressGovernor:
         self._military = MilitaryCommanderChain()
         self._resource = ResourceManagerChain()
         self._storyteller = StorytellerChain()
-        self._advisor = AdvisorChain()
         self._crisis = CrisisResponderChain(config=self._config)
         self._creativity = CreativityChain()
 
         # Cached full state for chains that need it
         self._last_full_state: FullFortressState | None = None
+        self._last_story_action: object | None = None  # fed to episode builder
 
         # Suppression fields
         self._fields = create_fortress_suppression_fields(self._config.suppression)
@@ -162,7 +161,10 @@ class FortressGovernor:
 
         # --- Storyteller (L3, never suppresses others) ---
         story_veto, story_action = self._storyteller.evaluate(state)
-        # Storyteller produces narrative, not game commands — handled separately
+        if story_action.action != "no_action" and story_veto.allowed:
+            self._last_story_action = story_action
+        else:
+            self._last_story_action = None
 
         # --- Creativity (L3.5) — gated by safety + suppression (uses cached full state) ---
         if full is not None:

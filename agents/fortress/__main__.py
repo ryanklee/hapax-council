@@ -72,6 +72,7 @@ class FortressDaemon:
         self._prev_state: FastFortressState | None = None
         self._running = True
         self._cmd_cooldowns: dict[str, float] = {}
+        self._recent_decisions: list[str] = []  # last N commands for deliberation context
         self._started = False
         self._last_game_day = -1
 
@@ -175,10 +176,18 @@ class FortressDaemon:
                     # Passthrough: send symbolic command
                     self._bridge.send_command(cmd.action, **cmd.params)
                 self._tracker.record_command(cmd.chain)
+                self._recent_decisions.append(f"{cmd.chain}: {cmd.action}")
+                if len(self._recent_decisions) > 50:
+                    self._recent_decisions = self._recent_decisions[-30:]
                 self._creativity_metrics.record_action(
                     cmd.chain, has_semantic_ref=(cmd.chain == "creativity")
                 )
                 log.info("  -> [%s] %s %s", cmd.chain, cmd.action, cmd.params)
+
+            # Feed storyteller narrative to episode builder
+            if self._governor._last_story_action is not None:
+                self._episode_builder.observe(self._governor._last_story_action)
+                self._governor._last_story_action = None
 
             # Episode lifecycle
             episode = self._episode_builder.observe(state)
@@ -239,10 +248,13 @@ class FortressDaemon:
                 check_nobles,
                 check_stockpile,
                 check_work_orders,
+                describe_patch_tool,
                 examine_dwarf,
                 get_situation_chunks,
+                observe_region,
                 recall_memory,
                 scan_threats,
+                survey_floor,
             )
 
             budget = AttentionBudget()
@@ -268,6 +280,15 @@ class FortressDaemon:
                 "get_situation": lambda: get_situation_chunks(
                     self._chunk_compressor, state, self._prev_state
                 ),
+                "observe_region": lambda patch_id="": observe_region(
+                    state, self._memory_store, budget, patch_id
+                ),
+                "describe_patch": lambda patch_id="": describe_patch_tool(
+                    state, self._memory_store, budget, patch_id
+                ),
+                "survey_floor": lambda z_level=0: survey_floor(
+                    state, self._memory_store, budget, z_level
+                ),
             }
 
             # Build recent_events from active events + trend anomalies/projections
@@ -287,7 +308,7 @@ class FortressDaemon:
                     config=self._config.deliberation,
                     tool_dispatch=dispatch,
                     recent_events=recent_events,
-                    recent_decisions=[],  # TODO: wire decision log
+                    recent_decisions=self._recent_decisions[-20:],
                 )
 
                 for action in actions:
