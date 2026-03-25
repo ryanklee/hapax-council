@@ -88,8 +88,8 @@ patterns:
     axiom_id: interpersonal_transparency
     implication_id: it-persist-001
     tier: T0
-    regex: '\b(?:(?:noted|recorded|stored|saved|logged|tracking|updating)\s+(?:that\s+)?[A-Z][a-z]+\s+(?:is|was|has|had|tends|prefers|likes|dislikes|always|never|usually))\b'
-    description: Persistent person-state without consent reference
+    regex: '\b(?:(?:noted|recorded|stored|saved|logged|tracking|updating)\s+(?:that\s+)?(?!(?:Logos|Qdrant|Ollama|Docker|Prometheus|Grafana|Langfuse|PostgreSQL|Redis|ClickHouse|MinIO|Publius|Brutus|Scout|Profile|Engine|Dashboard|Activity|Health|Drift|Agent|Compositor|Pipeline|Monitor|Profiler|Ingest|Digest|Calendar|Gmail|Chrome|Obsidian|YouTube|LiteLLM)\b)[A-Z][a-z]+\s+(?:tends|prefers|likes|dislikes|always|never|usually|struggles|excels|avoids|resists))\b'
+    description: Persistent person-state without consent reference (excludes known system components)
     false_positive_notes: >
       May match operator self-references. Check if subject is a third party
       and whether a consent contract is referenced nearby.
