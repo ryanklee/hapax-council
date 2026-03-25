@@ -1,0 +1,21 @@
+[Unit]
+Description=Contact microphone continuous recording (Cortado via PipeWire)
+After=pipewire.service pipewire-pulse.service
+Requires=pipewire-pulse.service
+
+[Service]
+Type=simple
+ExecStartPre=/usr/bin/mkdir -p %h/audio-recording/contact-mic
+ExecStart=/bin/bash -c 'exec /usr/bin/pw-record \
+    --target contact_mic --format s16 --rate 48000 --channels 1 - | \
+    /usr/bin/ffmpeg -nostdin -f s16le -ar 48000 -ac 1 -i pipe: \
+    -c:a flac -f segment -segment_time 900 -strftime 1 \
+    %h/audio-recording/contact-mic/contact-rec-%%Y%%m%%d-%%H%%M%%S.flac'
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=contact-mic-recorder
+
+[Install]
+WantedBy=default.target
