@@ -23,10 +23,27 @@ TOOL="$(echo "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)" || exit 0
 CMD="$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)" || exit 0
 [ -n "$CMD" ] || exit 0
 
-FIRST_LINE="$(echo "$CMD" | head -n1)"
+# Strip quoted strings and heredoc bodies to avoid false positives from
+# PR descriptions, commit messages, or echo'd text that mention stash pop.
+# Uses sed -z (GNU, null-delimited) so patterns span newlines.
+CMD_STRIPPED="$(printf '%s' "$CMD" | sed -zE "s/'[^']*'//g; s/\"[^\"]*\"//g")"
 
-# Block `git stash pop` (with any flags/args)
-if echo "$FIRST_LINE" | grep -qE '\bgit\s+stash\s+pop\b'; then
+# Block `git stash pop` only when it appears as an actual command
+# (not inside quotes, PR titles, commit messages, etc.)
+if echo "$CMD_STRIPPED" | grep -qE '^\s*git\s+stash\s+pop\b'; then
+    cat >&2 <<'MSG'
+BLOCKED: `git stash pop` is prohibited — it can leave conflict markers that break running services.
+
+Safe alternatives:
+  1. git stash apply && git stash drop   # two-step with validation checkpoint
+  2. git stash branch <name>             # zero-conflict (new branch from stash base)
+  3. git commit -m "WIP" before rebase   # prefer WIP commits over stash entirely
+MSG
+    exit 2
+fi
+
+# Also catch it after && or ; (chained commands)
+if echo "$CMD_STRIPPED" | grep -qE '(&&|;)\s*git\s+stash\s+pop\b'; then
     cat >&2 <<'MSG'
 BLOCKED: `git stash pop` is prohibited — it can leave conflict markers that break running services.
 
