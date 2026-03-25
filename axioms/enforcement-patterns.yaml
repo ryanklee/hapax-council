@@ -99,8 +99,8 @@ patterns:
     axiom_id: corporate_boundary
     implication_id: cb-employer-001
     tier: T1
-    regex: '\b(?:https?://(?:[\w-]+\.)?(?:jira|confluence|slack|teams|sharepoint|workday|servicenow|bamboohr|greenhouse|lever|namely|adp|successfactors)\.(?:com|net|io|cloud)/)\b'
-    description: Employer-system URLs in output
+    regex: '\b(?:https?://(?:[\w-]+\.)?(?:jira|confluence|slack|teams|sharepoint|workday|servicenow|bamboohr|greenhouse|lever|namely|adp|successfactors)\.(?:com|net|io|cloud)/(?!(?:help|docs|api|blog|about|pricing|status|changelog|intl|resources)\b))\b'
+    description: Employer-system URLs in output (excludes public documentation paths)
     false_positive_notes: >
       May match in documentation about corporate boundary axiom itself.
       Check if URL is being referenced as data vs. as a rule example.

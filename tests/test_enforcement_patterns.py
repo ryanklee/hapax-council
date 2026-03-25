@@ -73,3 +73,38 @@ class TestItPersistLivePattern:
         reload_patterns()
         violations = check_output("noted Sarah tends to avoid confrontation")
         assert [v for v in violations if v.pattern_id == "out-it-persist-001"]
+
+
+CB_EMPLOYER_REGEX = re.compile(
+    r"\b(?:https?://(?:[\w-]+\.)?(?:jira|confluence|slack|teams|sharepoint|workday|"
+    r"servicenow|bamboohr|greenhouse|lever|namely|adp|successfactors)"
+    r"\.(?:com|net|io|cloud)/"
+    r"(?!(?:help|docs|api|blog|about|pricing|status|changelog|intl|resources)\b))\b",
+    re.IGNORECASE,
+)
+
+
+class TestCbEmployerPattern:
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "See https://slack.com/help/articles/123",
+            "Docs at https://slack.com/api/metadata",
+            "Read https://confluence.com/docs/spaces",
+            "Blog: https://jira.com/blog/updates",
+        ],
+    )
+    def test_public_docs_do_not_trigger(self, text: str) -> None:
+        assert not CB_EMPLOYER_REGEX.search(text), f"False positive: {text}"
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "https://slack.com/archives/C123456",
+            "https://jira.com/browse/PROJ-123",
+            "https://confluence.com/spaces/TEAM",
+            "https://mycompany.slack.com/messages/general",
+        ],
+    )
+    def test_corporate_urls_do_trigger(self, text: str) -> None:
+        assert CB_EMPLOYER_REGEX.search(text), f"Missed: {text}"
