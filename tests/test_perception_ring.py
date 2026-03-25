@@ -100,6 +100,32 @@ class TestTrend:
         assert ring.trend("flow_score") == 0.0
 
 
+class TestTrendNumericalStability:
+    def test_trend_with_posix_timestamps_rising(self):
+        ring = PerceptionRing(maxlen=20)
+        base_ts = 1_711_324_800.0
+        for i in range(20):
+            ring.push({"ts": base_ts + i * 2.5, "flow_score": 0.3 + i * 0.01})
+        slope = ring.trend("flow_score", window_s=60.0)
+        assert 0.003 < slope < 0.005, f"Expected ~0.004, got {slope}"
+
+    def test_trend_with_posix_timestamps_falling(self):
+        ring = PerceptionRing(maxlen=20)
+        base_ts = 1_711_324_800.0
+        for i in range(20):
+            ring.push({"ts": base_ts + i * 2.5, "flow_score": 0.8 - i * 0.02})
+        slope = ring.trend("flow_score", window_s=60.0)
+        assert -0.009 < slope < -0.007, f"Expected ~-0.008, got {slope}"
+
+    def test_trend_with_posix_timestamps_flat(self):
+        ring = PerceptionRing(maxlen=20)
+        base_ts = 1_711_324_800.0
+        for i in range(20):
+            ring.push({"ts": base_ts + i * 2.5, "flow_score": 0.5})
+        slope = ring.trend("flow_score", window_s=60.0)
+        assert abs(slope) < 1e-10, f"Expected ~0, got {slope}"
+
+
 class TestSnapshots:
     def test_snapshots_ordered(self):
         ring = PerceptionRing()

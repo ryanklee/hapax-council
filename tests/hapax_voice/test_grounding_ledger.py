@@ -261,6 +261,64 @@ class TestGroundingDirective:
         assert "Do not build on it" in directive or "ungrounded" in directive.lower()
 
 
+class TestIgnoreBranch:
+    def test_low_concern_ignore_grounds(self):
+        from agents.hapax_voice.grounding_ledger import GroundingLedger
+
+        ledger = GroundingLedger()
+        ledger.add_du(1, "test statement", concern_overlap=0.1)
+        result = ledger.update_from_acceptance("IGNORE", concern_overlap=0.1)
+        assert result == "advance"
+
+    def test_high_concern_ignore_ungrounds(self):
+        from agents.hapax_voice.grounding_ledger import GroundingLedger
+
+        ledger = GroundingLedger()
+        ledger.add_du(1, "test statement", concern_overlap=0.8)
+        result = ledger.update_from_acceptance("IGNORE", concern_overlap=0.8)
+        assert result == "ungrounded_caution"
+
+    def test_medium_concern_ignore_ungrounds(self):
+        from agents.hapax_voice.grounding_ledger import GroundingLedger
+
+        ledger = GroundingLedger()
+        ledger.add_du(1, "test statement", concern_overlap=0.5)
+        result = ledger.update_from_acceptance("IGNORE", concern_overlap=0.5)
+        assert result == "ungrounded_caution"
+
+
+class TestEffortHoldCounter:
+    def test_same_rank_preserves_hold_counter(self):
+        from agents.hapax_voice.grounding_ledger import GroundingLedger
+
+        ledger = GroundingLedger()
+        ledger.effort_calibration(activation=0.5)
+        ledger.effort_calibration(activation=0.9)
+        ledger.effort_calibration(activation=0.2)
+        e4 = ledger.effort_calibration(activation=0.2)
+        assert e4.level_name == "EFFICIENT"
+
+    def test_true_escalation_resets_hold_counter(self):
+        # A true escalation (new_rank > current_rank) resets the hold counter.
+        # After escalation from BASELINE to ELABORATIVE and back to EFFICIENT-level,
+        # de-escalation requires 2 consecutive turns. A same-rank turn preserves
+        # the counter (M5 fix), so: de-escalate(hold=1) → same-rank(hold=1 preserved)
+        # → de-escalate(hold=2) → de-escalates immediately.
+        # But a true re-escalation (EFFICIENT→ELABORATIVE) resets hold to 0.
+        from agents.hapax_voice.grounding_ledger import GroundingLedger
+
+        ledger = GroundingLedger()
+        # Start at BASELINE (cold start), escalate to ELABORATIVE
+        ledger.effort_calibration(activation=0.9)  # → ELABORATIVE, hold=0
+        # Begin de-escalation (hold=1, stays ELABORATIVE)
+        ledger.effort_calibration(activation=0.2)  # → hold=1, ELABORATIVE
+        # True escalation: resets hold counter to 0
+        ledger.effort_calibration(activation=0.9)  # → same rank (ELABORATIVE), hold preserved
+        # With M5 fix, hold=1 preserved from step 2; next de-escalation will complete
+        e = ledger.effort_calibration(activation=0.2)  # hold=1+1=2, de-escalates
+        assert e.level_name == "EFFICIENT"
+
+
 class TestUngroundedCount:
     def test_counts_ungrounded_and_abandoned(self):
         from agents.hapax_voice.grounding_ledger import GroundingLedger

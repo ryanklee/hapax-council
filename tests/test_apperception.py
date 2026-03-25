@@ -760,3 +760,90 @@ class TestSourceStimmungMatrix:
 
         if stance == "critical" and source not in self._CRITICAL_ALLOWED:
             assert result is None, f"Source {source} should be filtered in critical stance"
+
+
+# ── C5: Rumination Valence Tests ─────────────────────────────────────────────
+
+
+class TestRuminationValence:
+    """C5: rumination must use actual valence, not a fixed sentinel."""
+
+    def test_positive_performance_events_do_not_trigger_gate(self):
+        """6 positive-valence performance events should NOT gate the dimension."""
+        cascade = _make_cascade()
+        # performance with magnitude > baseline (0.5) → positive valence
+        for i in range(6):
+            event = CascadeEvent(
+                source="performance",
+                text=f"good_{i}",
+                magnitude=0.6,
+                metadata={"baseline": 0.3},  # magnitude > baseline → affirming
+            )
+            cascade.process(event, stimmung_stance="nominal")
+        # performance maps to "processing_quality" dimension
+        assert "processing_quality" not in cascade._attention_gates
+
+    def test_negative_events_still_trigger_gate(self):
+        """RUMINATION_LIMIT consecutive negative prediction_error events still gate."""
+        cascade = _make_cascade()
+        for i in range(RUMINATION_LIMIT + 1):
+            event = _make_event(
+                source="prediction_error",
+                text=f"error_{i}",
+                magnitude=0.6,
+            )
+            cascade.process(event, stimmung_stance="nominal")
+        assert "temporal_prediction" in cascade._attention_gates
+
+
+# ── C4: Depth-4 Retention Tests ──────────────────────────────────────────────
+
+
+class TestDepthFourRetention:
+    """C4: high-signal depth-4 events should be retained."""
+
+    def test_high_signal_depth4_retained(self):
+        """prediction_error with magnitude 0.9 hits both relevance > 0.5 and |valence| > 0.3."""
+        cascade = _make_cascade()
+        event = CascadeEvent(
+            source="prediction_error",
+            text="significant temporal surprise 0.80",
+            magnitude=0.9,
+        )
+        result = cascade.process(event, stimmung_stance="nominal")
+        assert result is not None, "High-signal depth-4 event should be retained"
+
+    def test_low_signal_depth4_still_filtered(self):
+        """cross_resonance with magnitude 0.2 has |valence| = 0.06 < 0.3, filtered at depth 4."""
+        cascade = _make_cascade()
+        event = CascadeEvent(
+            source="cross_resonance",
+            text="minor pattern",
+            magnitude=0.2,
+        )
+        result = cascade.process(event, stimmung_stance="nominal")
+        assert result is None, "Low-signal depth-4 event should still be filtered"
+
+    def test_depth4_requires_both_relevance_and_valence(self):
+        """Depth-4 gate is AND not OR: both relevance > 0.5 AND |valence| > 0.3 required."""
+        # cross_resonance has polarity 0.3 → valence = 0.3 * 0.6 = 0.18 < 0.3
+        # So even with high relevance (magnitude=0.6 > 0.5), no retention without strong valence
+        cascade = _make_cascade()
+        event = CascadeEvent(
+            source="cross_resonance",
+            text="pattern with relevance but weak valence",
+            magnitude=0.6,
+        )
+        result = cascade.process(event, stimmung_stance="nominal")
+        assert result is None, "Depth-4 must require both high relevance AND strong valence"
+
+    def test_correction_retained_regardless_of_depth(self):
+        """Corrections bypass depth gate entirely."""
+        cascade = _make_cascade()
+        event = CascadeEvent(
+            source="correction",
+            text="operator correction at any depth",
+            magnitude=0.3,
+        )
+        result = cascade.process(event, stimmung_stance="nominal")
+        assert result is not None, "Corrections always retained"

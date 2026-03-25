@@ -133,6 +133,23 @@ _BIOMETRIC_STANCE_WEIGHT = 0.5
 # for conversation quality but doesn't override system health.
 _COGNITIVE_STANCE_WEIGHT = 0.3
 
+# Per-class stance thresholds applied to effective values (raw × weight).
+# Infrastructure: standard thresholds.
+# Biometric (0.5× weight): can reach DEGRADED at raw ≥ 0.8 (eff=0.4), never CRITICAL.
+# Cognitive (0.3× weight): can reach CAUTIOUS at raw ≥ 0.5 (eff=0.15), never DEGRADED.
+_INFRA_THRESHOLDS = (0.30, 0.60, 0.85)  # (CAUTIOUS, DEGRADED, CRITICAL)
+_BIOMETRIC_THRESHOLDS = (0.15, 0.40, 1.01)  # CRITICAL unreachable (eff max = 0.5)
+_COGNITIVE_THRESHOLDS = (0.15, 1.01, 1.01)  # DEGRADED+CRITICAL unreachable (eff max = 0.3)
+
+# Stance ordering for comparison (StrEnum alphabetical order doesn't match severity).
+# Keyed by Stance members; since Stance is StrEnum, Stance.NOMINAL == "nominal".
+_STANCE_ORDER: dict[Stance, int] = {
+    Stance.NOMINAL: 0,
+    Stance.CAUTIOUS: 1,
+    Stance.DEGRADED: 2,
+    Stance.CRITICAL: 3,
+}
+
 _STALE_THRESHOLD_S = 120.0  # dimensions older than this are excluded from stance
 
 # ── Baseline Constants ───────────────────────────────────────────────────────
@@ -341,7 +358,7 @@ class StimmungCollector:
         return SystemStimmung(
             **dimensions,
             overall_stance=stance,
-            timestamp=now,
+            timestamp=time.time(),
         )
 
     def _record(self, dimension: str, value: float) -> None:
@@ -366,24 +383,33 @@ class StimmungCollector:
     def _compute_stance(dimensions: dict[str, DimensionReading]) -> Stance:
         """Derive stance from worst non-stale dimension.
 
-        Biometric dimensions contribute at 0.5× weight — operator state
-        changes slowly and shouldn't dominate system stance.
+        Uses per-class thresholds so biometric/cognitive dimensions can
+        nudge stance proportionally without dominating.
         """
-        worst = 0.0
+        worst = Stance.NOMINAL
         for name, dim in dimensions.items():
             if dim.freshness_s > _STALE_THRESHOLD_S:
                 continue
             effective = dim.value
             if name in _BIOMETRIC_DIMENSION_NAMES:
                 effective *= _BIOMETRIC_STANCE_WEIGHT
+                thresholds = _BIOMETRIC_THRESHOLDS
             elif name in _COGNITIVE_DIMENSION_NAMES:
                 effective *= _COGNITIVE_STANCE_WEIGHT
-            worst = max(worst, effective)
+                thresholds = _COGNITIVE_THRESHOLDS
+            else:
+                thresholds = _INFRA_THRESHOLDS
 
-        if worst >= 0.85:
-            return Stance.CRITICAL
-        if worst >= 0.6:
-            return Stance.DEGRADED
-        if worst >= 0.3:
-            return Stance.CAUTIOUS
-        return Stance.NOMINAL
+            if effective >= thresholds[2]:
+                dim_stance = Stance.CRITICAL
+            elif effective >= thresholds[1]:
+                dim_stance = Stance.DEGRADED
+            elif effective >= thresholds[0]:
+                dim_stance = Stance.CAUTIOUS
+            else:
+                dim_stance = Stance.NOMINAL
+
+            if _STANCE_ORDER[dim_stance] > _STANCE_ORDER[worst]:
+                worst = dim_stance
+
+        return worst

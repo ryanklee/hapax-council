@@ -124,7 +124,7 @@ class Event[T]:
 
     def emit(self, timestamp: float, value: T) -> None:
         """Notify all subscribers. Exceptions are caught per-subscriber."""
-        for cb in self._subscribers:
+        for cb in list(self._subscribers):
             try:
                 cb(timestamp, value)
             except Exception:

@@ -474,16 +474,20 @@ class ApperceptionCascade:
         reflection: str,
         source: Source,
     ) -> bool:
-        """Worth keeping? cascade_depth >= 5 AND (relevance > 0.3 OR
-        |valence| > 0.2 OR reflection non-empty). Corrections always retained.
+        """Worth keeping? Corrections always. Depth >= 5 with moderate signal.
+        Depth 4 only with high signal (both relevance AND valence).
         """
         if source == "correction":
             return True
 
-        if cascade_depth < 5:
-            return False
+        if cascade_depth >= 5:
+            return relevance > 0.3 or abs(valence) > 0.2 or bool(reflection)
 
-        return relevance > 0.3 or abs(valence) > 0.2 or bool(reflection)
+        # Depth 4: retain only high-signal events (tighter gate)
+        if cascade_depth == 4:
+            return relevance > 0.5 and abs(valence) > 0.3
+
+        return False
 
     # ── Rumination Breaker ───────────────────────────────────────────────
 
@@ -534,18 +538,12 @@ class ApperceptionCascade:
         # Step 3: Integration
         target, links = self._step_integration(event)
 
-        # Rumination check (between integration and valence)
-        # We need to peek at likely valence direction
-        likely_negative = event.source in ("prediction_error", "correction", "absence")
-        if likely_negative and self._check_rumination(target, -0.1):
-            return None
-
-        # Step 4: Valence (FROZEN after this — no suppression pathway)
+        # Step 4: Valence (compute BEFORE rumination check)
         valence = self._step_valence(event)
 
-        # Update rumination tracking with actual valence
-        if not likely_negative:
-            self._check_rumination(target, valence)
+        # Rumination check with actual valence (all sources, gate + record)
+        if self._check_rumination(target, valence):
+            return None
 
         # Get/create the target dimension
         dimension = self.model.get_or_create_dimension(target)

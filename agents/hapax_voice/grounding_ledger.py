@@ -139,9 +139,7 @@ class GroundingLedger:
         if du.state in (DUState.GROUNDED, DUState.ABANDONED):
             return "advance"  # already resolved
 
-        threshold = self._repair_threshold(concern_overlap, self.compute_gqi())
-
-        # State transitions — explicit signals checked BEFORE threshold
+        # State transitions — explicit signals checked first
         if acceptance == "REJECT":
             if du.state == DUState.CONTESTED:
                 du.state = DUState.ABANDONED
@@ -167,13 +165,9 @@ class GroundingLedger:
             du.state = DUState.GROUNDED
             return "advance"
 
-        # IGNORE: threshold-dependent (concern modulates)
+        # IGNORE: grounding depends on concern overlap only
         if acceptance == "IGNORE":
-            if acceptance_score >= threshold:
-                du.state = DUState.GROUNDED
-                return "advance"
             if concern_overlap < 0.3:
-                # Low concern: IGNORE is acceptable
                 du.state = DUState.GROUNDED
                 return "advance"
             du.state = DUState.UNGROUNDED
@@ -272,7 +266,8 @@ class GroundingLedger:
                     "ELABORATIVE": 45,
                 }[self._effort_level]
         else:
-            self._effort_hold_turns = 0
+            # Same rank: preserve hold counter for in-progress de-escalation
+            pass
 
         return EffortDecision(
             effort_score=round(effort_score, 3),

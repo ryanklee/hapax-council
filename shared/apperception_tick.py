@@ -82,12 +82,18 @@ class ApperceptionTick:
     def _collect_events(self, stance: str) -> list[CascadeEvent]:
         events: list[CascadeEvent] = []
 
-        # 1. Surprise from temporal bands
+        # Read temporal file ONCE (C6: prevent contradictory events)
+        temporal_data = None
         try:
-            raw = json.loads(TEMPORAL_FILE.read_text(encoding="utf-8"))
-            ts = raw.get("timestamp", 0)
+            temporal_data = json.loads(TEMPORAL_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
+        # 1. Surprise from temporal bands
+        if temporal_data is not None:
+            ts = temporal_data.get("timestamp", 0)
             if (time.time() - ts) <= 30:
-                surprise = raw.get("max_surprise", 0.0)
+                surprise = temporal_data.get("max_surprise", 0.0)
                 if surprise > 0.3:
                     events.append(
                         CascadeEvent(
@@ -96,8 +102,6 @@ class ApperceptionTick:
                             magnitude=min(surprise, 1.0),
                         )
                     )
-        except Exception:
-            pass
 
         # 2. Operator corrections (dedup by timestamp)
         try:
@@ -133,10 +137,9 @@ class ApperceptionTick:
             )
             self._prev_stimmung_stance = stance
 
-        # 4. Perception staleness (absence) — check temporal bands age
-        try:
-            raw = json.loads(TEMPORAL_FILE.read_text(encoding="utf-8"))
-            perception_age = time.time() - raw.get("timestamp", 0)
+        # 4. Perception staleness (reuse temporal_data — mutually exclusive with surprise)
+        if temporal_data is not None:
+            perception_age = time.time() - temporal_data.get("timestamp", 0)
             if perception_age > 30.0:
                 events.append(
                     CascadeEvent(
@@ -145,8 +148,6 @@ class ApperceptionTick:
                         magnitude=min(perception_age / 120.0, 1.0),
                     )
                 )
-        except Exception:
-            pass
 
         return events
 

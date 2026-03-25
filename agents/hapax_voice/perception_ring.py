@@ -78,18 +78,23 @@ class PerceptionRing:
         if len(values) < 2:
             return 0.0
 
-        # Simple linear regression (slope)
+        # Linear regression with centered timestamps to avoid
+        # catastrophic cancellation with large POSIX values.
         n = len(values)
-        sum_t = sum(t for t, _ in values)
-        sum_v = sum(v for _, v in values)
-        sum_tv = sum(t * v for t, v in values)
-        sum_tt = sum(t * t for t, _ in values)
+        ts = [t for t, _ in values]
+        vs = [v for _, v in values]
+        t_mean = sum(ts) / n
 
-        denom = n * sum_tt - sum_t * sum_t
+        centered = [t - t_mean for t in ts]
+        sum_ct = sum(centered)
+        sum_cv = sum(c * v for c, v in zip(centered, vs, strict=True))
+        sum_cc = sum(c * c for c in centered)
+
+        denom = n * sum_cc - sum_ct * sum_ct
         if abs(denom) < 1e-12:
             return 0.0
 
-        return (n * sum_tv - sum_t * sum_v) / denom
+        return (n * sum_cv - sum_ct * sum(vs)) / denom
 
     def __len__(self) -> int:
         return len(self._buffer)

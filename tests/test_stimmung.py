@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+import time as time_mod
 
 from shared.stimmung import (
     _STALE_THRESHOLD_S,
@@ -261,8 +262,8 @@ class TestBiometricDimensions:
         assert s.operator_stress.value > 0.8
         # But stance should NOT be critical because of 0.5x weight
         assert s.overall_stance != Stance.CRITICAL
-        # It should be at most cautious (0.5 * 1.0 = 0.5 → cautious range)
-        assert s.overall_stance in (Stance.CAUTIOUS, Stance.NOMINAL)
+        # C1: biometric eff max = 0.5, threshold = 0.40 → can reach DEGRADED, not CRITICAL
+        assert s.overall_stance in (Stance.CAUTIOUS, Stance.DEGRADED, Stance.NOMINAL)
 
     def test_biometric_plus_infra_additive(self):
         """Biometric stress + infra stress can compound."""
@@ -291,3 +292,64 @@ class TestBiometricDimensions:
         )
         nn = s.non_nominal_dimensions
         assert "operator_stress" in nn
+
+
+class TestDimensionClassThresholds:
+    """C1: biometric dims can reach DEGRADED, cognitive reach CAUTIOUS."""
+
+    def test_biometric_high_reaches_degraded(self):
+        """Biometric dim at raw ~1.0 should reach DEGRADED."""
+        c = StimmungCollector()
+        # sleep_quality=0.0 and circadian_alignment=1.0 push operator_energy high
+        c.update_biometrics(sleep_quality=0.0, circadian_alignment=1.0)
+        s = c.snapshot()
+        assert s.overall_stance in (Stance.CAUTIOUS, Stance.DEGRADED), (
+            f"Expected CAUTIOUS or DEGRADED, got {s.overall_stance}"
+        )
+
+    def test_biometric_max_never_critical(self):
+        """No biometric combination should reach CRITICAL."""
+        c = StimmungCollector()
+        c.update_biometrics(
+            sleep_quality=0.0,
+            circadian_alignment=1.0,
+            hr_zone=0.0,
+            activity_level=0.0,
+        )
+        s = c.snapshot()
+        assert s.overall_stance != Stance.CRITICAL, (
+            f"Biometric-only input should never reach CRITICAL, got {s.overall_stance}"
+        )
+
+    def test_cognitive_max_reaches_cautious(self):
+        """Cognitive dim at raw 1.0 should reach CAUTIOUS."""
+        c = StimmungCollector()
+        c._record("grounding_quality", 1.0)
+        s = c.snapshot()
+        assert s.overall_stance == Stance.CAUTIOUS, f"Expected CAUTIOUS, got {s.overall_stance}"
+
+    def test_cognitive_max_never_degraded(self):
+        """Cognitive dim at raw 1.0 should never reach DEGRADED."""
+        c = StimmungCollector()
+        c._record("grounding_quality", 1.0)
+        s = c.snapshot()
+        assert s.overall_stance != Stance.DEGRADED, (
+            f"Cognitive-only should never be DEGRADED, got {s.overall_stance}"
+        )
+
+    def test_infrastructure_critical_unchanged(self):
+        """Infrastructure dims should still reach CRITICAL."""
+        c = StimmungCollector()
+        c.update_health(healthy=0, total=5)
+        s = c.snapshot()
+        assert s.overall_stance == Stance.CRITICAL
+
+
+class TestStimmungTimestamp:
+    def test_snapshot_timestamp_is_wall_clock(self):
+        """N2: serialized timestamp must be wall-clock, not monotonic."""
+        c = StimmungCollector()
+        c.update_health(healthy=5, total=5)
+        s = c.snapshot()
+        assert s.timestamp > 1_000_000_000, f"Timestamp {s.timestamp} looks monotonic"
+        assert abs(s.timestamp - time_mod.time()) < 2.0

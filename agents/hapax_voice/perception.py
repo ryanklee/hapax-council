@@ -267,10 +267,25 @@ class PerceptionEngine:
         # Latest state
         self.latest: EnvironmentState | None = None
 
-    def _bval(self, name: str, default: float) -> float:
-        """Read an optional Behavior value with a safe default."""
+    def _fval(self, name: str, default: float = 0.0) -> float:
+        """Read a float Behavior value."""
         b = self.behaviors.get(name)
-        return b.value if b is not None else default
+        return float(b.value) if b is not None else default
+
+    def _sval(self, name: str, default: str = "") -> str:
+        """Read a string Behavior value."""
+        b = self.behaviors.get(name)
+        return str(b.value) if b is not None else default
+
+    def _boolval(self, name: str, default: bool = False) -> bool:
+        """Read a boolean Behavior value."""
+        b = self.behaviors.get(name)
+        return bool(b.value) if b is not None else default
+
+    def _optval(self, name: str) -> object | None:
+        """Read an optional Behavior value (may be None)."""
+        b = self.behaviors.get(name)
+        return b.value if b is not None else None
 
     def subscribe(self, callback: Callable[[EnvironmentState], None]) -> None:
         """Register a callback for each new EnvironmentState."""
@@ -298,18 +313,15 @@ class PerceptionEngine:
         log.info("Registered perception backend: %s (provides: %s)", backend.name, backend.provides)
 
     def replace_backend(self, backend: PerceptionBackend) -> None:
-        """Replace an existing backend with a new instance of the same name.
-
-        Stops the old backend, unregisters it, then registers the new one.
-        Use for session-scoped backends that are recreated each session
-        (e.g., cognitive_loop).
-        """
+        """Replace a backend by name. New backend must be available."""
+        if not backend.available():
+            log.warning("Replacement backend %s unavailable, keeping current", backend.name)
+            return
         old = self._backends.pop(backend.name, None)
         if old is not None:
             old.stop()
             for name in old.provides:
                 self._provided_by.pop(name, None)
-            log.info("Replaced perception backend: %s", backend.name)
         self.register_backend(backend)
 
     @property
@@ -365,25 +377,25 @@ class PerceptionEngine:
         interruptibility = compute_interruptibility(
             vad_confidence=self._b_vad_confidence.value,
             activity_mode=self._b_activity_mode.value,
-            phone_call_active=bool(self._bval("phone_call_active", False)),
-            phone_call_incoming=bool(self._bval("phone_call_incoming", False)),
-            phone_media_playing=bool(self._bval("phone_media_playing", False)),
+            phone_call_active=self._boolval("phone_call_active"),
+            phone_call_incoming=self._boolval("phone_call_incoming"),
+            phone_media_playing=self._boolval("phone_media_playing"),
             in_voice_session=self._in_voice_session,
             operator_present=self._b_operator_present.value,
             window_count=self._b_window_count.value,
-            physiological_load=self._bval("physiological_load", 0.0),
-            circadian_alignment=self._bval("circadian_alignment", 0.1),
-            system_health_ratio=self._bval("system_health_ratio", 1.0),
-            gaze_direction=str(self._bval("gaze_direction", "unknown")),
-            emotion=str(self._bval("top_emotion", "neutral")),
-            posture=str(self._bval("posture", "unknown")),
+            physiological_load=self._fval("physiological_load", 0.0),
+            circadian_alignment=self._fval("circadian_alignment", 0.1),
+            system_health_ratio=self._fval("system_health_ratio", 1.0),
+            gaze_direction=self._sval("gaze_direction", "unknown"),
+            emotion=self._sval("top_emotion", "neutral"),
+            posture=self._sval("posture", "unknown"),
         )
 
         presence_score = getattr(self._presence, "score", "likely_absent")
 
         # Bayesian presence engine outputs (if registered)
-        bayesian_state = self._bval("presence_state", None)
-        bayesian_prob = self._bval("presence_probability", None)
+        bayesian_state = self._optval("presence_state")
+        bayesian_prob = self._optval("presence_probability")
 
         # Deduplicated guest count from fused face detection
         guest_count = getattr(self._presence, "guest_count", 0)
@@ -404,12 +416,12 @@ class PerceptionEngine:
             presence_state=bayesian_state,
             presence_probability=bayesian_prob,
             activity_mode=self._b_activity_mode.value,
-            phone_call_active=bool(self._bval("phone_call_active", False)),
-            phone_call_incoming=bool(self._bval("phone_call_incoming", False)),
-            phone_media_playing=bool(self._bval("phone_media_playing", False)),
-            phone_battery_pct=int(self._bval("phone_battery_pct", 100) or 100),
-            phone_notification_count=int(self._bval("phone_notification_count", 0) or 0),
-            phone_media_app=str(self._bval("phone_media_app", "") or ""),
+            phone_call_active=self._boolval("phone_call_active"),
+            phone_call_incoming=self._boolval("phone_call_incoming"),
+            phone_media_playing=self._boolval("phone_media_playing"),
+            phone_battery_pct=int(self._fval("phone_battery_pct", 100)),
+            phone_notification_count=int(self._fval("phone_notification_count", 0)),
+            phone_media_app=self._sval("phone_media_app", ""),
             workspace_context=self._b_workspace_context.value,
             active_window=self._b_active_window.value,
             window_count=self._b_window_count.value,
