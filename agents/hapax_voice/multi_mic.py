@@ -190,33 +190,50 @@ class NoiseReference:
 
             pa = pyaudio.PyAudio()
 
-            # Find the device index for this source
+            # Structure sources (PipeWire virtual) need pactl default-source;
+            # room sources (hardware ALSA) use PyAudio device name matching.
             device_idx = None
-            for i in range(pa.get_device_count()):
-                info = pa.get_device_info_by_index(i)
-                if source in str(info.get("name", "")):
-                    device_idx = i
-                    break
+            if is_structure:
+                import subprocess
 
-            if device_idx is None:
-                log.warning("Noise reference source not found (%s): %s", kind, source)
-                pa.terminate()
-                return
+                try:
+                    subprocess.run(
+                        ["pactl", "set-default-source", "contact_mic"],
+                        capture_output=True,
+                        timeout=5,
+                    )
+                except Exception:
+                    log.warning("Failed to set contact_mic as default source for %s ref", kind)
+                # Use default device (now routed to contact_mic)
+                device_idx = None  # None = default
+            else:
+                for i in range(pa.get_device_count()):
+                    info = pa.get_device_info_by_index(i)
+                    if source in str(info.get("name", "")):
+                        device_idx = i
+                        break
+                if device_idx is None:
+                    log.warning("Noise reference source not found (%s): %s", kind, source)
+                    pa.terminate()
+                    return
 
-            stream = pa.open(
-                format=pyaudio.paInt16,
-                channels=1,
-                rate=self._sample_rate,
-                input=True,
-                input_device_index=device_idx,
-                frames_per_buffer=_FFT_SIZE,
-            )
+            open_kwargs: dict = {
+                "format": pyaudio.paInt16,
+                "channels": 1,
+                "rate": self._sample_rate,
+                "input": True,
+                "frames_per_buffer": _FFT_SIZE,
+            }
+            if device_idx is not None:
+                open_kwargs["input_device_index"] = device_idx
+
+            stream = pa.open(**open_kwargs)
 
             log.info(
-                "Noise reference capturing from %s source: %s (device %d)",
+                "Noise reference capturing from %s source: %s (device %s)",
                 kind,
                 source,
-                device_idx,
+                device_idx if device_idx is not None else "default",
             )
 
             while self._running:

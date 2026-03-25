@@ -35,21 +35,23 @@ _FRAME_SAMPLES = _FFT_SIZE
 _FRAME_BYTES = _FRAME_SAMPLES * 2  # int16
 
 _RMS_SMOOTHING = 0.3  # exponential smoothing alpha
-_ONSET_THRESHOLD = 0.03  # normalized RMS threshold for onset
+_ONSET_THRESHOLD = 0.157  # calibrated 2026-03-25 (midpoint silence p95 / typing mean)
 _ONSET_MIN_INTERVAL_S = 0.08  # 80ms minimum between onsets
 _GESTURE_WINDOW_S = 0.5  # max time window for gesture classification
 _GESTURE_TIMEOUT_S = 0.3  # wait after last onset before classifying
 _DOUBLE_TAP_MIN_IOI = 0.08  # min inter-onset interval for double tap
 _DOUBLE_TAP_MAX_IOI = 0.25  # max inter-onset interval for double tap
 
-_IDLE_THRESHOLD = 0.005  # energy below this = idle
-_TYPING_MIN_ONSET_RATE = 3.0  # onsets/sec
-_TAPPING_MIN_ONSET_RATE = 1.0
-_DRUMMING_MIN_ENERGY = 0.3
-_DRUMMING_MAX_CENTROID = 1500.0  # Hz — low centroid = resonant low-end
+_IDLE_THRESHOLD = 0.116  # calibrated 2026-03-25 (2x silence p95)
+_TYPING_MIN_ONSET_RATE = 1.0  # calibrated (60% of observed 1.6/sec)
+_TAPPING_MIN_ONSET_RATE = 1.6  # calibrated (60% of observed 2.7/sec)
+_DRUMMING_MIN_ENERGY = 0.4  # calibrated (between tapping mean 0.33 and drumming mean 0.54)
+_DRUMMING_MAX_CENTROID = 219.0  # calibrated (1.5x drumming centroid mean 146 Hz)
 
-_SCRATCH_AUTOCORR_THRESHOLD = 0.4
-_SCRATCH_MIN_ENERGY = 0.02
+# Scratch detection via autocorrelation disabled — camera is primary detector.
+# See vision.py cross-modal fusion: turntable zone + non-idle energy = scratching.
+_SCRATCH_AUTOCORR_THRESHOLD = 0.9  # effectively disabled
+_SCRATCH_MIN_ENERGY = 0.03  # calibrated (50% of scratch RMS mean 0.058)
 _SCRATCH_MIN_LAG = 2  # ~64ms at 32ms frames (~16 Hz)
 _SCRATCH_MAX_LAG = 16  # ~512ms at 32ms frames (~2 Hz)
 _ENERGY_BUFFER_SIZE = 60  # ~1.9s of history at 32ms frames
@@ -277,20 +279,21 @@ class ContactMicBackend:
         return PerceptionTier.FAST
 
     def available(self) -> bool:
+        """Check if the contact mic PipeWire source exists."""
         if pyaudio is None:
             return False
         try:
-            pa = pyaudio.PyAudio()
-            try:
-                for i in range(pa.get_device_count()):
-                    info = pa.get_device_info_by_index(i)
-                    if self._source_name in str(info.get("name", "")):
-                        return True
-            finally:
-                pa.terminate()
+            import subprocess
+
+            result = subprocess.run(
+                ["pw-cli", "ls", "Node"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            return self._source_name in result.stdout
         except Exception:
-            pass
-        return False
+            return False
 
     def start(self) -> None:
         if pyaudio is None:
@@ -338,27 +341,33 @@ class ContactMicBackend:
         behaviors["desk_autocorr_peak"] = self._b_autocorr_peak
 
     def _capture_loop(self) -> None:
-        """Background thread: capture audio, compute DSP, update cache."""
+        """Background thread: capture audio, compute DSP, update cache.
+
+        Uses pactl to set the PipeWire default source to the contact mic
+        node, then opens the default PyAudio device. PyAudio cannot see
+        PipeWire virtual sources by name — only the default source works.
+        """
         try:
+            import subprocess
+
+            # Set contact_mic as the default PipeWire source for this capture
+            try:
+                subprocess.run(
+                    ["pactl", "set-default-source", "contact_mic"],
+                    capture_output=True,
+                    timeout=5,
+                )
+            except Exception:
+                log.warning("Failed to set contact_mic as default source")
+
             pa = pyaudio.PyAudio()
-            device_idx = None
-            for i in range(pa.get_device_count()):
-                info = pa.get_device_info_by_index(i)
-                if self._source_name in str(info.get("name", "")):
-                    device_idx = i
-                    break
 
-            if device_idx is None:
-                log.warning("Contact mic source not found: %s", self._source_name)
-                pa.terminate()
-                return
-
+            # Use default device (now routed to contact_mic via PipeWire)
             stream = pa.open(
                 format=pyaudio.paInt16,
                 channels=1,
                 rate=_SAMPLE_RATE,
                 input=True,
-                input_device_index=device_idx,
                 frames_per_buffer=_FRAME_SAMPLES,
             )
             self._stream = stream
