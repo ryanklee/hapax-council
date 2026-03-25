@@ -178,13 +178,6 @@ notify() {
     fi
 }
 
-signal_bar() {
-    # Push theme switch to hapax-bar via control socket (instant, no restart)
-    local sock="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hapax-bar.sock"
-    if [[ -S "$sock" ]]; then
-        echo "{\"cmd\":\"theme\",\"mode\":\"$1\"}" | socat - UNIX-CONNECT:"$sock" 2>/dev/null || true
-    fi
-}
 
 # ── No argument: print current mode ──
 if [[ $# -eq 0 ]]; then
@@ -240,7 +233,7 @@ write_relay_mode "$MODE"
 write_inflection "$MODE"
 apply_timer_overrides "$MODE"
 notify "$MODE"
-signal_bar "$MODE"
+signal_waybar
 
 # Apply visual theme (DE colors, wallpaper, terminal palette)
 if command -v hapax-theme-apply &>/dev/null; then

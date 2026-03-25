@@ -19,15 +19,23 @@ VIDEO_DIR="$HOME/video-recording"
 RETAIN_HOURS=48
 PROCESSED_RETAIN_HOURS=6
 PRESSURE_HOURS=12
+CRITICAL_HOURS=4
+EMERGENCY_HOURS=2
 LOG_TAG="video-retention"
 
 log() { logger -t "$LOG_TAG" "$1"; echo "$(date +%H:%M:%S) $1"; }
 
 [ -d "$VIDEO_DIR" ] || exit 0
 
-# Check disk pressure
+# Check disk pressure — tiered response
 USE_PCT=$(df --output=pcent / | tail -1 | tr -d " %")
-if [ "$USE_PCT" -gt 90 ]; then
+if [ "$USE_PCT" -gt 97 ]; then
+    EFFECTIVE_RETAIN=$EMERGENCY_HOURS
+    log "Disk at ${USE_PCT}% — EMERGENCY retention (${EFFECTIVE_RETAIN}h)"
+elif [ "$USE_PCT" -gt 95 ]; then
+    EFFECTIVE_RETAIN=$CRITICAL_HOURS
+    log "Disk at ${USE_PCT}% — critical retention (${EFFECTIVE_RETAIN}h)"
+elif [ "$USE_PCT" -gt 90 ]; then
     EFFECTIVE_RETAIN=$PRESSURE_HOURS
     log "Disk at ${USE_PCT}% — pressure retention (${EFFECTIVE_RETAIN}h)"
 else

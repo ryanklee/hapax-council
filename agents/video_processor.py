@@ -618,6 +618,8 @@ def _upload_to_gdrive(segment_path: Path, role: str, date: str) -> bool:
                 str(segment_path),
                 remote_path,
                 "--no-traverse",
+                "--transfers",
+                "4",
             ],
             capture_output=True,
             text=True,

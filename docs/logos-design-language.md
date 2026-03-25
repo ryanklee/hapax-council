@@ -59,7 +59,7 @@ The system has exactly two working modes. Mode governs the color palette across 
 Mode is set via `hapax-working-mode` script or `PUT /api/working-mode`. Propagation path:
 
 1. State file: `~/.cache/hapax/working-mode`
-2. Desktop: `hapax-theme-apply` → Hyprland borders, wallpaper, mako config, fuzzel config, hyprlock config, foot terminal signal, GTK theme; hapax-bar receives theme via control socket (`{"cmd":"theme","mode":"..."}` → instant CSS swap, no restart)
+2. Desktop: `hapax-theme-apply` → Hyprland borders, wallpaper, mako config, fuzzel config, hyprlock config, foot terminal signal, GTK theme; waybar CSS swap via hapax-theme-apply (`{"cmd":"theme","mode":"..."}` → instant CSS swap, no restart)
 3. Logos app: `ThemeProvider` reads `/api/working-mode`, selects palette, applies CSS custom properties to `<html>`
 
 ---
@@ -537,7 +537,7 @@ These surfaces must comply with §1–§8. All colors must derive from §3, all 
 | Surface | Config location | Mode switching | Current compliance |
 |---------|----------------|----------------|--------------------|
 | **Logos React app** | `hapax-logos/src/` | ThemeProvider + CSS custom properties | High — active development target |
-| **hapax-bar (Horizon + Bedrock)** | `hapax_bar/styles/hapax-bar-{rnd,research}.css` | Instant CSS swap via control socket | Full — dual-bar (Horizon top + Bedrock bottom per §4.1), GTK4 CSS custom properties, stimmung field with §6.1 breathing + §3.7 severity ladder |
+| **Waybar** | `~/.config/waybar/style-{rnd,research}.css` | CSS swap via `hapax-theme-apply` | High |
 | **Mako notifications** | `~/.config/mako/config-{rnd,research}` | Config swap via `hapax-theme-apply` | High — minor border token issue |
 | **Fuzzel launcher** | `~/.config/fuzzel/fuzzel-{rnd,research}.ini` | Config swap via `hapax-theme-apply` | High — inherits §10.1 question |
 | **Hyprland compositor** | `~/.config/hypr/hyprland.conf` | `hyprctl keyword` via `hapax-theme-apply` | Medium — static defaults stale, group colors unwired |
