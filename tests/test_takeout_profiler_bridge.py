@@ -225,6 +225,7 @@ class TestLoadStructuredFacts:
     def _isolate(monkeypatch, tmp_path):
         monkeypatch.setattr("agents.profiler.PROFILES_DIR", tmp_path)
         monkeypatch.setattr("agents.profiler_sources.read_watch_facts", lambda: [])
+        monkeypatch.setattr("agents.profiler._sync_fact_paths", lambda: [])
 
     def test_load_valid_facts(self, tmp_path, monkeypatch):
         from agents.profiler import load_structured_facts

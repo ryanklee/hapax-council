@@ -9,7 +9,7 @@ class TestWakeWordDetector:
     def test_init_without_model_does_not_crash(self) -> None:
         detector = WakeWordDetector()
         assert detector._onnx_session is None
-        assert detector.threshold == 0.5
+        assert detector.threshold == 0.3
 
     def test_callback_fires_above_threshold(self) -> None:
         detector = WakeWordDetector(threshold=0.5)
