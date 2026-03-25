@@ -123,6 +123,11 @@ def _encode_resource(
     """Encode resource operations into manager order imports."""
     actions: list[dict[str, Any]] = []
 
+    if op == "build_workshops":
+        # Resource manager escalated: needs workshops before production is possible.
+        # Delegate to planner's workshop building logic.
+        return _encode_planner("expand_workshops", state, ctx)
+
     if op in ("drink_production", "food_production", "equipment_production"):
         if not ctx.orders_imported:
             # Import the basic order library — covers brew, cook, thread, cloth, etc.

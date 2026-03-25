@@ -85,7 +85,7 @@ class DeliberationConfig:
     model_seasonal: str = "anthropic/claude-opus-4-6"
     max_iterations: int = 3
     max_tool_calls: int = 5
-    timeout_s: float = 8.0
+    timeout_s: float = 15.0
     # Severity thresholds
     food_warning_per_capita: int = 10
     food_critical_per_capita: int = 5

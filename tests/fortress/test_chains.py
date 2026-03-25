@@ -218,28 +218,44 @@ class TestResourceChain(unittest.TestCase):
     def setUp(self) -> None:
         self.chain = ResourceManagerChain()
 
-    def test_workshop_veto(self) -> None:
-        state = _base_full(workshops=())
-        veto, sel = self.chain.evaluate(state)
-        self.assertFalse(veto.allowed)
-        self.assertIn("workshop_available", veto.denied_by)
-
-    def test_food_production_priority(self) -> None:
-        state = _base_full(
-            population=50,
-            food_count=100,
-            drink_count=500,
-            stockpiles=StockpileSummary(food=100, drink=500, weapons=10),
-        )
-        _, sel = self.chain.evaluate(state)
-        self.assertEqual(sel.action, "food_production")
-
-    def test_drink_production_when_food_ok(self) -> None:
+    def test_build_workshops_when_no_still(self) -> None:
+        """When drinks are needed but no still exists, build workshops first."""
         state = _base_full(
             population=50,
             food_count=600,
             drink_count=100,
             stockpiles=StockpileSummary(food=600, drink=100, weapons=10),
+        )
+        # Default workshops have no Still — should escalate to build_workshops
+        _, sel = self.chain.evaluate(state)
+        self.assertEqual(sel.action, "build_workshops")
+
+    def test_food_production_with_kitchen(self) -> None:
+        """When food is low and kitchen exists, order food production."""
+        state = _base_full(
+            population=50,
+            food_count=100,
+            drink_count=500,
+            stockpiles=StockpileSummary(food=100, drink=500, weapons=10),
+            workshops=(
+                Workshop(type="Kitchen", x=0, y=0, z=0, is_active=True, current_job=""),
+                Workshop(type="Still", x=1, y=0, z=0, is_active=True, current_job=""),
+            ),
+        )
+        _, sel = self.chain.evaluate(state)
+        self.assertEqual(sel.action, "food_production")
+
+    def test_drink_production_with_still(self) -> None:
+        """When drinks are low and still exists, order drink production."""
+        state = _base_full(
+            population=50,
+            food_count=600,
+            drink_count=100,
+            stockpiles=StockpileSummary(food=600, drink=100, weapons=10),
+            workshops=(
+                Workshop(type="Kitchen", x=0, y=0, z=0, is_active=True, current_job=""),
+                Workshop(type="Still", x=1, y=0, z=0, is_active=True, current_job=""),
+            ),
         )
         _, sel = self.chain.evaluate(state)
         self.assertEqual(sel.action, "drink_production")
