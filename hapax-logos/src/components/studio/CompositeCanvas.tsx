@@ -440,7 +440,7 @@ export function CompositeCanvas({
      */
     const computeTrailAlphas = (trail: CompositePreset["trail"]) => {
       // Base fade rate per rAF tick, tuned per blend mode
-      const baseFade = trail.blendMode === "lighter" ? 0.05
+      const baseFade = trail.blendMode === "lighter" ? 0.03
         : trail.blendMode === "multiply" ? 0.08
         : trail.blendMode === "difference" ? 0.03
         : 0.04;
