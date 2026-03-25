@@ -72,6 +72,36 @@ export function PerceptionMeter({ perception }: { perception: PerceptionState | 
             ? "text-teal-300" : "text-zinc-400"
         } />
 
+        {/* Desk activity (contact mic) */}
+        {perception.desk_activity && perception.desk_activity !== "idle" && perception.desk_activity !== "" && (
+          <IconTag icon={Activity} value={perception.desk_activity.replace(/_/g, " ")} color={
+            perception.desk_activity === "scratching" ? "text-rose-300"
+              : perception.desk_activity === "drumming" ? "text-orange-300"
+                : perception.desk_activity === "tapping" ? "text-amber-300"
+                  : perception.desk_activity === "typing" ? "text-zinc-400"
+                    : "text-zinc-400"
+          } />
+        )}
+
+        {/* Desk energy */}
+        {perception.desk_energy > 0.12 && (
+          <Tag
+            value={`desk ${Math.round(perception.desk_energy * 100)}%`}
+            color={
+              perception.desk_energy > 0.5
+                ? "bg-emerald-900/50 text-emerald-300"
+                : perception.desk_energy > 0.25
+                  ? "bg-amber-900/50 text-amber-300"
+                  : "bg-zinc-800 text-zinc-400"
+            }
+          />
+        )}
+
+        {/* Overhead hand zones */}
+        {perception.overhead_hand_zones && perception.overhead_hand_zones !== "" && (
+          <IconTag icon={Hand} value={perception.overhead_hand_zones.replace(/,/g, " + ")} color="text-violet-300" />
+        )}
+
         {/* Scene type */}
         <IconTag icon={Scan} value={(perception.scene_type || "unknown").replace(/_/g, " ")} color={
           perception.scene_type && perception.scene_type !== "unknown"

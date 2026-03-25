@@ -63,6 +63,11 @@ export const PerceptionOverlayPortal = memo(function PerceptionOverlayPortal() {
                 {perception.detected_action}
               </span>
             )}
+            {perception.desk_activity && perception.desk_activity !== "idle" && perception.desk_activity !== "" && (
+              <span className="rounded bg-black/70 px-2 py-0.5 text-[10px] font-bold text-emerald-300 backdrop-blur-sm">
+                {perception.desk_activity.replace(/_/g, " ")}
+              </span>
+            )}
             {perception.scene_type && perception.scene_type !== "unknown" && (
               <span className="rounded bg-black/70 px-2 py-0.5 text-[10px] text-teal-400 backdrop-blur-sm">
                 {perception.scene_type.replace(/_/g, " ")}

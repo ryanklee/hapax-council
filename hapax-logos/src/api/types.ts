@@ -573,6 +573,15 @@ export interface PerceptionState {
   audio_scene: string;
   posture: string;
   detected_action: string;
+  // Contact mic (desk vibration sensing)
+  desk_activity: string;
+  desk_energy: number;
+  desk_onset_rate: number;
+  desk_tap_gesture: string;
+  desk_spectral_centroid: number;
+  desk_autocorr_peak: number;
+  // Overhead hand tracking
+  overhead_hand_zones: string;
   usb_devices: string;
   bluetooth_nearby: string;
   network_devices: string;
