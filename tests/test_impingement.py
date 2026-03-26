@@ -294,3 +294,174 @@ def test_dmn_extinction_risk():
     assert len(extinction) == 1
     assert extinction[0].interrupt_token == "population_critical"
     assert extinction[0].strength == 1.0
+
+
+# ── Anti-correlation signal ──────────────────────────────────────────────────
+
+
+def test_tpn_active_signal_on_phase_transition():
+    """Cognitive loop signals DMN when TPN transitions active↔idle."""
+    from unittest.mock import MagicMock
+
+    from agents.hapax_voice.cognitive_loop import CognitiveLoop, TurnPhase
+
+    mock_daemon = MagicMock()
+    loop = MagicMock()
+    loop._daemon = mock_daemon
+    loop._mutual_silence_start = 0.0
+    loop._wind_down_sent = False
+    loop._last_operator_speaking_at = 0.0
+    loop._speculative_stt = None
+    loop._response_start_at = 0.0
+    loop._model = None
+
+    handler = CognitiveLoop._on_phase_transition
+
+    # MUTUAL_SILENCE → OPERATOR_SPEAKING should signal active
+    handler(loop, TurnPhase.MUTUAL_SILENCE, TurnPhase.OPERATOR_SPEAKING)
+    mock_daemon._signal_tpn_active.assert_called_once_with(True)
+
+    mock_daemon.reset_mock()
+
+    # HAPAX_SPEAKING → MUTUAL_SILENCE should signal idle
+    handler(loop, TurnPhase.HAPAX_SPEAKING, TurnPhase.MUTUAL_SILENCE)
+    mock_daemon._signal_tpn_active.assert_called_once_with(False)
+
+
+def test_tpn_signal_not_called_within_active_phases():
+    """No signal when transitioning between active phases."""
+    from unittest.mock import MagicMock
+
+    from agents.hapax_voice.cognitive_loop import CognitiveLoop, TurnPhase
+
+    mock_daemon = MagicMock()
+    loop = MagicMock()
+    loop._daemon = mock_daemon
+    loop._mutual_silence_start = 0.0
+    loop._wind_down_sent = False
+    loop._last_operator_speaking_at = 0.0
+    loop._speculative_stt = None
+    loop._response_start_at = 0.0
+    loop._model = None
+
+    CognitiveLoop._on_phase_transition(loop, TurnPhase.OPERATOR_SPEAKING, TurnPhase.TRANSITION)
+    mock_daemon._signal_tpn_active.assert_not_called()
+
+
+def test_tpn_signal_graceful_without_daemon():
+    """Phase transition doesn't crash when _daemon is not wired."""
+    from unittest.mock import MagicMock
+
+    from agents.hapax_voice.cognitive_loop import CognitiveLoop, TurnPhase
+
+    loop = MagicMock()
+    loop._daemon = None
+    loop._mutual_silence_start = 0.0
+    loop._wind_down_sent = False
+    loop._last_operator_speaking_at = 0.0
+    loop._speculative_stt = None
+    loop._response_start_at = 0.0
+    loop._model = None
+
+    CognitiveLoop._on_phase_transition(loop, TurnPhase.MUTUAL_SILENCE, TurnPhase.OPERATOR_SPEAKING)
+
+
+# ── Speech capability recruitment ────────────────────────────────────────────
+
+
+def test_speech_capability_can_resolve():
+    """SpeechProductionCapability matches operator stress and interrupt tokens."""
+    from agents.hapax_voice.capability import SpeechProductionCapability
+
+    cap = SpeechProductionCapability()
+
+    imp = Impingement(
+        timestamp=time.time(),
+        source="dmn.absolute_threshold",
+        type=ImpingementType.ABSOLUTE_THRESHOLD,
+        strength=0.8,
+        content={"metric": "operator_stress", "value": 0.9},
+    )
+    assert cap.can_resolve(imp) > 0.0
+
+    imp2 = Impingement(
+        timestamp=time.time(),
+        source="dmn.absolute_threshold",
+        type=ImpingementType.ABSOLUTE_THRESHOLD,
+        strength=1.0,
+        content={"metric": "extinction_risk"},
+        interrupt_token="population_critical",
+    )
+    assert cap.can_resolve(imp2) > 0.0
+
+
+def test_speech_capability_activate_queues():
+    """activate() queues impingement for cognitive loop consumption."""
+    from agents.hapax_voice.capability import SpeechProductionCapability
+
+    cap = SpeechProductionCapability()
+    imp = Impingement(
+        timestamp=time.time(),
+        source="test",
+        type=ImpingementType.STATISTICAL_DEVIATION,
+        strength=0.6,
+        content={"metric": "operator_stress"},
+    )
+
+    assert not cap.has_pending()
+    cap.activate(imp, 0.6)
+    assert cap.has_pending()
+    consumed = cap.consume_pending()
+    assert consumed is not None
+    assert consumed.source == "test"
+    assert not cap.has_pending()
+
+
+# ── Fortress capability ──────────────────────────────────────────────────────
+
+
+def test_fortress_capability_matches():
+    """FortressGovernanceCapability matches fortress-related signals."""
+    from agents.fortress.capability import FortressGovernanceCapability
+
+    cap = FortressGovernanceCapability()
+
+    imp = Impingement(
+        timestamp=time.time(),
+        source="dmn.absolute_threshold",
+        type=ImpingementType.ABSOLUTE_THRESHOLD,
+        strength=0.9,
+        content={"metric": "drink_per_capita", "value": 0, "threshold": 10},
+    )
+    assert cap.can_resolve(imp) > 0.0
+
+    imp2 = Impingement(
+        timestamp=time.time(),
+        source="sensor.chrome",
+        type=ImpingementType.STATISTICAL_DEVIATION,
+        strength=0.3,
+        content={"metric": "browsing_update"},
+    )
+    assert cap.can_resolve(imp2) == 0.0
+
+
+def test_fortress_capability_consume():
+    """FortressGovernanceCapability queues and consumes impingements."""
+    from agents.fortress.capability import FortressGovernanceCapability
+
+    cap = FortressGovernanceCapability()
+    imp = Impingement(
+        timestamp=time.time(),
+        source="dmn.absolute_threshold",
+        type=ImpingementType.ABSOLUTE_THRESHOLD,
+        strength=0.9,
+        content={"metric": "drink_per_capita"},
+    )
+
+    assert not cap.has_pending_impingement()
+    cap.activate(imp, 0.9)
+    assert cap.has_pending_impingement()
+    consumed = cap.consume_impingement()
+    assert consumed is not None
+    assert consumed.content["metric"] == "drink_per_capita"
+    assert not cap.has_pending_impingement()

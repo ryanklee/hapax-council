@@ -1124,6 +1124,8 @@ class VoiceDaemon:
 
         # Wire speech capability into cognitive loop for spontaneous speech polling
         self._cognitive_loop._speech_capability = self._speech_capability
+        # Wire daemon ref for anti-correlation signal (TPN active → DMN slows ticks)
+        self._cognitive_loop._daemon = self
 
         # Wire salience router and context distillation into pipeline
         if self._salience_router is not None:
