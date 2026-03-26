@@ -524,6 +524,7 @@ class StudioCompositor:
 
             # Wire runtime callbacks for GStreamer integration
             runtime._on_params_changed = self._on_graph_params_changed
+            runtime._on_plan_changed = self._on_graph_plan_changed
 
             # Expose to API routes
             try:
@@ -540,67 +541,60 @@ class StudioCompositor:
             log.warning("Effect node graph system not available", exc_info=True)
             return None
 
+    # Legacy preset name → graph file name mapping for presets where
+    # the legacy name doesn't match the graph file name exactly.
+    _GRAPH_PRESET_ALIASES: dict[str, str] = {
+        "ascii": "ascii_preset",
+        "diff": "diff_preset",
+        "feedback": "feedback_preset",
+        "glitchblocks": "glitch_blocks_preset",
+        "halftone": "halftone_preset",
+        "pixsort": "pixsort_preset",
+        "slitscan": "slitscan_preset",
+        "thermal": "thermal_preset",
+        "vhs": "vhs_preset",
+    }
+
     def _try_graph_preset(self, name: str) -> bool:
         """Try to load a graph-based preset. Returns True if found and loaded."""
         from pathlib import Path
+
+        # Try exact name first, then aliased name
+        candidates = [name]
+        alias = self._GRAPH_PRESET_ALIASES.get(name)
+        if alias:
+            candidates.append(alias)
 
         for dir_ in (
             Path.home() / ".config" / "hapax" / "effect-presets",
             Path(__file__).parent.parent / "presets",
         ):
-            preset_path = dir_ / f"{name}.json"
-            if preset_path.is_file():
-                try:
-                    from agents.effect_graph.types import EffectGraph
+            for candidate in candidates:
+                preset_path = dir_ / f"{candidate}.json"
+                if preset_path.is_file():
+                    try:
+                        from agents.effect_graph.types import EffectGraph
 
-                    raw = json.loads(preset_path.read_text())
-                    graph = EffectGraph(**raw)
-                    self._graph_runtime.load_graph(graph)
-                    log.info("Activated graph preset: %s", name)
-                    return True
-                except Exception:
-                    log.warning("Failed to load graph preset %s", name, exc_info=True)
+                        raw = json.loads(preset_path.read_text())
+                        graph = EffectGraph(**raw)
+                        self._graph_runtime.load_graph(graph)
+                        log.info("Activated graph preset: %s (file: %s)", name, candidate)
+                        return True
+                    except Exception:
+                        log.warning("Failed to load graph preset %s", candidate, exc_info=True)
         return False
 
     def _on_graph_params_changed(self, node_id: str, params: dict) -> None:
-        """Update GStreamer shader uniforms for a node (Level 1 graph mutation).
+        """Update GStreamer shader uniforms for a node via the slot pipeline."""
+        if hasattr(self, "_slot_pipeline") and self._slot_pipeline is not None:
+            self._slot_pipeline.update_node_uniforms(node_id, params)
 
-        Maps graph node IDs to stored GStreamer element references and builds
-        GstStructure uniform strings from the param dict.
-        """
-        # Map node types to existing GStreamer element refs
-        element_map = {
-            "color": getattr(self, "_fx_color_grade", None),
-            "colorgrade": getattr(self, "_fx_color_grade", None),
-            "vhs": getattr(self, "_fx_vhs_shader", None),
-            "thermal": getattr(self, "_fx_thermal_shader", None),
-            "halftone": getattr(self, "_fx_halftone_shader", None),
-            "glitch_block": getattr(self, "_fx_glitch_shader", None),
-            "pixsort": getattr(self, "_fx_pixsort_shader", None),
-            "ascii": getattr(self, "_fx_ascii_shader", None),
-            "slitscan": getattr(self, "_fx_slitscan_shader", None),
-            "warp": getattr(self, "_fx_warp_shader", None),
-        }
-        element = element_map.get(node_id)
-        if element is None:
-            return
-
-        Gst = self._Gst
-        if Gst is None:
-            return
-
-        parts = []
-        for key, value in params.items():
-            if isinstance(value, bool):
-                parts.append(f"u_{key}=(float){1.0 if value else 0.0}")
-            elif isinstance(value, (int, float)):
-                parts.append(f"u_{key}=(float){float(value)}")
-
-        if parts:
-            uniforms_str = "uniforms, " + ", ".join(parts)
-            result = Gst.Structure.from_string(uniforms_str)
-            if result and result[0]:
-                element.set_property("uniforms", result[0])
+    def _on_graph_plan_changed(self, old_plan: Any, new_plan: Any) -> None:
+        """Apply a new execution plan to the slot pipeline."""
+        if hasattr(self, "_slot_pipeline") and self._slot_pipeline is not None:
+            self._slot_pipeline.activate_plan(new_plan)
+            self._fx_graph_mode = True
+            log.info("Slot pipeline activated: %s", new_plan.name if new_plan else "none")
 
     def _build_pipeline(self) -> Any:
         """Build the full GStreamer pipeline."""
@@ -779,9 +773,9 @@ class StudioCompositor:
         """Add GPU-accelerated visual effects branch.
 
         Pipeline: tee → queue → videoconvert(RGBA) → glupload → glcolorconvert →
-                  glshader(color_grade) → [gleffects] → glshader(post_process) →
-                  glcolorconvert → gldownload → videoconvert → videoscale → videorate →
-                  jpegenc → appsink (fx snapshot to /dev/shm)
+                  [8 slot pipeline glshaders] → gleffects → temporalfx →
+                  glshader(post_process) → glcolorconvert → gldownload →
+                  videoconvert → videoscale → videorate → jpegenc → appsink
         """
         Gst = self._Gst
 
@@ -811,118 +805,11 @@ class StudioCompositor:
         glupload = Gst.ElementFactory.make("glupload", "fx-glupload")
         glcolorconvert_in = Gst.ElementFactory.make("glcolorconvert", "fx-glcc-in")
 
-        # Color grade shader
-        color_grade = Gst.ElementFactory.make("glshader", "fx-color-grade")
-        color_frag = load_shader("color_grade.frag")
-        if color_frag:
-            color_grade.set_property("fragment", color_frag)
-            cg = initial_preset.color_grade
-            uniforms = Gst.Structure.from_string(
-                f"uniforms, u_saturation=(float){cg.saturation}, "
-                f"u_brightness=(float){cg.brightness}, "
-                f"u_contrast=(float){cg.contrast}, "
-                f"u_sepia=(float){cg.sepia}, "
-                f"u_hue_rotate=(float){cg.hue_rotate}"
-            )
-            color_grade.set_property("uniforms", uniforms[0])
+        # --- Slot pipeline: 8 dynamic glshader slots managed by the graph system ---
+        from agents.effect_graph.pipeline import SlotPipeline
 
-        # VHS shader (RGB split, head-switch, noise band, scanlines)
-        vhs_shader = Gst.ElementFactory.make("glshader", "fx-vhs")
-        vhs_frag = load_shader("vhs.frag")
-        if vhs_frag:
-            vhs_shader.set_property("fragment", vhs_frag)
-            vhs_uniforms = Gst.Structure.from_string(
-                "uniforms, u_time=(float)0.0, u_chroma_shift=(float)0.0, "
-                "u_head_switch_y=(float)0.92, u_noise_band_y=(float)0.0, "
-                "u_width=(float)1920.0, u_height=(float)1080.0"
-            )
-            vhs_shader.set_property("uniforms", vhs_uniforms[0])
-
-        # Thermal shader (infrared/predator vision)
-        thermal_shader = Gst.ElementFactory.make("glshader", "fx-thermal")
-        thermal_frag = load_shader("thermal.frag")
-        if thermal_frag:
-            thermal_shader.set_property("fragment", thermal_frag)
-            thermal_uniforms = Gst.Structure.from_string(
-                "uniforms, u_time=(float)0.0, u_edge_glow=(float)-1.0, "
-                "u_palette_shift=(float)0.0, "
-                "u_width=(float)1920.0, u_height=(float)1080.0"
-            )
-            thermal_shader.set_property("uniforms", thermal_uniforms[0])
-
-        # Halftone shader (print dots)
-        halftone_shader = Gst.ElementFactory.make("glshader", "fx-halftone")
-        halftone_frag = load_shader("halftone.frag")
-        if halftone_frag:
-            halftone_shader.set_property("fragment", halftone_frag)
-            halftone_uniforms = Gst.Structure.from_string(
-                "uniforms, u_time=(float)0.0, u_dot_size=(float)0.0, "
-                "u_color_mode=(float)0.0, "
-                "u_width=(float)1920.0, u_height=(float)1080.0"
-            )
-            halftone_shader.set_property("uniforms", halftone_uniforms[0])
-
-        # Glitch blocks shader (digital block corruption)
-        glitch_shader = Gst.ElementFactory.make("glshader", "fx-glitch-blocks")
-        glitch_frag = load_shader("glitch_blocks.frag")
-        if glitch_frag:
-            glitch_shader.set_property("fragment", glitch_frag)
-            glitch_uniforms = Gst.Structure.from_string(
-                "uniforms, u_time=(float)0.0, u_block_size=(float)16.0, "
-                "u_intensity=(float)0.0, u_rgb_split=(float)0.0, "
-                "u_width=(float)1920.0, u_height=(float)1080.0"
-            )
-            glitch_shader.set_property("uniforms", glitch_uniforms[0])
-
-        # Pixel sorting shader (pseudo pixel sort)
-        pixsort_shader = Gst.ElementFactory.make("glshader", "fx-pixsort")
-        pixsort_frag = load_shader("pixsort.frag")
-        if pixsort_frag:
-            pixsort_shader.set_property("fragment", pixsort_frag)
-            pixsort_uniforms = Gst.Structure.from_string(
-                "uniforms, u_time=(float)0.0, u_threshold_low=(float)0.0, "
-                "u_threshold_high=(float)1.0, u_sort_length=(float)0.0, "
-                "u_direction=(float)0.0, "
-                "u_width=(float)1920.0, u_height=(float)1080.0"
-            )
-            pixsort_shader.set_property("uniforms", pixsort_uniforms[0])
-
-        # ASCII art shader
-        ascii_shader = Gst.ElementFactory.make("glshader", "fx-ascii")
-        ascii_frag = load_shader("ascii.frag")
-        if ascii_frag:
-            ascii_shader.set_property("fragment", ascii_frag)
-            ascii_uniforms = Gst.Structure.from_string(
-                "uniforms, u_time=(float)0.0, u_cell_size=(float)0.0, "
-                "u_color_mode=(float)0.0, "
-                "u_width=(float)1920.0, u_height=(float)1080.0"
-            )
-            ascii_shader.set_property("uniforms", ascii_uniforms[0])
-
-        # Slit-scan shader (temporal displacement approximation)
-        slitscan_shader = Gst.ElementFactory.make("glshader", "fx-slitscan")
-        slitscan_frag = load_shader("slitscan.frag")
-        if slitscan_frag:
-            slitscan_shader.set_property("fragment", slitscan_frag)
-            slitscan_uniforms = Gst.Structure.from_string(
-                "uniforms, u_time=(float)0.0, u_scan_speed=(float)0.0, "
-                "u_scan_axis=(float)0.0, u_warp_amount=(float)0.0, "
-                "u_width=(float)1920.0, u_height=(float)1080.0"
-            )
-            slitscan_shader.set_property("uniforms", slitscan_uniforms[0])
-
-        # Slice warp shader (pan, rotate, zoom, horizontal slice displacement)
-        warp_shader = Gst.ElementFactory.make("glshader", "fx-warp")
-        warp_frag = load_shader("slice_warp.frag")
-        if warp_frag:
-            warp_shader.set_property("fragment", warp_frag)
-            warp_uniforms = Gst.Structure.from_string(
-                "uniforms, u_time=(float)0.0, u_slice_count=(float)0.0, "
-                "u_slice_amplitude=(float)0.0, u_pan_x=(float)0.0, u_pan_y=(float)0.0, "
-                "u_rotation=(float)0.0, u_zoom=(float)1.0, u_zoom_breath=(float)0.0, "
-                "u_width=(float)1920.0, u_height=(float)1080.0"
-            )
-            warp_shader.set_property("uniforms", warp_uniforms[0])
+        registry = self._graph_runtime._registry if self._graph_runtime else None
+        self._slot_pipeline = SlotPipeline(registry, num_slots=8)
 
         # GL effects (glow for Neon, sobel for Ghost)
         glow_effect = Gst.ElementFactory.make("gleffects", "fx-glow")
@@ -1009,15 +896,7 @@ class StudioCompositor:
             rgba_caps,
             glupload,
             glcolorconvert_in,
-            color_grade,
-            vhs_shader,
-            thermal_shader,
-            halftone_shader,
-            glitch_shader,
-            pixsort_shader,
-            ascii_shader,
-            slitscan_shader,
-            warp_shader,
+            # slot pipeline elements are added by build_chain() below
             glow_effect,
             post_proc,
             glcolorconvert_out,
@@ -1040,16 +919,9 @@ class StudioCompositor:
         convert_rgba.link(rgba_caps)
         rgba_caps.link(glupload)
         glupload.link(glcolorconvert_in)
-        glcolorconvert_in.link(color_grade)
-        color_grade.link(vhs_shader)
-        vhs_shader.link(thermal_shader)
-        thermal_shader.link(halftone_shader)
-        halftone_shader.link(glitch_shader)
-        glitch_shader.link(pixsort_shader)
-        pixsort_shader.link(ascii_shader)
-        ascii_shader.link(slitscan_shader)
-        slitscan_shader.link(warp_shader)
-        warp_shader.link(glow_effect)
+
+        # Build 8 slot pipeline elements between glcolorconvert_in and glow_effect
+        self._slot_pipeline.build_chain(pipeline, Gst, glcolorconvert_in, glow_effect)
         # Temporal feedback via custom Rust GstGLFilter plugin (FBO ping-pong)
         #
         # Single element replaces the entire multi-tap trail system.
@@ -1088,24 +960,21 @@ class StudioCompositor:
         # Store references for runtime preset switching
         self._fx_temporal = temporal_fx
         self._fx_stutter = stutter_el
-        self._fx_color_grade = color_grade
-        self._fx_vhs_shader = vhs_shader
-        self._fx_thermal_shader = thermal_shader
-        self._fx_halftone_shader = halftone_shader
-        self._fx_glitch_shader = glitch_shader
-        self._fx_pixsort_shader = pixsort_shader
-        self._fx_ascii_shader = ascii_shader
-        self._fx_slitscan_shader = slitscan_shader
-        self._fx_warp_shader = warp_shader
         self._fx_glow_effect = glow_effect
         self._fx_post_proc = post_proc
         self._fx_active_preset = initial_preset.name
+        self._fx_graph_mode = False
         self._fx_tick = 0
 
         log.info("FX branch: glshader pipeline → /dev/shm/hapax-compositor/fx-snapshot.jpg")
 
     def _switch_fx_preset(self, preset_name: str) -> None:
-        """Switch the active visual effect preset at runtime."""
+        """Switch the active visual effect preset at runtime.
+
+        All presets are loaded as graph presets via the slot pipeline.
+        Non-slot elements (gleffects, post_proc, temporalfx, stutter) are
+        updated from the legacy preset data for backward compatibility.
+        """
         from agents.studio_effects import PRESETS
 
         preset = PRESETS.get(preset_name)
@@ -1117,141 +986,7 @@ class StudioCompositor:
 
         Gst = self._Gst
 
-        # Update color grade uniforms
-        cg = preset.color_grade
-        uniforms = Gst.Structure.from_string(
-            f"uniforms, u_saturation=(float){cg.saturation}, "
-            f"u_brightness=(float){cg.brightness}, "
-            f"u_contrast=(float){cg.contrast}, "
-            f"u_sepia=(float){cg.sepia}, "
-            f"u_hue_rotate=(float){cg.hue_rotate}"
-        )
-        self._fx_color_grade.set_property("uniforms", uniforms[0])
-
-        # Update VHS shader — active only for VHS preset
-        chroma_shift = 4.0 if preset.use_vhs_shader else 0.0
-        vhs_uniforms = Gst.Structure.from_string(
-            f"uniforms, u_time=(float)0.0, u_chroma_shift=(float){chroma_shift}, "
-            f"u_head_switch_y=(float)0.92, u_noise_band_y=(float)0.0, "
-            f"u_width=(float)1920.0, u_height=(float)1080.0"
-        )
-        self._fx_vhs_shader.set_property("uniforms", vhs_uniforms[0])
-
-        # Update thermal shader — passthrough when not active (edge_glow = -1)
-        t_edge = (
-            preset.thermal_params.get("u_edge_glow", -1.0) if preset.use_thermal_shader else -1.0
-        )
-        t_pal = (
-            preset.thermal_params.get("u_palette_shift", 0.0) if preset.use_thermal_shader else 0.0
-        )
-        thermal_u = Gst.Structure.from_string(
-            f"uniforms, u_time=(float)0.0, u_edge_glow=(float){t_edge}, "
-            f"u_palette_shift=(float){t_pal}, "
-            f"u_width=(float)1920.0, u_height=(float)1080.0"
-        )
-        self._fx_thermal_shader.set_property("uniforms", thermal_u[0])
-
-        # Update halftone shader — passthrough when dot_size < 1
-        h_dot = preset.halftone_params.get("u_dot_size", 0.0) if preset.use_halftone_shader else 0.0
-        h_mode = (
-            preset.halftone_params.get("u_color_mode", 0.0) if preset.use_halftone_shader else 0.0
-        )
-        halftone_u = Gst.Structure.from_string(
-            f"uniforms, u_time=(float)0.0, u_dot_size=(float){h_dot}, "
-            f"u_color_mode=(float){h_mode}, "
-            f"u_width=(float)1920.0, u_height=(float)1080.0"
-        )
-        self._fx_halftone_shader.set_property("uniforms", halftone_u[0])
-
-        # Update glitch blocks shader — passthrough when intensity < 0.01
-        g_block = (
-            preset.glitch_blocks_params.get("u_block_size", 16.0)
-            if preset.use_glitch_blocks_shader
-            else 16.0
-        )
-        g_int = (
-            preset.glitch_blocks_params.get("u_intensity", 0.0)
-            if preset.use_glitch_blocks_shader
-            else 0.0
-        )
-        g_rgb = (
-            preset.glitch_blocks_params.get("u_rgb_split", 0.0)
-            if preset.use_glitch_blocks_shader
-            else 0.0
-        )
-        glitch_u = Gst.Structure.from_string(
-            f"uniforms, u_time=(float)0.0, u_block_size=(float){g_block}, "
-            f"u_intensity=(float){g_int}, u_rgb_split=(float){g_rgb}, "
-            f"u_width=(float)1920.0, u_height=(float)1080.0"
-        )
-        self._fx_glitch_shader.set_property("uniforms", glitch_u[0])
-
-        # Update pixsort shader — passthrough when sort_length < 1
-        ps_low = (
-            preset.pixsort_params.get("u_threshold_low", 0.0) if preset.use_pixsort_shader else 0.0
-        )
-        ps_high = (
-            preset.pixsort_params.get("u_threshold_high", 1.0) if preset.use_pixsort_shader else 1.0
-        )
-        ps_len = (
-            preset.pixsort_params.get("u_sort_length", 0.0) if preset.use_pixsort_shader else 0.0
-        )
-        ps_dir = preset.pixsort_params.get("u_direction", 0.0) if preset.use_pixsort_shader else 0.0
-        pixsort_u = Gst.Structure.from_string(
-            f"uniforms, u_time=(float)0.0, u_threshold_low=(float){ps_low}, "
-            f"u_threshold_high=(float){ps_high}, u_sort_length=(float){ps_len}, "
-            f"u_direction=(float){ps_dir}, "
-            f"u_width=(float)1920.0, u_height=(float)1080.0"
-        )
-        self._fx_pixsort_shader.set_property("uniforms", pixsort_u[0])
-
-        # Update ASCII shader — passthrough when cell_size < 2
-        a_cell = preset.ascii_params.get("u_cell_size", 0.0) if preset.use_ascii_shader else 0.0
-        a_mode = preset.ascii_params.get("u_color_mode", 0.0) if preset.use_ascii_shader else 0.0
-        ascii_u = Gst.Structure.from_string(
-            f"uniforms, u_time=(float)0.0, u_cell_size=(float){a_cell}, "
-            f"u_color_mode=(float){a_mode}, "
-            f"u_width=(float)1920.0, u_height=(float)1080.0"
-        )
-        self._fx_ascii_shader.set_property("uniforms", ascii_u[0])
-
-        # Update slitscan shader — passthrough when scan_speed < 0.01
-        ss_speed = (
-            preset.slitscan_params.get("u_scan_speed", 0.0) if preset.use_slitscan_shader else 0.0
-        )
-        ss_axis = (
-            preset.slitscan_params.get("u_scan_axis", 0.0) if preset.use_slitscan_shader else 0.0
-        )
-        ss_warp = (
-            preset.slitscan_params.get("u_warp_amount", 0.0) if preset.use_slitscan_shader else 0.0
-        )
-        slitscan_u = Gst.Structure.from_string(
-            f"uniforms, u_time=(float)0.0, u_scan_speed=(float){ss_speed}, "
-            f"u_scan_axis=(float){ss_axis}, u_warp_amount=(float){ss_warp}, "
-            f"u_width=(float)1920.0, u_height=(float)1080.0"
-        )
-        self._fx_slitscan_shader.set_property("uniforms", slitscan_u[0])
-
-        # Update warp shader
-        warp = preset.warp
-        if warp:
-            warp_uniforms = Gst.Structure.from_string(
-                f"uniforms, u_time=(float)0.0, "
-                f"u_slice_count=(float){warp.slice_count}, "
-                f"u_slice_amplitude=(float){warp.slice_amplitude}, "
-                f"u_pan_x=(float){warp.pan_x}, u_pan_y=(float){warp.pan_y}, "
-                f"u_rotation=(float){warp.rotation}, u_zoom=(float){warp.zoom}, "
-                f"u_zoom_breath=(float){warp.zoom_breath}, "
-                f"u_width=(float)1920.0, u_height=(float)1080.0"
-            )
-        else:
-            warp_uniforms = Gst.Structure.from_string(
-                "uniforms, u_time=(float)0.0, u_slice_count=(float)0.0, "
-                "u_slice_amplitude=(float)0.0, u_pan_x=(float)0.0, u_pan_y=(float)0.0, "
-                "u_rotation=(float)0.0, u_zoom=(float)1.0, u_zoom_breath=(float)0.0, "
-                "u_width=(float)1920.0, u_height=(float)1080.0"
-            )
-        self._fx_warp_shader.set_property("uniforms", warp_uniforms[0])
+        # --- Update non-slot elements from legacy preset data ---
 
         # Update gleffects — glow for Neon, sobel for Ghost, identity otherwise
         if preset.use_glow:
@@ -1898,12 +1633,17 @@ class StudioCompositor:
     def _fx_tick_callback(self) -> bool:
         """GLib timeout: update time-varying FX shader uniforms at ~30fps.
 
+        Operates in two modes:
+        - Graph mode: modulator drives slot pipeline uniforms, time/resolution
+          pushed to all active slots
+        - Legacy mode: direct uniform updates on named elements (deprecated)
+
         Reads audio_energy_rms from the perception state to modulate
         shader parameters in sync with audio — beat-reactive effects.
         """
         if not self._running:
             return False
-        if not hasattr(self, "_fx_warp_shader"):
+        if not hasattr(self, "_slot_pipeline"):
             return False
 
         import random
@@ -1929,141 +1669,17 @@ class StudioCompositor:
         self._fx_beat_smooth = max(beat, self._fx_beat_smooth * 0.85)
         b = self._fx_beat_smooth  # 0.0 = silent, 1.0 = loud
 
-        # --- Color grade: pulse brightness/contrast on beats ---
-        cg = preset.color_grade
-        beat_brightness = cg.brightness + b * 0.15  # up to +15% brightness on beat
-        beat_contrast = cg.contrast + b * 0.1  # up to +10% contrast on beat
-        beat_saturation = cg.saturation + b * 0.2  # slightly more saturated on beat
-
-        cg_u = Gst.Structure.from_string(
-            f"uniforms, u_saturation=(float){beat_saturation}, "
-            f"u_brightness=(float){beat_brightness}, "
-            f"u_contrast=(float){beat_contrast}, "
-            f"u_sepia=(float){cg.sepia}, "
-            f"u_hue_rotate=(float){cg.hue_rotate}"
-        )
-        self._fx_color_grade.set_property("uniforms", cg_u[0])
-
-        # --- Warp: amplify displacement on beats ---
-        if preset.warp and (preset.warp.pan_x > 0 or preset.warp.slice_count > 0):
-            w = preset.warp
-            beat_slice_amp = w.slice_amplitude * (1.0 + b * 0.5)  # up to +50% on beat
-            beat_pan_x = w.pan_x * (1.0 + b * 0.3)
-            beat_pan_y = w.pan_y * (1.0 + b * 0.3)
-            beat_zoom_breath = w.zoom_breath * (1.0 + b * 0.4)
-
-            warp_u = Gst.Structure.from_string(
-                f"uniforms, u_time=(float){t}, "
-                f"u_slice_count=(float){w.slice_count}, "
-                f"u_slice_amplitude=(float){beat_slice_amp}, "
-                f"u_pan_x=(float){beat_pan_x}, u_pan_y=(float){beat_pan_y}, "
-                f"u_rotation=(float){w.rotation}, u_zoom=(float){w.zoom}, "
-                f"u_zoom_breath=(float){beat_zoom_breath}, "
-                f"u_width=(float)1920.0, u_height=(float)1080.0"
-            )
-            self._fx_warp_shader.set_property("uniforms", warp_u[0])
-
-        # --- VHS: increase chroma shift + noise band speed on beats ---
-        if preset.use_vhs_shader:
-            beat_chroma = 4.0 + b * 6.0  # 4-10px chroma shift, more on beat
-            noise_speed = 0.003 + b * 0.008  # faster noise scrolling on beat
-            noise_y = (self._fx_tick * noise_speed) % 1.0
-            vhs_u = Gst.Structure.from_string(
-                f"uniforms, u_time=(float){t}, u_chroma_shift=(float){beat_chroma}, "
-                f"u_head_switch_y=(float)0.92, u_noise_band_y=(float){noise_y}, "
-                f"u_width=(float)1920.0, u_height=(float)1080.0"
-            )
-            self._fx_vhs_shader.set_property("uniforms", vhs_u[0])
-
-        # --- Thermal: update time uniform for noise animation ---
-        if preset.use_thermal_shader:
-            t_edge = preset.thermal_params.get("u_edge_glow", 0.6)
-            t_pal = preset.thermal_params.get("u_palette_shift", 0.0)
-            thermal_u = Gst.Structure.from_string(
-                f"uniforms, u_time=(float){t}, u_edge_glow=(float){t_edge}, "
-                f"u_palette_shift=(float){t_pal}, "
-                f"u_width=(float)1920.0, u_height=(float)1080.0"
-            )
-            self._fx_thermal_shader.set_property("uniforms", thermal_u[0])
-
-        # --- Halftone: update time ---
-        if preset.use_halftone_shader:
-            h_dot = preset.halftone_params.get("u_dot_size", 8.0)
-            h_mode = preset.halftone_params.get("u_color_mode", 0.0)
-            halftone_u = Gst.Structure.from_string(
-                f"uniforms, u_time=(float){t}, u_dot_size=(float){h_dot}, "
-                f"u_color_mode=(float){h_mode}, "
-                f"u_width=(float)1920.0, u_height=(float)1080.0"
-            )
-            self._fx_halftone_shader.set_property("uniforms", halftone_u[0])
-
-        # --- Glitch blocks: update time + beat-reactive intensity ---
-        if preset.use_glitch_blocks_shader:
-            g_block = preset.glitch_blocks_params.get("u_block_size", 16.0)
-            g_int = preset.glitch_blocks_params.get("u_intensity", 0.4)
-            g_rgb = preset.glitch_blocks_params.get("u_rgb_split", 0.6)
-            # Beat increases corruption intensity
-            beat_int = g_int + b * 0.3
-            beat_rgb = g_rgb + b * 0.2
-            glitch_u = Gst.Structure.from_string(
-                f"uniforms, u_time=(float){t}, u_block_size=(float){g_block}, "
-                f"u_intensity=(float){beat_int}, u_rgb_split=(float){beat_rgb}, "
-                f"u_width=(float)1920.0, u_height=(float)1080.0"
-            )
-            self._fx_glitch_shader.set_property("uniforms", glitch_u[0])
-
-        # --- Pixsort: update time + beat-reactive sort length ---
-        if preset.use_pixsort_shader:
-            ps_low = preset.pixsort_params.get("u_threshold_low", 0.2)
-            ps_high = preset.pixsort_params.get("u_threshold_high", 0.85)
-            ps_len = preset.pixsort_params.get("u_sort_length", 32.0)
-            ps_dir = preset.pixsort_params.get("u_direction", 0.0)
-            # Beat increases sort length for more dramatic streaking
-            beat_len = ps_len + b * 16.0
-            pixsort_u = Gst.Structure.from_string(
-                f"uniforms, u_time=(float){t}, u_threshold_low=(float){ps_low}, "
-                f"u_threshold_high=(float){ps_high}, u_sort_length=(float){beat_len}, "
-                f"u_direction=(float){ps_dir}, "
-                f"u_width=(float)1920.0, u_height=(float)1080.0"
-            )
-            self._fx_pixsort_shader.set_property("uniforms", pixsort_u[0])
-
-        # --- ASCII: update time ---
-        if preset.use_ascii_shader:
-            a_cell = preset.ascii_params.get("u_cell_size", 8.0)
-            a_mode = preset.ascii_params.get("u_color_mode", 0.0)
-            ascii_u = Gst.Structure.from_string(
-                f"uniforms, u_time=(float){t}, u_cell_size=(float){a_cell}, "
-                f"u_color_mode=(float){a_mode}, "
-                f"u_width=(float)1920.0, u_height=(float)1080.0"
-            )
-            self._fx_ascii_shader.set_property("uniforms", ascii_u[0])
-
-        # --- Slit-scan: update time ---
-        if preset.use_slitscan_shader:
-            ss_speed = preset.slitscan_params.get("u_scan_speed", 0.5)
-            ss_axis = preset.slitscan_params.get("u_scan_axis", 0.0)
-            ss_warp = preset.slitscan_params.get("u_warp_amount", 0.3)
-            slitscan_u = Gst.Structure.from_string(
-                f"uniforms, u_time=(float){t}, u_scan_speed=(float){ss_speed}, "
-                f"u_scan_axis=(float){ss_axis}, u_warp_amount=(float){ss_warp}, "
-                f"u_width=(float)1920.0, u_height=(float)1080.0"
-            )
-            self._fx_slitscan_shader.set_property("uniforms", slitscan_u[0])
-
-        # --- Post-process: beat-triggered band displacement ---
+        # --- Post-process: beat-triggered band displacement (always-on) ---
         pp = preset.post_process
-        # Increase band displacement probability and intensity on beats
-        beat_band_chance = pp.band_chance + b * 0.3  # more frequent bands on beat
-        beat_band_shift = pp.band_max_shift * (1.0 + b * 1.0)  # up to 2x shift on beat
+        beat_band_chance = pp.band_chance + b * 0.3
+        beat_band_shift = pp.band_max_shift * (1.0 + b * 1.0)
 
         band_active = 1.0 if beat_band_chance > 0 and random.random() < beat_band_chance else 0.0
         band_y = random.random() * 0.6 + 0.2 if band_active else 0.0
         band_h = random.random() * 0.03 + 0.005 if band_active else 0.0
         band_shift = (random.random() - 0.5) * 2 * beat_band_shift / 1920.0 if band_active else 0.0
 
-        # Beat flash: brief vignette pulse (open up on beat, close in on silence)
-        beat_vignette = pp.vignette_strength * (1.0 - b * 0.3)  # vignette opens on beat
+        beat_vignette = pp.vignette_strength * (1.0 - b * 0.3)
 
         pp_u = Gst.Structure.from_string(
             f"uniforms, u_vignette_strength=(float){beat_vignette}, "
@@ -2097,6 +1713,14 @@ class StudioCompositor:
                 updates = modulator.tick(signals)
                 for (node_id, param), value in updates.items():
                     self._on_graph_params_changed(node_id, {param: value})
+
+        # --- Graph mode: push time/resolution to all active slots ---
+        if self._fx_graph_mode and self._slot_pipeline:
+            for i, node_type in enumerate(self._slot_pipeline.slot_assignments):
+                if node_type is not None:
+                    self._slot_pipeline._set_uniforms(
+                        i, {"time": t, "width": 1920.0, "height": 1080.0}
+                    )
 
         return True  # keep timer running
 
@@ -2530,14 +2154,17 @@ class StudioCompositor:
                     preset_name = fx_request_path.read_text().strip()
                     fx_request_path.unlink(missing_ok=True)
                     if preset_name:
-                        # Try graph-based preset first
+                        # Load graph preset (activates slot pipeline)
                         graph_activated = False
                         if self._graph_runtime is not None:
                             graph_activated = self._try_graph_preset(preset_name)
 
-                        # Fall back to legacy preset system
-                        if not graph_activated and hasattr(self, "_fx_color_grade"):
+                        # Update non-slot elements (gleffects, post_proc,
+                        # temporalfx, stutter) from legacy preset data
+                        if hasattr(self, "_fx_post_proc"):
                             self._switch_fx_preset(preset_name)
+                            if graph_activated:
+                                self._fx_graph_mode = True
 
                         try:
                             (SNAPSHOT_DIR / "fx-current.txt").write_text(preset_name)
@@ -2634,7 +2261,7 @@ class StudioCompositor:
         self._status_timer_id = GLib.timeout_add(interval_ms, self._status_tick)
 
         # FX uniform update timer (~30fps) for time-varying effects
-        if hasattr(self, "_fx_warp_shader"):
+        if hasattr(self, "_slot_pipeline"):
             GLib.timeout_add(33, self._fx_tick_callback)
 
         if self.config.overlay_enabled:
