@@ -80,14 +80,21 @@ class TestClassifyActivity:
             == "idle"
         )
 
-    def test_typing_high_onset_low_energy(self):
+    def test_typing_moderate_onset_low_energy(self):
+        # onset_rate 1.2 is below tapping threshold (1.6) but above typing (1.0)
         assert (
-            _classify_activity(energy=0.2, onset_rate=2.0, centroid=300.0, autocorr_peak=0.0)
+            _classify_activity(energy=0.2, onset_rate=1.2, centroid=300.0, autocorr_peak=0.0)
             == "typing"
         )
 
-    def test_tapping_moderate_onset_higher_energy(self):
-        # energy >= 0.4 so typing branch (energy < 0.4) is skipped, falls to tapping (onset >= 1.6)
+    def test_tapping_high_onset(self):
+        # onset_rate 2.0 hits tapping threshold (1.6) before typing
+        assert (
+            _classify_activity(energy=0.2, onset_rate=2.0, centroid=300.0, autocorr_peak=0.0)
+            == "tapping"
+        )
+
+    def test_tapping_higher_energy(self):
         assert (
             _classify_activity(energy=0.45, onset_rate=2.0, centroid=300.0, autocorr_peak=0.0)
             == "tapping"
@@ -278,25 +285,29 @@ class TestEnvelopeAutocorrelation:
 
 
 class TestScratchClassification:
-    def test_scratching_high_autocorr(self):
+    """Scratching is no longer classified by audio alone — its autocorr signature
+    overlaps with typing. Cross-modal fusion in vision.py handles it instead
+    (turntable zone + non-idle energy). These tests verify the audio classifier
+    returns 'active' (not 'scratching') for ambiguous non-idle signals."""
+
+    def test_ambiguous_non_idle_returns_active(self):
+        # Non-idle energy, no onset pattern, no drumming signature → "active"
         assert (
             _classify_activity(energy=0.12, onset_rate=0.0, centroid=200.0, autocorr_peak=0.95)
-            == "scratching"
+            == "active"
         )
 
-    def test_no_scratch_low_autocorr(self):
-        # Same energy but no autocorrelation -> falls through to other categories
-        # energy >= 0.4 skips typing branch, onset_rate >= 1.6 hits tapping
+    def test_high_energy_low_onset_falls_to_drumming(self):
+        # High energy + low centroid = drumming regardless of autocorr
+        assert (
+            _classify_activity(energy=0.5, onset_rate=0.0, centroid=150.0, autocorr_peak=0.95)
+            == "drumming"
+        )
+
+    def test_tapping_unaffected_by_autocorr(self):
         assert (
             _classify_activity(energy=0.45, onset_rate=2.0, centroid=300.0, autocorr_peak=0.1)
             == "tapping"
-        )
-
-    def test_scratch_before_drumming(self):
-        # High energy + low centroid would be drumming, but autocorr makes it scratching
-        assert (
-            _classify_activity(energy=0.5, onset_rate=0.0, centroid=150.0, autocorr_peak=0.95)
-            == "scratching"
         )
 
     def test_idle_not_affected(self):

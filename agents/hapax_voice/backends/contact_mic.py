@@ -132,18 +132,21 @@ def _compute_envelope_autocorrelation(energy_buffer: deque[float]) -> float:
 def _classify_activity(
     energy: float, onset_rate: float, centroid: float, autocorr_peak: float = 0.0
 ) -> str:
-    """Classify desk activity from DSP metrics."""
+    """Classify desk activity from DSP metrics.
+
+    Scratching is NOT classified here — its audio signature overlaps with
+    typing (autocorr 0.289 vs 0.471). Scratching detection uses cross-modal
+    fusion in vision.py (turntable zone + non-idle energy).
+    """
     if energy < _IDLE_THRESHOLD:
         return "idle"
-    if autocorr_peak >= _SCRATCH_AUTOCORR_THRESHOLD and energy >= _SCRATCH_MIN_ENERGY:
-        return "scratching"
     if energy >= _DRUMMING_MIN_ENERGY and centroid < _DRUMMING_MAX_CENTROID:
         return "drumming"
-    if onset_rate >= _TYPING_MIN_ONSET_RATE and energy < _DRUMMING_MIN_ENERGY:
-        return "typing"
     if onset_rate >= _TAPPING_MIN_ONSET_RATE:
         return "tapping"
-    return "idle"
+    if onset_rate >= _TYPING_MIN_ONSET_RATE:
+        return "typing"
+    return "active"
 
 
 def _classify_gesture(onset_times: list[float]) -> str:
