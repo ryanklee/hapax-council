@@ -318,6 +318,12 @@ class OverlayData(BaseModel):
     guest_present: bool = False
     consent_phase: str = "no_guest"
     timestamp: float = 0.0
+    mixer_energy: float = 0.0
+    mixer_beat: float = 0.0
+    mixer_bass: float = 0.0
+    mixer_mid: float = 0.0
+    mixer_high: float = 0.0
+    mixer_active: bool = False
 
 
 class OverlayState:
@@ -1710,6 +1716,12 @@ class StudioCompositor:
                     signals["stimmung_valence"] = data.emotion_valence
                 if data.emotion_arousal != 0:
                     signals["stimmung_arousal"] = data.emotion_arousal
+                # Mixer master (clean audio analysis)
+                signals["mixer_energy"] = data.mixer_energy
+                signals["mixer_beat"] = data.mixer_beat
+                signals["mixer_bass"] = data.mixer_bass
+                signals["mixer_mid"] = data.mixer_mid
+                signals["mixer_high"] = data.mixer_high
                 updates = modulator.tick(signals)
                 for (node_id, param), value in updates.items():
                     self._on_graph_params_changed(node_id, {param: value})
