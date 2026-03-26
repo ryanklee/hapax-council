@@ -8,7 +8,6 @@ import {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-type Region = TerrainState["focusedRegion"];
 type Depths = TerrainState["depths"];
 
 function makeState(overrides: Partial<TerrainState> = {}): TerrainState {

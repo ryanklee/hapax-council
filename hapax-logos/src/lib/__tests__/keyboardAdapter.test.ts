@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { CommandRegistry } from "../commandRegistry";
 import { evaluateKeyMap, LOGOS_KEY_MAP } from "../keyboardAdapter";
 import type { KeyBinding } from "../keyboardAdapter";
