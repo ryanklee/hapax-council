@@ -165,11 +165,11 @@ class DMNPulse:
         observation = await _ollama_generate(prompt, SENSORY_SYSTEM)
 
         if observation:
-            self._buffer.add_observation(observation, deltas)
+            self._buffer.add_observation(observation, deltas, raw_sensor=prompt)
             log.debug("Sensory: %s", observation[:80])
         else:
             # Fallback: use raw sensor summary if Ollama fails
-            self._buffer.add_observation(prompt[:100], deltas)
+            self._buffer.add_observation(prompt[:100], deltas, raw_sensor=prompt)
 
     async def _evaluative_tick(self, snapshot: dict) -> None:
         """Assess value trajectory: improving, degrading, or stable."""
@@ -203,7 +203,7 @@ class DMNPulse:
             log.debug("Evaluative: %s %s", trajectory, concerns)
 
     async def _consolidation_tick(self) -> None:
-        """Compress older observations into a retentional summary."""
+        """Compress older observations into a retentional summary, then prune."""
         input_text = self._buffer.get_consolidation_input()
         if not input_text:
             return
@@ -211,4 +211,9 @@ class DMNPulse:
         summary = await _ollama_generate(input_text, CONSOLIDATION_SYSTEM)
         if summary:
             self._buffer.set_retentional_summary(summary)
-            log.debug("Consolidated: %s", summary[:80])
+            pruned = self._buffer.prune_consolidated()
+            log.info(
+                "Consolidated %d observations into summary, pruned %d",
+                len(input_text.split("\n")),
+                pruned,
+            )

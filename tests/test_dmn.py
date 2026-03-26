@@ -59,10 +59,33 @@ class TestDMNBuffer:
     def test_needs_consolidation(self):
         buf = DMNBuffer()
         for i in range(11):
-            buf.add_observation(f"tick {i}")
+            buf.add_observation(f"tick {i}", raw_sensor=f"raw {i}")
         assert not buf.needs_consolidation()
-        buf.add_observation("tick 12")
+        buf.add_observation("tick 12", raw_sensor="raw 12")
         assert buf.needs_consolidation()
+
+    def test_no_consolidation_when_all_stable(self):
+        buf = DMNBuffer()
+        for _i in range(15):
+            buf.add_observation("stable")
+        assert not buf.needs_consolidation()
+
+    def test_consolidation_input_uses_raw_sensor(self):
+        buf = DMNBuffer()
+        for i in range(12):
+            buf.add_observation(f"DMN output {i}", raw_sensor=f"Sensor data {i}")
+        input_text = buf.get_consolidation_input()
+        assert "Sensor data" in input_text
+        assert "DMN output" not in input_text
+
+    def test_prune_consolidated(self):
+        buf = DMNBuffer()
+        for i in range(12):
+            buf.add_observation(f"tick {i}", raw_sensor=f"raw {i}")
+        assert len(buf) == 12
+        pruned = buf.prune_consolidated()
+        assert pruned == 6
+        assert len(buf) == 6
 
     def test_add_evaluation(self):
         buf = DMNBuffer()

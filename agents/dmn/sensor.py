@@ -14,7 +14,6 @@ from pathlib import Path
 log = logging.getLogger("dmn.sensor")
 
 # Sensor file locations
-PERCEPTION_STATE = Path("/dev/shm/hapax-compositor/visual-layer-state.json")
 STIMMUNG_STATE = Path("/dev/shm/hapax-stimmung/state.json")
 FORTRESS_STATE = Path("/dev/shm/hapax-df/state.json")
 WATCH_DIR = Path.home() / "hapax-state" / "watch"

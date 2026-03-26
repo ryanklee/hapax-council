@@ -32,6 +32,7 @@ class Observation:
     tick: int
     timestamp: float
     content: str  # 1-sentence situation fragment
+    raw_sensor: str = ""  # raw sensor prompt (external grounding, never DMN output)
     deltas: list[str] = field(default_factory=list)  # what changed
 
     @property
@@ -60,7 +61,7 @@ class Evaluation:
         concern_str = "; ".join(self.concerns) if self.concerns else "none"
         return (
             f'<dmn_evaluation tick="{self.tick}" age="{self.age_s:.0f}s">'
-            f"Trajectory: {self.trajectory}. Concerns: {concern_str}"
+            f" Trajectory: {self.trajectory}. Concerns: {concern_str} "
             f"</dmn_evaluation>"
         )
 
@@ -83,8 +84,16 @@ class DMNBuffer:
     def tick(self) -> int:
         return self._tick_counter
 
-    def add_observation(self, content: str, deltas: list[str] | None = None) -> None:
-        """Add a sensory tick observation."""
+    def add_observation(
+        self, content: str, deltas: list[str] | None = None, raw_sensor: str = ""
+    ) -> None:
+        """Add a sensory tick observation.
+
+        Args:
+            content: DMN-generated situation fragment (or "stable")
+            deltas: list of state changes since prior tick
+            raw_sensor: the raw sensor prompt (external grounding, stored for consolidation)
+        """
         self._tick_counter += 1
         self._observations.append(
             Observation(
@@ -92,6 +101,7 @@ class DMNBuffer:
                 timestamp=time.time(),
                 content=content,
                 deltas=deltas or [],
+                raw_sensor=raw_sensor,
             )
         )
 
@@ -113,14 +123,37 @@ class DMNBuffer:
 
     def needs_consolidation(self) -> bool:
         """Check if buffer has enough entries to warrant consolidation."""
-        return len(self._observations) >= CONSOLIDATION_THRESHOLD
+        if len(self._observations) < CONSOLIDATION_THRESHOLD:
+            return False
+        # Skip if all entries since last consolidation are "stable"
+        cutoff = self._last_consolidation
+        recent = [o for o in self._observations if o.timestamp > cutoff]
+        return any(o.content != "stable" for o in recent)
 
     def get_consolidation_input(self) -> str:
-        """Get the raw observations for consolidation by the DMN model."""
+        """Get RAW SENSOR DATA for consolidation — never DMN's own output.
+
+        Returns the raw_sensor strings from older observations, which are
+        the original sensor prompts (external grounding). This prevents
+        hallucination snowballing from the DMN reading its own output.
+        """
         lines = []
         for obs in list(self._observations)[: CONSOLIDATION_THRESHOLD // 2]:
-            lines.append(obs.format())
+            if obs.raw_sensor:
+                lines.append(obs.raw_sensor)
+            elif obs.content != "stable":
+                # Fallback: use content only if no raw_sensor stored (shouldn't happen)
+                lines.append(obs.content)
         return "\n".join(lines)
+
+    def prune_consolidated(self) -> int:
+        """Remove old observations after consolidation. Returns count removed."""
+        count = CONSOLIDATION_THRESHOLD // 2
+        removed = 0
+        while removed < count and self._observations:
+            self._observations.popleft()
+            removed += 1
+        return removed
 
     def format_for_tpn(self) -> str:
         """Format the buffer for TPN consumption, aligned to U-curve.
