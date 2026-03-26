@@ -111,6 +111,7 @@ class SalienceRouter:
         guest_mode: bool = False,
         face_count: int = 0,
         has_tools: bool = True,
+        desk_activity: str = "idle",
     ) -> RoutingDecision:
         """Route an utterance to a model tier based on activation score.
 
@@ -223,6 +224,11 @@ class SalienceRouter:
             + dialog_score * w["dialog_features"]
         )
         activation = max(0.0, min(1.0, activation))
+
+        # Production mode boost: active desk engagement increases salience
+        # (utterances during production sessions are more likely intentional)
+        if desk_activity in ("scratching", "drumming", "tapping"):
+            activation = min(1.0, activation + 0.08)
 
         # ── Map to tier ──────────────────────────────────────────
         tier = self._activation_to_tier(activation)

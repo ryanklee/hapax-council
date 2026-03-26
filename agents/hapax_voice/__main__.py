@@ -2082,6 +2082,11 @@ class VoiceDaemon:
                     self._conversation_pipeline._consent_phase = _phase_map.get(_cp, "none")
                     self._conversation_pipeline._guest_mode = self.session.is_guest_mode
                     self._conversation_pipeline._face_count = state.guest_count
+                    # Desk activity from contact mic for salience routing
+                    _desk_b = self.perception.behaviors.get("desk_activity")
+                    self._conversation_pipeline._desk_activity = (
+                        str(_desk_b.value) if _desk_b is not None else "idle"
+                    )
 
                 # Write perception state AFTER consent tick so published state
                 # reflects the current consent decision
