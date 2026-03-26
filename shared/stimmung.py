@@ -269,10 +269,13 @@ class StimmungCollector:
         hr_zone: float = 0.0,
         hrv_cv: float | None = None,
         skin_temp_cv: float | None = None,
+        desk_activity: str = "",
+        desk_energy: float = 0.0,
     ) -> None:
-        """Update biometric dimensions from watch/phone perception data.
+        """Update biometric dimensions from watch/phone/contact-mic perception data.
 
         All inputs are optional — gracefully degrades when sensors are unavailable.
+        Desk activity and energy come from the contact mic backend.
         """
         # ── operator_stress ──────────────────────────────────────────────
         # Weighted composite: 0.4×HRV_drop + 0.3×EDA_active + 0.3×frustration
@@ -293,6 +296,19 @@ class StimmungCollector:
         circadian_pressure = circadian_alignment  # 0=peak, 1=worst
         activity_pressure = max(0.0, min(1.0, 1.0 - activity_level))
         hr_pressure = max(0.0, min(1.0, 1.0 - hr_zone))
+
+        # Desk engagement from contact mic — active production reduces energy pressure
+        _DESK_ENGAGEMENT = {
+            "scratching": 0.8,
+            "drumming": 0.7,
+            "tapping": 0.5,
+            "typing": 0.3,
+            "active": 0.2,
+        }
+        desk_engagement = _DESK_ENGAGEMENT.get(desk_activity, 0.0)
+        # Blend desk engagement into activity_pressure (physical engagement = less fatigue)
+        if desk_engagement > 0:
+            activity_pressure = min(activity_pressure, 1.0 - desk_engagement)
 
         energy = (
             0.3 * sleep_deficit

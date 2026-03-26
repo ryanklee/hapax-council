@@ -353,6 +353,7 @@ class ConversationPipeline:
         self._last_env_hash: int = 0
         self._session_id: str = ""
         self._activity_mode: str = "idle"
+        self._desk_activity: str = "idle"
         self._consent_phase: str = "none"
         self._llm_prewarmed: bool = False
         self._prev_tier: int = -1  # tier momentum: previous turn's tier (legacy)
@@ -847,6 +848,7 @@ class ConversationPipeline:
                 guest_mode=self._guest_mode,
                 face_count=self._face_count,
                 has_tools=bool(self.tools),
+                desk_activity=self._desk_activity,
             )
             # Keep CANNED for zero-latency phatic, upgrade everything else
             if routing.tier != ModelTier.CANNED:
