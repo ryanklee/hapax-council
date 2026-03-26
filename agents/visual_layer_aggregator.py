@@ -354,6 +354,29 @@ def map_perception(data: dict) -> tuple[list[SignalEntry], float, float, bool]:
             )
         )
 
+    # Desk activity from contact mic
+    desk_activity = data.get("desk_activity", "")
+    if desk_activity and desk_activity != "idle":
+        signals.append(
+            SignalEntry(
+                category=SignalCategory.AMBIENT_SENSOR,
+                severity=0.0,
+                title=f"desk: {desk_activity}",
+                source_id="contact-mic-activity",
+            )
+        )
+
+    desk_energy_val = float(data.get("desk_energy", 0.0) or 0.0)
+    if desk_energy_val > 0.12:  # Above idle threshold
+        signals.append(
+            SignalEntry(
+                category=SignalCategory.AMBIENT_SENSOR,
+                severity=0.0,
+                title=f"desk energy: {desk_energy_val:.0%}",
+                source_id="contact-mic-energy",
+            )
+        )
+
     return signals, flow_score, audio_energy, production_active
 
 
@@ -1427,6 +1450,8 @@ class VisualLayerAggregator:
             activity_level=activity_level,
             hr_zone=hr_zone,
             hrv_cv=hrv_cv,
+            desk_activity=self._last_perception_data.get("desk_activity", ""),
+            desk_energy=float(self._last_perception_data.get("desk_energy", 0.0) or 0.0),
         )
 
     def _write_stimmung(self) -> None:
