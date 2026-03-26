@@ -788,3 +788,102 @@ async def get_node_type(node_type: str):
     if not s:
         raise HTTPException(404, f"Unknown: {node_type}")
     return s
+
+
+# --- Layer Control ---
+
+
+COMPOSITOR_LAYER_DIR = Path("/dev/shm/hapax-compositor")
+
+
+@router.patch("/studio/layer/{layer}/enabled")
+async def set_layer_enabled(layer: str, body: dict[str, Any]):
+    """Enable or disable a source layer."""
+    if layer not in ("live", "smooth", "hls"):
+        raise HTTPException(400, f"Invalid layer: {layer}")
+    enabled = body.get("enabled")
+    if not isinstance(enabled, bool):
+        raise HTTPException(400, "Body must contain 'enabled' boolean")
+    flag_path = COMPOSITOR_LAYER_DIR / f"layer-{layer}-enabled.txt"
+    flag_path.parent.mkdir(parents=True, exist_ok=True)
+    flag_path.write_text("1" if enabled else "0")
+    return {"layer": layer, "enabled": enabled}
+
+
+@router.patch("/studio/layer/smooth/delay")
+async def set_smooth_delay(body: dict[str, Any]):
+    """Set the smooth layer temporal delay in seconds."""
+    delay = body.get("delay_seconds")
+    if not isinstance(delay, (int, float)) or delay < 0 or delay > 30:
+        raise HTTPException(400, "'delay_seconds' must be a number between 0 and 30")
+    flag_path = COMPOSITOR_LAYER_DIR / "smooth-delay.txt"
+    flag_path.parent.mkdir(parents=True, exist_ok=True)
+    flag_path.write_text(str(float(delay)))
+    return {"delay_seconds": float(delay)}
+
+
+# --- Preset CRUD ---
+
+
+@router.put("/studio/presets/{name}")
+async def save_preset(name: str, body: dict[str, Any]):
+    """Save the current or provided graph as a user preset."""
+    from agents.effect_graph.types import EffectGraph
+
+    # If body has graph data, save it; otherwise save current graph
+    if body:
+        try:
+            graph = EffectGraph(**body)
+        except Exception as e:
+            raise HTTPException(400, f"Invalid graph: {e}") from e
+    elif _graph_runtime and _graph_runtime.current_graph:
+        graph = _graph_runtime.current_graph
+    else:
+        raise HTTPException(400, "No graph data provided and no active graph")
+
+    _USER_PRESETS.mkdir(parents=True, exist_ok=True)
+    preset_path = _USER_PRESETS / f"{name}.json"
+    preset_path.write_text(_json_mod.dumps(graph.model_dump(), indent=2))
+    return {"status": "saved", "name": name, "path": str(preset_path)}
+
+
+@router.delete("/studio/presets/{name}")
+async def delete_preset(name: str):
+    """Delete a user preset. Built-in presets cannot be deleted."""
+    preset_path = _USER_PRESETS / f"{name}.json"
+    if not preset_path.is_file():
+        builtin = _BUILTIN_PRESETS / f"{name}.json"
+        if builtin.is_file():
+            raise HTTPException(403, "Cannot delete built-in preset")
+        raise HTTPException(404, f"Preset not found: {name}")
+    preset_path.unlink()
+    return {"status": "deleted", "name": name}
+
+
+# --- Camera Control ---
+
+
+@router.get("/studio/cameras")
+async def list_cameras():
+    """List cameras from compositor status."""
+    import json
+
+    if not COMPOSITOR_STATUS_PATH.exists():
+        return {"cameras": []}
+    try:
+        data = json.loads(COMPOSITOR_STATUS_PATH.read_text())
+    except (json.JSONDecodeError, OSError):
+        return {"cameras": []}
+    return {"cameras": data.get("cameras", {})}
+
+
+@router.post("/studio/camera/select")
+async def select_camera(body: dict[str, Any]):
+    """Set the hero camera role for the studio view."""
+    role = body.get("role")
+    if not role or not isinstance(role, str):
+        raise HTTPException(400, "'role' string required")
+    flag_path = COMPOSITOR_LAYER_DIR / "hero-camera.txt"
+    flag_path.parent.mkdir(parents=True, exist_ok=True)
+    flag_path.write_text(role)
+    return {"status": "ok", "hero": role}
