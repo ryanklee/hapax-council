@@ -288,6 +288,17 @@ class CognitiveLoop:
             if self._speculative_stt is not None:
                 self._speculative_stt.reset()
 
+        # Anti-correlation: signal DMN when TPN is active/idle
+        _active_phases = {
+            TurnPhase.OPERATOR_SPEAKING,
+            TurnPhase.TRANSITION,
+            TurnPhase.HAPAX_SPEAKING,
+        }
+        was_active = from_phase in _active_phases
+        now_active = to_phase in _active_phases
+        if was_active != now_active and hasattr(self, "_daemon") and self._daemon is not None:
+            self._daemon._signal_tpn_active(now_active)
+
         # Track response timing from phase transitions — now that
         # process_utterance runs as a background task, the cognitive loop
         # observes TRANSITION and HAPAX_SPEAKING phases in real time.
