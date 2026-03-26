@@ -395,12 +395,6 @@ export function TerrainLayout() {
         return;
       }
 
-      if (e.key.toLowerCase() === "c" && !e.ctrlKey && !e.metaKey && !isInput && activeOverlay !== "investigation") {
-        e.preventDefault();
-        setOverlay(activeOverlay === "classification" ? null : "classification");
-        return;
-      }
-
       if (e.key === "Escape") {
         // Don't navigate when exiting fullscreen — browser handles that Escape
         if (document.fullscreenElement) return;
@@ -460,7 +454,7 @@ export function TerrainLayout() {
   return (
     <ClassificationOverlayProvider>
     <DetectionKeyboardHandler />
-    <ModifierShortcutOverlay />
+    {/* <ModifierShortcutOverlay /> */}
     <GroundStudioProvider>
       <StudioParamSync />
       <StudioKeyboardHandler />
