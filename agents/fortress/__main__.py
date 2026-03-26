@@ -76,6 +76,14 @@ class FortressDaemon:
         self._started = False
         self._last_game_day = -1
 
+        # Impingement cascade integration
+        from agents.fortress.capability import FortressGovernanceCapability
+        from shared.capability_registry import CapabilityRegistry
+
+        self._cascade_registry = CapabilityRegistry()
+        self._fortress_capability = FortressGovernanceCapability()
+        self._cascade_registry.register(self._fortress_capability)
+
     async def run(self) -> None:
         """Run governance + maintenance loops concurrently."""
         log.info("Fortress daemon starting")
@@ -189,6 +197,44 @@ class FortressDaemon:
                 log.info("Storyteller: %s", self._governor._last_story_action.action)
                 self._governor._last_story_action = None
 
+            # Impingement cascade: drain DMN impingements and broadcast
+            try:
+                imp_path = Path("/dev/shm/hapax-dmn/status.json")
+                if imp_path.exists():
+                    # DMN is running — check for impingements via shared state
+                    # The DMN daemon writes impingements; we read and broadcast
+
+                    # Since we can't access the DMN daemon's in-process pulse object,
+                    # we check for absolute threshold violations ourselves using the
+                    # same logic the DMN uses (anti-habituation)
+                    from agents.dmn.sensor import read_fortress
+
+                    fortress_sensor = read_fortress()
+                    if fortress_sensor:
+                        from shared.impingement import Impingement, ImpingementType
+
+                        pop = fortress_sensor.get("population", 0)
+                        drink = fortress_sensor.get("drink", 0)
+                        if pop > 0 and drink < pop * 2:
+                            imp = Impingement(
+                                timestamp=time.time(),
+                                source="fortress.governance_loop",
+                                type=ImpingementType.ABSOLUTE_THRESHOLD,
+                                strength=min(1.0, 1.0 - (drink / max(1, pop * 2))),
+                                content={
+                                    "metric": "drink_per_capita",
+                                    "value": drink,
+                                    "threshold": pop * 2,
+                                },
+                            )
+                            matches = self._cascade_registry.broadcast(imp)
+                            for match in matches:
+                                match.capability.activate(imp, match.effective_score)
+                            if matches:
+                                self._cascade_registry.add_inhibition(imp, duration_s=60.0)
+            except Exception:
+                pass  # cascade is optional enrichment, never blocks governance
+
             # Episode lifecycle
             episode = self._episode_builder.observe(state)
             if episode is not None:
@@ -300,6 +346,38 @@ class FortressDaemon:
             for proj in self._trend_engine.projections():
                 recent_events.append(f"[PROJECTION] {proj}")
 
+            # Read DMN buffer for situational enrichment
+            dmn_buffer = ""
+            try:
+                from pathlib import Path
+
+                dmn_path = Path("/dev/shm/hapax-dmn/buffer.txt")
+                if dmn_path.exists():
+                    dmn_buffer = dmn_path.read_text(encoding="utf-8").strip()
+            except OSError:
+                pass
+
+            # Drain DMN impingements and broadcast to cascade
+            try:
+                # Read impingements from DMN status (if DMN daemon is running)
+                dmn_status_path = Path("/dev/shm/hapax-dmn/status.json")
+                if dmn_status_path.exists():
+                    import json as _json
+
+                    status = _json.loads(dmn_status_path.read_text())
+                    if status.get("running"):
+                        # Check for pending impingements via the fortress capability
+                        if self._fortress_capability.has_pending_impingement():
+                            imp = self._fortress_capability.consume_impingement()
+                            if imp:
+                                recent_events.append(
+                                    f"[IMPINGEMENT] {imp.content.get('metric', imp.source)} "
+                                    f"(strength={imp.strength:.2f})"
+                                )
+                                log.info("Cascade impingement consumed: %s", imp.content)
+            except Exception:
+                pass
+
             try:
                 actions = await run_deliberation(
                     state=state,
@@ -309,6 +387,7 @@ class FortressDaemon:
                     tool_dispatch=dispatch,
                     recent_events=recent_events,
                     recent_decisions=self._recent_decisions[-20:],
+                    dmn_buffer=dmn_buffer,
                 )
 
                 for action in actions:

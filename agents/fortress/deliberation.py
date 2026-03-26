@@ -67,12 +67,13 @@ def build_deliberation_prompt(
     chunks: list[str],
     recent_events: list[str] | None = None,
     recent_decisions: list[str] | None = None,
+    dmn_buffer: str = "",
 ) -> list[dict[str, str]]:
     """Build the U-shaped prompt for deliberation.
 
-    Top: identity + alerts (high attention)
-    Middle: recent history (lower attention)
-    Bottom: current situation + question (high attention)
+    Top: identity + alerts (high attention — primacy zone)
+    Middle: recent history + DMN context (lower attention — middle zone)
+    Bottom: current situation + question (high attention — recency zone)
     """
     season_names = {0: "Spring", 1: "Summer", 2: "Autumn", 3: "Winter"}
     season_name = season_names.get(season, f"Season {season}")
@@ -83,8 +84,10 @@ def build_deliberation_prompt(
     if alerts:
         alert_section = "\nCRITICAL ALERTS:\n" + "\n".join(f"  ! {a}" for a in alerts) + "\n"
 
-    # Middle: recent history
+    # Middle: recent history + DMN context
     history_section = ""
+    if dmn_buffer:
+        history_section += f"\nDEFAULT MODE CONTEXT:\n{dmn_buffer}\n"
     if recent_events:
         history_section += (
             "\nRECENT EVENTS:\n" + "\n".join(f"  - {e}" for e in recent_events[-5:]) + "\n"
@@ -94,7 +97,7 @@ def build_deliberation_prompt(
             "\nRECENT DECISIONS:\n" + "\n".join(f"  - {d}" for d in recent_decisions[-3:]) + "\n"
         )
 
-    # Bottom: current situation
+    # Bottom: current situation (recency zone — highest attention)
     situation = "\n".join(f"  {i + 1}. {c}" for i, c in enumerate(chunks))
 
     user_content = f"""{alert_section}{history_section}
@@ -117,6 +120,7 @@ async def run_deliberation(
     tool_dispatch: dict[str, Any] | None = None,
     recent_events: list[str] | None = None,
     recent_decisions: list[str] | None = None,
+    dmn_buffer: str = "",
 ) -> list[dict[str, Any]]:
     """Run a single ReAct deliberation cycle.
 
@@ -133,6 +137,7 @@ async def run_deliberation(
         chunks=chunks,
         recent_events=recent_events,
         recent_decisions=recent_decisions,
+        dmn_buffer=dmn_buffer,
     )
 
     openai_tools = _to_openai_tools(FORTRESS_TOOLS)
