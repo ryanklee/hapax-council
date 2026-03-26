@@ -60,46 +60,48 @@ export function CommandRegistryProvider({
       registry,
       () => ({
         focusedRegion: terrainRef.current.focusedRegion,
-        regionDepths: terrainRef.current.regionDepths as Record<string, string>,
+        depths: terrainRef.current.regionDepths,
       }),
       {
-        focusRegion: terrainActions.focusRegion,
-        setRegionDepth: terrainActions.setRegionDepth,
-        cycleDepth: terrainActions.cycleDepth,
+        setFocusedRegion: terrainActions.focusRegion,
+        setDepth: terrainActions.setRegionDepth,
       },
     );
 
     registerOverlayCommands(
       registry,
-      () => ({ activeOverlay: terrainRef.current.activeOverlay }),
-      { setOverlay: terrainActions.setOverlay },
+      () => ({ active: terrainRef.current.activeOverlay }),
+      { setActive: terrainActions.setOverlay },
     );
 
     registerSplitCommands(
       registry,
       () => ({
-        splitRegion: terrainRef.current.splitRegion,
-        splitFullscreen: terrainRef.current.splitFullscreen,
-        focusedRegion: terrainRef.current.focusedRegion,
+        region: terrainRef.current.splitRegion,
+        fullscreen: terrainRef.current.splitFullscreen,
       }),
       {
-        setSplitRegion: terrainActions.setSplitRegion,
-        setSplitFullscreen: terrainActions.setSplitFullscreen,
+        setRegion: terrainActions.setSplitRegion,
+        setFullscreen: terrainActions.setSplitFullscreen,
       },
     );
 
     registerNavCommands(
       registry,
-      () => ({ currentPath: window.location.pathname }),
+      () => ({
+        currentPath: window.location.pathname,
+        manualOpen: false,
+        paletteOpen: false,
+      }),
       {
-        navigate,
-        toggleManual: () => onManualRef.current(),
-        togglePalette: () => onPaletteRef.current(),
+        setCurrentPath: navigate,
+        setManualOpen: () => onManualRef.current(),
+        setPaletteOpen: () => onPaletteRef.current(),
       },
     );
 
     registerDataCommands(registry, {
-      invalidateQueries: (key?: string) => {
+      invalidate: (key?: string) => {
         if (key) {
           queryClient.invalidateQueries({ queryKey: [key] });
         } else {

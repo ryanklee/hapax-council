@@ -34,7 +34,7 @@ export function CommandRegistryBridge() {
       registry,
       () => ({
         smoothMode: smoothRef.current,
-        activePreset: null,
+        activePreset: "",
         recording: false,
       }),
       {
@@ -44,7 +44,7 @@ export function CommandRegistryBridge() {
             setRegionDepth("ground", "core");
           }
         },
-        activatePreset: (name: string) => {
+        setActivePreset: (name: string) => {
           fetch(`/api/studio/presets/${name}/activate`, { method: "POST" }).catch(() => {});
         },
         cyclePreset: (direction: "next" | "prev") => {
@@ -52,7 +52,7 @@ export function CommandRegistryBridge() {
             () => {},
           );
         },
-        toggleRecording: () => {
+        setRecording: () => {
           recordingToggle.mutate(true);
         },
       },
@@ -64,7 +64,10 @@ export function CommandRegistryBridge() {
         tier: tierRef.current as 1 | 2 | 3,
         visible: visibleRef.current,
       }),
-      { setDetectionTier, setDetectionLayerVisible },
+      {
+        setTier: setDetectionTier,
+        setVisible: setDetectionLayerVisible,
+      },
     );
 
     return () => {
