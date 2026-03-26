@@ -101,16 +101,21 @@ def render_dmn() -> str:
 
     Reads the DMN daemon's accumulated observations from /dev/shm.
     Returns the U-curve-formatted buffer for injection into the VOLATILE band.
-    Empty string when DMN daemon is not running.
+    Empty string when DMN daemon is not running or buffer is stale.
     """
     try:
+        import os
         from pathlib import Path
 
         path = Path("/dev/shm/hapax-dmn/buffer.txt")
         if not path.exists():
             return ""
+        # Staleness check: buffer older than 60s is likely from a crashed daemon
+        age_s = time.time() - os.path.getmtime(path)
+        if age_s > 60:
+            return ""
         text = path.read_text(encoding="utf-8").strip()
-        if not text or text == "":
+        if not text:
             return ""
         return f"## Background Awareness (DMN)\n{text}"
     except Exception:
