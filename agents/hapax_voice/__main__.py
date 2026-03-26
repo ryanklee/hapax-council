@@ -943,7 +943,16 @@ class VoiceDaemon:
         self._nudges_fn = render_nudges
         self._dmn_fn = render_dmn
 
-        log.info("Pipeline dependencies precomputed")
+        # Impingement cascade: speech as a recruited capability
+        from agents.hapax_voice.capability import SpeechProductionCapability
+        from shared.capability_registry import CapabilityRegistry
+
+        self._cascade_registry = CapabilityRegistry()
+        self._speech_capability = SpeechProductionCapability()
+        self._cascade_registry.register(self._speech_capability)
+        self._dmn_impingement_cursor = 0  # byte offset in impingements.jsonl
+
+        log.info("Pipeline dependencies precomputed (cascade: speech capability registered)")
 
     def _pause_vision_for_conversation(self) -> None:
         """Pause vision inference to free ~2-3GB VRAM for voice models."""
@@ -1112,6 +1121,9 @@ class VoiceDaemon:
         self._conversation_pipeline._health_fn = self._health_fn
         self._conversation_pipeline._nudges_fn = self._nudges_fn
         self._conversation_pipeline._dmn_fn = self._dmn_fn
+
+        # Wire speech capability into cognitive loop for spontaneous speech polling
+        self._cognitive_loop._speech_capability = self._speech_capability
 
         # Wire salience router and context distillation into pipeline
         if self._salience_router is not None:
@@ -1760,6 +1772,60 @@ class VoiceDaemon:
             notification.priority,
         )
 
+    async def _impingement_consumer_loop(self) -> None:
+        """Poll DMN impingements and route to speech capability.
+
+        Reads /dev/shm/hapax-dmn/impingements.jsonl, filters for
+        voice-relevant signals, activates SpeechProductionCapability
+        when verbal output is warranted.
+        """
+        from pathlib import Path
+
+        from shared.impingement import Impingement
+
+        imp_path = Path("/dev/shm/hapax-dmn/impingements.jsonl")
+
+        while self._running:
+            try:
+                if imp_path.exists():
+                    text = imp_path.read_text(encoding="utf-8")
+                    lines = text.strip().split("\n") if text.strip() else []
+
+                    # Process only lines we haven't seen
+                    new_lines = lines[self._dmn_impingement_cursor :]
+                    if new_lines:
+                        self._dmn_impingement_cursor = len(lines)
+
+                        for line in new_lines:
+                            if not line.strip():
+                                continue
+                            try:
+                                imp = Impingement.model_validate_json(line)
+                                score = self._speech_capability.can_resolve(imp)
+                                if score > 0.0:
+                                    self._speech_capability.activate(imp, score)
+                                    log.info(
+                                        "Speech recruited by impingement: %s (score=%.2f)",
+                                        imp.content.get("metric", imp.source),
+                                        score,
+                                    )
+                            except Exception:
+                                pass  # skip malformed lines
+            except Exception:
+                log.debug("Impingement consumer error (non-fatal)", exc_info=True)
+
+            await asyncio.sleep(0.5)  # 500ms poll cadence
+
+    def _signal_tpn_active(self, active: bool) -> None:
+        """Signal DMN that TPN (voice) is actively processing."""
+        try:
+            from pathlib import Path
+
+            flag = Path("/dev/shm/hapax-dmn/tpn_active")
+            flag.write_text("1" if active else "0", encoding="utf-8")
+        except OSError:
+            pass
+
     async def _proactive_delivery_loop(self) -> None:
         """Periodically check for deliverable notifications.
 
@@ -2181,6 +2247,7 @@ class VoiceDaemon:
         self._background_tasks.append(asyncio.create_task(self._perception_loop()))
         self._background_tasks.append(asyncio.create_task(self._wake_word_processor()))
         self._background_tasks.append(asyncio.create_task(self._ambient_refresh_loop()))
+        self._background_tasks.append(asyncio.create_task(self._impingement_consumer_loop()))
 
         # Actuation loop (drains ScheduleQueue at beat precision)
         if self.cfg.mc_enabled or self.cfg.obs_enabled:

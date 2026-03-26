@@ -29,6 +29,8 @@ log = logging.getLogger("dmn")
 DMN_STATE_DIR = Path("/dev/shm/hapax-dmn")
 BUFFER_FILE = DMN_STATE_DIR / "buffer.txt"
 STATUS_FILE = DMN_STATE_DIR / "status.json"
+IMPINGEMENTS_FILE = DMN_STATE_DIR / "impingements.jsonl"
+TPN_ACTIVE_FILE = DMN_STATE_DIR / "tpn_active"
 
 # Main loop tick rate (fastest possible — individual ticks have their own cadence)
 LOOP_TICK_S = 1.0
@@ -60,13 +62,32 @@ class DMNDaemon:
         log.info("DMN daemon stopped")
 
     def _write_output(self) -> None:
-        """Write buffer to /dev/shm for TPN consumption."""
+        """Write buffer, impingements, and status to /dev/shm."""
         # Buffer formatted for U-curve
         buffer_text = self._buffer.format_for_tpn()
         try:
             tmp = BUFFER_FILE.with_suffix(".tmp")
             tmp.write_text(buffer_text, encoding="utf-8")
             tmp.rename(BUFFER_FILE)
+        except OSError:
+            pass
+
+        # Drain and persist impingements (cross-daemon transport)
+        impingements = self._pulse.drain_impingements()
+        if impingements:
+            try:
+                with IMPINGEMENTS_FILE.open("a", encoding="utf-8") as f:
+                    for imp in impingements:
+                        f.write(imp.model_dump_json() + "\n")
+                log.info("Emitted %d impingements to JSONL", len(impingements))
+            except OSError:
+                pass
+
+        # Read TPN active flag (anti-correlation signal from voice daemon)
+        try:
+            if TPN_ACTIVE_FILE.exists():
+                active = TPN_ACTIVE_FILE.read_text().strip() == "1"
+                self._pulse.set_tpn_active(active)
         except OSError:
             pass
 

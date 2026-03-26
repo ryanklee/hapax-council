@@ -418,6 +418,55 @@ class ConversationPipeline:
             log.exception("Notification delivery failed: %s", title)
             return False
 
+    async def generate_spontaneous_speech(self, impingement: object) -> None:
+        """Generate and speak a spontaneous utterance from an impingement.
+
+        Unlike process_utterance (which transcribes operator audio), this
+        bypasses STT and routes directly to LLM with impingement context
+        as the intent. Speech is a tool — recruited by the cascade.
+        """
+        if not self._running or self.state == ConvState.SPEAKING:
+            return
+
+        content = getattr(impingement, "content", {})
+        metric = content.get("metric", "")
+        strength = getattr(impingement, "strength", 0.5)
+
+        # Build a concise impingement-aware prompt
+        prompt = (
+            f"You noticed something worth mentioning: {metric}. "
+            f"Urgency: {'high' if strength > 0.7 else 'moderate' if strength > 0.4 else 'low'}. "
+            f"If this warrants a brief, natural remark to the operator, say it in one sentence. "
+            f"If not worth mentioning, respond with exactly: [silence]"
+        )
+
+        try:
+            log.info("Generating spontaneous speech: %s (strength=%.2f)", metric, strength)
+            self._update_system_context()
+
+            import litellm
+
+            messages = [
+                {"role": "system", "content": self._system_context},
+                {"role": "user", "content": prompt},
+            ]
+
+            response = await litellm.acompletion(
+                model=self._model_id or "anthropic/claude-sonnet-4-6",
+                messages=messages,
+                max_tokens=80,
+                temperature=0.7,
+            )
+
+            text = response.choices[0].message.content.strip()
+            if text and "[silence]" not in text.lower():
+                log.info("Spontaneous speech: %s", text[:80])
+                await self._speak_sentence(text)
+            else:
+                log.debug("Cascade recruited speech but LLM chose silence")
+        except Exception:
+            log.debug("Spontaneous speech generation failed (non-fatal)", exc_info=True)
+
     async def start(self) -> None:
         """Start the conversation pipeline."""
         import random

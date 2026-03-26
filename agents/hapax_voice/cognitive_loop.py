@@ -181,6 +181,16 @@ class CognitiveLoop:
                     utterance = self._buffer.get_utterance()
                     if utterance is not None:
                         self._dispatch_utterance(utterance)
+                    elif (
+                        self._turn_phase == TurnPhase.MUTUAL_SILENCE
+                        and hasattr(self, "_speech_capability")
+                        and self._speech_capability is not None
+                        and self._speech_capability.has_pending()
+                    ):
+                        # Spontaneous speech: impingement cascade recruited speech production
+                        imp = self._speech_capability.consume_pending()
+                        if imp is not None:
+                            self._dispatch_spontaneous_speech(imp)
 
                 # 3. Phase-specific cognition
                 if self._turn_phase == TurnPhase.OPERATOR_SPEAKING:
@@ -354,6 +364,22 @@ class CognitiveLoop:
             self._speculative_stt.reset()
 
         self._processing_task = asyncio.create_task(self._process_utterance(utterance))
+        self._processing_task.add_done_callback(self._on_processing_done)
+
+    def _dispatch_spontaneous_speech(self, impingement: object) -> None:
+        """Dispatch spontaneous speech from an impingement cascade activation.
+
+        Unlike _dispatch_utterance (which processes operator audio through STT),
+        this skips STT and routes directly to LLM generation with impingement
+        context as the "user intent."
+        """
+        log.info(
+            "Spontaneous speech dispatched: %s",
+            getattr(impingement, "content", {}).get("metric", "unknown"),
+        )
+        self._processing_task = asyncio.create_task(
+            self._pipeline.generate_spontaneous_speech(impingement)
+        )
         self._processing_task.add_done_callback(self._on_processing_done)
 
     def _on_processing_done(self, task: asyncio.Task) -> None:
