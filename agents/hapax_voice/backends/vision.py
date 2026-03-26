@@ -521,8 +521,9 @@ class VisionBackend:
     ) -> None:
         self._webcam_capturer = webcam_capturer
         # Weighted round-robin: operator gets 3x polls for responsive tracking.
-        # Sequence: op, desk, op, room, op, overhead, room-brio, synths-brio (repeat)
-        self._camera_roles = camera_roles or [
+        # When desk activity is non-idle, overhead gets 2x slots for faster
+        # hand zone updates (8s cycle vs 24s when idle).
+        self._camera_roles_idle = camera_roles or [
             "operator",
             "desk",
             "operator",
@@ -532,6 +533,17 @@ class VisionBackend:
             "room-brio",
             "synths-brio",
         ]
+        self._camera_roles_active = [
+            "operator",
+            "overhead",
+            "operator",
+            "desk",
+            "operator",
+            "overhead",
+            "room",
+            "synths-brio",
+        ]
+        self._camera_roles = self._camera_roles_idle
         self._poll_interval = poll_interval
         self._cache = _VisionCache()
         self._thread: threading.Thread | None = None
@@ -669,6 +681,12 @@ class VisionBackend:
         # Inject desk activity for overhead zone fusion
         desk_activity = str(behaviors.get("desk_activity", Behavior("")).value)
         self._cache.set_desk_context(desk_activity=desk_activity)
+
+        # Adaptive overhead priority: 2x overhead slots when desk is active
+        desk_is_active = desk_activity not in ("", "idle")
+        target_roles = self._camera_roles_active if desk_is_active else self._camera_roles_idle
+        if self._camera_roles is not target_roles:
+            self._camera_roles = target_roles
 
         now = time.monotonic()
         cached = self._cache.read()
