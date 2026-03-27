@@ -51,8 +51,8 @@ Shared modules: `shared/google_auth.py` (OAuth2 token management for all Google 
 | manifest-snapshot | Weekly Sun 02:30 | Infrastructure state snapshot |
 | llm-backup | Weekly Sun 02:00 | Full stack backup |
 | obsidian-webui-sync | Every 6h | Vault sync to Open WebUI |
-| audio-recorder | Always on | Continuous mic recording (ffmpeg) |
-| audio-processor | Every 30min | Audio segmentation + transcription + RAG (GPU) |
+| ~~audio-recorder~~ | Disabled | Was: continuous mic recording (FLAC archival) |
+| ~~audio-processor~~ | Disabled | Was: audio classification + RAG (archival only) |
 | audio-archiver | Daily 03:00 | rclone move raw audio to Google Drive |
 | hapax-voice | Always on | Voice interaction daemon (wake word, presence, TTS/STT) |
 | bt-keepalive | Always on | Silent stream to iLoud BT monitors (prevents auto-standby) |

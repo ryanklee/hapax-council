@@ -562,7 +562,6 @@ async def check_gpu_temperature() -> list[CheckResult]:
 @check_group("systemd")
 async def check_systemd_services() -> list[CheckResult]:
     services = [
-        ("rag-ingest.service", True, "systemctl --user restart rag-ingest"),
         ("profile-update.timer", True, "systemctl --user enable --now profile-update.timer"),
         ("digest.timer", True, "systemctl --user enable --now digest.timer"),
         ("knowledge-maint.timer", True, "systemctl --user enable --now knowledge-maint.timer"),
