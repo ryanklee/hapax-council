@@ -119,9 +119,8 @@ impl ShmOutput {
         }
     }
 
-    /// Map the staging buffer and write to /dev/shm. Call after queue submit.
-    /// This is async — uses buffer mapping callback.
-    pub fn write_frame(&mut self) {
+    /// Map the staging buffer and write to /dev/shm. Call after queue submit + device.poll.
+    pub fn write_frame(&mut self, device: &wgpu::Device) {
         if !self.enabled {
             return;
         }
@@ -137,12 +136,13 @@ impl ShmOutput {
             tx.send(result).ok();
         });
 
-        // Poll until mapping completes (non-blocking in a real app, but we want the data now)
-        // In practice the GPU has already finished since we submitted and presented.
-        match rx.recv_timeout(std::time::Duration::from_millis(5)) {
+        // Poll device so the map_async callback fires
+        device.poll(wgpu::Maintain::Wait);
+
+        match rx.recv_timeout(std::time::Duration::from_millis(50)) {
             Ok(Ok(())) => {}
             _ => {
-                // Mapping didn't complete in time, skip this frame
+                // Mapping failed, skip this frame
                 return;
             }
         }
