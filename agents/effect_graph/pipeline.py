@@ -66,6 +66,7 @@ class SlotPipeline:
         for slot in self._slots:
             try:
                 slot.set_property("fragment", PASSTHROUGH_SHADER)
+                slot.set_property("update-shader", True)
             except Exception:
                 pass
 
@@ -79,6 +80,7 @@ class SlotPipeline:
             if step.shader_source:
                 try:
                     self._slots[slot_idx].set_property("fragment", step.shader_source)
+                    self._slots[slot_idx].set_property("update-shader", True)
                 except Exception:
                     log.exception("Failed to set shader for slot %d (%s)", slot_idx, step.node_type)
                 self._set_uniforms(slot_idx, step.params)
