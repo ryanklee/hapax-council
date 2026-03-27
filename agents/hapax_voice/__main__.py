@@ -980,7 +980,22 @@ class VoiceDaemon:
             "operator_distress", "speech_production", "hapax_voice"
         )
 
-        log.info("Pipeline dependencies precomputed (affordance pipeline: speech indexed)")
+        # Vocal chain: MIDI affordances for speech modulation
+        from agents.hapax_voice.midi_output import MidiOutput
+        from agents.hapax_voice.vocal_chain import VOCAL_CHAIN_RECORDS, VocalChainCapability
+
+        self._midi_output = MidiOutput(port_name=self.cfg.midi_output_port)
+        self._vocal_chain = VocalChainCapability(
+            midi_output=self._midi_output,
+            evil_pet_channel=self.cfg.midi_evil_pet_channel,
+            s4_channel=self.cfg.midi_s4_channel,
+        )
+        for record in VOCAL_CHAIN_RECORDS:
+            self._affordance_pipeline.index_capability(record)
+
+        log.info(
+            "Pipeline dependencies precomputed (affordance pipeline: speech + 9 vocal chain dims)"
+        )
 
     def _pause_vision_for_conversation(self) -> None:
         """Pause vision inference to free ~2-3GB VRAM for voice models."""

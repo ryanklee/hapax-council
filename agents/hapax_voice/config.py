@@ -193,6 +193,11 @@ class VoiceConfig(BaseModel):
     midi_port_name: str = "OXI One"
     midi_beats_per_bar: int = 4
 
+    # MIDI output (vocal chain)
+    midi_output_port: str = ""  # empty = first available, or device name
+    midi_evil_pet_channel: int = 0  # 0-indexed MIDI channel
+    midi_s4_channel: int = 1  # 0-indexed MIDI channel
+
     # OBS integration
     obs_enabled: bool = False
     obs_host: str = "localhost"
