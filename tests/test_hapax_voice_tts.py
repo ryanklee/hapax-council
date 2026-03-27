@@ -199,13 +199,8 @@ def test_voxtral_uses_ref_audio_when_set(tmp_path) -> None:
 
 
 def test_voxtral_missing_api_key() -> None:
-    """RuntimeError when MISTRAL_API_KEY not set and client can be imported."""
-    # Provide a mock Mistral class so the import succeeds, then verify the key check
-    mock_mistral_mod = MagicMock()
-    with (
-        patch.dict("os.environ", {}, clear=True),
-        patch.dict("sys.modules", {"mistralai": mock_mistral_mod}),
-    ):
+    """RuntimeError when MISTRAL_API_KEY not set."""
+    with patch.dict("os.environ", {"MISTRAL_API_KEY": ""}):
         mgr = TTSManager(voice_id="jessica")
         with pytest.raises(RuntimeError, match="MISTRAL_API_KEY"):
             mgr._get_client()

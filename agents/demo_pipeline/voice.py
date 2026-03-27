@@ -58,7 +58,7 @@ def generate_voice_segment_voxtral(
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    from mistralai import Mistral
+    from mistralai.client.sdk import Mistral
 
     api_key = os.environ.get("MISTRAL_API_KEY", "")
     if not api_key:
