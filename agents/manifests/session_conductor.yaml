@@ -1,0 +1,92 @@
+id: session_conductor
+name: Session Conductor
+version: "1.0.0"
+category: governance
+reports_to: operator
+peers: []
+depends_on: []
+
+purpose: >
+  Per-session sidecar that enforces workspace focus, research convergence, epic pipeline
+  phase transitions, smoke test activation, cross-session relay sync, and child session
+  spawn/reunion. Launched by Claude Code SessionStart hook; communicates over a Unix
+  Domain Socket. Deterministic — no LLM calls.
+
+inputs:
+  - Claude Code hook events (PreToolUse, PostToolUse) via UDS
+  - Peer relay status YAML files (~/.cache/hapax/relay/)
+  - Spawn manifests (~/.cache/hapax/conductor/spawns/)
+outputs:
+  - Hook responses (allow, block, rewrite) over UDS
+  - Relay status YAML for peer sessions
+  - Spawn manifests for child sessions
+  - Persisted session state JSON
+
+capabilities:
+  - focus_enforcement
+  - research_convergence_tracking
+  - epic_pipeline_management
+  - smoke_test_activation
+  - cross_session_relay_sync
+  - child_session_spawn_reunion
+
+schedule:
+  type: daemon
+
+model: null
+
+autonomy: full
+decision_scope: >
+  Autonomous hook interception within the active Claude Code session. Blocks or rewrites
+  tool calls that violate workspace focus, convergence, or epic-phase constraints.
+  Writes relay status and spawn manifests for cross-session coordination.
+  All decisions are bounded by the session topology and rule registry — no LLM calls.
+escalation_target: operator
+
+axiom_bindings:
+  - axiom_id: executive_function
+    implications: [ex-routine-001]
+    role: subject
+  - axiom_id: single_user
+    implications: [su-decision-001]
+    role: subject
+
+raci:
+  - task: hook_event_routing
+    role: responsible
+  - task: workspace_focus_enforcement
+    role: responsible
+  - task: research_convergence_enforcement
+    role: responsible
+  - task: epic_pipeline_tracking
+    role: responsible
+  - task: relay_sync
+    role: responsible
+
+health_group: governance
+service_tier: 1
+
+narrative: |
+  The Session Conductor is a lightweight deterministic sidecar that runs alongside every
+  Claude Code session. It is launched by the SessionStart hook (conductor-start.sh) via
+  systemd-run and communicates over a per-session Unix Domain Socket. On each PreToolUse
+  event the conductor can rewrite or block the tool call; on each PostToolUse event it
+  updates internal state and writes coordination artifacts.
+
+  Six rules compose the rule registry:
+    - FocusRule: rewrites all browser_* tools to the configured testing workspace and
+      converts non-silent hyprctl workspace switches to the silent variant.
+    - ConvergenceRule: tracks Agent tool research rounds per topic slug and blocks
+      further research when topics converge (≤30% new findings) or cap at 5 rounds.
+    - EpicRule: detects epic-entry trigger phrases and drives the six-phase pipeline
+      (RESEARCH → DESIGN → DESIGN_GAPS → PLANNING → PLANNING_GAPS → IMPLEMENTATION)
+      via file-write and convergence signals.
+    - SmokeRule: activates smoke test mode on PR creation or "smoke test" in user
+      messages and rewrites subsequent browser_* calls with smoke test config.
+    - RelayRule: tracks in-flight file edits and PR events; writes YAML relay status
+      for peer sessions every 30 minutes and on PR events.
+    - SpawnRule: detects spawn-intent phrases, writes child session manifests, and
+      blocks child sessions from editing parent's in-flight files.
+
+  The conductor is fully self-contained (no shared database, no LiteLLM) and recovers
+  gracefully if the socket is missing or the conductor is not running.
