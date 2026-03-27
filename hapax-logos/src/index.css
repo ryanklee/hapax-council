@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+/* Transparent background for Tauri overlay rendering.
+   WGPU visual surface renders behind the webview. */
+html,
+body {
+  background: transparent;
+}
+
 @import "@fontsource/jetbrains-mono/400.css";
 @import "@fontsource/jetbrains-mono/500.css";
 @import "@fontsource/jetbrains-mono/600.css";
