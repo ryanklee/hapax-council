@@ -289,6 +289,8 @@ pub struct VisualLayerState {
     #[serde(default)]
     pub ambient_params: AmbientParams,
     #[serde(default)]
+    pub readiness: String,
+    #[serde(default)]
     pub timestamp: f64,
 }
 
@@ -316,6 +318,7 @@ pub fn get_visual_layer() -> VisualLayerState {
         zone_opacities: HashMap::new(),
         signals: HashMap::new(),
         ambient_params: AmbientParams::default(),
+        readiness: String::new(),
         timestamp: 0.0,
     });
     state.available = state.timestamp > 0.0;
