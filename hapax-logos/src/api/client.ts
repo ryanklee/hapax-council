@@ -1,151 +1,115 @@
 import { invoke } from "@tauri-apps/api/core";
 
-const BASE = "/api";
-
-// Detect if running inside Tauri webview
-const IS_TAURI = "__TAURI_INTERNALS__" in window;
-
-async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`);
-  if (!res.ok) throw new Error(`API ${res.status}: ${path}`);
-  return res.json();
-}
-
-async function post<T>(path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    method: "POST",
-    headers: body ? { "Content-Type": "application/json" } : {},
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) throw new Error(`API ${res.status}: ${path}`);
-  return res.json();
-}
-
-async function put<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`API ${res.status}: ${path}`);
-  return res.json();
-}
-
-async function del<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, { method: "DELETE" });
-  if (!res.ok) throw new Error(`API ${res.status}: ${path}`);
-  return res.json();
-}
-
-/** Invoke a Tauri command if running in Tauri, otherwise fall back to HTTP. */
-async function tauriOrHttp<T>(command: string, httpPath: string, args?: Record<string, unknown>): Promise<T> {
-  if (IS_TAURI) {
-    return invoke<T>(command, args);
-  }
-  return get<T>(httpPath);
-}
-
+/**
+ * SSE URL helper — kept for Task 2 (will be replaced by Tauri event streams).
+ */
 export function sseUrl(path: string): string {
-  return `${BASE}${path}`;
+  return `/api${path}`;
 }
 
 export const api = {
   // --- Tier 1: Tauri commands (file I/O) ---
-  health: () => tauriOrHttp<import("./types").HealthSnapshot | null>("get_health", "/health"),
-  gpu: () => tauriOrHttp<import("./types").VramSnapshot | null>("get_gpu", "/gpu"),
-  infrastructure: () => tauriOrHttp<import("./types").Infrastructure>("get_infrastructure", "/infrastructure"),
-  healthHistory: (days = 7) =>
-    IS_TAURI
-      ? invoke<import("./types").HealthHistory>("get_health_history", { days })
-      : get<import("./types").HealthHistory>(`/health/history?days=${days}`),
-  workingMode: () => tauriOrHttp<import("./types").WorkingModeResponse>("get_working_mode", "/working-mode"),
+  health: () => invoke<import("./types").HealthSnapshot | null>("get_health"),
+  gpu: () => invoke<import("./types").VramSnapshot | null>("get_gpu"),
+  infrastructure: () => invoke<import("./types").Infrastructure>("get_infrastructure"),
+  healthHistory: (days = 7) => invoke<import("./types").HealthHistory>("get_health_history", { days }),
+  workingMode: () => invoke<import("./types").WorkingModeResponse>("get_working_mode"),
   setWorkingMode: (mode: "research" | "rnd") =>
-    IS_TAURI
-      ? invoke<import("./types").WorkingModeResponse>("set_working_mode", { mode })
-      : put<import("./types").WorkingModeResponse>("/working-mode", { mode }),
-  accommodations: () => tauriOrHttp<import("./types").AccommodationSet>("get_accommodations", "/accommodations"),
-  manual: () => tauriOrHttp<import("./types").ManualResponse>("get_manual", "/manual"),
-  goals: () => tauriOrHttp<import("./types").GoalSnapshot>("get_goals", "/goals"),
-  scout: () => tauriOrHttp<import("./types").ScoutData | null>("get_scout", "/scout"),
-  scoutDecisions: () => tauriOrHttp<import("./types").ScoutDecisionsResponse>("get_scout_decisions", "/scout/decisions"),
-  drift: () => tauriOrHttp<import("./types").DriftSummary | null>("get_drift", "/drift"),
-  management: () => tauriOrHttp<import("./types").ManagementSnapshot>("get_management", "/management"),
-  nudges: () => tauriOrHttp<import("./types").Nudge[]>("get_nudges", "/nudges"),
-  readiness: () => tauriOrHttp<import("./types").ReadinessSnapshot>("get_readiness", "/readiness"),
-  agents: () => tauriOrHttp<import("./types").AgentInfo[]>("get_agents", "/agents"),
-  briefing: () => tauriOrHttp<import("./types").BriefingData | null>("get_briefing", "/briefing"),
-  studio: () => tauriOrHttp<import("./types").StudioSnapshot>("get_studio", "/studio"),
-  studioStreamInfo: () => tauriOrHttp<import("./types").StudioStreamInfo>("get_studio_stream_info", "/studio/stream/info"),
-  perception: () => tauriOrHttp<import("./types").PerceptionState>("get_perception", "/studio/perception"),
-  visualLayer: () => tauriOrHttp<import("./types").VisualLayerState>("get_visual_layer", "/studio/visual-layer"),
+    invoke<import("./types").WorkingModeResponse>("set_working_mode", { mode }),
+  accommodations: () => invoke<import("./types").AccommodationSet>("get_accommodations"),
+  manual: () => invoke<import("./types").ManualResponse>("get_manual"),
+  goals: () => invoke<import("./types").GoalSnapshot>("get_goals"),
+  scout: () => invoke<import("./types").ScoutData | null>("get_scout"),
+  scoutDecisions: () => invoke<import("./types").ScoutDecisionsResponse>("get_scout_decisions"),
+  drift: () => invoke<import("./types").DriftSummary | null>("get_drift"),
+  management: () => invoke<import("./types").ManagementSnapshot>("get_management"),
+  nudges: () => invoke<import("./types").Nudge[]>("get_nudges"),
+  readiness: () => invoke<import("./types").ReadinessSnapshot>("get_readiness"),
+  agents: () => invoke<import("./types").AgentInfo[]>("get_agents"),
+  briefing: () => invoke<import("./types").BriefingData | null>("get_briefing"),
+  studio: () => invoke<import("./types").StudioSnapshot>("get_studio"),
+  studioStreamInfo: () => invoke<import("./types").StudioStreamInfo>("get_studio_stream_info"),
+  perception: () => invoke<import("./types").PerceptionState>("get_perception"),
+  visualLayer: () => invoke<import("./types").VisualLayerState>("get_visual_layer"),
   selectEffect: (preset: string) =>
-    IS_TAURI
-      ? invoke<{ status: string; preset: string }>("select_effect", { preset })
-      : post<{ status: string; preset: string }>("/studio/effect/select", { preset }),
-  demos: () => tauriOrHttp<import("./types").Demo[]>("get_demos", "/demos"),
-  demo: (id: string) =>
-    IS_TAURI
-      ? invoke<import("./types").Demo>("get_demo", { id })
-      : get<import("./types").Demo>(`/demos/${id}`),
+    invoke<{ status: string; preset: string }>("select_effect", { preset }),
+  demos: () => invoke<import("./types").Demo[]>("get_demos"),
+  demo: (id: string) => invoke<import("./types").Demo>("get_demo", { id }),
 
   // --- Tier 2: Tauri commands (Qdrant/Langfuse direct) ---
-  cost: () => tauriOrHttp<import("./types").CostSnapshot>("get_cost", "/cost"),
+  cost: () => invoke<import("./types").CostSnapshot>("get_cost"),
 
-  // --- Studio (HTTP-only until Tauri commands added) ---
-  compositorLive: () => get<import("./types").LiveCompositorStatus>("/studio/compositor/live"),
-  studioDisk: () => get<import("./types").StudioDisk>("/studio/disk"),
-  enableRecording: () => post<{ status: string }>("/studio/recording/enable"),
-  disableRecording: () => post<{ status: string }>("/studio/recording/disable"),
+  // --- Proxy commands (Rust → FastAPI at :8051) ---
 
-  // --- Tier 3: Always HTTP (LLM orchestration) ---
-  copilot: () => get<import("./types").CopilotResponse>("/copilot"),
+  // Studio
+  compositorLive: () => invoke<import("./types").LiveCompositorStatus>("proxy_compositor_live"),
+  studioDisk: () => invoke<import("./types").StudioDisk>("proxy_studio_disk"),
+  enableRecording: () => invoke<{ status: string }>("proxy_enable_recording"),
+  disableRecording: () => invoke<{ status: string }>("proxy_disable_recording"),
+
+  // Copilot
+  copilot: () => invoke<import("./types").CopilotResponse>("proxy_copilot"),
+
+  // Scout mutations
   scoutDecide: (component: string, decision: string, notes?: string) =>
-    post<import("./types").ScoutDecision>(`/scout/${component}/decide`, { decision, notes: notes ?? "" }),
-  deleteDemo: (id: string) => del<{ deleted: string }>(`/demos/${id}`),
-
-  // --- Governance & Consent (HTTP-only) ---
-  consentContracts: () => get<unknown[]>("/consent/contracts"),
-  consentTrace: (path?: string) => get<unknown>(`/consent/trace${path ? `?path=${encodeURIComponent(path)}` : ""}`),
-  consentCoverage: () => get<unknown>("/consent/coverage"),
-  consentOverhead: () => get<unknown>("/consent/overhead"),
-  consentPrecedents: () => get<unknown[]>("/consent/precedents"),
-  governanceHeartbeat: () => get<import("./types").GovernanceHeartbeat>("/governance/heartbeat"),
-  governanceCoverage: () => get<unknown>("/governance/coverage"),
-  governanceCarriers: () => get<unknown>("/governance/carriers"),
-
-  // --- Engine (HTTP-only) ---
-  engineStatus: () => get<unknown>("/engine/status"),
-  engineRules: () => get<unknown[]>("/engine/rules"),
-  engineHistory: () => get<unknown[]>("/engine/history"),
-
-  // --- Profile (HTTP-only) ---
-  profile: () => get<unknown>("/profile"),
-  profileDimension: (dim: string) => get<unknown>(`/profile/${dim}`),
-  profilePending: () => get<unknown>("/profile/facts/pending"),
-
-  // --- Insight Queries (HTTP-only, background execution) ---
-  insightQueries: () => get<import("./types").InsightQueryList>("/query/list"),
-  insightQuery: (id: string) => get<import("./types").InsightQuery>(`/query/${id}`),
-  runInsightQuery: (query: string) => post<{ id: string; status: string }>("/query/run", { query }),
-  refineInsightQuery: (query: string, parentId: string, priorResult: string, agentType: string) =>
-    post<{ id: string; status: string }>("/query/refine", {
-      query,
-      parent_id: parentId,
-      prior_result: priorResult,
-      agent_type: agentType,
+    invoke<import("./types").ScoutDecision>("proxy_scout_decide", {
+      component,
+      decision,
+      notes: notes ?? "",
     }),
-  deleteInsightQuery: (id: string) => del<{ deleted: string }>(`/query/${id}`),
 
-  // --- Fortress (HTTP-only) ---
-  fortressState: () => get<import("./types").FortressState>("/fortress/state"),
-  fortressGovernance: () => get<import("./types").FortressGovernance>("/fortress/governance"),
-  fortressGoals: () => get<import("./types").FortressGoals>("/fortress/goals"),
-  fortressEvents: () => get<import("./types").FortressEvents>("/fortress/events"),
-  fortressMetrics: () => get<import("./types").FortressMetrics>("/fortress/metrics"),
-  fortressSessions: () => get<import("./types").FortressSessions>("/fortress/sessions"),
-  fortressChronicle: () => get<import("./types").FortressChronicle>("/fortress/chronicle"),
+  // Demo mutations
+  deleteDemo: (id: string) => invoke<{ deleted: string }>("proxy_delete_demo", { id }),
 
-  // POST/DELETE helpers for mutations
-  post,
-  del,
+  // Governance & Consent
+  consentContracts: () => invoke<unknown[]>("proxy_consent_contracts"),
+  consentTrace: (path?: string) => invoke<unknown>("proxy_consent_trace", { path: path ?? null }),
+  consentCoverage: () => invoke<unknown>("proxy_consent_coverage"),
+  consentOverhead: () => invoke<unknown>("proxy_consent_overhead"),
+  consentPrecedents: () => invoke<unknown[]>("proxy_consent_precedents"),
+  governanceHeartbeat: () =>
+    invoke<import("./types").GovernanceHeartbeat>("proxy_governance_heartbeat"),
+  governanceCoverage: () => invoke<unknown>("proxy_governance_coverage"),
+  governanceCarriers: () => invoke<unknown>("proxy_governance_carriers"),
+
+  // Engine
+  engineStatus: () => invoke<unknown>("proxy_engine_status"),
+  engineRules: () => invoke<unknown[]>("proxy_engine_rules"),
+  engineHistory: () => invoke<unknown[]>("proxy_engine_history"),
+
+  // Profile
+  profile: () => invoke<unknown>("proxy_profile"),
+  profileDimension: (dim: string) => invoke<unknown>("proxy_profile_dimension", { dim }),
+  profilePending: () => invoke<unknown>("proxy_profile_pending"),
+
+  // Insight Queries
+  insightQueries: () => invoke<import("./types").InsightQueryList>("proxy_insight_queries"),
+  insightQuery: (id: string) =>
+    invoke<import("./types").InsightQuery>("proxy_insight_query", { id }),
+  runInsightQuery: (query: string) =>
+    invoke<{ id: string; status: string }>("proxy_run_insight_query", { query }),
+  refineInsightQuery: (query: string, parentId: string, priorResult: string, agentType: string) =>
+    invoke<{ id: string; status: string }>("proxy_refine_insight_query", {
+      query,
+      parentId,
+      priorResult,
+      agentType,
+    }),
+  deleteInsightQuery: (id: string) =>
+    invoke<{ deleted: string }>("proxy_delete_insight_query", { id }),
+
+  // Fortress
+  fortressState: () => invoke<import("./types").FortressState>("proxy_fortress_state"),
+  fortressGovernance: () =>
+    invoke<import("./types").FortressGovernance>("proxy_fortress_governance"),
+  fortressGoals: () => invoke<import("./types").FortressGoals>("proxy_fortress_goals"),
+  fortressEvents: () => invoke<import("./types").FortressEvents>("proxy_fortress_events"),
+  fortressMetrics: () => invoke<import("./types").FortressMetrics>("proxy_fortress_metrics"),
+  fortressSessions: () => invoke<import("./types").FortressSessions>("proxy_fortress_sessions"),
+  fortressChronicle: () => invoke<import("./types").FortressChronicle>("proxy_fortress_chronicle"),
+
+  // Generic proxy helpers (used by ChatProvider and hooks for dynamic paths)
+  post: <T>(path: string, body?: unknown) =>
+    invoke<T>("proxy_post", { path, body: body ?? null }),
+  del: <T>(path: string) => invoke<T>("proxy_delete", { path }),
 };

@@ -34,4 +34,5 @@ dirs = "6"
 
 # Tier 2: Qdrant + Langfuse direct access
 qdrant-client = "1"
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.12", features = ["json", "blocking"] }
+urlencoding = "2"
