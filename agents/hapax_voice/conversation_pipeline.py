@@ -1849,9 +1849,8 @@ class ConversationPipeline:
 
         try:
             _t0 = time.monotonic()
-            # Strip emoji before TTS — Kokoro synthesizes them as
-            # "smiling face with..." or silence. Keep original in
-            # echo detection history (already appended above).
+            # Strip emoji before TTS — they synthesize as Unicode names
+            # or silence. Keep original in echo detection history.
             tts_text = _strip_emoji(text)
             if not tts_text.strip():
                 return  # text was only emoji
@@ -1949,7 +1948,7 @@ class ConversationPipeline:
             self._audio_output = pa.open(
                 format=pyaudio.paInt16,
                 channels=1,
-                rate=24000,  # Kokoro output rate
+                rate=24000,  # Voxtral output rate
                 output=True,
             )
             self._pa = pa
