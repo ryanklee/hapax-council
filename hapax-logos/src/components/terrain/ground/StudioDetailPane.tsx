@@ -24,6 +24,7 @@ export function StudioDetailPane({
     heroRole, setHeroRole,
     effectSourceId, setEffectSourceId,
     smoothMode, setSmoothMode,
+    activePreset, setActivePreset: setActivePresetCtx,
   } = useGroundStudio();
   const { data: studio } = useStudio();
   const { data: streamInfo } = useStudioStreamInfo();
@@ -42,7 +43,6 @@ export function StudioDetailPane({
 
   // Backend presets fetched from API
   const [presets, setPresets] = useState<{ name: string; display_name: string }[]>([]);
-  const [activePreset, setActivePreset] = useState<string | null>(null);
   useEffect(() => {
     fetch("/api/studio/presets")
       .then((r) => r.json())
@@ -76,9 +76,8 @@ export function StudioDetailPane({
   }, [isRecording]);
 
   const activatePreset = (presetName: string) => {
-    fetch(`/api/studio/presets/${presetName}/activate`, { method: "POST" })
-      .then(() => setActivePreset(presetName))
-      .catch(() => {});
+    setActivePresetCtx(presetName);
+    fetch(`/api/studio/presets/${presetName}/activate`, { method: "POST" }).catch(() => {});
   };
 
   // Consent summary

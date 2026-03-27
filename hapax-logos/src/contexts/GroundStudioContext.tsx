@@ -6,6 +6,7 @@ interface StoredState {
   heroRole?: string;
   effectSourceId?: string;
   smoothMode?: boolean;
+  activePreset?: string | null;
 }
 
 function loadState(): StoredState {
@@ -29,6 +30,8 @@ interface GroundStudioState {
   setEffectSourceId: (id: string) => void;
   smoothMode: boolean;
   setSmoothMode: (on: boolean) => void;
+  activePreset: string | null;
+  setActivePreset: (name: string | null) => void;
 }
 
 const GroundStudioContext = createContext<GroundStudioState | null>(null);
@@ -38,16 +41,18 @@ export function GroundStudioProvider({ children }: { children: ReactNode }) {
   const [heroRole, setHeroRole] = useState(stored.heroRole ?? "brio-operator");
   const [effectSourceId, setEffectSourceId] = useState(stored.effectSourceId ?? "camera");
   const [smoothMode, setSmoothMode] = useState(stored.smoothMode ?? false);
+  const [activePreset, setActivePreset] = useState<string | null>(stored.activePreset ?? null);
 
   // Persist on change
   useEffect(() => {
-    saveState({ heroRole, effectSourceId, smoothMode });
-  }, [heroRole, effectSourceId, smoothMode]);
+    saveState({ heroRole, effectSourceId, smoothMode, activePreset });
+  }, [heroRole, effectSourceId, smoothMode, activePreset]);
 
   // Wrap setters in useCallback to avoid unnecessary re-renders
   const setHeroRoleCb = useCallback((v: string) => setHeroRole(v), []);
   const setEffectSourceIdCb = useCallback((v: string) => setEffectSourceId(v), []);
   const setSmoothModeCb = useCallback((v: boolean) => setSmoothMode(v), []);
+  const setActivePresetCb = useCallback((v: string | null) => setActivePreset(v), []);
 
   return (
     <GroundStudioContext.Provider
@@ -55,6 +60,7 @@ export function GroundStudioProvider({ children }: { children: ReactNode }) {
         heroRole, setHeroRole: setHeroRoleCb,
         effectSourceId, setEffectSourceId: setEffectSourceIdCb,
         smoothMode, setSmoothMode: setSmoothModeCb,
+        activePreset, setActivePreset: setActivePresetCb,
       }}
     >
       {children}
