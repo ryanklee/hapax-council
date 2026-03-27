@@ -139,6 +139,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         base_h + hue_var,
     );
 
-    let srgb = linear_to_srgb(clamp(color, vec3<f32>(0.0), vec3<f32>(1.0)));
-    return vec4<f32>(srgb, 1.0);
+    // Output linear RGB — the Rgba8UnormSrgb render target handles the
+    // linear→sRGB encoding automatically on store.
+    return vec4<f32>(clamp(color, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0);
 }
