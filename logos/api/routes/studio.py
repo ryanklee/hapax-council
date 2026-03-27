@@ -737,6 +737,8 @@ async def list_presets():
         if not d.is_dir():
             continue
         for p in sorted(d.glob("*.json")):
+            if p.name.startswith("_"):
+                continue
             if p.stem not in seen:
                 seen.add(p.stem)
                 try:
