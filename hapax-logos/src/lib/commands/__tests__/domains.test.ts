@@ -376,11 +376,11 @@ describe("split domain commands", () => {
     expect(state.region).toBeNull();
   });
 
-  it("split.toggle uses focused region when none provided", async () => {
-    // No focused region info in split state — uses provided region or null
-    // When region omitted and no current region, returns ok:false
+  it("split.toggle defaults to ground when no region provided and no split open", async () => {
+    // No explicit region, no current split — defaults to ground
     const result = await registry.execute("split.toggle", {});
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBe(true);
+    expect(state.region).toBe("ground");
   });
 
   it("split.toggle closes current split when region omitted and split is open", async () => {

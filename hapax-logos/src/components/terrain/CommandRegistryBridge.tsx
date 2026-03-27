@@ -13,6 +13,7 @@ import { useTerrain } from "../../contexts/TerrainContext";
 import { useRecordingToggle } from "../../api/hooks";
 import { registerStudioCommands, type StudioState } from "../../lib/commands/studio";
 import { registerDetectionCommands, type DetectionState } from "../../lib/commands/detection";
+import { selectEffect } from "../../components/studio/effectSources";
 
 function createMirror<T extends object>(initial: T) {
   let state = { ...initial };
@@ -25,7 +26,7 @@ function createMirror<T extends object>(initial: T) {
 
 export function CommandRegistryBridge() {
   const registry = useCommandRegistry();
-  const { smoothMode, setSmoothMode, activePreset, setActivePreset } = useGroundStudio();
+  const { smoothMode, setSmoothMode, activePreset, setActivePreset, setEffectSourceId } = useGroundStudio();
   const { detectionTier, setDetectionTier, detectionLayerVisible, setDetectionLayerVisible } =
     useDetections();
   const { regionDepths, setRegionDepth } = useTerrain();
@@ -64,6 +65,10 @@ export function CommandRegistryBridge() {
         setActivePreset: (name: string) => {
           studioMirror.set({ activePreset: name });
           setActivePreset(name);
+          // Switch hero source to FX so the camera polls the GPU-processed output
+          const fxSource = `fx-${name}`;
+          setEffectSourceId(fxSource);
+          selectEffect(fxSource);
           fetch(`/api/studio/presets/${name}/activate`, { method: "POST" }).catch(() => {});
         },
         cyclePreset: (direction: "next" | "prev") => {

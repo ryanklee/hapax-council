@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Circle, Square, ChevronDown, ChevronRight } from "lucide-react";
-import { EFFECT_SOURCES } from "../../studio/effectSources";
+import { EFFECT_SOURCES, selectEffect } from "../../studio/effectSources";
 import VisualLayerPanel from "../../studio/VisualLayerPanel";
 import {
   useStudio,
@@ -77,6 +77,9 @@ export function StudioDetailPane({
 
   const activatePreset = (presetName: string) => {
     setActivePresetCtx(presetName);
+    const fxSource = `fx-${presetName}`;
+    setEffectSourceId(fxSource);
+    selectEffect(fxSource);
     fetch(`/api/studio/presets/${presetName}/activate`, { method: "POST" }).catch(() => {});
   };
 
