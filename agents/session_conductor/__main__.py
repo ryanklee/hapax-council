@@ -108,6 +108,10 @@ def cmd_start(args: argparse.Namespace) -> None:
             if hasattr(rule, "write_completion"):
                 summary = state.workstream_summary or "Session ended"
                 rule.write_completion(summary)  # type: ignore[attr-defined]
+        try:
+            state.save(state_path)
+        except OSError:
+            log.exception("Failed to save state during shutdown")
         server.shutdown()
 
     signal.signal(signal.SIGTERM, _handle_sigterm)

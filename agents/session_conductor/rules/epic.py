@@ -121,6 +121,16 @@ class EpicRule(RuleBase):
                     ),
                 )
 
+        # Increment gap_rounds during gap review phases
+        if state.epic_phase in (EpicPhase.DESIGN_GAPS, EpicPhase.PLANNING_GAPS):
+            state.gap_rounds += 1
+            log.debug(
+                "EpicRule: gap round %d/%d in %s",
+                state.gap_rounds,
+                MAX_GAP_ROUNDS,
+                state.epic_phase.value,
+            )
+
         # Check if a convergence/cap-driven phase transition is needed
         return self._check_phase_transition(state)
 
