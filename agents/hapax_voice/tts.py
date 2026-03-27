@@ -1,30 +1,28 @@
-"""Tiered TTS abstraction — Piper for short utterances, Kokoro for conversation."""
+"""Tiered TTS abstraction — Voxtral backend via Mistral hosted API."""
 
 from __future__ import annotations
 
+import base64
 import logging
-from pathlib import Path
+import os
 
 import numpy as np
 
 log = logging.getLogger(__name__)
 
 _TIER_MAP: dict[str, str] = {
-    "conversation": "kokoro",
-    "notification": "kokoro",
-    "briefing": "kokoro",
-    "proactive": "kokoro",
+    "conversation": "voxtral",
+    "notification": "voxtral",
+    "briefing": "voxtral",
+    "proactive": "voxtral",
 }
 
-PIPER_MODEL_DIR = Path.home() / ".local" / "share" / "hapax-voice"
-PIPER_MODEL_DEFAULT = PIPER_MODEL_DIR / "piper-voice.onnx"
-PIPER_SAMPLE_RATE = 22050  # Piper default sample rate
-KOKORO_SAMPLE_RATE = 24000
+VOXTRAL_SAMPLE_RATE = 24000
 
 
 def select_tier(use_case: str) -> str:
-    """Select TTS tier for a given use case, defaulting to kokoro."""
-    return _TIER_MAP.get(use_case, "kokoro")
+    """Select TTS tier for a given use case, defaulting to voxtral."""
+    return _TIER_MAP.get(use_case, "voxtral")
 
 
 def _audio_to_pcm_int16(audio: np.ndarray) -> bytes:
@@ -35,102 +33,85 @@ def _audio_to_pcm_int16(audio: np.ndarray) -> bytes:
     return pcm.tobytes()
 
 
+def _decode_pcm_f32_b64(data: str) -> np.ndarray:
+    """Decode base64-encoded float32 little-endian PCM into a numpy array."""
+    raw = base64.b64decode(data)
+    return np.frombuffer(raw, dtype="<f4")
+
+
 class TTSManager:
-    """Manages TTS synthesis across Piper (fast) and Kokoro (expressive) tiers."""
+    """Manages TTS synthesis via Mistral Voxtral API."""
 
     def __init__(
         self,
-        kokoro_voice: str = "af_heart",
-        piper_model_path: str | Path | None = None,
+        voice_id: str = "jessica",
+        ref_audio_path: str | None = None,
     ) -> None:
-        self.kokoro_voice = kokoro_voice
-        self.piper_model_path = Path(piper_model_path) if piper_model_path else PIPER_MODEL_DEFAULT
-        self._piper_model = None
-        self._kokoro_pipeline = None
+        self.voice_id = voice_id
+        self.ref_audio_path = ref_audio_path
+        self._ref_audio_b64: str | None = None
+        self._client = None
+
+        # Pre-encode reference audio if provided
+        if ref_audio_path is not None:
+            with open(ref_audio_path, "rb") as f:
+                self._ref_audio_b64 = base64.b64encode(f.read()).decode("ascii")
+
+    def _get_client(self):
+        """Lazy-init Mistral client from MISTRAL_API_KEY env var."""
+        if self._client is None:
+            from mistralai import Mistral
+
+            api_key = os.environ.get("MISTRAL_API_KEY")
+            if not api_key:
+                raise RuntimeError(
+                    "MISTRAL_API_KEY environment variable is not set. Set it to use Voxtral TTS."
+                )
+            self._client = Mistral(api_key=api_key)
+        return self._client
 
     def preload(self) -> None:
-        """Eagerly load TTS models at startup instead of lazy-loading on first use."""
-        if self._kokoro_pipeline is None:
-            self._load_kokoro()
+        """Validate API key availability at startup."""
+        api_key = os.environ.get("MISTRAL_API_KEY")
+        if not api_key:
+            raise RuntimeError(
+                "MISTRAL_API_KEY environment variable is not set. Set it to use Voxtral TTS."
+            )
+        log.info("Voxtral TTS ready (voice_id=%s)", self.voice_id)
 
     def synthesize(self, text: str, use_case: str = "conversation") -> bytes:
-        """Synthesize text to raw PCM int16 audio bytes using the appropriate TTS tier."""
+        """Synthesize text to raw PCM int16 audio bytes using Voxtral."""
         tier = select_tier(use_case)
         log.debug("TTS tier=%s for use_case=%s", tier, use_case)
-        if tier == "piper":
-            return self._synthesize_piper(text)
-        return self._synthesize_kokoro(text)
+        return self._synthesize_voxtral(text)
 
-    def _load_piper(self) -> None:
-        """Lazy-load the Piper ONNX voice model."""
-        try:
-            from piper import PiperVoice
-        except ImportError:
-            raise RuntimeError(
-                "piper-tts is not installed. Install with: uv pip install piper-tts"
-            ) from None
+    def _synthesize_voxtral(self, text: str) -> bytes:
+        """Stream TTS from Mistral Voxtral API, returning PCM int16 bytes."""
+        client = self._get_client()
 
-        model_path = self.piper_model_path
-        if not model_path.exists():
-            raise RuntimeError(
-                f"Piper voice model not found at {model_path}. "
-                f"Download a .onnx voice model to {PIPER_MODEL_DIR}/"
-            )
-
-        config_path = model_path.with_suffix(".onnx.json")
-        log.info("Loading Piper model from %s", model_path)
-        self._piper_model = PiperVoice.load(
-            str(model_path),
-            config_path=str(config_path) if config_path.exists() else None,
-        )
-
-    def _synthesize_piper(self, text: str) -> bytes:
-        """Synthesize using Piper (lightweight, CPU-only, fast)."""
-        if self._piper_model is None:
-            self._load_piper()
+        # Build request kwargs — voice_id and ref_audio are mutually exclusive
+        kwargs: dict = {
+            "model": "voxtral-mini-tts-2603",
+            "input": text,
+            "response_format": "pcm",
+            "stream": True,
+        }
+        if self._ref_audio_b64 is not None:
+            kwargs["ref_audio"] = self._ref_audio_b64
+        else:
+            kwargs["voice_id"] = self.voice_id
 
         chunks: list[bytes] = []
-        for audio_bytes in self._piper_model.synthesize_stream_raw(text):
-            chunks.append(audio_bytes)
+        with client.audio.speech.complete(**kwargs) as stream:
+            for event in stream:
+                if event.event == "speech.audio.delta":
+                    audio_f32 = _decode_pcm_f32_b64(event.data.audio_data)
+                    chunks.append(_audio_to_pcm_int16(audio_f32))
+                elif event.event == "speech.audio.done":
+                    break
 
         if not chunks:
-            log.warning("Piper produced no audio for text: %r", text[:50])
-            return b""
-
-        return b"".join(chunks)
-
-    def _load_kokoro(self) -> None:
-        """Lazy-load the Kokoro TTS pipeline."""
-        try:
-            import kokoro
-        except ImportError:
-            raise RuntimeError(
-                "kokoro is not installed. Install with: uv pip install kokoro"
-            ) from None
-
-        log.info("Loading Kokoro pipeline (voice=%s)...", self.kokoro_voice)
-        try:
-            self._kokoro_pipeline = kokoro.KPipeline(lang_code="a")
-        except Exception as exc:
-            raise RuntimeError(f"Failed to initialize Kokoro pipeline: {exc}") from exc
-
-    def _synthesize_kokoro(self, text: str) -> bytes:
-        """Synthesize using Kokoro (expressive, GPU-accelerated)."""
-        if self._kokoro_pipeline is None:
-            self._load_kokoro()
-
-        chunks: list[bytes] = []
-        for _graphemes, _phonemes, audio_tensor in self._kokoro_pipeline(
-            text, voice=self.kokoro_voice
-        ):
-            # audio_tensor is a torch tensor — convert to numpy float32 then to PCM int16
-            audio_np = audio_tensor.cpu().numpy().astype(np.float32)
-            if audio_np.ndim > 1:
-                audio_np = audio_np.squeeze()
-            chunks.append(_audio_to_pcm_int16(audio_np))
-
-        if not chunks:
-            log.warning("Kokoro produced no audio for text: %r", text[:50])
+            log.warning("Voxtral produced no audio for text: %r", text[:50])
             return b""
 
         return b"".join(chunks)
