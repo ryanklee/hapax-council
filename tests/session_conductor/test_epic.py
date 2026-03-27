@@ -102,7 +102,7 @@ def test_transitions_to_design_gaps_on_write():
 def test_gap_phases_capped():
     topology = TopologyConfig()
     state = _make_state(phase=EpicPhase.DESIGN_GAPS)
-    state._gap_rounds = 2  # type: ignore[attr-defined]
+    state.gap_rounds = 2
     rule = EpicRule(topology, state)
     # After cap, should advance past gap phase
     rule.check_phase_transition(state)

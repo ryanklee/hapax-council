@@ -10,6 +10,7 @@ from pathlib import Path
 from agents.session_conductor.rules import HookEvent, HookResponse, RuleBase
 from agents.session_conductor.state import (
     MAX_RESEARCH_ROUNDS,
+    SessionState,
     TopicState,
 )
 from agents.session_conductor.topology import TopologyConfig
@@ -131,9 +132,11 @@ class ConvergenceRule(RuleBase):
     def __init__(
         self,
         topology: TopologyConfig,
+        state: SessionState | None = None,
         context_dir: Path | None = None,
     ) -> None:
         super().__init__(topology)
+        self._state = state
         self.context_dir = context_dir or DEFAULT_CONTEXT_DIR
         self.context_dir.mkdir(parents=True, exist_ok=True)
         # slug -> TopicState, lives for the session
@@ -207,10 +210,18 @@ class ConvergenceRule(RuleBase):
         topic.rounds += 1
         topic.findings_per_round.append(findings_count)
 
-        # Persist findings to context file
+        # Sync to shared state so EpicRule can see convergence
+        if self._state is not None:
+            self._state.active_topics[slug] = topic
+
+        # Persist findings to context file with timestamps
         try:
             existing = topic.prior_file.read_text() if topic.prior_file.exists() else ""
-            topic.prior_file.write_text(existing + output)
+            timestamp = datetime.now().isoformat(timespec="seconds")
+            section = (
+                f"\n## {timestamp} — Round {topic.rounds} ({findings_count} findings)\n{output}\n"
+            )
+            topic.prior_file.write_text(existing + section)
             log.debug(
                 "ConvergenceRule: persisted %d findings for topic %s (round %d)",
                 findings_count,

@@ -27,9 +27,6 @@ _DESIGN_DOC_RE = re.compile(r"(DESIGN|design[_-]doc|design\.md)", re.IGNORECASE)
 # Filenames that indicate a plan doc write
 _PLAN_DOC_RE = re.compile(r"(PLAN|plan[_-]doc|plan\.md|implementation[_-]plan)", re.IGNORECASE)
 
-# Internal attribute name used to track gap rounds on SessionState at runtime
-_GAP_ROUNDS_ATTR = "_gap_rounds"
-
 
 def is_epic_trigger(text: str) -> bool:
     """Return True if the text matches any epic entry pattern."""
@@ -63,12 +60,12 @@ class EpicRule(RuleBase):
             if state.epic_phase == EpicPhase.DESIGN and _DESIGN_DOC_RE.search(file_path):
                 log.info("EpicRule: design doc written — transitioning to DESIGN_GAPS")
                 state.epic_phase = EpicPhase.DESIGN_GAPS
-                setattr(state, _GAP_ROUNDS_ATTR, 0)
+                state.gap_rounds = 0
                 return None
             if state.epic_phase == EpicPhase.PLANNING and _PLAN_DOC_RE.search(file_path):
                 log.info("EpicRule: plan doc written — transitioning to PLANNING_GAPS")
                 state.epic_phase = EpicPhase.PLANNING_GAPS
-                setattr(state, _GAP_ROUNDS_ATTR, 0)
+                state.gap_rounds = 0
                 return None
 
         # After post-tool-use, check if a phase transition is needed
@@ -92,7 +89,7 @@ class EpicRule(RuleBase):
 
         # Gap phases: advance when gap rounds are at MAX_GAP_ROUNDS
         elif state.epic_phase in (EpicPhase.DESIGN_GAPS, EpicPhase.PLANNING_GAPS):
-            gap_rounds = getattr(state, _GAP_ROUNDS_ATTR, 0)
+            gap_rounds = state.gap_rounds
             if gap_rounds >= MAX_GAP_ROUNDS:
                 next_phase = EPIC_PHASE_ORDER[current_idx + 1]
                 log.info(
@@ -101,4 +98,4 @@ class EpicRule(RuleBase):
                     next_phase.value,
                 )
                 state.epic_phase = next_phase
-                setattr(state, _GAP_ROUNDS_ATTR, 0)
+                state.gap_rounds = 0
