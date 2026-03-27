@@ -2008,13 +2008,24 @@ class StudioCompositor:
                 for (node_id, param), value in updates.items():
                     self._on_graph_params_changed(node_id, {param: value})
 
-        # --- Graph mode: push time/resolution to all active slots ---
+        # --- Graph mode: push time/resolution to active slots that declare these uniforms ---
+        # Only push uniforms the shader actually declares — pushing undeclared uniforms
+        # via GstStructure corrupts the GL shader state and produces black frames.
         if self._fx_graph_mode and self._slot_pipeline:
+            time_uniforms = {"time": t, "width": 1920.0, "height": 1080.0}
             for i, node_type in enumerate(self._slot_pipeline.slot_assignments):
-                if node_type is not None:
-                    self._slot_pipeline._set_uniforms(
-                        i, {"time": t, "width": 1920.0, "height": 1080.0}
-                    )
+                if node_type is None:
+                    continue
+                # Check which uniforms the node type actually declares
+                defn = (
+                    self._slot_pipeline._registry.get(node_type)
+                    if self._slot_pipeline._registry
+                    else None
+                )
+                if defn and defn.params:
+                    declared = {k: v for k, v in time_uniforms.items() if k in defn.params}
+                    if declared:
+                        self._slot_pipeline._set_uniforms(i, declared)
 
         return True  # keep timer running
 
