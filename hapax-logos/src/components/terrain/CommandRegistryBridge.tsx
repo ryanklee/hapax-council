@@ -14,7 +14,7 @@ import { useRecordingToggle } from "../../api/hooks";
 import { registerStudioCommands, type StudioState } from "../../lib/commands/studio";
 import { registerDetectionCommands, type DetectionState } from "../../lib/commands/detection";
 
-function createMirror<T extends Record<string, unknown>>(initial: T) {
+function createMirror<T extends object>(initial: T) {
   let state = { ...initial };
   return {
     get: () => state,
@@ -25,7 +25,7 @@ function createMirror<T extends Record<string, unknown>>(initial: T) {
 
 export function CommandRegistryBridge() {
   const registry = useCommandRegistry();
-  const { smoothMode, setSmoothMode } = useGroundStudio();
+  const { smoothMode, setSmoothMode, activePreset, setActivePreset } = useGroundStudio();
   const { detectionTier, setDetectionTier, detectionLayerVisible, setDetectionLayerVisible } =
     useDetections();
   const { regionDepths, setRegionDepth } = useTerrain();
@@ -43,7 +43,7 @@ export function CommandRegistryBridge() {
   })).current;
 
   // Sync mirrors on every render
-  studioMirror.sync({ smoothMode, activePreset: "", recording: false });
+  studioMirror.sync({ smoothMode, activePreset: activePreset ?? "", recording: false });
   detectionMirror.sync({ tier: detectionTier as 1 | 2 | 3, visible: detectionLayerVisible });
 
   const depthsRef = useRef(regionDepths);
@@ -63,6 +63,7 @@ export function CommandRegistryBridge() {
         },
         setActivePreset: (name: string) => {
           studioMirror.set({ activePreset: name });
+          setActivePreset(name);
           fetch(`/api/studio/presets/${name}/activate`, { method: "POST" }).catch(() => {});
         },
         cyclePreset: (direction: "next" | "prev") => {
