@@ -5,6 +5,7 @@
  */
 import { useEffect } from "react";
 import { useTerrainActions } from "../contexts/TerrainContext";
+import { api } from "../api/client";
 import type { RegionName, Depth, Overlay, InvestigationTab } from "../contexts/TerrainContext";
 
 export interface DemoBridge {
@@ -50,11 +51,7 @@ export function useDemoBridge(): DemoBridge {
     },
     studio: {
       selectPreset: (preset: string) => {
-        fetch("/api/studio/effect/select", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ preset }),
-        }).catch(() => {});
+        api.post("/api/studio/effect/select", { preset }).catch(() => {});
       },
     },
   };

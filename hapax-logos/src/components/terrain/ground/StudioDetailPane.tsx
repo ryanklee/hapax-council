@@ -12,6 +12,7 @@ import {
 import type { ClassificationDetection } from "../../../api/types";
 import { useGroundStudio } from "../../../contexts/GroundStudioContext";
 import { useTerrainActions, useTerrainDisplay } from "../../../contexts/TerrainContext";
+import { api } from "../../../api/client";
 
 interface StudioDetailPaneProps {
   classificationDetections: ClassificationDetection[];
@@ -44,8 +45,7 @@ export function StudioDetailPane({
   // Backend presets fetched from API
   const [presets, setPresets] = useState<{ name: string; display_name: string }[]>([]);
   useEffect(() => {
-    fetch("/api/studio/presets")
-      .then((r) => r.json())
+    api.get<{ presets: { name: string; display_name: string }[] }>("/api/studio/presets")
       .then((d) => setPresets(d.presets ?? []))
       .catch(() => {});
   }, []);
@@ -80,7 +80,7 @@ export function StudioDetailPane({
     const fxSource = `fx-${presetName}`;
     setEffectSourceId(fxSource);
     selectEffect(fxSource);
-    fetch(`/api/studio/presets/${presetName}/activate`, { method: "POST" }).catch(() => {});
+    api.post(`/api/studio/presets/${presetName}/activate`).catch(() => {});
   };
 
   // Consent summary

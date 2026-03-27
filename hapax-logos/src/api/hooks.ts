@@ -69,7 +69,7 @@ export function useNudgeAction() {
 export const useChatModels = () =>
   useQuery({
     queryKey: ["chatModels"],
-    queryFn: () => fetch("/api/chat/models").then(r => r.json()) as Promise<import("./types").ChatModelsResponse>,
+    queryFn: () => api.get<import("./types").ChatModelsResponse>("/api/chat/models"),
     staleTime: Infinity,
   });
 

@@ -14,6 +14,7 @@ import { useRecordingToggle } from "../../api/hooks";
 import { registerStudioCommands, type StudioState } from "../../lib/commands/studio";
 import { registerDetectionCommands, type DetectionState } from "../../lib/commands/detection";
 import { selectEffect } from "../../components/studio/effectSources";
+import { api } from "../../api/client";
 
 function createMirror<T extends object>(initial: T) {
   let state = { ...initial };
@@ -69,10 +70,10 @@ export function CommandRegistryBridge() {
           const fxSource = `fx-${name}`;
           setEffectSourceId(fxSource);
           selectEffect(fxSource);
-          fetch(`/api/studio/presets/${name}/activate`, { method: "POST" }).catch(() => {});
+          api.post(`/api/studio/presets/${name}/activate`).catch(() => {});
         },
         cyclePreset: (direction: "next" | "prev") => {
-          fetch(`/api/studio/presets/cycle?direction=${direction}`, { method: "POST" }).catch(
+          api.post(`/api/studio/presets/cycle?direction=${direction}`).catch(
             () => {},
           );
         },

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { api } from "../api/client";
 
 interface NodeMetrics {
   [key: string]: unknown;
@@ -63,11 +64,8 @@ export function useSystemFlow() {
         if (mounted) setFlowState(state);
       } catch {
         try {
-          const resp = await fetch("/api/flow/state");
-          if (resp.ok) {
-            const state = await resp.json();
-            if (mounted) setFlowState(state);
-          }
+          const state = await api.get<SystemFlowState>("/api/flow/state");
+          if (mounted) setFlowState(state);
         } catch {
           if (mounted && !flowState) setFlowState(staticTopology());
         }

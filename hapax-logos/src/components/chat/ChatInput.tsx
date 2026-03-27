@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { useChatContext } from "./ChatProvider";
 import { useInputHistory } from "../../hooks/useInputHistory";
 import { Send, StopCircle } from "lucide-react";
+import { api } from "../../api/client";
 
 const SLASH_COMMANDS = [
   { cmd: "/help", desc: "Show available commands" },
@@ -142,20 +143,14 @@ export function ChatInput() {
     try {
       if (args[0] === "correct" && args.length >= 4) {
         const [, dim, key, ...rest] = args;
-        const res = await fetch(`/api/profile/correct`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ dimension: dim, key, value: rest.join(" ") }),
-        });
-        const data = await res.json();
+        const data = await api.post<{ result: string }>("/api/profile/correct", { dimension: dim, key, value: rest.join(" ") });
         addSystemMessage(`Correction applied: ${data.result}`);
         return;
       }
 
       const dim = args[0] || "";
       const url = dim ? `/api/profile/${dim}` : "/api/profile";
-      const res = await fetch(url);
-      const data = await res.json();
+      const data = await api.get<Record<string, unknown>>(url);
 
       if (data.dimensions) {
         const lines = data.dimensions.map(
@@ -176,8 +171,7 @@ export function ChatInput() {
 
   async function handlePendingCommand() {
     try {
-      const res = await fetch("/api/profile/facts/pending");
-      const data = await res.json();
+      const data = await api.get<{ count: number; facts: { dimension: string; key: string; value: string }[] }>("/api/profile/facts/pending");
       if (data.count === 0) {
         addSystemMessage("No pending facts.");
       } else {
@@ -193,8 +187,7 @@ export function ChatInput() {
 
   async function handleFlushCommand() {
     try {
-      const res = await fetch("/api/profile/facts/flush", { method: "POST" });
-      const data = await res.json();
+      const data = await api.post<{ flushed: number }>("/api/profile/facts/flush");
       addSystemMessage(`Flushed ${data.flushed} facts to profile.`);
     } catch (err) {
       addSystemMessage(`Error: ${err}`);
@@ -204,17 +197,16 @@ export function ChatInput() {
   async function handleAccommodateCommand(args: string[]) {
     try {
       if (args[0] === "confirm" && args[1]) {
-        await fetch(`/api/accommodations/${args[1]}/confirm`, { method: "POST" });
+        await api.post(`/api/accommodations/${args[1]}/confirm`);
         addSystemMessage(`Accommodation '${args[1]}' activated.`);
         return;
       }
       if (args[0] === "disable" && args[1]) {
-        await fetch(`/api/accommodations/${args[1]}/disable`, { method: "POST" });
+        await api.post(`/api/accommodations/${args[1]}/disable`);
         addSystemMessage(`Accommodation '${args[1]}' deactivated.`);
         return;
       }
-      const res = await fetch("/api/accommodations");
-      const data = await res.json();
+      const data = await api.get<{ accommodations?: { id: string; description: string; active: boolean }[] }>("/api/accommodations");
       if (data.accommodations?.length) {
         const lines = data.accommodations.map(
           (a: { id: string; description: string; active: boolean }) =>
