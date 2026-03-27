@@ -29,19 +29,32 @@ class SlotPipeline:
         self._slots: list[Any] = []
         self._slot_assignments: list[str | None] = [None] * num_slots
 
-    def build_chain(self, pipeline: Any, Gst: Any, upstream: Any, downstream: Any) -> None:
-        """Create N glshader elements, link them between upstream and downstream."""
+    def create_slots(self, Gst: Any) -> list[Any]:
+        """Create N glshader slot elements. Call before adding to pipeline."""
         self._slots = []
-        prev = upstream
         for i in range(self._num_slots):
             slot = Gst.ElementFactory.make("glshader", f"effect-slot-{i}")
             slot.set_property("fragment", PASSTHROUGH_SHADER)
-            pipeline.add(slot)
-            prev.link(slot)
             self._slots.append(slot)
+        return list(self._slots)
+
+    def link_chain(self, upstream: Any, downstream: Any) -> None:
+        """Link slots between upstream and downstream. Call after pipeline.add()."""
+        prev = upstream
+        for slot in self._slots:
+            if not prev.link(slot):
+                log.error("Failed to link %s → %s", prev.get_name(), slot.get_name())
             prev = slot
-        prev.link(downstream)
+        if not prev.link(downstream):
+            log.error("Failed to link %s → %s", prev.get_name(), downstream.get_name())
         log.info("Built %d-slot shader pipeline", self._num_slots)
+
+    def build_chain(self, pipeline: Any, Gst: Any, upstream: Any, downstream: Any) -> None:
+        """Create N glshader elements, link them between upstream and downstream."""
+        slots = self.create_slots(Gst)
+        for slot in slots:
+            pipeline.add(slot)
+        self.link_chain(upstream, downstream)
 
     def activate_plan(self, plan: ExecutionPlan) -> None:
         """Assign graph nodes to slots in topological order."""

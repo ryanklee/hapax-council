@@ -54,7 +54,10 @@ class TTSManager:
 
         # Pre-encode reference audio if provided
         if ref_audio_path is not None:
-            with open(ref_audio_path, "rb") as f:
+            from pathlib import Path
+
+            resolved = Path(ref_audio_path).expanduser()
+            with open(resolved, "rb") as f:
                 self._ref_audio_b64 = base64.b64encode(f.read()).decode("ascii")
 
     def _get_client(self):

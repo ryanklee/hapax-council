@@ -79,7 +79,7 @@ class VoiceConfig(BaseModel):
     gemini_model: str = "gemini-2.5-flash-preview-native-audio"
     local_stt_model: str = "distil-large-v3"
     voxtral_voice_id: str = "jessica"
-    voxtral_ref_audio: str = ""  # path to reference audio for voice cloning
+    voxtral_ref_audio: str = "~/.local/share/hapax-voice/formant-refs/reed-24k.wav"  # eSpeak-NG Reed (Klatt mode 6) — formant carrier for hardware chain
 
     # Consent
     consent_debounce_s: float = 5.0  # sustained presence before triggering
