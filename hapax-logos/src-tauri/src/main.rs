@@ -67,6 +67,7 @@ fn main() {
             commands::introspect::visual_ping,
             commands::introspect::ui_directive,
             // Proxy (HTTP-only endpoints → FastAPI :8051)
+            commands::proxy::proxy_get_generic,
             commands::proxy::proxy_post,
             commands::proxy::proxy_delete,
             commands::proxy::proxy_compositor_live,
@@ -114,7 +115,12 @@ fn main() {
             browser::a11y::browser_a11y_tree,
             browser::services::browser_get_services,
             browser::services::browser_resolve_url,
+            // Streaming (SSE bridge)
+            commands::streaming::start_stream,
+            commands::streaming::cancel_stream,
+            commands::streaming::cancel_stream_and_server,
         ])
+        .manage(commands::streaming::StreamRegistry::new())
         .setup(|app| {
             // Spawn the wgpu visual surface on a dedicated thread
             // Skip if HAPAX_NO_VISUAL=1 (useful when visual surface conflicts with Wayland)

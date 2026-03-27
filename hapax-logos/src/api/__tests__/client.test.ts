@@ -9,18 +9,12 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: mockInvoke,
 }));
 
-import { api, sseUrl } from "../client";
+import { api } from "../client";
 
 describe("api client (invoke-only)", () => {
   beforeEach(() => {
     mockInvoke.mockReset();
     mockInvoke.mockResolvedValue({});
-  });
-
-  // --- sseUrl ---
-
-  it("sseUrl prepends /api", () => {
-    expect(sseUrl("/health/stream")).toBe("/api/health/stream");
   });
 
   // --- Tier 1: no-arg commands ---
@@ -201,6 +195,13 @@ describe("api client (invoke-only)", () => {
     });
   });
 
+  it("get invokes proxy_get_generic with path", async () => {
+    await api.get("/chat/sessions/abc");
+    expect(mockInvoke).toHaveBeenCalledWith("proxy_get_generic", {
+      path: "/chat/sessions/abc",
+    });
+  });
+
   it("del invokes proxy_delete with path", async () => {
     await api.del("/agents/runs/current");
     expect(mockInvoke).toHaveBeenCalledWith("proxy_delete", {
@@ -210,13 +211,12 @@ describe("api client (invoke-only)", () => {
 
   // --- No HTTP remnants ---
 
-  it("does not export IS_TAURI, BASE, tauriOrHttp, get, put", () => {
+  it("does not export IS_TAURI, BASE, tauriOrHttp, put", () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const mod = api as any;
     expect(mod.IS_TAURI).toBeUndefined();
     expect(mod.BASE).toBeUndefined();
     expect(mod.tauriOrHttp).toBeUndefined();
-    expect(mod.get).toBeUndefined();
     expect(mod.put).toBeUndefined();
   });
 });

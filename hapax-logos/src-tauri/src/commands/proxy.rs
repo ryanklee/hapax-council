@@ -61,6 +61,11 @@ async fn proxy_delete_req(path: &str) -> Result<Value, String> {
 // ── Generic proxy commands (for ChatProvider and other dynamic paths) ─────────
 
 #[tauri::command]
+pub async fn proxy_get_generic(path: String) -> Result<Value, String> {
+    proxy_get(&path).await
+}
+
+#[tauri::command]
 pub async fn proxy_post(path: String, body: Option<Value>) -> Result<Value, String> {
     proxy_post_json(&path, body).await
 }

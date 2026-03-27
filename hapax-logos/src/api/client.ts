@@ -1,12 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
 
-/**
- * SSE URL helper — kept for Task 2 (will be replaced by Tauri event streams).
- */
-export function sseUrl(path: string): string {
-  return `/api${path}`;
-}
-
 export const api = {
   // --- Tier 1: Tauri commands (file I/O) ---
   health: () => invoke<import("./types").HealthSnapshot | null>("get_health"),
@@ -109,6 +102,7 @@ export const api = {
   fortressChronicle: () => invoke<import("./types").FortressChronicle>("proxy_fortress_chronicle"),
 
   // Generic proxy helpers (used by ChatProvider and hooks for dynamic paths)
+  get: <T>(path: string) => invoke<T>("proxy_get_generic", { path }),
   post: <T>(path: string, body?: unknown) =>
     invoke<T>("proxy_post", { path, body: body ?? null }),
   del: <T>(path: string) => invoke<T>("proxy_delete", { path }),

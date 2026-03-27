@@ -6,6 +6,7 @@ pub mod health;
 pub mod introspect;
 pub mod proxy;
 pub mod state;
+pub mod streaming;
 pub mod studio;
 pub mod system_flow;
 
