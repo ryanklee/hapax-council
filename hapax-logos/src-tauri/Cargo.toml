@@ -34,4 +34,15 @@ dirs = "6"
 
 # Tier 2: Qdrant + Langfuse direct access
 qdrant-client = "1"
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.12", features = ["json", "blocking", "stream"] }
+urlencoding = "2"
+
+# JPEG encoding for visual surface frames
+turbojpeg = "1"
+
+# HTTP frame server (visual surface)
+axum = "0.8"
+
+# Command relay (WebSocket server for external clients)
+tokio-tungstenite = "0.26"
+regex = "1"

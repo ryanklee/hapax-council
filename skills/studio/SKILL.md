@@ -1,6 +1,6 @@
 ---
 name: studio
-description: Check music production infrastructure. Auto-run when: operator mentions MIDI, audio, music production, beats, or studio setup, when audio/MIDI errors appear in tool output (PostToolUse suggests it), or user asks about studio. Invoke proactively without asking.
+description: "Check music production infrastructure. Auto-run when: operator mentions MIDI, audio, music production, beats, or studio setup, when audio/MIDI errors appear in tool output (PostToolUse suggests it), or user asks about studio. Invoke proactively without asking."
 ---
 
 Check music production infrastructure:

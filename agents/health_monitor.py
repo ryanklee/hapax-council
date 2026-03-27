@@ -562,18 +562,11 @@ async def check_gpu_temperature() -> list[CheckResult]:
 @check_group("systemd")
 async def check_systemd_services() -> list[CheckResult]:
     services = [
-        ("rag-ingest.service", True, "systemctl --user restart rag-ingest"),
         ("profile-update.timer", True, "systemctl --user enable --now profile-update.timer"),
         ("digest.timer", True, "systemctl --user enable --now digest.timer"),
         ("knowledge-maint.timer", True, "systemctl --user enable --now knowledge-maint.timer"),
         ("midi-route.service", False, None),
-        ("gcalendar-sync.timer", True, "systemctl --user restart gcalendar-sync"),
-        ("gdrive-sync.timer", True, "systemctl --user restart gdrive-sync"),
-        ("gmail-sync.timer", True, "systemctl --user restart gmail-sync"),
-        ("youtube-sync.timer", True, "systemctl --user restart youtube-sync"),
-        ("chrome-sync.timer", True, "systemctl --user restart chrome-sync"),
-        ("claude-code-sync.timer", True, "systemctl --user restart claude-code-sync"),
-        ("obsidian-sync.timer", True, "systemctl --user restart obsidian-sync"),
+        # Sync timers offloaded to hapax-pi6 (192.168.68.74) — checked via connectivity.pi
     ]
     results: list[CheckResult] = []
 
@@ -679,9 +672,24 @@ async def check_systemd_drift() -> list[CheckResult]:
             )
         ]
 
+    # Sync agents offloaded to hapax-pi6 — not expected locally
+    pi6_offloaded = {
+        "chrome-sync",
+        "claude-code-sync",
+        "gcalendar-sync",
+        "gdrive-sync",
+        "gmail-sync",
+        "langfuse-sync",
+        "obsidian-sync",
+        "youtube-sync",
+    }
+
     drifted = []
     for unit_file in sorted(repo_units.iterdir()):
         if unit_file.suffix not in (".service", ".timer"):
+            continue
+        stem = unit_file.name.rsplit(".", 1)[0]
+        if stem in pi6_offloaded:
             continue
         deployed = deployed_dir / unit_file.name
         if not deployed.exists():

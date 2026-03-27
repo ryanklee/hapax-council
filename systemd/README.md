@@ -27,10 +27,8 @@ prometheus, clickhouse,             hapax-voice       → voice daemon (GPU)
 n8n, open-webui, minio, ntfy       visual-layer-agg  → perception pipeline
                                     studio-compositor → camera tiling (GPU)
 Managed by:                         studio-fx-output  → ffmpeg /dev/video50
-  llm-stack.service (oneshot)       audio-recorder    → pw-record → FLAC
-  llm-stack-analytics.service       hapax-watch-recv  → Wear OS biometrics
-                                    rag-ingest        → document ingestion
-                                    41 timers         → sync, health, backups
+  llm-stack.service (oneshot)       hapax-watch-recv  → Wear OS biometrics
+  llm-stack-analytics.service       31 timers         → sync, health, backups
 ```
 
 ## Boot Sequence
@@ -64,7 +62,6 @@ Written to `/run/user/1000/hapax-secrets.env` (tmpfs, 0600). All services declar
 |---------|-----------|----------------|------|-----------|
 | hapax-voice | 8G | -500 | -10 | default |
 | studio-compositor | 4G | default | default | 500 |
-| rag-ingest | 4G | default | 10 | 25 |
 | visual-layer-aggregator | 1G | default | default | default |
 | logos-api | 1G | default | default | default |
 | officium-api | 512M | default | default | default |
@@ -99,24 +96,7 @@ See `process-compose.yaml` (development only, not in boot chain).
 
 ## Storage Management
 
-Three automated systems prevent disk exhaustion:
-
-### Video Retention (`video-retention.timer` — every 15min)
-
-Manages `~/video-recording/` (6 cameras, ~6GB/day). Two-phase lifecycle:
-1. **Unprocessed** files: kept for 12h (pipeline should ingest during this window)
-2. **Processed** files (`.processed` sidecar): deleted after 6h
-
-Disk pressure override — tiered response:
-
-| Root Usage | Retention Window | Mode |
-|------------|-----------------|------|
-| < 85% | 12h | Normal |
-| 85-94% | 6h | Pressure |
-| 95-96% | 3h | Critical |
-| 97%+ | 1h | Emergency |
-
-Also sweeps `~/.cache/hapax/tmp-wav/` for leaked audio temp files (>5min old) and kills orphan `pacat --record` processes when >2 concurrent.
+Two automated systems prevent disk exhaustion:
 
 ### Cache Cleanup (`cache-cleanup.timer` — weekly Sun 03:00)
 
@@ -135,9 +115,23 @@ Secrets: local password in `pass show backups/restic-password`, remote in `pass 
 
 ### Known Leak Sources
 
-- **pacat --record**: Voice daemon's audio capture backends spawn `pacat` subprocesses that can orphan on crash/OOM. Each writes an unbounded WAV file (~7GB before detection). Mitigated by video-retention sweep (15min) and cache-cleanup.
-- **Studio compositor**: Single-file recording (no segmentation) can occur if GStreamer `splitmuxsink` fails to split. Mitigated by segment_seconds config and retention timer.
+- **pacat --record**: Voice daemon's audio capture backends spawn `pacat` subprocesses that can orphan on crash/OOM. Each writes an unbounded WAV file (~7GB before detection). Mitigated by cache-cleanup.
 - **Claude Code task output**: Background task output in `/tmp/claude-1000/` can grow unbounded. Not automatically cleaned — monitor `/tmp` usage.
+
+## Disabled Services (archival pipeline)
+
+The following services and timers are disabled (2026-03-27). They supported 24/7 audio/video recording, classification, and RAG ingestion — purely archival with no live consumers. The live perception and effects pipeline (compositor, VLA, fx, person detector) is unaffected as it captures directly from cameras and PipeWire.
+
+| Unit | Purpose | Re-enable with |
+|------|---------|---------------|
+| `audio-recorder.service` | Blue Yeti → FLAC archival | `systemctl --user enable --now audio-recorder` |
+| `contact-mic-recorder.service` | Cortado → FLAC archival | `systemctl --user enable --now contact-mic-recorder` |
+| `rag-ingest.service` | Document watchdog → Qdrant | `systemctl --user enable --now rag-ingest` |
+| `audio-processor.timer` | FLAC classify → RAG docs | `systemctl --user enable --now audio-processor.timer` |
+| `video-processor.timer` | MKV classify → sidecars | `systemctl --user enable --now video-processor.timer` |
+| `av-correlator.timer` | Cross-modal → studio_moments | `systemctl --user enable --now av-correlator.timer` |
+| `flow-journal.timer` | Flow transitions → RAG docs | `systemctl --user enable --now flow-journal.timer` |
+| `video-retention.timer` | Prune old MKV segments | `systemctl --user enable --now video-retention.timer` |
 
 ## Recovery
 

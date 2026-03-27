@@ -1,11 +1,11 @@
 import { useState, useRef, useCallback } from "react";
-import { connectSSE } from "../api/sse";
+import { startCancellableStream, type StreamHandle } from "../api/stream";
 
 interface UseSSEReturn {
   lines: string[];
   isRunning: boolean;
   error: string | null;
-  start: (url: string, body?: unknown) => void;
+  start: (path: string, body?: unknown) => void;
   cancel: () => void;
   clear: () => void;
 }
@@ -14,16 +14,16 @@ export function useSSE(): UseSSEReturn {
   const [lines, setLines] = useState<string[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const controllerRef = useRef<AbortController | null>(null);
+  const handleRef = useRef<StreamHandle | null>(null);
 
-  const start = useCallback((url: string, body?: unknown) => {
+  const start = useCallback((path: string, body?: unknown) => {
     // Cancel any existing stream
-    controllerRef.current?.abort();
+    handleRef.current?.cancel();
     setLines([]);
     setError(null);
     setIsRunning(true);
 
-    controllerRef.current = connectSSE(url, {
+    startCancellableStream(path, {
       method: "POST",
       body,
       onEvent: (event) => {
@@ -51,13 +51,13 @@ export function useSSE(): UseSSEReturn {
         setError(err.message);
         setIsRunning(false);
       },
+    }).then((handle) => {
+      handleRef.current = handle;
     });
   }, []);
 
   const cancel = useCallback(() => {
-    controllerRef.current?.abort();
-    // Also tell the server to cancel
-    fetch("/api/agents/runs/current", { method: "DELETE" }).catch(() => {});
+    handleRef.current?.cancel();
   }, []);
 
   const clear = useCallback(() => {

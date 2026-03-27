@@ -1,5 +1,5 @@
 import { createContext, useContext, useReducer, useCallback, useRef, useEffect, type ReactNode } from "react";
-import { connectSSE } from "../../api/sse";
+import { startStream, type StreamHandle } from "../../api/stream";
 import { api } from "../../api/client";
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -189,12 +189,12 @@ function clearSavedSession() {
 
 export function ChatProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(chatReducer, initialState);
-  const controllerRef = useRef<AbortController | null>(null);
+  const handleRef = useRef<StreamHandle | null>(null);
 
-  // Abort any active stream on unmount
+  // Cancel any active stream on unmount
   useEffect(() => {
     return () => {
-      controllerRef.current?.abort();
+      handleRef.current?.cancel();
     };
   }, []);
 
@@ -205,11 +205,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     const saved = loadSession();
     if (saved) {
       try {
-        const info = await fetch(`/api/chat/sessions/${saved.sessionId}`);
-        if (info.ok) {
-          dispatch({ type: "SET_SESSION", sessionId: saved.sessionId, model: saved.model });
-          return;
-        }
+        await api.get(`/chat/sessions/${saved.sessionId}`);
+        dispatch({ type: "SET_SESSION", sessionId: saved.sessionId, model: saved.model });
+        return;
       } catch { /* session gone — create new */ }
       clearSavedSession();
     }
@@ -242,7 +240,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
       dispatch({ type: "STREAM_START" });
 
-      controllerRef.current = connectSSE(`/api/chat/sessions/${state.sessionId}/send`, {
+      startStream(`/api/chat/sessions/${state.sessionId}/send`, {
         method: "POST",
         body: { message: text },
         onEvent: (event) => {
@@ -285,13 +283,15 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         },
         onError: (err) => dispatch({ type: "STREAM_ERROR", message: err.message }),
         onDone: () => dispatch({ type: "STREAM_ABORT" }),
+      }).then((handle) => {
+        handleRef.current = handle;
       });
     },
     [state.sessionId, state.isStreaming],
   );
 
   const stopGeneration = useCallback(() => {
-    controllerRef.current?.abort();
+    handleRef.current?.cancel();
     if (state.sessionId) {
       api.post(`/chat/sessions/${state.sessionId}/stop`).catch(() => {});
     }
@@ -356,7 +356,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     dispatch({ type: "SET_MODE", mode: "interview" });
     dispatch({ type: "STREAM_START" });
 
-    controllerRef.current = connectSSE(`/api/chat/sessions/${state.sessionId}/interview`, {
+    startStream(`/api/chat/sessions/${state.sessionId}/interview`, {
       method: "POST",
       onEvent: (event) => {
         try {
@@ -403,6 +403,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       },
       onError: (err) => dispatch({ type: "STREAM_ERROR", message: err.message }),
       onDone: () => dispatch({ type: "STREAM_ABORT" }),
+    }).then((handle) => {
+      handleRef.current = handle;
     });
   }, [state.sessionId, state.isStreaming, addSystemMessage]);
 
@@ -434,9 +436,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const getInterviewStatus = useCallback(async (): Promise<InterviewStatus | null> => {
     if (!state.sessionId) return null;
     try {
-      const res = await fetch(`/api/chat/sessions/${state.sessionId}/interview/status`);
-      if (!res.ok) return null;
-      return await res.json() as InterviewStatus;
+      return await api.get<InterviewStatus>(`/chat/sessions/${state.sessionId}/interview/status`);
     } catch {
       return null;
     }

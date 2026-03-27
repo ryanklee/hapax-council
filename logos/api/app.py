@@ -102,8 +102,6 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5173",  # Vite dev server
-        "http://127.0.0.1:5173",
         "tauri://localhost",  # Tauri desktop app
     ],
     allow_credentials=True,
@@ -130,7 +128,6 @@ except Exception:
 from logos.api.routes.accommodations import router as accommodations_router
 from logos.api.routes.agents import router as agents_router
 from logos.api.routes.chat import router as chat_router
-from logos.api.routes.commands import router as commands_router
 from logos.api.routes.consent import router as consent_router
 from logos.api.routes.copilot import router as copilot_router
 from logos.api.routes.data import router as data_router
@@ -165,7 +162,6 @@ app.include_router(studio_router)
 app.include_router(logos_router)
 app.include_router(flow_router)
 app.include_router(fortress_router)
-app.include_router(commands_router)
 
 # Mount HLS segment directory for live stream serving
 # Override .ts MIME type: Starlette defaults to Qt Linguist (text/vnd.trolltech.linguist)

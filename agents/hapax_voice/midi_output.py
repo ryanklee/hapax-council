@@ -7,10 +7,21 @@ if no MIDI hardware is available (logs warning, becomes a no-op).
 from __future__ import annotations
 
 import logging
-
-import mido
+from typing import Any
 
 log = logging.getLogger(__name__)
+
+# Lazy-import mido so the module loads even without the dependency installed.
+mido: Any = None
+
+
+def _ensure_mido() -> Any:
+    global mido  # noqa: PLW0603
+    if mido is None:
+        import mido as _mido
+
+        mido = _mido
+    return mido
 
 
 class MidiOutput:
@@ -18,7 +29,7 @@ class MidiOutput:
 
     def __init__(self, port_name: str = "") -> None:
         self._port_name = port_name
-        self._port: mido.ports.BaseOutput | None = None
+        self._port: Any = None
         self._init_failed = False
 
     def send_cc(self, channel: int, cc: int, value: int) -> None:
@@ -37,14 +48,16 @@ class MidiOutput:
                 return
 
         value = max(0, min(127, value))
-        msg = mido.Message("control_change", channel=channel, control=cc, value=value)
+        m = _ensure_mido()
+        msg = m.Message("control_change", channel=channel, control=cc, value=value)
         self._port.send(msg)
 
     def _open_port(self) -> None:
         """Lazy-open the MIDI output port."""
         try:
+            m = _ensure_mido()
             name = self._port_name or None  # None = mido picks first available
-            self._port = mido.open_output(name)
+            self._port = m.open_output(name)
             log.info("MIDI output opened: %s", self._port.name)
         except OSError as exc:
             log.warning("No MIDI output available (%s) — vocal chain disabled", exc)

@@ -18,6 +18,7 @@ import { useVisualLayer } from "../../api/hooks";
 import { useTerrain, useTerrainDisplay, type RegionName } from "../../contexts/TerrainContext";
 import { CommandRegistryBridge } from "./CommandRegistryBridge";
 import { CommandFeedback } from "./CommandFeedback";
+import { VisualSurface } from "../visual/VisualSurface";
 
 function useGridRows(): string {
   const { regionDepths } = useTerrainDisplay();
@@ -187,6 +188,9 @@ export function TerrainLayout() {
         className="h-screen w-screen overflow-hidden relative"
         style={{ fontFamily: "'JetBrains Mono', monospace", background: "#1d2021" }}
       >
+        {/* z-(-1): wgpu visual surface (JPEG frames from Rust) */}
+        <VisualSurface />
+
         {/* z-0: Ambient shader background */}
         <AmbientShader
           speed={ambient.speed}

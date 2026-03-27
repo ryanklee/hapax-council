@@ -50,6 +50,7 @@ fn main() {
             visual::control::get_visual_surface_state,
             visual::control::set_visual_layer_param,
             visual::control::get_visual_surface_snapshot,
+            visual::control::toggle_visual_window,
             // Introspection: Hapax self-manipulation
             commands::introspect::navigate,
             commands::introspect::toggle_panel,
@@ -66,6 +67,43 @@ fn main() {
             commands::introspect::set_visual_stance,
             commands::introspect::visual_ping,
             commands::introspect::ui_directive,
+            // Proxy (HTTP-only endpoints → FastAPI :8051)
+            commands::proxy::proxy_get_generic,
+            commands::proxy::proxy_post,
+            commands::proxy::proxy_delete,
+            commands::proxy::proxy_compositor_live,
+            commands::proxy::proxy_studio_disk,
+            commands::proxy::proxy_enable_recording,
+            commands::proxy::proxy_disable_recording,
+            commands::proxy::proxy_copilot,
+            commands::proxy::proxy_scout_decide,
+            commands::proxy::proxy_delete_demo,
+            commands::proxy::proxy_consent_contracts,
+            commands::proxy::proxy_consent_trace,
+            commands::proxy::proxy_consent_coverage,
+            commands::proxy::proxy_consent_overhead,
+            commands::proxy::proxy_consent_precedents,
+            commands::proxy::proxy_governance_heartbeat,
+            commands::proxy::proxy_governance_coverage,
+            commands::proxy::proxy_governance_carriers,
+            commands::proxy::proxy_engine_status,
+            commands::proxy::proxy_engine_rules,
+            commands::proxy::proxy_engine_history,
+            commands::proxy::proxy_profile,
+            commands::proxy::proxy_profile_dimension,
+            commands::proxy::proxy_profile_pending,
+            commands::proxy::proxy_insight_queries,
+            commands::proxy::proxy_insight_query,
+            commands::proxy::proxy_run_insight_query,
+            commands::proxy::proxy_refine_insight_query,
+            commands::proxy::proxy_delete_insight_query,
+            commands::proxy::proxy_fortress_state,
+            commands::proxy::proxy_fortress_governance,
+            commands::proxy::proxy_fortress_goals,
+            commands::proxy::proxy_fortress_events,
+            commands::proxy::proxy_fortress_metrics,
+            commands::proxy::proxy_fortress_sessions,
+            commands::proxy::proxy_fortress_chronicle,
             // Browser (agent-controlled web access)
             browser::commands::browser_navigate,
             browser::commands::browser_eval,
@@ -78,7 +116,12 @@ fn main() {
             browser::a11y::browser_a11y_tree,
             browser::services::browser_get_services,
             browser::services::browser_resolve_url,
+            // Streaming (SSE bridge)
+            commands::streaming::start_stream,
+            commands::streaming::cancel_stream,
+            commands::streaming::cancel_stream_and_server,
         ])
+        .manage(commands::streaming::StreamRegistry::new())
         .setup(|app| {
             // Spawn the wgpu visual surface on a dedicated thread
             // Skip if HAPAX_NO_VISUAL=1 (useful when visual surface conflicts with Wayland)
@@ -87,10 +130,14 @@ fn main() {
             } else {
                 log::info!("Visual surface disabled (HAPAX_NO_VISUAL=1)");
             }
+            // Spawn the HTTP frame server (GET /frame, GET /stats on :8053)
+            visual::http_server::start_frame_server();
             // Spawn the directive watcher (reads agent directives from shm)
             commands::directive_watcher::spawn_directive_watcher(app.handle().clone());
             // Spawn headless browser engine for agent web access
             browser::commands::spawn_browser_engine(app.handle().clone());
+            // Spawn command relay WebSocket server for external clients (MCP, voice)
+            commands::relay::spawn_relay_server(app.handle());
             Ok(())
         })
         .run(tauri::generate_context!())

@@ -1,14 +1,10 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
-const IS_TAURI = "__TAURI_INTERNALS__" in window;
-
 export function SurfacePreview() {
   const [imgSrc, setImgSrc] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!IS_TAURI) return;
-
     let active = true;
     const poll = async () => {
       while (active) {
@@ -31,14 +27,6 @@ export function SurfacePreview() {
       active = false;
     };
   }, []);
-
-  if (!IS_TAURI) {
-    return (
-      <div className="flex items-center justify-center rounded border border-zinc-700 bg-zinc-900 p-8 text-xs text-zinc-500">
-        Surface preview requires Tauri runtime
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-2">

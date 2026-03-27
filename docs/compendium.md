@@ -865,14 +865,12 @@ hapax-secrets.service          (oneshot) Load all credentials from pass store
 │   ├─► llm-stack-analytics    (oneshot) docker compose --profile analytics up -d [60s delay]
 │   ├─► logos-api.service      FastAPI on :8051
 │   ├─► officium-api.service   FastAPI on :8050
-│   └─► rag-ingest.service     Docling document ingestion watchdog
 ├─► hapax-voice.service        Voice daemon (After: pipewire, secrets) [10s delay]
 ├─► visual-layer-aggregator    Perception → Stimmung → /dev/shm (After: logos-api, voice)
 ├─► studio-compositor.service  GPU camera tiling/recording/HLS (After: voice, visual-agg)
 │   └─► studio-fx-output       ffmpeg snapshot → /dev/video50
-├─► audio-recorder.service     pw-record → ffmpeg FLAC segmenting (After: pipewire)
 ├─► hapax-watch-receiver       Uvicorn on :8042 (Wear OS biometrics)
-└─► 41 timers                  Sync agents, health monitor, VRAM watchdog, backups
+└─► 31 timers                  Sync agents, health monitor, VRAM watchdog, backups
 ```
 
 **Secrets**: Single `hapax-secrets.service` (oneshot, RemainAfterExit=yes) writes all credentials to `/run/user/1000/hapax-secrets.env`. All services declare `Requires=hapax-secrets.service`. No inline `pass show` calls in individual services. No race conditions.
@@ -880,7 +878,7 @@ hapax-secrets.service          (oneshot) Load all credentials from pass store
 **Resource isolation**: Each service has its own cgroup with explicit MemoryMax, OOMScoreAdjust, Nice, and CPUWeight. Priority tiers:
 - Tier 0 (real-time): studio-compositor (CPUWeight=500)
 - Tier 1 (interactive): hapax-voice (Nice=-10, OOMScoreAdjust=-500, MemoryMax=8G)
-- Tier 2 (background): rag-ingest, studio-fx-output (Nice=10)
+- Tier 2 (background): studio-fx-output (Nice=10)
 
 **Recovery**: Kernel panic auto-reboots in 10s. Hardware watchdog (SP5100 TCO) forces reset if systemd hangs. greetd autologin + lingering ensures all services restart without human intervention.
 
