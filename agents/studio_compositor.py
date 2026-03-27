@@ -769,7 +769,10 @@ class StudioCompositor:
         self._add_effects_branch(pipeline, output_tee)
 
         # Smooth delay branch (@smooth layer source)
-        self._add_smooth_delay_branch(pipeline, output_tee)
+        # TODO: _add_smooth_delay_branch not yet merged — Rust plugin built but
+        # method definition missing from compositor session's commit. Skipping
+        # until the compositor session adds it.
+        # self._add_smooth_delay_branch(pipeline, output_tee)
 
         return pipeline
 
