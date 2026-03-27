@@ -1,6 +1,6 @@
 ---
 name: ingest
-description: Check RAG ingestion pipeline. Auto-run when: a query returns stale or missing results, after adding documents to watched directories, when qdrant errors appear (PostToolUse suggests it), or user asks about RAG/ingestion. Invoke proactively without asking.
+description: "Check RAG ingestion pipeline. Auto-run when: a query returns stale or missing results, after adding documents to watched directories, when qdrant errors appear (PostToolUse suggests it), or user asks about RAG/ingestion. Invoke proactively without asking."
 ---
 
 Check RAG ingestion pipeline:

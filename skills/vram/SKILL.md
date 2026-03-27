@@ -1,6 +1,6 @@
 ---
 name: vram
-description: Show detailed VRAM analysis. Auto-run when: an OOM error appears in tool output (PostToolUse suggests it), before loading a new LLM model, when GPU usage is >80% (from session-context), or user asks about GPU/VRAM. Invoke proactively without asking.
+description: "Show detailed VRAM analysis. Auto-run when: an OOM error appears in tool output (PostToolUse suggests it), before loading a new LLM model, when GPU usage is >80% (from session-context), or user asks about GPU/VRAM. Invoke proactively without asking."
 ---
 
 Show detailed VRAM analysis:

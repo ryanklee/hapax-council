@@ -1,8 +1,6 @@
 // Prevents additional console window on Windows in release
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use tauri::Manager;
-
 mod browser;
 mod commands;
 mod visual;
@@ -124,16 +122,12 @@ fn main() {
         ])
         .manage(commands::streaming::StreamRegistry::new())
         .setup(|app| {
-            // Spawn the wgpu visual surface
-            // HAPAX_NO_VISUAL=1 disables, HAPAX_VISUAL_POC=1 runs overlay PoC
-            if std::env::var("HAPAX_NO_VISUAL").unwrap_or_default() == "1" {
-                log::info!("Visual surface disabled (HAPAX_NO_VISUAL=1)");
-            } else if std::env::var("HAPAX_VISUAL_POC").unwrap_or_default() == "1" {
-                log::info!("Running visual overlay PoC (HAPAX_VISUAL_POC=1)");
-                let window = app.get_webview_window("main").unwrap();
-                visual::poc_overlay::spawn_overlay_poc(app.handle().clone(), window);
-            } else {
+            // Spawn the wgpu visual surface on a dedicated thread
+            // Skip if HAPAX_NO_VISUAL=1 (useful when visual surface conflicts with Wayland)
+            if std::env::var("HAPAX_NO_VISUAL").unwrap_or_default() != "1" {
                 visual::bridge::spawn_visual_surface(app.handle().clone());
+            } else {
+                log::info!("Visual surface disabled (HAPAX_NO_VISUAL=1)");
             }
             // Spawn the directive watcher (reads agent directives from shm)
             commands::directive_watcher::spawn_directive_watcher(app.handle().clone());

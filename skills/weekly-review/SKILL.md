@@ -1,6 +1,6 @@
 ---
 name: weekly-review
-description: Aggregate the week's system data into a structured review. Auto-run when: it is Sunday evening or Monday morning and session-context shows no review this week, or user asks for a weekly summary. Invoke proactively without asking.
+description: "Aggregate the week's system data into a structured review. Auto-run when: it is Sunday evening or Monday morning and session-context shows no review this week, or user asks for a weekly summary. Invoke proactively without asking."
 ---
 
 # Weekly System Review
