@@ -654,9 +654,17 @@ async def replace_effect_graph(request: dict[str, Any]):
     if not _graph_runtime:
         raise HTTPException(503, "Compositor not available")
     try:
-        _graph_runtime.load_graph(EffectGraph(**request))
+        graph = EffectGraph(**request)
+        _graph_runtime.load_graph(graph)
     except Exception as e:
         raise HTTPException(400, str(e)) from e
+    # Write graph to shm for compositor's GStreamer pipeline
+    try:
+        mutation_path = Path("/dev/shm/hapax-compositor/graph-mutation.json")
+        mutation_path.parent.mkdir(parents=True, exist_ok=True)
+        mutation_path.write_text(_json_mod.dumps(graph.model_dump()))
+    except OSError:
+        pass
     return {"status": "ok"}
 
 
@@ -774,6 +782,13 @@ async def activate_preset(name: str):
         _graph_runtime.load_graph(p)
     except Exception as e:
         raise HTTPException(400, str(e)) from e
+    # Write to shm so compositor's GStreamer pipeline picks up the change
+    try:
+        fx_req = Path("/dev/shm/hapax-compositor/fx-request.txt")
+        fx_req.parent.mkdir(parents=True, exist_ok=True)
+        fx_req.write_text(name)
+    except OSError:
+        pass
     return {"status": "ok", "name": p.name}
 
 

@@ -43,6 +43,30 @@ async def lifespan(app: FastAPI):
     except Exception:
         _log.exception("Qdrant schema verification failed (continuing)")
 
+    # Initialize effect graph runtime (pure Python — no GPU/GStreamer needed)
+    try:
+        from pathlib import Path as _Path
+
+        from agents.effect_graph.compiler import GraphCompiler
+        from agents.effect_graph.modulator import UniformModulator
+        from agents.effect_graph.registry import ShaderRegistry
+        from agents.effect_graph.runtime import GraphRuntime
+        from logos.api.routes.studio import set_graph_runtime, set_shader_registry
+
+        _shader_nodes_dir = _Path(__file__).parent.parent.parent / "agents" / "shaders" / "nodes"
+        _registry = ShaderRegistry(_shader_nodes_dir)
+        _compiler = GraphCompiler(_registry)
+        _modulator = UniformModulator()
+        _runtime = GraphRuntime(registry=_registry, compiler=_compiler, modulator=_modulator)
+
+        set_graph_runtime(_runtime)
+        set_shader_registry(_registry)
+        _log.info(
+            "Effect graph runtime: %d node types loaded (API-local)", len(_registry.node_types)
+        )
+    except Exception:
+        _log.exception("Effect graph runtime failed to initialize (continuing without it)")
+
     # Start reactive engine
     try:
         from logos.engine import ReactiveEngine
