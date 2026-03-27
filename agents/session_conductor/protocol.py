@@ -89,7 +89,7 @@ class ConductorServer:
                 return
             try:
                 event_data = json.loads(raw.decode())
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, UnicodeDecodeError):
                 response = {"action": "allow", "error": "invalid JSON"}
                 writer.write((json.dumps(response) + "\n").encode())
                 await writer.drain()

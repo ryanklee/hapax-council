@@ -127,3 +127,29 @@ def test_transitions_to_implementation():
     assert (
         state.epic_phase == EpicPhase.PLANNING_GAPS or state.epic_phase == EpicPhase.IMPLEMENTATION
     )
+
+
+def test_gap_rounds_increment_on_tool_use():
+    """gap_rounds should increment each tool use during gap phases."""
+    topology = TopologyConfig()
+    state = _make_state(phase=EpicPhase.DESIGN_GAPS)
+    assert state.gap_rounds == 0
+    rule = EpicRule(topology, state)
+    event = _make_agent_event("review the design for issues")
+    rule.on_post_tool_use(event)
+    assert state.gap_rounds == 1
+    assert state.epic_phase == EpicPhase.DESIGN_GAPS  # not yet transitioned
+
+
+def test_gap_rounds_auto_transition():
+    """Gap phases should auto-transition after MAX_GAP_ROUNDS tool uses."""
+    from agents.session_conductor.state import MAX_GAP_ROUNDS
+
+    topology = TopologyConfig()
+    state = _make_state(phase=EpicPhase.DESIGN_GAPS)
+    rule = EpicRule(topology, state)
+    event = _make_agent_event("review the design for gaps")
+    for _ in range(MAX_GAP_ROUNDS):
+        rule.on_post_tool_use(event)
+    assert state.epic_phase == EpicPhase.PLANNING
+    assert state.gap_rounds == 0
