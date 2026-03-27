@@ -9,7 +9,7 @@ Shared conventions (uv, ruff, testing, git workflow, pydantic-ai) are in the wor
 **Filesystem-as-bus**: Agents read/write markdown files with YAML frontmatter on disk. A reactive engine (inotify) watches for changes and cascades downstream work.
 
 **Three tiers**:
-- **Tier 1** — Interactive interfaces (hapax-logos React SPA at :5173, waybar GTK4 status bar, VS Code extension)
+- **Tier 1** — Interactive interfaces (hapax-logos Tauri native app, waybar GTK4 status bar, VS Code extension)
 - **Tier 2** — LLM-driven agents (pydantic-ai, routed through LiteLLM at :4000)
 - **Tier 3** — Deterministic agents (sync, health, maintenance — no LLM calls)
 
@@ -34,7 +34,7 @@ Centralized automation layer for all Logos UI actions. Every action (focus regio
 **Access points:**
 - **Playwright / browser console**: `window.__logos.execute("terrain.focus", { region: "ground" })`
 - **Keyboard**: Single adapter in `CommandRegistryProvider`, key map in `lib/keyboardAdapter.ts`
-- **External (MCP, voice)**: WebSocket relay at `ws://localhost:8051/ws/commands`
+- **External (MCP, voice)**: WebSocket relay at `ws://localhost:8052/ws/commands` (Rust, inside Tauri)
 - **CommandPalette**: Reads from `registry.list()` dynamically
 
 **Key files:**
@@ -44,11 +44,26 @@ Centralized automation layer for all Logos UI actions. Every action (focus regio
 - `hapax-logos/src/lib/keyboardAdapter.ts` — Key map with `when`-clause conditional bindings
 - `hapax-logos/src/contexts/CommandRegistryContext.tsx` — React provider, `window.__logos`, keyboard handler
 - `hapax-logos/src/components/terrain/CommandRegistryBridge.tsx` — Bridges studio/detection contexts
-- `logos/api/routes/commands.py` — WebSocket relay endpoint
+- `hapax-logos/src/lib/commandBridge.ts` — Tauri event bridge for command relay
+- `hapax-logos/src-tauri/src/commands/relay.rs` — Rust WebSocket relay server (:8052)
 
 **State mirrors:** The provider maintains synchronous state mirrors updated eagerly by action wrappers. This ensures `query()` returns post-execution state without waiting for React re-render. Mirrors sync from React state on each render.
 
 **Spec:** `docs/superpowers/specs/2026-03-26-logos-command-registry-design.md`
+
+## Tauri-Only Runtime
+
+Logos is a Tauri 2 native app. The frontend speaks **only IPC** — zero browser `fetch()` calls. All API communication goes through `invoke()` to Rust commands, which proxy to FastAPI at `:8051` internally.
+
+**Key services inside Tauri process:**
+- **IPC commands** — 60+ invoke handlers (health, state, studio, governance, proxy passthrough)
+- **SSE bridge** — Rust subscribes to FastAPI SSE streams, re-emits as Tauri events (`commands/streaming.rs`)
+- **Command relay** — WebSocket server on `:8052` for MCP/voice (`commands/relay.rs`)
+- **HTTP frame server** — Axum on `:8053` serves visual surface JPEG frames (`visual/http_server.rs`)
+
+**Visual surface in webview:** The wgpu render pipeline (6 techniques, compositor, postprocess) runs on a winit thread and writes JPEG frames to `/dev/shm/hapax-visual/frame.jpg` via turbojpeg. The `VisualSurface` React component fetches frames at 30fps from `:8053` and displays them as a fullscreen background behind terrain regions. The winit window is toggleable (`toggle_visual_window` command) for dual-monitor effects display.
+
+**Dev workflow:** `pnpm tauri dev` is the only dev path. Vite serves assets to the Tauri webview only — no proxy, no exposed API.
 
 ## Council-Specific Conventions
 
@@ -85,7 +100,7 @@ PreToolUse hooks enforce branch discipline and safety at the tool-call level:
 | `push-gate.sh` | Bash | Push without passing tests |
 | `pii-guard.sh` | Edit, Write | PII patterns in file content |
 | `axiom-commit-scan.sh` | Bash | Commit messages violating axiom patterns |
-| `session-context.sh` | Bash | Advisory: detects vite dev server worktree mismatch |
+| `session-context.sh` | Bash | Advisory: session context and relay status |
 
 Destructive command detection strips quoted strings before matching to prevent false positives from commit messages that discuss git commands.
 
