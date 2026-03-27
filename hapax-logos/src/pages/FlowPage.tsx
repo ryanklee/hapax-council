@@ -16,6 +16,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { invoke } from "@tauri-apps/api/core";
+import { api } from "../api/client";
 import { useTheme } from "../theme/ThemeProvider";
 import type { ThemePalette } from "../theme/palettes";
 
@@ -277,8 +278,10 @@ function DetailPanel({ node, onClose }: { node: FlowNode | null; onClose: () => 
 function useSystemSummary() {
   const [s, setS] = useState<{ hp: number; ht: number; gp: number; gt: number; ct: number } | null>(null);
   useEffect(() => { let m = true;
-    const poll = async () => { try { const [h, g, c] = await Promise.allSettled([fetch("/api/health").then(r=>r.json()), fetch("/api/gpu").then(r=>r.json()), fetch("/api/cost").then(r=>r.json())]);
-      if (!m) return; const hv = h.status === "fulfilled" ? h.value : {}, gv = g.status === "fulfilled" ? g.value : {}, cv = c.status === "fulfilled" ? c.value : {};
+    const poll = async () => { try { const [h, g, c] = await Promise.allSettled([api.health(), api.gpu(), api.cost()]);
+      if (!m) return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const hv: any = h.status === "fulfilled" ? h.value : {}, gv: any = g.status === "fulfilled" ? g.value : {}, cv: any = c.status === "fulfilled" ? c.value : {};
       setS({ hp: (hv.total_checks ?? 0) - (hv.failed ?? 0), ht: hv.total_checks ?? 0, gp: gv.usage_pct ?? 0, gt: gv.temperature_c ?? 0, ct: cv.today_cost ?? 0 }); } catch { /* polling failure — stale data shown */ } };
     poll(); const iv = setInterval(poll, 30000); return () => { m = false; clearInterval(iv); };
   }, []); return s;
@@ -305,7 +308,7 @@ export function FlowPage() {
   const ss = useSystemSummary();
 
   useEffect(() => { let m = true;
-    const poll = async () => { try { const st = await invoke<SystemFlowState>("get_system_flow"); if (m) setFlowState(st); } catch { try { const r = await fetch("/api/flow/state"); if (r.ok) { const st = await r.json(); if (m) setFlowState(st); } } catch { if (m && !flowState) setFlowState(staticTopology()); } } };
+    const poll = async () => { try { const st = await invoke<SystemFlowState>("get_system_flow"); if (m) setFlowState(st); } catch { try { const st = await api.get<SystemFlowState>("/api/flow/state"); if (m) setFlowState(st); } catch { if (m && !flowState) setFlowState(staticTopology()); } } };
     poll(); const iv = setInterval(poll, 3000); return () => { m = false; clearInterval(iv); };
   }, []);
 

@@ -9,6 +9,7 @@
 
 import { useEffect, useState } from "react";
 import { useTheme } from "../../theme/ThemeProvider";
+import { api } from "../../api/client";
 
 interface FlowNode {
   id: string;
@@ -49,8 +50,8 @@ export function SystemStatus() {
     let mounted = true;
     const poll = async () => {
       try {
-        const resp = await fetch("/api/flow/state");
-        if (resp.ok && mounted) setState(await resp.json());
+        const data = await api.get<FlowState>("/api/flow/state");
+        if (mounted) setState(data);
       } catch { /* offline */ }
     };
     poll();

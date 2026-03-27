@@ -61,8 +61,8 @@ impl Compositor {
 
         let sampler = gpu.device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("composite sampler"),
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
             ..Default::default()
         });
 
@@ -74,22 +74,22 @@ impl Compositor {
                         // Uniforms
                         bgl_buffer(0),
                         // Gradient
-                        bgl_texture(1, true),
+                        bgl_texture(1, false),
                         // R-D
-                        bgl_texture(2, true),
+                        bgl_texture(2, false),
                         // Voronoi
-                        bgl_texture(3, true),
-                        // Wave
+                        bgl_texture(3, false),
+                        // Wave (R32Float — not filterable)
                         bgl_texture(4, false),
-                        // Physarum
+                        // Physarum (R32Float — not filterable)
                         bgl_texture(5, false),
                         // Feedback
-                        bgl_texture(6, true),
+                        bgl_texture(6, false),
                         // Sampler
                         wgpu::BindGroupLayoutEntry {
                             binding: 7,
                             visibility: wgpu::ShaderStages::FRAGMENT,
-                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering),
                             count: None,
                         },
                     ],

@@ -170,8 +170,7 @@ impl<R: Runtime> VisualApp<R> {
 
         if let Some(shm) = &mut self.shm_output {
             if self.frame_count % 2 == 0 {
-                gpu.device.poll(wgpu::Maintain::Wait);
-                shm.write_frame();
+                shm.write_frame(&gpu.device);
             }
         }
 

@@ -1,4 +1,5 @@
 /** Available sources for live/smooth layer selection. */
+import { api } from "../../api/client";
 
 export interface EffectSource {
   id: string;
@@ -53,9 +54,5 @@ const BACKEND_PRESET_MAP: Record<string, string> = {
 export async function selectEffect(id: string): Promise<void> {
   if (id === "camera") return;
   const name = BACKEND_PRESET_MAP[id] ?? (id.startsWith("fx-") ? id.slice(3) : id);
-  await fetch("/api/studio/effect/select", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ preset: name }),
-  }).catch(() => {});
+  await api.post("/api/studio/effect/select", { preset: name }).catch(() => {});
 }

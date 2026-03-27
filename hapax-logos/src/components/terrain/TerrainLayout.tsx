@@ -15,6 +15,7 @@ import { DetailPane } from "./DetailPane";
 import { ClassificationOverlayProvider } from "../../contexts/ClassificationOverlayContext";
 import { GroundStudioProvider, useGroundStudio } from "../../contexts/GroundStudioContext";
 import { useVisualLayer } from "../../api/hooks";
+import { api } from "../../api/client";
 import { useTerrain, useTerrainDisplay, type RegionName } from "../../contexts/TerrainContext";
 import { CommandRegistryBridge } from "./CommandRegistryBridge";
 import { CommandFeedback } from "./CommandFeedback";
@@ -121,7 +122,7 @@ function StudioParamSync() {
 
     if (presetName) {
       // Activate preset via backend API
-      fetch(`/api/studio/presets/${presetName}/activate`, { method: "POST" }).catch(() => {});
+      api.post(`/api/studio/presets/${presetName}/activate`).catch(() => {});
     }
     if (source) {
       setEffectSourceId(source);
