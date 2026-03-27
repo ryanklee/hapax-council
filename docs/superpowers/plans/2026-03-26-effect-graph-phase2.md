@@ -12,6 +12,25 @@
 
 ---
 
+## Completion Status
+
+All 7 tasks complete. Phase 2 done.
+
+| Task | Status | Commit |
+|------|--------|--------|
+| 1. Slot pipeline builder | **Done** | `884b1855` |
+| 2. Wire into compositor | **Done** | `ff3ed654` |
+| 3. Crossfade Rust plugin | **Done** | `a0a99101` |
+| 4. Smooth delay Rust plugin | **Done** | `05fcee15` |
+| 5. Modulator signal wiring | **Done** | (already wired in `ff3ed654`) |
+| 6. API routes | **Done** | `442fd069` |
+| 7. Compute shader approximations | **Done** | `884b1855` |
+
+Backend smoke test: 191 pytest + 63 API tests = 254 pass, 0 fail.
+Frontend smoke test plan written, Layer 1 verified via `window.__logos`.
+
+---
+
 ## Task 1: Slot-based pipeline builder
 
 **Files:**
