@@ -455,7 +455,7 @@ Frequency window tracks event patterns for novelty detection: events with patter
 
 The voice daemon (`agents/hapax_voice/__main__.py`) is the largest subsystem (95+ files). It provides continuous voice interaction with the operator.
 
-**Pipeline:** Wake word (Whisper-based, fuzzy phonetic matching) → VAD-gated audio accumulation (1.5s pre-roll) → STT (faster-whisper, resident in VRAM, contextual prompt conditioning) → Salience routing (concern graph activation) → LLM call (Opus via LiteLLM, 150 token max, 25 word spoken cutoff) → Streaming TTS (Kokoro af_heart, clause-level chunking) → Audio output (PyAudio) → Per-turn grounding evaluation → Frustration detection → Langfuse scoring
+**Pipeline:** Wake word (Whisper-based, fuzzy phonetic matching) → VAD-gated audio accumulation (1.5s pre-roll) → STT (faster-whisper, resident in VRAM, contextual prompt conditioning) → Salience routing (concern graph activation) → LLM call (Opus via LiteLLM, 150 token max, 25 word spoken cutoff) → Streaming TTS (Voxtral via Mistral API, clause-level chunking) → Audio output (PyAudio) → Per-turn grounding evaluation → Frustration detection → Langfuse scoring
 
 ### Per-Turn Grounding Evaluation
 
@@ -551,11 +551,11 @@ Routing tier scales visual intensity: LOCAL = ambient, CAPABLE = intense. The op
 
 ### TTS Decision
 
-**Epistemic status: Proven.**
+**Epistemic status: Proven. Updated 2026-03-27.**
 
-Kokoro 0.9.4 with af_heart voice. 82M params, ~100ms latency, ~500MB VRAM, 24kHz, 54 voices. Speed × naturalness tradeoff unmatched as of 2026-03-15 evaluation.
+Voxtral TTS (Mistral API, `voxtral-mini-tts-2603`). 4B params, ~70ms TTFA (H200), 24kHz output, 9 languages, 20 preset voices, voice cloning from 3s reference audio. $0.016/1K chars. Replaced Kokoro 0.9.4 (local GPU) and Piper (local CPU) — both excised.
 
-Orpheus 3B was more natural but ~2000ms (autoregressive limit). Fish Speech 1.5 required 24GB VRAM. Decision: stay on Kokoro until a <500ms model with Orpheus quality appears.
+Previous: Kokoro 0.9.4 (af_heart, 82M, ~100ms, local GPU). Replaced because Voxtral offers frontier quality with voice cloning, and the API latency (~0.7s TTFA with PCM streaming) is acceptable for conversational use. Local inference via vLLM-Omni available if API latency becomes problematic or for offline use — waiting on community quantizations.
 
 ---
 
@@ -1131,10 +1131,15 @@ Context: Original 3 axioms (single_user, executive_function, corporate_boundary)
 Decision: Add interpersonal_transparency (weight 88) and management_governance (weight 85).
 Consequences: Consent infrastructure became necessary. Management agent constraints became enforceable.
 
-**2026-03-15: Kokoro over Orpheus for TTS**
+**2026-03-15: Kokoro over Orpheus for TTS** (superseded 2026-03-27)
 Context: Need <500ms TTS for conversational voice. Orpheus 3B is more natural but ~2000ms.
 Decision: Kokoro 0.9.4, af_heart voice. 82M params, ~100ms.
-Consequences: Slightly less natural, but conversational cadence preserved. Revisit when faster models appear.
+Consequences: Slightly less natural, but conversational cadence preserved. Superseded by Voxtral.
+
+**2026-03-27: Voxtral over Kokoro for TTS**
+Context: Voxtral TTS released (Mistral, 4B params, open weights CC BY-NC). Frontier quality with voice cloning from 3s reference audio. API streaming PCM at 24kHz — same rate as Kokoro, zero downstream changes.
+Decision: Replace Kokoro (local GPU) + Piper (local CPU) with Voxtral via Mistral API. Both local engines fully excised.
+Consequences: Depends on external API (Mistral). Latency ~0.7s TTFA via streaming PCM (vs ~100ms Kokoro local). Gained voice cloning and quality. Local fallback via vLLM-Omni possible when community quantizations appear.
 
 **2026-03-16: Lightweight pipeline over Pipecat**
 Context: Pipecat framework was 600+ lines of integration code with framework-imposed constraints.

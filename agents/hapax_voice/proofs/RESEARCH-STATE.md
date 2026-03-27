@@ -1,6 +1,6 @@
 # Voice Grounding Research State
 
-**Last updated:** 2026-03-25 (session 17 — perceptual system hardening, 20 fixes across 6 subsystems)
+**Last updated:** 2026-03-27 (session 18 — TTS engine swap: Kokoro+Piper → Voxtral API)
 **Update convention:** After any session with research decisions or implementation progress, update this file before ending.
 
 ## Position (one paragraph)
@@ -379,6 +379,20 @@ Infrastructure-only. No changes to experiment code, grounding theory, or researc
 **Plan:** `docs/superpowers/plans/2026-03-24-perceptual-system-hardening.md`
 
 **Impact on grounding research:** H7 simplifies IGNORE acceptance path (concern_overlap only). M5 fixes effort de-escalation hysteresis (was never reaching EFFICIENT from ELABORATIVE). C5 fixes rumination tracking for all sources. None affect experiment code directly — all changes are in the perceptual substrate consumed by the voice pipeline.
+
+## Session 18 (2026-03-27): TTS Engine Swap — Kokoro+Piper → Voxtral API
+
+Infrastructure-only. No changes to experiment code, grounding theory, or research design.
+
+**TTS engine replacement (PR #371).** Replaced both local TTS engines (Kokoro 0.9.4 GPU, Piper CPU) with Mistral Voxtral TTS via hosted API (`voxtral-mini-tts-2603`). Voxtral outputs 24kHz — identical to Kokoro — so zero downstream audio pipeline changes. Voice cloning from 3s reference audio now available via `voxtral_ref_audio` config.
+
+**Changes:** 17 files, -1058/+374 lines (net reduction). `tts.py` rewritten (streams from Mistral API, decodes base64 float32 PCM, converts to int16). `KokoroTTSService` → `VoxtralTTSService`. Config `kokoro_voice` → `voxtral_voice_id` + `voxtral_ref_audio`. All Piper code fully excised. Dependencies: `kokoro` and `piper-tts` removed, `mistralai>=2.1.0` added.
+
+**Bug found:** `mistralai` 2.1.3 doesn't re-export `Mistral` at top level. Correct import: `from mistralai.client.sdk import Mistral`.
+
+**Tests:** 17 Piper/Kokoro tests removed, 11 Voxtral tests added. 44 TTS-related tests passing. Conversation pipeline comment change required DEVIATION-021 (comment-only, no functional impact).
+
+**Impact on grounding research:** None. TTS is downstream of all grounding evaluation. Sample rate unchanged (24kHz). Audio output format unchanged (PCM int16 mono). The `.synthesize(text, use_case)` interface is preserved. Latency profile shifts from ~100ms local to ~0.7s API streaming — this affects conversational cadence timing but not grounding mechanics. If API latency proves problematic for experiment conditions, local inference via vLLM-Omni is available as fallback.
 
 ## Operator Research Preferences
 
