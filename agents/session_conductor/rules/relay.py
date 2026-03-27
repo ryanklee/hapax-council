@@ -124,6 +124,18 @@ class RelayRule(RuleBase):
                 self._state.in_flight_files.add(file_path)
                 log.debug("RelayRule: tracking in-flight file %s", file_path)
 
+                # Check for peer conflicts on file edits
+                conflicts = self.check_peer_conflicts()
+                if conflicts:
+                    log.warning("RelayRule: peer conflict on files: %s", conflicts)
+                    return HookResponse(
+                        action="allow",
+                        message=(
+                            f"Warning: files also being edited by peer session: "
+                            f"{', '.join(conflicts)}"
+                        ),
+                    )
+
         # Detect PR events in Bash output
         if event.tool_name == "Bash":
             output: str = event.user_message or ""

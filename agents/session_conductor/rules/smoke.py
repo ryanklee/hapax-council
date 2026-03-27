@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+from datetime import datetime, timedelta
 
 from agents.session_conductor.rules import HookEvent, HookResponse, RuleBase
 from agents.session_conductor.rules.relay import detect_pr_event
@@ -13,6 +14,7 @@ from agents.session_conductor.topology import TopologyConfig
 log = logging.getLogger(__name__)
 
 _SMOKE_TRIGGER_RE = re.compile(r"\bsmoke\s+test\b", re.IGNORECASE)
+_SMOKE_DEACTIVATION_TIMEOUT = timedelta(seconds=60)
 
 
 def is_smoke_test_trigger(text: str) -> bool:
@@ -28,21 +30,33 @@ class SmokeRule(RuleBase):
         self._state = state
 
     def on_pre_tool_use(self, event: HookEvent) -> HookResponse | None:
-        # Rewrite browser_* calls when smoke test is active
-        if self._state.smoke_test_active and event.tool_name.startswith("browser_"):
-            cfg = self.topology.smoke_test
-            rewritten = dict(event.tool_input)
-            rewritten["workspace"] = cfg.workspace
-            rewritten["fullscreen"] = cfg.fullscreen
-            rewritten["launch_method"] = cfg.launch_method
-            rewritten["screenshot_interval_ms"] = cfg.screenshot_interval_ms
-            log.debug("SmokeRule: rewrote %s with smoke test config", event.tool_name)
-            return HookResponse(
-                action="rewrite",
-                message="Browser tool rewritten with smoke test config",
-                rewrite=rewritten,
-            )
-        return None
+        if not self._state.smoke_test_active:
+            return None
+
+        # Deactivate after 60s with no browser tool calls
+        if not event.tool_name.startswith("browser_"):
+            if self._state.smoke_test_activated_at is not None:
+                elapsed = datetime.now() - self._state.smoke_test_activated_at
+                if elapsed > _SMOKE_DEACTIVATION_TIMEOUT:
+                    log.info("SmokeRule: deactivating smoke test (60s timeout, no browser tools)")
+                    self._state.smoke_test_active = False
+                    self._state.smoke_test_activated_at = None
+            return None
+
+        # Rewrite browser_* calls with smoke test config
+        self._state.smoke_test_activated_at = datetime.now()  # reset timeout
+        cfg = self.topology.smoke_test
+        rewritten = dict(event.tool_input)
+        rewritten["workspace"] = cfg.workspace
+        rewritten["fullscreen"] = cfg.fullscreen
+        rewritten["launch_method"] = cfg.launch_method
+        rewritten["screenshot_interval_ms"] = cfg.screenshot_interval_ms
+        log.debug("SmokeRule: rewrote %s with smoke test config", event.tool_name)
+        return HookResponse(
+            action="rewrite",
+            message="Browser tool rewritten with smoke test config",
+            rewrite=rewritten,
+        )
 
     def on_post_tool_use(self, event: HookEvent) -> HookResponse | None:
         # Activate on user message containing "smoke test"
@@ -50,6 +64,7 @@ class SmokeRule(RuleBase):
             if not self._state.smoke_test_active:
                 log.info("SmokeRule: activating smoke test mode (user message trigger)")
                 self._state.smoke_test_active = True
+                self._state.smoke_test_activated_at = datetime.now()
             return None
 
         # Activate on PR creation in Bash output
@@ -60,5 +75,6 @@ class SmokeRule(RuleBase):
                 if not self._state.smoke_test_active:
                     log.info("SmokeRule: activating smoke test mode (PR create trigger)")
                     self._state.smoke_test_active = True
+                    self._state.smoke_test_activated_at = datetime.now()
 
         return None

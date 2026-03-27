@@ -70,11 +70,17 @@ def cmd_start(args: argparse.Namespace) -> None:
 
     registry = RuleRegistry()
     registry.register(FocusRule(topology))
-    registry.register(ConvergenceRule(topology))
+    registry.register(ConvergenceRule(topology, state=state))
     registry.register(EpicRule(topology, state))
     registry.register(RelayRule(topology, state, role=args.role))
     registry.register(SmokeRule(topology, state))
-    registry.register(SpawnRule(topology, state))
+    spawn_rule = SpawnRule(topology, state)
+    registry.register(spawn_rule)
+
+    # C2: Child sessions claim pending manifests at startup
+    claimed = spawn_rule.claim_pending_manifest(state)
+    if claimed:
+        log.info("Claimed spawn manifest: topic=%s", claimed.get("topic", "unknown"))
 
     state_path = _state_file(args.role)
     sock_path = _sock_path(args.role)
@@ -96,10 +102,12 @@ def cmd_start(args: argparse.Namespace) -> None:
 
     def _handle_sigterm(signum: int, frame: object) -> None:
         log.info("Received signal %d — shutting down", signum)
-        # Write final relay status if relay rule exists
         for rule in registry._rules:
             if hasattr(rule, "write_final_status"):
                 rule.write_final_status()  # type: ignore[attr-defined]
+            if hasattr(rule, "write_completion"):
+                summary = state.workstream_summary or "Session ended"
+                rule.write_completion(summary)  # type: ignore[attr-defined]
         server.shutdown()
 
     signal.signal(signal.SIGTERM, _handle_sigterm)

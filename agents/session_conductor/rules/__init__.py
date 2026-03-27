@@ -85,20 +85,45 @@ class RuleRegistry:
         self._rules.append(rule)
 
     def process_pre_tool_use(self, event: HookEvent) -> HookResponse | None:
-        """First block wins; None means allow."""
+        """Block wins over rewrite; rewrites merge. Fail-open on rule exceptions."""
+        merged_rewrite: dict[str, Any] | None = None
+        merged_message: str | None = None
         for rule in self._rules:
-            resp = rule.on_pre_tool_use(event)
+            try:
+                resp = rule.on_pre_tool_use(event)
+            except Exception:
+                log.exception(
+                    "Rule %s.on_pre_tool_use crashed — skipping (fail-open)", type(rule).__name__
+                )
+                continue
             if resp is not None and resp.action == "block":
                 return resp
-            if resp is not None and resp.action == "rewrite":
-                return resp
+            if resp is not None and resp.action == "rewrite" and resp.rewrite:
+                if merged_rewrite is None:
+                    merged_rewrite = dict(resp.rewrite)
+                else:
+                    merged_rewrite.update(resp.rewrite)
+                if resp.message:
+                    merged_message = (
+                        resp.message
+                        if merged_message is None
+                        else f"{merged_message}; {resp.message}"
+                    )
+        if merged_rewrite is not None:
+            return HookResponse(action="rewrite", message=merged_message, rewrite=merged_rewrite)
         return None
 
     def process_post_tool_use(self, event: HookEvent) -> list[HookResponse]:
-        """Collect all non-None responses from post-tool-use handlers."""
+        """Collect all non-None responses from post-tool-use handlers. Fail-open on exceptions."""
         results = []
         for rule in self._rules:
-            resp = rule.on_post_tool_use(event)
+            try:
+                resp = rule.on_post_tool_use(event)
+            except Exception:
+                log.exception(
+                    "Rule %s.on_post_tool_use crashed — skipping (fail-open)", type(rule).__name__
+                )
+                continue
             if resp is not None:
                 results.append(resp)
         return results

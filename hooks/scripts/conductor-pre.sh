@@ -16,11 +16,17 @@ fi
 SOCK="/run/user/$(id -u)/conductor-${ROLE}.sock"
 [ -S "$SOCK" ] || exit 0  # No conductor = allow all
 
-# Build event JSON
+# Build event JSON safely with jq (no string interpolation)
 TOOL_NAME="$(echo "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)"
-EVENT="{\"event\":\"pre_tool_use\",\"tool_name\":\"$TOOL_NAME\",\"tool_input\":$(echo "$INPUT" | jq '.tool_input // {}' 2>/dev/null),\"session_id\":\"$SESSION_ID\"}"
+TOOL_INPUT="$(echo "$INPUT" | jq -c '.tool_input // {}' 2>/dev/null)"
+EVENT="$(jq -cn \
+    --arg event_type "pre_tool_use" \
+    --arg tool_name "$TOOL_NAME" \
+    --arg session_id "$SESSION_ID" \
+    --argjson tool_input "$TOOL_INPUT" \
+    '{event_type: $event_type, tool_name: $tool_name, tool_input: $tool_input, session_id: $session_id}')"
 
-RESPONSE="$(echo "$EVENT" | timeout 0.5 socat - UNIX-CONNECT:"$SOCK" 2>/dev/null)" || exit 0
+RESPONSE="$(echo "$EVENT" | timeout 2 socat - UNIX-CONNECT:"$SOCK" 2>/dev/null)" || exit 0
 
 ACTION="$(echo "$RESPONSE" | jq -r '.action // "allow"' 2>/dev/null)"
 MESSAGE="$(echo "$RESPONSE" | jq -r '.message // empty' 2>/dev/null)"
