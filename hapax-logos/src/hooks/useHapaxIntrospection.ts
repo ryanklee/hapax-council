@@ -20,8 +20,6 @@
 import { useEffect, useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-const IS_TAURI = "__TAURI_INTERNALS__" in window;
-
 interface ModalState {
   visible: boolean;
   title: string;
@@ -49,8 +47,6 @@ export function useHapaxIntrospection() {
   }, []);
 
   useEffect(() => {
-    if (!IS_TAURI) return;
-
     // Track whether we've been cleaned up (handles race between async setup and unmount)
     let disposed = false;
     const cleanups: Array<() => void> = [];
