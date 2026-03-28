@@ -108,7 +108,7 @@ pub struct ContentLayer {
     slot_views: [wgpu::TextureView; MAX_SLOTS],
     placeholder_view: wgpu::TextureView,
     _placeholder_texture: wgpu::Texture,
-    output_texture: wgpu::Texture,
+    pub output_texture: wgpu::Texture,
     pub output_view: wgpu::TextureView,
     pub current_fragment_id: String,
     pub is_continuation: bool,
