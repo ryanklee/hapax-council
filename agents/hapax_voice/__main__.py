@@ -314,16 +314,21 @@ class VoiceDaemon:
 
         self._audio_preprocessor = AudioPreprocessor()
 
-        # Multi-mic noise reference (C920 webcam mics as ambient reference)
-        from agents.hapax_voice.multi_mic import NoiseReference
+        # Multi-mic noise reference (pw-record capture from all matching sources)
+        from agents.hapax_voice.multi_mic import NoiseReference, discover_pipewire_sources
 
+        _room_sources = discover_pipewire_sources(self.cfg.noise_ref_room_patterns)
+        _structure_sources = discover_pipewire_sources(self.cfg.noise_ref_structure_patterns)
+        log.info(
+            "Noise reference sources: %d room (%s), %d structure (%s)",
+            len(_room_sources),
+            _room_sources,
+            len(_structure_sources),
+            _structure_sources,
+        )
         self._noise_reference = NoiseReference(
-            room_sources=[
-                "HD Pro Webcam C920",  # any C920 mic — airborne noise reference
-            ],
-            structure_sources=[
-                self.cfg.contact_mic_source,  # Cortado contact mic — structure-borne reference
-            ],
+            room_sources=_room_sources,
+            structure_sources=_structure_sources,
         )
         self._noise_reference.start()
 
