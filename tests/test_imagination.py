@@ -6,10 +6,13 @@ import json
 from pathlib import Path
 
 from agents.imagination import (
+    ESCALATION_THRESHOLD,
     ContentReference,
     ImaginationFragment,
+    maybe_escalate,
     publish_fragment,
 )
+from shared.impingement import ImpingementType
 
 # ---------------------------------------------------------------------------
 # Test helpers
@@ -149,3 +152,47 @@ class TestPublishFragment:
         # Should keep the last 5
         assert json.loads(lines[0])["narrative"] == "frag-5"
         assert json.loads(lines[-1])["narrative"] == "frag-9"
+
+
+# ---------------------------------------------------------------------------
+# Task 3: Escalation tests
+# ---------------------------------------------------------------------------
+
+
+class TestMaybeEscalate:
+    def test_above_threshold(self) -> None:
+        frag = _make_fragment(salience=0.8)
+        imp = maybe_escalate(frag)
+        assert imp is not None
+        assert imp.source == "imagination"
+        assert imp.type == ImpingementType.SALIENCE_INTEGRATION
+        assert imp.strength == 0.8
+
+    def test_below_threshold(self) -> None:
+        frag = _make_fragment(salience=0.3)
+        assert maybe_escalate(frag) is None
+
+    def test_at_threshold(self) -> None:
+        frag = _make_fragment(salience=ESCALATION_THRESHOLD)
+        imp = maybe_escalate(frag)
+        assert imp is not None
+        assert imp.strength == ESCALATION_THRESHOLD
+
+    def test_preserves_content_refs(self) -> None:
+        refs = [
+            ContentReference(kind="qdrant_query", source="mem", query="q1", salience=0.9),
+            ContentReference(kind="text", source="input", salience=0.4),
+        ]
+        frag = _make_fragment(content_references=refs, salience=0.8)
+        imp = maybe_escalate(frag)
+        assert imp is not None
+        assert len(imp.content["content_references"]) == 2
+        assert imp.content["content_references"][0]["kind"] == "qdrant_query"
+        assert imp.content["content_references"][0]["query"] == "q1"
+
+    def test_includes_dimensions(self) -> None:
+        dims = {"intensity": 0.7, "tension": 0.5}
+        frag = _make_fragment(dimensions=dims, salience=0.9)
+        imp = maybe_escalate(frag)
+        assert imp is not None
+        assert imp.context["dimensions"] == dims

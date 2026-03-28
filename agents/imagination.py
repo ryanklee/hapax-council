@@ -14,6 +14,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
+from shared.impingement import Impingement, ImpingementType
+
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -93,3 +95,30 @@ def publish_fragment(
     lines = stream_path.read_text().splitlines()
     if len(lines) > max_lines:
         stream_path.write_text("\n".join(lines[-max_lines:]) + "\n")
+
+
+# ---------------------------------------------------------------------------
+# Escalation
+# ---------------------------------------------------------------------------
+
+
+def maybe_escalate(fragment: ImaginationFragment) -> Impingement | None:
+    """Escalate high-salience fragments into impingements for capability recruitment."""
+    if fragment.salience < ESCALATION_THRESHOLD:
+        return None
+
+    return Impingement(
+        timestamp=fragment.timestamp,
+        source="imagination",
+        type=ImpingementType.SALIENCE_INTEGRATION,
+        strength=fragment.salience,
+        content={
+            "narrative": fragment.narrative,
+            "content_references": [ref.model_dump() for ref in fragment.content_references],
+            "continuation": fragment.continuation,
+        },
+        context={
+            "dimensions": fragment.dimensions,
+        },
+        parent_id=fragment.parent_id,
+    )
