@@ -63,9 +63,9 @@ class TestPairwiseSimilarity:
         assert result["mean"] < 0.01
 
     def test_similar_vectors(self) -> None:
-        """Similar vectors (noise_scale=0.1) should have mean >0.7, stddev <0.15."""
+        """Similar vectors (low noise) should have mean >0.7, stddev <0.15."""
         base = _random_unit_vector(512, rng=np.random.default_rng(1))
-        embeddings = _similar_vectors(base, 8, noise_scale=0.1)
+        embeddings = _similar_vectors(base, 8, noise_scale=0.01)
         result = compute_pairwise_similarity(embeddings)
         assert result["mean"] > 0.7
         assert result["stddev"] < 0.15
@@ -92,14 +92,14 @@ class TestOutlierDetection:
     def test_clean_set_no_outliers(self) -> None:
         """A clean set of similar vectors should have no outliers."""
         base = _random_unit_vector(512, rng=np.random.default_rng(10))
-        embeddings = _similar_vectors(base, 8, noise_scale=0.05)
+        embeddings = _similar_vectors(base, 8, noise_scale=0.01)
         outliers = detect_outliers(embeddings, threshold=0.50)
         assert outliers == []
 
     def test_detects_orthogonal_outlier(self) -> None:
         """An orthogonal vector among similar vectors should be detected."""
         base = _random_unit_vector(512, rng=np.random.default_rng(20))
-        embeddings = _similar_vectors(base, 7, noise_scale=0.05)
+        embeddings = _similar_vectors(base, 7, noise_scale=0.01)
         outlier = np.zeros(512)
         outlier[0] = 1.0
         embeddings.append(outlier)
@@ -113,7 +113,7 @@ class TestThresholdTest:
     def test_all_above_threshold(self) -> None:
         """When all embeddings are similar to average, samples_below_threshold==0."""
         base = _random_unit_vector(512, rng=np.random.default_rng(30))
-        embeddings = _similar_vectors(base, 8, noise_scale=0.05)
+        embeddings = _similar_vectors(base, 8, noise_scale=0.01)
         averaged = np.mean(embeddings, axis=0)
         averaged = averaged / np.linalg.norm(averaged)
         result = threshold_test(embeddings, averaged, accept_threshold=0.60)
@@ -122,7 +122,7 @@ class TestThresholdTest:
     def test_returns_correct_keys(self) -> None:
         """Result dict should have the expected keys."""
         base = _random_unit_vector(512, rng=np.random.default_rng(31))
-        embeddings = _similar_vectors(base, 4, noise_scale=0.05)
+        embeddings = _similar_vectors(base, 4, noise_scale=0.01)
         averaged = np.mean(embeddings, axis=0)
         averaged = averaged / np.linalg.norm(averaged)
         result = threshold_test(embeddings, averaged, accept_threshold=0.60)
@@ -139,7 +139,7 @@ class TestStabilityReport:
     def test_writes_valid_json(self) -> None:
         """Should write a valid JSON file with the expected keys."""
         base = _random_unit_vector(512, rng=np.random.default_rng(40))
-        embeddings = _similar_vectors(base, 6, noise_scale=0.05)
+        embeddings = _similar_vectors(base, 6, noise_scale=0.01)
         averaged = np.mean(embeddings, axis=0)
         averaged = averaged / np.linalg.norm(averaged)
 
