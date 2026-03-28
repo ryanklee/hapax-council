@@ -1,5 +1,8 @@
 """Tests for the visual chain capability — semantic visual expression."""
 
+import json
+from pathlib import Path
+
 from agents.visual_chain import (
     VISUAL_CHAIN_RECORDS,
     VISUAL_DIMENSIONS,
@@ -188,3 +191,30 @@ def test_compute_deltas_at_nonzero():
     cap.activate_dimension("visual_chain.intensity", imp, 1.0)
     deltas = cap.compute_param_deltas()
     assert deltas.get("gradient.brightness", 0.0) > 0.0
+
+
+# ---------------------------------------------------------------------------
+# Task 5: SHM output tests
+# ---------------------------------------------------------------------------
+
+
+def test_write_state_creates_json(tmp_path: Path):
+    cap = VisualChainCapability()
+    imp = _make_impingement()
+    cap.activate_dimension("visual_chain.intensity", imp, 0.7)
+    out_path = tmp_path / "visual-chain-state.json"
+    cap.write_state(out_path)
+    assert out_path.exists()
+    data = json.loads(out_path.read_text())
+    assert "levels" in data
+    assert "params" in data
+    assert "timestamp" in data
+    assert data["levels"]["visual_chain.intensity"] == 0.7
+    assert data["params"]["gradient.brightness"] > 0.0
+
+
+def test_write_state_atomic(tmp_path: Path):
+    cap = VisualChainCapability()
+    out_path = tmp_path / "visual-chain-state.json"
+    cap.write_state(out_path)
+    assert json.loads(out_path.read_text())

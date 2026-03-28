@@ -7,7 +7,9 @@ impingement activation alongside vocal_chain.*.
 
 from __future__ import annotations
 
+import json
 import logging
+import time as time_mod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -314,3 +316,22 @@ class VisualChainCapability:
         for name in self._levels:
             self._levels[name] = 0.0
         self._activation_level = 0.0
+
+    def write_state(self, path: Path | None = None) -> None:
+        """Write current state as JSON, atomically via tmp+rename."""
+        if path is None:
+            path = SHM_PATH
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        levels = {k: v for k, v in self._levels.items() if v > 0.0}
+        params = self.compute_param_deltas()
+        state = {
+            "levels": levels,
+            "params": params,
+            "timestamp": time_mod.time(),
+        }
+
+        tmp_path = path.with_suffix(".tmp")
+        tmp_path.write_text(json.dumps(state))
+        tmp_path.rename(path)
