@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from agents.imagination import (
     ContentReference,
     ImaginationFragment,
+    publish_fragment,
 )
 
 # ---------------------------------------------------------------------------
@@ -93,3 +97,55 @@ class TestImaginationFragment:
         assert restored.narrative == frag.narrative
         assert restored.content_references == frag.content_references
         assert restored.dimensions == frag.dimensions
+
+
+# ---------------------------------------------------------------------------
+# Task 2: SHM publisher tests
+# ---------------------------------------------------------------------------
+
+
+class TestPublishFragment:
+    def test_writes_current_json(self, tmp_path: Path) -> None:
+        current = tmp_path / "current.json"
+        stream = tmp_path / "stream.jsonl"
+        frag = _make_fragment()
+
+        publish_fragment(frag, current_path=current, stream_path=stream)
+
+        assert current.exists()
+        loaded = json.loads(current.read_text())
+        assert loaded["narrative"] == "test narrative"
+
+    def test_appends_to_stream(self, tmp_path: Path) -> None:
+        current = tmp_path / "current.json"
+        stream = tmp_path / "stream.jsonl"
+
+        publish_fragment(
+            _make_fragment(narrative="first"), current_path=current, stream_path=stream
+        )
+        publish_fragment(
+            _make_fragment(narrative="second"), current_path=current, stream_path=stream
+        )
+
+        lines = stream.read_text().strip().splitlines()
+        assert len(lines) == 2
+        assert json.loads(lines[0])["narrative"] == "first"
+        assert json.loads(lines[1])["narrative"] == "second"
+
+    def test_caps_stream_at_max(self, tmp_path: Path) -> None:
+        current = tmp_path / "current.json"
+        stream = tmp_path / "stream.jsonl"
+
+        for i in range(10):
+            publish_fragment(
+                _make_fragment(narrative=f"frag-{i}"),
+                current_path=current,
+                stream_path=stream,
+                max_lines=5,
+            )
+
+        lines = stream.read_text().strip().splitlines()
+        assert len(lines) == 5
+        # Should keep the last 5
+        assert json.loads(lines[0])["narrative"] == "frag-5"
+        assert json.loads(lines[-1])["narrative"] == "frag-9"

@@ -52,3 +52,44 @@ class ImaginationFragment(BaseModel, frozen=True):
     continuation: bool
     narrative: str
     parent_id: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# SHM publisher
+# ---------------------------------------------------------------------------
+
+
+def publish_fragment(
+    fragment: ImaginationFragment,
+    current_path: Path | None = None,
+    stream_path: Path | None = None,
+    max_lines: int = STREAM_MAX_LINES,
+) -> None:
+    """Publish a fragment to shared memory (atomic write + append stream)."""
+    if current_path is None:
+        current_path = CURRENT_PATH
+    if stream_path is None:
+        stream_path = STREAM_PATH
+
+    current_path = Path(current_path)
+    stream_path = Path(stream_path)
+
+    # Ensure directories exist
+    current_path.parent.mkdir(parents=True, exist_ok=True)
+    stream_path.parent.mkdir(parents=True, exist_ok=True)
+
+    payload = fragment.model_dump_json()
+
+    # Atomic write to current.json via tmp+rename
+    tmp_path = current_path.with_suffix(".tmp")
+    tmp_path.write_text(payload)
+    tmp_path.rename(current_path)
+
+    # Append to stream.jsonl
+    with stream_path.open("a") as f:
+        f.write(payload + "\n")
+
+    # Cap stream at max_lines
+    lines = stream_path.read_text().splitlines()
+    if len(lines) > max_lines:
+        stream_path.write_text("\n".join(lines[-max_lines:]) + "\n")
