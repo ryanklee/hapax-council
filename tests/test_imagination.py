@@ -7,9 +7,11 @@ from pathlib import Path
 
 from agents.imagination import (
     ESCALATION_THRESHOLD,
+    MAX_RECENT_FRAGMENTS,
     CadenceController,
     ContentReference,
     ImaginationFragment,
+    ImaginationLoop,
     assemble_context,
     maybe_escalate,
     publish_fragment,
@@ -285,3 +287,55 @@ class TestAssembleContext:
         assert "activity=idle" in ctx
         assert "HR=72" in ctx
         assert "18C" in ctx
+
+
+# ---------------------------------------------------------------------------
+# Task 6: ImaginationLoop tests
+# ---------------------------------------------------------------------------
+
+
+class TestImaginationLoop:
+    def test_construction(self) -> None:
+        loop = ImaginationLoop()
+        assert isinstance(loop.cadence, CadenceController)
+        assert loop.recent_fragments == []
+
+    def test_stores_recent_fragments(self, tmp_path: Path) -> None:
+        loop = ImaginationLoop(
+            current_path=tmp_path / "current.json",
+            stream_path=tmp_path / "stream.jsonl",
+        )
+        frag = _make_fragment(salience=0.2)
+        loop._process_fragment(frag)
+        assert len(loop.recent_fragments) == 1
+        assert loop.recent_fragments[0] is frag
+
+    def test_caps_recent_at_max(self, tmp_path: Path) -> None:
+        loop = ImaginationLoop(
+            current_path=tmp_path / "current.json",
+            stream_path=tmp_path / "stream.jsonl",
+        )
+        for i in range(MAX_RECENT_FRAGMENTS + 3):
+            loop._process_fragment(_make_fragment(narrative=f"frag-{i}", salience=0.1))
+        assert len(loop.recent_fragments) == MAX_RECENT_FRAGMENTS
+        assert loop.recent_fragments[0].narrative == "frag-3"
+
+    def test_drains_impingements_high_salience(self, tmp_path: Path) -> None:
+        loop = ImaginationLoop(
+            current_path=tmp_path / "current.json",
+            stream_path=tmp_path / "stream.jsonl",
+        )
+        loop._process_fragment(_make_fragment(salience=0.8))
+        imps = loop.drain_impingements()
+        assert len(imps) == 1
+        assert imps[0].source == "imagination"
+        # Draining clears the list
+        assert loop.drain_impingements() == []
+
+    def test_no_impingement_for_low_salience(self, tmp_path: Path) -> None:
+        loop = ImaginationLoop(
+            current_path=tmp_path / "current.json",
+            stream_path=tmp_path / "stream.jsonl",
+        )
+        loop._process_fragment(_make_fragment(salience=0.2))
+        assert loop.drain_impingements() == []

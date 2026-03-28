@@ -226,3 +226,107 @@ def maybe_escalate(fragment: ImaginationFragment) -> Impingement | None:
         },
         parent_id=fragment.parent_id,
     )
+
+
+# ---------------------------------------------------------------------------
+# Imagination loop
+# ---------------------------------------------------------------------------
+
+IMAGINATION_SYSTEM_PROMPT = """\
+You are the imagination process of a personal computing system. You observe
+the system's current state and produce spontaneous associations, memories,
+projections, and novel connections — the way a human mind wanders during
+idle moments.
+
+Your output is a structured fragment describing what you're currently
+"imagining." This is not evaluation or analysis — it is free association
+grounded in what you observe.
+
+Content sources you can reference:
+- camera_frame: overhead, hero, left, right (live camera feeds)
+- qdrant_query: profile-facts, documents, operator-episodes, studio-moments (vector knowledge)
+- text: any text you want to display
+- url: any image URL
+- file: any file path
+
+Produce one ImaginationFragment. Be specific in content_references —
+point to real things. Set dimensional coloring to match the emotional
+tone of what you're imagining. Assess salience honestly — most fragments
+are low salience (0.1-0.3). Only mark high salience (>0.6) for genuine
+insights or concerns worth escalating.
+
+If your previous fragment had continuation=true, you may continue that
+train of thought or let it go. Don't force continuation.\
+"""
+
+MAX_RECENT_FRAGMENTS = 5
+
+
+class ImaginationLoop:
+    """Main loop that drives imagination ticks via an LLM agent."""
+
+    def __init__(
+        self,
+        current_path: Path | None = None,
+        stream_path: Path | None = None,
+    ):
+        self.cadence = CadenceController()
+        self.recent_fragments: list[ImaginationFragment] = []
+        self._pending_impingements: list[Impingement] = []
+        self._current_path = current_path or CURRENT_PATH
+        self._stream_path = stream_path or STREAM_PATH
+        self._agent = None  # lazy-init
+
+    def _get_agent(self):
+        """Lazy-init pydantic_ai Agent for imagination generation."""
+        if self._agent is None:
+            from pydantic_ai import Agent
+
+            from shared.config import get_model
+
+            self._agent = Agent(
+                get_model("reasoning"),
+                output_type=ImaginationFragment,
+                system_prompt=IMAGINATION_SYSTEM_PROMPT,
+            )
+        return self._agent
+
+    def _record_fragment(self, fragment: ImaginationFragment) -> None:
+        """Append fragment to recent list, capping at MAX_RECENT_FRAGMENTS."""
+        self.recent_fragments.append(fragment)
+        if len(self.recent_fragments) > MAX_RECENT_FRAGMENTS:
+            self.recent_fragments = self.recent_fragments[-MAX_RECENT_FRAGMENTS:]
+
+    def _process_fragment(self, fragment: ImaginationFragment) -> None:
+        """Record, publish, update cadence, and maybe escalate a fragment."""
+        self._record_fragment(fragment)
+        publish_fragment(fragment, self._current_path, self._stream_path)
+        self.cadence.update(fragment)
+        imp = maybe_escalate(fragment)
+        if imp is not None:
+            self._pending_impingements.append(imp)
+
+    def drain_impingements(self) -> list[Impingement]:
+        """Return and clear pending impingements."""
+        result = list(self._pending_impingements)
+        self._pending_impingements.clear()
+        return result
+
+    def set_tpn_active(self, active: bool) -> None:
+        """Delegate TPN state to cadence controller."""
+        self.cadence.set_tpn_active(active)
+
+    async def tick(
+        self, observations: list[str], sensor_snapshot: dict
+    ) -> ImaginationFragment | None:
+        """Run one imagination tick: assemble context, call agent, process result."""
+        context = assemble_context(observations, self.recent_fragments, sensor_snapshot)
+        try:
+            agent = self._get_agent()
+            result = await agent.run(context)
+            fragment = result.output
+            self._process_fragment(fragment)
+            return fragment
+        except Exception:
+            log.warning("Imagination tick failed", exc_info=True)
+            return None
