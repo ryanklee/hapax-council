@@ -20,6 +20,7 @@ import asyncio
 import logging
 import time
 from enum import StrEnum
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agents.hapax_daimonion.perception import PerceptionTier as BackendTier
@@ -38,6 +39,20 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 TICK_INTERVAL_S = 0.15  # 150ms cognitive tick
+TPN_ACTIVE_FILE = Path("/dev/shm/hapax-dmn/tpn_active")
+
+
+def write_tpn_active(active: bool, path: Path = TPN_ACTIVE_FILE) -> None:
+    """Write TPN active signal for DMN anti-correlation."""
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text("1" if active else "0")
+        tmp.rename(path)
+    except OSError:
+        pass
+
+
 _VERIFY_MIN_SAMPLES = 16000 * 3  # 3s of 16kHz audio for reliable speaker ID
 _PAUSING_THRESHOLD_S = 1.5  # silence duration before OPERATOR_PAUSING → MUTUAL_SILENCE
 
@@ -231,11 +246,13 @@ class CognitiveLoop:
             log.exception("Cognitive loop error")
         finally:
             self._running = False
+            write_tpn_active(False)
             log.info("Cognitive loop stopped")
 
     def stop_loop(self) -> None:
         """Signal the loop to stop."""
         self._running = False
+        write_tpn_active(False)
 
     @property
     def is_running(self) -> bool:
@@ -288,16 +305,9 @@ class CognitiveLoop:
             if self._speculative_stt is not None:
                 self._speculative_stt.reset()
 
-        # Anti-correlation: signal DMN when TPN is active/idle
-        _active_phases = {
-            TurnPhase.OPERATOR_SPEAKING,
-            TurnPhase.TRANSITION,
-            TurnPhase.HAPAX_SPEAKING,
-        }
-        was_active = from_phase in _active_phases
-        now_active = to_phase in _active_phases
-        if was_active != now_active and hasattr(self, "_daemon") and self._daemon is not None:
-            self._daemon._signal_tpn_active(now_active)
+        # TPN_ACTIVE signal for DMN anti-correlation
+        _tpn_active = to_phase in (TurnPhase.TRANSITION, TurnPhase.HAPAX_SPEAKING)
+        write_tpn_active(_tpn_active)
 
         # Track response timing from phase transitions — now that
         # process_utterance runs as a background task, the cognitive loop
