@@ -66,17 +66,15 @@ install: build check
     [ -f "$LOGOS_DST" ] && cp "$LOGOS_DST" "$LOGOS_DST.prev"
     [ -f "$IMAG_DST" ] && cp "$IMAG_DST" "$IMAG_DST.prev"
 
-    # Stop imagination (logos is user-launched, don't touch it)
-    systemctl --user stop hapax-imagination.service 2>/dev/null || true
-
-    # Install
+    # Install binaries — DO NOT restart services.
+    # Restarting imagination opens a new window on the operator's workspace.
+    # The operator restarts services manually when ready (mod+Q or systemctl).
     cp "$LOGOS_SRC" "$LOGOS_DST"
     cp "$IMAG_SRC" "$IMAG_DST"
 
-    # Restart imagination
-    systemctl --user start hapax-imagination.service 2>/dev/null || true
-
-    echo "Installed. Previous binaries saved as .prev"
+    echo "Installed (not restarted — restart manually when ready)."
+    echo "  systemctl --user restart hapax-imagination.service"
+    echo "  or: mod+Q to relaunch Logos + Imagination together"
     $IMAG_DST --version 2>/dev/null || true
 
 # ── Rollback ──────────────────────────────────────────────────────
