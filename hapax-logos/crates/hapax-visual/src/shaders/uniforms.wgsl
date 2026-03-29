@@ -23,8 +23,8 @@ struct Uniforms {
     align_pad1: f32,
     // Content layer
     slot_opacities: vec4<f32>,
-    // Per-node custom params (32 floats)
-    custom: array<f32, 32>,
+    // Per-node custom params (32 floats packed as 8 vec4s for uniform alignment)
+    custom: array<vec4<f32>, 8>,
 };
 
 @group(0) @binding(0)

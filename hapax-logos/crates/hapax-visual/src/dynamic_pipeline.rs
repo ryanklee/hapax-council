@@ -166,7 +166,7 @@ impl DynamicPipeline {
             },
             fragment: Some(wgpu::FragmentState {
                 module: &blit_shader,
-                entry_point: Some("fs_main"),
+                entry_point: Some("main"),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: surface_format,
                     blend: Some(wgpu::BlendState::REPLACE),
@@ -376,7 +376,7 @@ impl DynamicPipeline {
                         },
                         fragment: Some(wgpu::FragmentState {
                             module: &fragment_module,
-                            entry_point: Some("fs_main"),
+                            entry_point: Some("main"),
                             targets: &[Some(wgpu::ColorTargetState {
                                 format: TEXTURE_FORMAT,
                                 blend: Some(wgpu::BlendState::REPLACE),
@@ -437,7 +437,7 @@ impl DynamicPipeline {
                 }
                 for (i, &val) in overrides.custom.iter().enumerate() {
                     if i < 32 {
-                        uniform_data.custom[i] = val;
+                        uniform_data.custom[i / 4][i % 4] = val;
                     }
                 }
             }
@@ -774,7 +774,7 @@ var source_texture: texture_2d<f32>;
 var source_sampler: sampler;
 
 @fragment
-fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+fn main(in: VertexOutput) -> @location(0) vec4<f32> {
     return textureSample(source_texture, source_sampler, in.uv);
 }
 "#;
