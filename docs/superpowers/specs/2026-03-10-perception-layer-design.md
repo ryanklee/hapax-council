@@ -2,7 +2,7 @@
 
 > **Status:** Approved
 > **Date:** 2026-03-10
-> **Scope:** `agents/hapax_voice/` — perception, governance, and pipeline integration
+> **Scope:** `agents/hapax_daimonion/` — perception, governance, and pipeline integration
 
 ## Problem
 
@@ -142,19 +142,19 @@ All thresholds tunable via config. Easy to loosen if too aggressive.
 
 | File | Responsibility |
 |------|---------------|
-| `agents/hapax_voice/perception.py` | `EnvironmentState` dataclass + `PerceptionEngine` (tick loops, signal fusion) |
-| `agents/hapax_voice/governor.py` | `PipelineGovernor` (state → directive mapping) |
-| `agents/hapax_voice/frame_gate.py` | `FrameGate` Pipecat processor (drops/passes frames) |
+| `agents/hapax_daimonion/perception.py` | `EnvironmentState` dataclass + `PerceptionEngine` (tick loops, signal fusion) |
+| `agents/hapax_daimonion/governor.py` | `PipelineGovernor` (state → directive mapping) |
+| `agents/hapax_daimonion/frame_gate.py` | `FrameGate` Pipecat processor (drops/passes frames) |
 
 ### Modified Files
 
 | File | Changes |
 |------|---------|
-| `agents/hapax_voice/__main__.py` | Wire PerceptionEngine + Governor into VoiceDaemon lifecycle |
-| `agents/hapax_voice/pipeline.py` | Insert FrameGate before STT in pipeline construction |
-| `agents/hapax_voice/config.py` | Add perception config fields (tick intervals, thresholds, gaze params) |
-| `agents/hapax_voice/context_gate.py` | Simplify to read from PerceptionEngine instead of running own checks |
-| `agents/hapax_voice/session.py` | Add `pause()`/`resume()` for timeout clock management |
+| `agents/hapax_daimonion/__main__.py` | Wire PerceptionEngine + Governor into VoiceDaemon lifecycle |
+| `agents/hapax_daimonion/pipeline.py` | Insert FrameGate before STT in pipeline construction |
+| `agents/hapax_daimonion/config.py` | Add perception config fields (tick intervals, thresholds, gaze params) |
+| `agents/hapax_daimonion/context_gate.py` | Simplify to read from PerceptionEngine instead of running own checks |
+| `agents/hapax_daimonion/session.py` | Add `pause()`/`resume()` for timeout clock management |
 
 ### Config Additions
 

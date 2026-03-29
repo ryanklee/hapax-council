@@ -31,18 +31,18 @@
 |------|---------------|
 | `shared/ir_models.py` | Pydantic models for IR detection reports (shared schema) |
 | `logos/api/routes/pi.py` | FastAPI receiver: POST /api/pi/{role}/ir, GET /api/pi/status |
-| `agents/hapax_voice/backends/ir_presence.py` | Perception backend: reads state files, contributes 13 signals |
-| `agents/hapax_voice/ir_signals.py` | State file reader with caching (like watch_signals.py) |
+| `agents/hapax_daimonion/backends/ir_presence.py` | Perception backend: reads state files, contributes 13 signals |
+| `agents/hapax_daimonion/ir_signals.py` | State file reader with caching (like watch_signals.py) |
 
 ### Modified files
 
 | File | Change |
 |------|--------|
 | `logos/api/app.py` | Add `include_router(pi_router)` |
-| `agents/hapax_voice/__main__.py` | Register `IrPresenceBackend` |
-| `agents/hapax_voice/_perception_state_writer.py` | Add 8 IR fields to state dict |
-| `agents/hapax_voice/perception.py` | Add `ir_drowsiness_score` to `compute_interruptibility()` |
-| `agents/hapax_voice/presence_engine.py` | Add `ir_person_detected` signal weight |
+| `agents/hapax_daimonion/__main__.py` | Register `IrPresenceBackend` |
+| `agents/hapax_daimonion/_perception_state_writer.py` | Add 8 IR fields to state dict |
+| `agents/hapax_daimonion/perception.py` | Add `ir_drowsiness_score` to `compute_interruptibility()` |
+| `agents/hapax_daimonion/presence_engine.py` | Add `ir_person_detected` signal weight |
 
 ---
 
@@ -202,19 +202,19 @@ feat: add Pydantic models for IR detection reports
 ## Task 2: IR Signal Reader (state file cache)
 
 **Files:**
-- Create: `agents/hapax_voice/ir_signals.py`
-- Test: `tests/hapax_voice/test_ir_signals.py`
+- Create: `agents/hapax_daimonion/ir_signals.py`
+- Test: `tests/hapax_daimonion/test_ir_signals.py`
 
 - [ ] **Step 1: Write test for IR signal reader**
 
 ```python
-"""tests/hapax_voice/test_ir_signals.py"""
+"""tests/hapax_daimonion/test_ir_signals.py"""
 import json
 import os
 import time
 from pathlib import Path
 
-from agents.hapax_voice.ir_signals import read_ir_signal, IR_STATE_DIR
+from agents.hapax_daimonion.ir_signals import read_ir_signal, IR_STATE_DIR
 
 
 def test_read_missing_file(tmp_path):
@@ -254,13 +254,13 @@ def test_default_state_dir():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run pytest tests/hapax_voice/test_ir_signals.py -v`
+Run: `uv run pytest tests/hapax_daimonion/test_ir_signals.py -v`
 Expected: FAIL — `ModuleNotFoundError`
 
 - [ ] **Step 3: Implement reader**
 
 ```python
-"""agents/hapax_voice/ir_signals.py — Read Pi NoIR state files.
+"""agents/hapax_daimonion/ir_signals.py — Read Pi NoIR state files.
 
 Follows the same pattern as watch_signals.py: read JSON state files
 from ~/hapax-state/pi-noir/ with staleness checking.
@@ -314,7 +314,7 @@ def read_all_ir_reports(
 
 - [ ] **Step 4: Run tests**
 
-Run: `uv run pytest tests/hapax_voice/test_ir_signals.py -v`
+Run: `uv run pytest tests/hapax_daimonion/test_ir_signals.py -v`
 Expected: 5 passed
 
 - [ ] **Step 5: Commit**
@@ -328,19 +328,19 @@ feat: add IR signal reader for Pi NoIR state files
 ## Task 3: IR Presence Backend
 
 **Files:**
-- Create: `agents/hapax_voice/backends/ir_presence.py`
-- Test: `tests/hapax_voice/test_ir_presence_backend.py`
+- Create: `agents/hapax_daimonion/backends/ir_presence.py`
+- Test: `tests/hapax_daimonion/test_ir_presence_backend.py`
 
 - [ ] **Step 1: Write test for IR presence backend**
 
 ```python
-"""tests/hapax_voice/test_ir_presence_backend.py"""
+"""tests/hapax_daimonion/test_ir_presence_backend.py"""
 import json
 from pathlib import Path
 
-from agents.hapax_voice.backends.ir_presence import IrPresenceBackend
-from agents.hapax_voice.perception import PerceptionTier
-from agents.hapax_voice.primitives import Behavior
+from agents.hapax_daimonion.backends.ir_presence import IrPresenceBackend
+from agents.hapax_daimonion.perception import PerceptionTier
+from agents.hapax_daimonion.primitives import Behavior
 
 
 def _write_report(tmp_path: Path, role: str, **overrides):
@@ -458,12 +458,12 @@ def test_fusion_any_pi_presence(tmp_path):
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run pytest tests/hapax_voice/test_ir_presence_backend.py -v`
+Run: `uv run pytest tests/hapax_daimonion/test_ir_presence_backend.py -v`
 Expected: FAIL — `ModuleNotFoundError`
 
 - [ ] **Step 3: Implement backend**
 
-Create `agents/hapax_voice/backends/ir_presence.py` — FAST tier backend that reads Pi NoIR state files and contributes 13 signals. Fuses reports from up to 3 Pis with role-based priority: biometrics/gaze prefer desk Pi (face-on angle), hand activity prefers overhead Pi (best instrument view), presence uses any() across all Pis. Full implementation code is in the spec exploration context above — follow the `AttentionBackend` pattern with `Behavior[T]` instances, `contribute()` that reads via `read_all_ir_reports()`, and `provides` returning the 13 signal names.
+Create `agents/hapax_daimonion/backends/ir_presence.py` — FAST tier backend that reads Pi NoIR state files and contributes 13 signals. Fuses reports from up to 3 Pis with role-based priority: biometrics/gaze prefer desk Pi (face-on angle), hand activity prefers overhead Pi (best instrument view), presence uses any() across all Pis. Full implementation code is in the spec exploration context above — follow the `AttentionBackend` pattern with `Behavior[T]` instances, `contribute()` that reads via `read_all_ir_reports()`, and `provides` returning the 13 signal names.
 
 Key implementation details:
 - Person detection: `any()` across Pis
@@ -475,7 +475,7 @@ Key implementation details:
 
 - [ ] **Step 4: Run tests**
 
-Run: `uv run pytest tests/hapax_voice/test_ir_presence_backend.py -v`
+Run: `uv run pytest tests/hapax_daimonion/test_ir_presence_backend.py -v`
 Expected: 7 passed
 
 - [ ] **Step 5: Commit**
@@ -602,12 +602,12 @@ feat: add Logos API receiver for Pi NoIR detection reports
 ## Task 5: Register Backend + Presence Signal
 
 **Files:**
-- Modify: `agents/hapax_voice/__main__.py:665-705`
-- Modify: `agents/hapax_voice/presence_engine.py:27-39`
+- Modify: `agents/hapax_daimonion/__main__.py:665-705`
+- Modify: `agents/hapax_daimonion/presence_engine.py:27-39`
 
 - [ ] **Step 1: Add IR presence signal weight**
 
-In `agents/hapax_voice/presence_engine.py`, add to `DEFAULT_SIGNAL_WEIGHTS` dict after `room_occupancy` (line 39):
+In `agents/hapax_daimonion/presence_engine.py`, add to `DEFAULT_SIGNAL_WEIGHTS` dict after `room_occupancy` (line 39):
 
 ```python
     "ir_person_detected": (0.90, 0.10),  # lighting-invariant IR detection
@@ -625,11 +625,11 @@ In `presence_engine.py` `_read_signals` method, add after existing `room_occupan
 
 - [ ] **Step 3: Register IrPresenceBackend in daemon**
 
-In `agents/hapax_voice/__main__.py`, add after the mixer_input backend registration (~line 665):
+In `agents/hapax_daimonion/__main__.py`, add after the mixer_input backend registration (~line 665):
 
 ```python
         try:
-            from agents.hapax_voice.backends.ir_presence import IrPresenceBackend
+            from agents.hapax_daimonion.backends.ir_presence import IrPresenceBackend
 
             self.perception.register_backend(IrPresenceBackend())
         except Exception:
@@ -638,7 +638,7 @@ In `agents/hapax_voice/__main__.py`, add after the mixer_input backend registrat
 
 - [ ] **Step 4: Run presence tests**
 
-Run: `uv run pytest tests/hapax_voice/ -k presence -v`
+Run: `uv run pytest tests/hapax_daimonion/ -k presence -v`
 Expected: All pass
 
 - [ ] **Step 5: Commit**
@@ -652,8 +652,8 @@ feat: register IR presence backend and add signal to presence engine
 ## Task 6: Perception State Writer + Interruptibility
 
 **Files:**
-- Modify: `agents/hapax_voice/_perception_state_writer.py:329-430`
-- Modify: `agents/hapax_voice/perception.py:75-144`
+- Modify: `agents/hapax_daimonion/_perception_state_writer.py:329-430`
+- Modify: `agents/hapax_daimonion/perception.py:75-144`
 
 - [ ] **Step 1: Add IR fields to perception state writer**
 
@@ -689,7 +689,7 @@ Grep for `compute_interruptibility(` to find the caller. Add `ir_drowsiness_scor
 
 - [ ] **Step 4: Run tests**
 
-Run: `uv run pytest tests/hapax_voice/ -v -x --timeout=30`
+Run: `uv run pytest tests/hapax_daimonion/ -v -x --timeout=30`
 Expected: All pass
 
 - [ ] **Step 5: Commit**
@@ -879,13 +879,13 @@ Expected: `overhead.online = true`
 - [ ] **Step 8: Restart voice daemon**
 
 ```bash
-systemctl --user restart hapax-voice
+systemctl --user restart hapax-daimonion
 ```
 
 - [ ] **Step 9: Verify IR in perception state**
 
 ```bash
-python3 -c "import json; d=json.load(open('$HOME/.cache/hapax-voice/perception-state.json')); [print(f'{k}: {v}') for k,v in sorted(d.items()) if k.startswith('ir_')]"
+python3 -c "import json; d=json.load(open('$HOME/.cache/hapax-daimonion/perception-state.json')); [print(f'{k}: {v}') for k,v in sorted(d.items()) if k.startswith('ir_')]"
 ```
 
 Expected: live ir_ fields

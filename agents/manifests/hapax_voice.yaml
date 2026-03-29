@@ -1,4 +1,4 @@
-id: hapax_voice
+id: hapax_daimonion
 name: Voice Daemon
 version: "1.0.0"
 category: interaction
@@ -59,7 +59,7 @@ health_group: voice
 service_tier: 1
 
 narrative: |
-  The Voice Daemon (hapax_voice) is the system's real-time interaction layer. It runs
+  The Voice Daemon (hapax_daimonion) is the system's real-time interaction layer. It runs
   as an always-on daemon with a perception engine that processes audio streams, detects
   voice activity, classifies emotions, and tracks musical position from DAW transport.
   Two governance chains make autonomous decisions: MC governance decides when to vocalize

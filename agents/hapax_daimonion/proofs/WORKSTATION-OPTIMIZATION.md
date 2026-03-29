@@ -45,7 +45,7 @@ net.core.wmem_default = 1048576
 [Service]
 Environment="IRQBALANCE_BANNED_CPULIST=14-15"
 ```
-Then pin voice daemon: `taskset -c 14,15 uv run python -m agents.hapax_voice`
+Then pin voice daemon: `taskset -c 14,15 uv run python -m agents.hapax_daimonion`
 
 ---
 

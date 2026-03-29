@@ -6,7 +6,7 @@
 
 ## What Changed
 
-Updated `agents/hapax_voice/proofs/RESEARCH-STATE.md` with session 17 entry documenting perceptual system hardening (PR #322, 20 fixes across 6 subsystems).
+Updated `agents/hapax_daimonion/proofs/RESEARCH-STATE.md` with session 17 entry documenting perceptual system hardening (PR #322, 20 fixes across 6 subsystems).
 
 ## Why
 

@@ -437,7 +437,7 @@ The filter must intercept the raw tool result, redact/abstract it, and pass only
 
 ### 7.4 Integration Point: Existing Tool Handlers
 
-The existing `handle_search_documents`, `handle_get_calendar_today`, and `handle_search_emails` in `agents/hapax_voice/tools.py` currently return raw results to the LLM via `params.result_callback`. The privacy filter wraps `result_callback`:
+The existing `handle_search_documents`, `handle_get_calendar_today`, and `handle_search_emails` in `agents/hapax_daimonion/tools.py` currently return raw results to the LLM via `params.result_callback`. The privacy filter wraps `result_callback`:
 
 ```python
 # Conceptual — actual implementation would be a decorator or middleware

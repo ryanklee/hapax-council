@@ -23,7 +23,7 @@ Docker Compose (infrastructure)     systemd user units (application + utilities)
 ─────────────────────────────────   ─────────────────────────────────────────────
 qdrant, postgres, redis,            hapax-secrets     → all credentials (oneshot)
 litellm, langfuse, grafana,         logos-api         → FastAPI :8051
-prometheus, clickhouse,             hapax-voice       → voice daemon (GPU)
+prometheus, clickhouse,             hapax-daimonion       → voice daemon (GPU)
 n8n, open-webui, minio, ntfy       hapax-logos       → Tauri native app (GPU)
                                     visual-layer-agg  → perception pipeline
                                     studio-compositor → camera tiling (GPU)
@@ -40,10 +40,10 @@ Managed by:                         studio-fx-output  → ffmpeg /dev/video50
 3. llm-stack-analytics       docker compose --profile analytics up -d (60s after llm-stack)
 4. logos-api.service         After: llm-stack, hapax-secrets
 5. officium-api.service      After: llm-stack, hapax-secrets
-6. hapax-voice.service       After: pipewire, hapax-secrets (+10s delay for GPU sequencing)
+6. hapax-daimonion.service       After: pipewire, hapax-secrets (+10s delay for GPU sequencing)
 7. hapax-logos.service        After: graphical-session, logos-api (__NV_DISABLE_EXPLICIT_SYNC=1)
-8. visual-layer-aggregator   After: logos-api, hapax-voice, hapax-secrets
-9. studio-compositor         After: hapax-voice, visual-layer-aggregator (+10s for USB cameras)
+8. visual-layer-aggregator   After: logos-api, hapax-daimonion, hapax-secrets
+9. studio-compositor         After: hapax-daimonion, visual-layer-aggregator (+10s for USB cameras)
 10. studio-fx-output         After: studio-compositor
 11. Timers activate          vram-watchdog (30s), health-monitor (15m), sync agents, backups,
                               rebuild-logos (5m), rebuild-services (5m)
@@ -63,7 +63,7 @@ Written to `/run/user/1000/hapax-secrets.env` (tmpfs, 0600). All services declar
 
 | Service | MemoryMax | OOMScoreAdjust | Nice | CPUWeight |
 |---------|-----------|----------------|------|-----------|
-| hapax-voice | 8G | -500 | -10 | default |
+| hapax-daimonion | 8G | -500 | -10 | default |
 | hapax-logos | 4G | default | default | default |
 | studio-compositor | 4G | default | default | 500 |
 | visual-layer-aggregator | 1G | default | default | default |
@@ -91,7 +91,7 @@ systemctl --user daemon-reload
 For development, stop systemd services and use process-compose:
 
 ```bash
-systemctl --user stop logos-api hapax-voice visual-layer-aggregator studio-compositor
+systemctl --user stop logos-api hapax-daimonion visual-layer-aggregator studio-compositor
 process-compose up           # TUI mode
 process-compose attach       # attach to running instance
 ```
@@ -112,7 +112,7 @@ Two timers poll `origin/main` every 5 minutes and rebuild/restart services when 
 
 | Service | Repo | Watched Paths | SHA Key |
 |---------|------|---------------|---------|
-| `hapax-voice.service` | hapax-council | `agents/hapax_voice/` `shared/` | `voice` |
+| `hapax-daimonion.service` | hapax-council | `agents/hapax_daimonion/` `shared/` | `voice` |
 | `logos-api.service` | hapax-council | `logos/` | `logos-api` |
 | `officium-api.service` | hapax-officium | (entire repo) | `officium` |
 | hapax-mcp (pull-only) | hapax-mcp | (entire repo) | `hapax-mcp` |

@@ -6,7 +6,7 @@
 
 ## What Changed
 
-`agents/hapax_voice/proofs/RESEARCH-STATE.md`: Added session 16 entry documenting langfuse-sync timeout fix and documentation updates. Updated "Last updated" header.
+`agents/hapax_daimonion/proofs/RESEARCH-STATE.md`: Added session 16 entry documenting langfuse-sync timeout fix and documentation updates. Updated "Last updated" header.
 
 ## Why
 

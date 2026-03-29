@@ -1,6 +1,6 @@
 # Voice Observability Design
 
-**Goal:** Add meaningful observability to hapax-voice audio-vision layers via structured event logging and Langfuse trace integration.
+**Goal:** Add meaningful observability to hapax-daimonion audio-vision layers via structured event logging and Langfuse trace integration.
 
 **Decision:** Approach A (structured JSONL event log) + Approach B (Langfuse SDK trace integration). No Prometheus, no dashboards — JSONL + Langfuse is sufficient for debugging and improvement assessment.
 
@@ -8,7 +8,7 @@
 
 ## Part A: Structured Event Log
 
-New module `agents/hapax_voice/event_log.py`. Appends JSON-lines to `~/.local/share/hapax-voice/events-YYYY-MM-DD.jsonl`. Daily rotation with configurable retention (default 14 days).
+New module `agents/hapax_daimonion/event_log.py`. Appends JSON-lines to `~/.local/share/hapax-daimonion/events-YYYY-MM-DD.jsonl`. Daily rotation with configurable retention (default 14 days).
 
 ### Event Schema
 
@@ -19,7 +19,7 @@ Every event includes:
 | `ts` | float | Unix timestamp |
 | `type` | string | Event type identifier |
 | `session_id` | string \| null | Current voice session ID, null if no active session |
-| `source_service` | string | Always `"hapax-voice"` |
+| `source_service` | string | Always `"hapax-daimonion"` |
 
 Plus type-specific fields.
 
@@ -51,7 +51,7 @@ Single instance created in `VoiceDaemon.__init__()`, passed to subsystems via se
 
 ## Part B: Langfuse Trace Integration
 
-New module `agents/hapax_voice/tracing.py`. Uses `langfuse` Python SDK to create traces with spans. LiteLLM auto-detects active Langfuse trace context and attaches API calls as child spans.
+New module `agents/hapax_daimonion/tracing.py`. Uses `langfuse` Python SDK to create traces with spans. LiteLLM auto-detects active Langfuse trace context and attaches API calls as child spans.
 
 ### Traces
 
@@ -65,8 +65,8 @@ New module `agents/hapax_voice/tracing.py`. Uses `langfuse` Python SDK to create
 
 Every trace includes:
 - `session_id` as Langfuse session ID (links traces within same voice session)
-- `metadata.source_service: "hapax-voice"` for filtering
-- `tags: ["hapax-voice"]` for Langfuse UI filtering
+- `metadata.source_service: "hapax-daimonion"` for filtering
+- `tags: ["hapax-daimonion"]` for Langfuse UI filtering
 
 ### API Surface
 
@@ -120,6 +120,6 @@ observability_events_retention_days: int = 14
 
 **Not in scope for this implementation**, but the schema is designed for it.
 
-A future timer-based agent reads daily JSONL, computes aggregates (gate block distribution, analysis success rate, presence accuracy, face detection confidence distribution), and writes a summary document to Qdrant `documents` collection with `source_service: "hapax-voice"` metadata. This makes observability data visible to briefing, digest, and profiler agents.
+A future timer-based agent reads daily JSONL, computes aggregates (gate block distribution, analysis success rate, presence accuracy, face detection confidence distribution), and writes a summary document to Qdrant `documents` collection with `source_service: "hapax-daimonion"` metadata. This makes observability data visible to briefing, digest, and profiler agents.
 
 The `session_id` field in both JSONL events and Langfuse traces enables correlation across the two systems.

@@ -5,4 +5,4 @@ categories: [data]
 description: "Phase A complete. Context anchoring score 0.317, declining trajectories, frustration exclusively mechanical."
 ---
 
-{{< include ../../../../agents/hapax_voice/proofs/BASELINE-ANALYSIS.md >}}
+{{< include ../../../../agents/hapax_daimonion/proofs/BASELINE-ANALYSIS.md >}}

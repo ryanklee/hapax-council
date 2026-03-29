@@ -82,7 +82,7 @@ The governing hypothesis: alignment and governance are not costs applied to a us
 | shared/ modules | 83 files across 8 subsystems |
 | agents/ modules | 221 files across 7 subsystems |
 | logos/ modules | 43 files |
-| hapax_voice/ | 95 files (largest subsystem) |
+| hapax_daimonion/ | 95 files (largest subsystem) |
 | Test files | 470+ |
 | Agent manifests | 33 (YAML, 4-layer schema) |
 | Systemd services | 12 long-running services, 41 timers |
@@ -451,7 +451,7 @@ Frequency window tracks event patterns for novelty detection: events with patter
 
 ### Overview
 
-The voice daemon (`agents/hapax_voice/__main__.py`) is the largest subsystem (95+ files). It provides continuous voice interaction with the operator.
+The voice daemon (`agents/hapax_daimonion/__main__.py`) is the largest subsystem (95+ files). It provides continuous voice interaction with the operator.
 
 **Pipeline:** Wake word (Whisper-based, fuzzy phonetic matching) → VAD-gated audio accumulation (1.5s pre-roll) → STT (faster-whisper, resident in VRAM, contextual prompt conditioning) → Salience routing (concern graph activation) → LLM call (Opus via LiteLLM, 150 token max, 25 word spoken cutoff) → Streaming TTS (Voxtral via Mistral API, clause-level chunking) → Audio output (PyAudio) → Per-turn grounding evaluation → Frustration detection → Langfuse scoring
 
@@ -805,7 +805,7 @@ React Flow visualization of the system's circulatory anatomy. 9 nodes (Perceptio
 | KNOWLEDGE | 2 | knowledge_maint, query |
 | SYNTHESIS | 8 | demo, demo_eval, briefing, digest, research, scout, video_processor, studio_compositor |
 | GOVERNANCE | 3 | code_review, drift_detector, deliberation_eval |
-| INTERACTION | 4 | hapax_voice, watch_receiver, sdlc_metrics, backup |
+| INTERACTION | 4 | hapax_daimonion, watch_receiver, sdlc_metrics, backup |
 
 ### Notable Agents
 
@@ -863,7 +863,7 @@ hapax-secrets.service          (oneshot) Load all credentials from pass store
 │   ├─► llm-stack-analytics    (oneshot) docker compose --profile analytics up -d [60s delay]
 │   ├─► logos-api.service      FastAPI on :8051
 │   ├─► officium-api.service   FastAPI on :8050
-├─► hapax-voice.service        Voice daemon (After: pipewire, secrets) [10s delay]
+├─► hapax-daimonion.service        Voice daemon (After: pipewire, secrets) [10s delay]
 ├─► visual-layer-aggregator    Perception → Stimmung → /dev/shm (After: logos-api, voice)
 ├─► studio-compositor.service  GPU camera tiling/recording/HLS (After: voice, visual-agg)
 │   └─► studio-fx-output       ffmpeg snapshot → /dev/video50
@@ -875,7 +875,7 @@ hapax-secrets.service          (oneshot) Load all credentials from pass store
 
 **Resource isolation**: Each service has its own cgroup with explicit MemoryMax, OOMScoreAdjust, Nice, and CPUWeight. Priority tiers:
 - Tier 0 (real-time): studio-compositor (CPUWeight=500)
-- Tier 1 (interactive): hapax-voice (Nice=-10, OOMScoreAdjust=-500, MemoryMax=8G)
+- Tier 1 (interactive): hapax-daimonion (Nice=-10, OOMScoreAdjust=-500, MemoryMax=8G)
 - Tier 2 (background): studio-fx-output (Nice=10)
 
 **Recovery**: Kernel panic auto-reboots in 10s. Hardware watchdog (SP5100 TCO) forces reset if systemd hangs. greetd autologin + lingering ensures all services restart without human intervention.
@@ -996,7 +996,7 @@ Five explicit failure modes define the boundary: if the system exhibits fact ext
 
 An observed artifact — a Gemini system prompt leak (captured 2026-03-18) — demonstrates all five failure modes in a single interaction: the model allocated its reasoning budget to a four-step trigger detection decision tree for a simple alarm request.
 
-→ Full analysis in `agents/hapax_voice/proofs/POSITION.md`
+→ Full analysis in `agents/hapax_daimonion/proofs/POSITION.md`
 
 ### Experimental Design
 
@@ -1020,7 +1020,7 @@ Sequential stopping: Bayes Factor > 10 (decisive evidence) or max sessions reach
 - **Class R (Retrieval-native):** the industry's home turf. Reference accuracy, sentinel recall, cross-session memory. Must match or exceed profile-retrieval baselines.
 - **Class F (Failure-mode detectors):** alert if the system regresses toward profile-retrieval patterns. Five boolean watchdogs matching the five failure modes.
 
-→ Full framework in `agents/hapax_voice/proofs/OBSERVABILITY.md`
+→ Full framework in `agents/hapax_daimonion/proofs/OBSERVABILITY.md`
 
 ### Baseline Status (2026-03-19)
 
@@ -1028,18 +1028,18 @@ Sequential stopping: Bayes Factor > 10 (decisive evidence) or max sessions reach
 
 **Session 5 (0522076a3c4d)** produced the strongest grounding evidence in the experiment. The operator posed open-ended relational questions ("How are you feeling today?"). The system responded with self-reflection about its operational state. The operator performed a Clark grounding sequence (reflect → probe → accept → commit to act). This occurred in baseline conditions (all features OFF), suggesting the context anchoring architecture itself — where the model sees workspace state as continuous environment rather than retrieval index — may enable emergent grounding that profile-retrieval does not replicate.
 
-→ Pre-registered hypotheses in `agents/hapax_voice/proofs/claim-*/hypothesis.md`
-→ Baseline data in `agents/hapax_voice/proofs/claim-*/data/`
+→ Pre-registered hypotheses in `agents/hapax_daimonion/proofs/claim-*/hypothesis.md`
+→ Baseline data in `agents/hapax_daimonion/proofs/claim-*/data/`
 
 ### Related Research Directions (Deferred to Post-Baseline)
 
 **Tool calls as epistemic acts:** Current tools are monolithic retrieval operations that interrupt the grounding process (structurally analogous to profile retrieval). Research direction: decomposable atomic primitives, composable based on conversational state, fitted to the temporal band envelope, subject to Bayesian pre-execution scoring. Decision on whether to redesign deferred to post-baseline analysis.
 
-→ Full analysis in `agents/hapax_voice/proofs/TOOL-CALLS.md`
+→ Full analysis in `agents/hapax_daimonion/proofs/TOOL-CALLS.md`
 
 **Barge-in as grounding repair:** When the operator speaks during the system's response, the system goes deaf (speaking gate drops all audio). Research direction: (a) detect barge-in, (b) finish current clause gracefully, (c) capture operator speech during (b) via AEC residual, (d) inject as concurrent thread annotation for next round. Maps to Clark's other-initiated repair + mutual monitoring. No existing system implements grounding-aware barge-in repair in a live voice pipeline.
 
-→ Full analysis in `agents/hapax_voice/proofs/BARGE-IN-REPAIR.md`
+→ Full analysis in `agents/hapax_daimonion/proofs/BARGE-IN-REPAIR.md`
 
 ---
 
@@ -1319,7 +1319,7 @@ Full system feature audit: 110 features inventoried across 11 groups, all DONE. 
 docker compose up -d                    # 13 containers
 systemctl --user start logos-api      # FastAPI on :8051
 systemctl --user start visual-layer-aggregator  # Stimmung + temporal + shm
-systemctl --user start hapax-voice      # Voice daemon
+systemctl --user start hapax-daimonion      # Voice daemon
 systemctl --user start studio-compositor # GStreamer pipeline
 
 # Start Hapax Logos (desktop app)
@@ -1335,7 +1335,7 @@ curl http://localhost:8051/api/health
 
 | Path | What Lives There |
 |------|-----------------|
-| `~/.cache/hapax-voice/perception-state.json` | Live perception snapshot (2.5s) |
+| `~/.cache/hapax-daimonion/perception-state.json` | Live perception snapshot (2.5s) |
 | `/dev/shm/hapax-stimmung/state.json` | System self-state (60s) |
 | `/dev/shm/hapax-temporal/bands.json` | Temporal bands (3s) |
 | `/dev/shm/hapax-apperception/self-band.json` | Self-model (3s) |
@@ -1350,7 +1350,7 @@ curl http://localhost:8051/api/health
 | Symptom | Probable Cause | Action |
 |---------|---------------|--------|
 | Stimmung shows critical | LLM cost > $50/day or stale health data | Check `cat /dev/shm/hapax-stimmung/state.json`, restart visual-layer-aggregator |
-| Voice daemon not responding | Service crashed | `systemctl --user restart hapax-voice` |
+| Voice daemon not responding | Service crashed | `systemctl --user restart hapax-daimonion` |
 | Flow page shows "connecting..." | Logos API not running or not restarted after code change | `fuser -k 8051/tcp; systemctl --user start logos-api` |
 | Temporal bands stale | Visual aggregator not running | `systemctl --user restart visual-layer-aggregator` |
 | Consent stuck in pending | Face detector seeing screen reflections as faces | Check `/dev/shm/hapax-compositor/visual-layer-state.json` voice_session.consent_phase |

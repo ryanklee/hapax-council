@@ -69,7 +69,7 @@ Bit depth:      16-bit signed integer
 Channels:       Mono (centered phantom image)
 Format:         WAV (PCM)
 File sizes:     ~17-34 KB each
-Storage:        ~/.local/share/hapax-voice/chimes/
+Storage:        ~/.local/share/hapax-daimonion/chimes/
   activation.wav
   deactivation.wav
   error.wav
@@ -121,7 +121,7 @@ class ChimePlayer:
     def close(self) -> None: ...           # Release PyAudio resources
 ```
 
-**Chime directory auto-generation:** If `~/.local/share/hapax-voice/chimes/` doesn't exist or is empty, the daemon generates the chimes on first startup using the synthesis function. This means the chimes are always available — no manual generation step required.
+**Chime directory auto-generation:** If `~/.local/share/hapax-daimonion/chimes/` doesn't exist or is empty, the daemon generates the chimes on first startup using the synthesis function. This means the chimes are always available — no manual generation step required.
 
 ---
 
@@ -257,7 +257,7 @@ New fields in `VoiceConfig`:
 # Chime settings
 chime_enabled: bool = True
 chime_volume: float = 0.7       # 0.0-1.0, relative to system volume
-chime_dir: str = "~/.local/share/hapax-voice/chimes"
+chime_dir: str = "~/.local/share/hapax-daimonion/chimes"
 ```
 
 ---

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Exercise all 8 fundamental surfaces of the hapax-voice daemon to 99% basic-flow reliability, gated sequentially.
+**Goal:** Exercise all 8 fundamental surfaces of the hapax-daimonion daemon to 99% basic-flow reliability, gated sequentially.
 
 **Architecture:** Integration tests that wire real components together with mocked I/O boundaries (audio hardware, LLM endpoints, Hyprland IPC). Each surface has a gating test that must pass before proceeding to the next. Live smoke test script validates against the running daemon.
 
@@ -15,7 +15,7 @@
 ## File Structure
 
 ```
-tests/hapax_voice/
+tests/hapax_daimonion/
   test_surface_wake_pipeline.py    # Surface 1: wake word → pipeline start
   test_surface_voice_roundtrip.py  # Surface 2: STT → LLM → TTS
   test_surface_session.py          # Surface 3: session lifecycle
@@ -43,7 +43,7 @@ Every surface test builds a `VoiceDaemon` with `__init__` bypassed and individua
 ### Task 1: Surface 1 — Wake Word → Pipeline Start
 
 **Files:**
-- Create: `tests/hapax_voice/test_surface_wake_pipeline.py`
+- Create: `tests/hapax_daimonion/test_surface_wake_pipeline.py`
 
 This tests the critical path: wake word detected → session opens → audio input stops → pipeline builds → pipeline task created.
 
@@ -62,8 +62,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agents.hapax_voice.__main__ import VoiceDaemon
-from agents.hapax_voice.session import VoiceLifecycle
+from agents.hapax_daimonion.__main__ import VoiceDaemon
+from agents.hapax_daimonion.session import VoiceLifecycle
 
 
 def _make_daemon() -> VoiceDaemon:
@@ -151,7 +151,7 @@ class TestWakeWordStartsPipeline:
         daemon = _make_daemon()
 
         with patch(
-            "agents.hapax_voice.__main__.VoiceDaemon._start_pipeline",
+            "agents.hapax_daimonion.__main__.VoiceDaemon._start_pipeline",
             new_callable=AsyncMock,
         ) as mock_start:
             daemon._on_wake_word()
@@ -168,7 +168,7 @@ class TestWakeWordStartsPipeline:
         mock_transport = MagicMock()
 
         with patch(
-            "agents.hapax_voice.pipeline.build_pipeline_task",
+            "agents.hapax_daimonion.pipeline.build_pipeline_task",
             return_value=(mock_task, mock_transport),
         ), patch("pipecat.pipeline.runner.PipelineRunner"):
             await daemon._start_local_pipeline()
@@ -180,7 +180,7 @@ class TestWakeWordStartsPipeline:
         daemon = _make_daemon()
 
         with patch(
-            "agents.hapax_voice.pipeline.build_pipeline_task",
+            "agents.hapax_daimonion.pipeline.build_pipeline_task",
             side_effect=RuntimeError("build failed"),
         ):
             await daemon._start_local_pipeline()
@@ -205,20 +205,20 @@ class TestWakeWordStartsPipeline:
 
 - [ ] **Step 2: Run tests to verify they pass**
 
-Run: `uv run pytest tests/hapax_voice/test_surface_wake_pipeline.py -v`
+Run: `uv run pytest tests/hapax_daimonion/test_surface_wake_pipeline.py -v`
 Expected: All tests PASS
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add tests/hapax_voice/test_surface_wake_pipeline.py
+git add tests/hapax_daimonion/test_surface_wake_pipeline.py
 git commit -m "test: add surface 1 — wake word → pipeline integration tests"
 ```
 
 ### Task 2: Surface 2 — STT → LLM → TTS Voice Round-Trip
 
 **Files:**
-- Create: `tests/hapax_voice/test_surface_voice_roundtrip.py`
+- Create: `tests/hapax_daimonion/test_surface_voice_roundtrip.py`
 
 This tests pipeline construction produces a valid processor chain and that each stage connects correctly. We can't run a real STT/LLM/TTS round-trip in tests (requires GPU + API), so we verify the wiring is correct.
 
@@ -237,20 +237,20 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agents.hapax_voice.pipeline import build_pipeline_task
+from agents.hapax_daimonion.pipeline import build_pipeline_task
 
 
 class TestPipelineWiring:
     """Pipeline processors are wired in the correct order."""
 
-    @patch("agents.hapax_voice.pipeline.LocalAudioTransport")
-    @patch("agents.hapax_voice.pipeline.WhisperSTTService")
-    @patch("agents.hapax_voice.pipeline.OpenAILLMService")
-    @patch("agents.hapax_voice.pipeline.KokoroTTSService")
-    @patch("agents.hapax_voice.pipeline.LLMContext")
-    @patch("agents.hapax_voice.pipeline.LLMContextAggregatorPair")
-    @patch("agents.hapax_voice.pipeline.Pipeline")
-    @patch("agents.hapax_voice.pipeline.PipelineTask")
+    @patch("agents.hapax_daimonion.pipeline.LocalAudioTransport")
+    @patch("agents.hapax_daimonion.pipeline.WhisperSTTService")
+    @patch("agents.hapax_daimonion.pipeline.OpenAILLMService")
+    @patch("agents.hapax_daimonion.pipeline.KokoroTTSService")
+    @patch("agents.hapax_daimonion.pipeline.LLMContext")
+    @patch("agents.hapax_daimonion.pipeline.LLMContextAggregatorPair")
+    @patch("agents.hapax_daimonion.pipeline.Pipeline")
+    @patch("agents.hapax_daimonion.pipeline.PipelineTask")
     def test_processor_order(
         self,
         mock_task_cls,
@@ -285,14 +285,14 @@ class TestPipelineWiring:
         assert processors[5] == mock_t.output()  # transport output
         assert processors[6] == mock_agg.assistant()  # assistant aggregator
 
-    @patch("agents.hapax_voice.pipeline.LocalAudioTransport")
-    @patch("agents.hapax_voice.pipeline.WhisperSTTService")
-    @patch("agents.hapax_voice.pipeline.OpenAILLMService")
-    @patch("agents.hapax_voice.pipeline.KokoroTTSService")
-    @patch("agents.hapax_voice.pipeline.LLMContext")
-    @patch("agents.hapax_voice.pipeline.LLMContextAggregatorPair")
-    @patch("agents.hapax_voice.pipeline.Pipeline")
-    @patch("agents.hapax_voice.pipeline.PipelineTask")
+    @patch("agents.hapax_daimonion.pipeline.LocalAudioTransport")
+    @patch("agents.hapax_daimonion.pipeline.WhisperSTTService")
+    @patch("agents.hapax_daimonion.pipeline.OpenAILLMService")
+    @patch("agents.hapax_daimonion.pipeline.KokoroTTSService")
+    @patch("agents.hapax_daimonion.pipeline.LLMContext")
+    @patch("agents.hapax_daimonion.pipeline.LLMContextAggregatorPair")
+    @patch("agents.hapax_daimonion.pipeline.Pipeline")
+    @patch("agents.hapax_daimonion.pipeline.PipelineTask")
     def test_stt_model_forwarded(
         self,
         mock_task_cls,
@@ -314,14 +314,14 @@ class TestPipelineWiring:
             model="large-v3", device="cuda", compute_type="float16", no_speech_prob=0.4,
         )
 
-    @patch("agents.hapax_voice.pipeline.LocalAudioTransport")
-    @patch("agents.hapax_voice.pipeline.WhisperSTTService")
-    @patch("agents.hapax_voice.pipeline.OpenAILLMService")
-    @patch("agents.hapax_voice.pipeline.KokoroTTSService")
-    @patch("agents.hapax_voice.pipeline.LLMContext")
-    @patch("agents.hapax_voice.pipeline.LLMContextAggregatorPair")
-    @patch("agents.hapax_voice.pipeline.Pipeline")
-    @patch("agents.hapax_voice.pipeline.PipelineTask")
+    @patch("agents.hapax_daimonion.pipeline.LocalAudioTransport")
+    @patch("agents.hapax_daimonion.pipeline.WhisperSTTService")
+    @patch("agents.hapax_daimonion.pipeline.OpenAILLMService")
+    @patch("agents.hapax_daimonion.pipeline.KokoroTTSService")
+    @patch("agents.hapax_daimonion.pipeline.LLMContext")
+    @patch("agents.hapax_daimonion.pipeline.LLMContextAggregatorPair")
+    @patch("agents.hapax_daimonion.pipeline.Pipeline")
+    @patch("agents.hapax_daimonion.pipeline.PipelineTask")
     def test_llm_uses_litellm_config(
         self,
         mock_task_cls,
@@ -349,14 +349,14 @@ class TestPipelineWiring:
             base_url="http://127.0.0.1:4000",
         )
 
-    @patch("agents.hapax_voice.pipeline.LocalAudioTransport")
-    @patch("agents.hapax_voice.pipeline.WhisperSTTService")
-    @patch("agents.hapax_voice.pipeline.OpenAILLMService")
-    @patch("agents.hapax_voice.pipeline.KokoroTTSService")
-    @patch("agents.hapax_voice.pipeline.LLMContext")
-    @patch("agents.hapax_voice.pipeline.LLMContextAggregatorPair")
-    @patch("agents.hapax_voice.pipeline.Pipeline")
-    @patch("agents.hapax_voice.pipeline.PipelineTask")
+    @patch("agents.hapax_daimonion.pipeline.LocalAudioTransport")
+    @patch("agents.hapax_daimonion.pipeline.WhisperSTTService")
+    @patch("agents.hapax_daimonion.pipeline.OpenAILLMService")
+    @patch("agents.hapax_daimonion.pipeline.KokoroTTSService")
+    @patch("agents.hapax_daimonion.pipeline.LLMContext")
+    @patch("agents.hapax_daimonion.pipeline.LLMContextAggregatorPair")
+    @patch("agents.hapax_daimonion.pipeline.Pipeline")
+    @patch("agents.hapax_daimonion.pipeline.PipelineTask")
     def test_tools_registered_in_context(
         self,
         mock_task_cls,
@@ -380,14 +380,14 @@ class TestPipelineWiring:
         from pipecat.adapters.schemas.tools_schema import ToolsSchema
         assert isinstance(tools_arg, ToolsSchema)
 
-    @patch("agents.hapax_voice.pipeline.LocalAudioTransport")
-    @patch("agents.hapax_voice.pipeline.WhisperSTTService")
-    @patch("agents.hapax_voice.pipeline.OpenAILLMService")
-    @patch("agents.hapax_voice.pipeline.KokoroTTSService")
-    @patch("agents.hapax_voice.pipeline.LLMContext")
-    @patch("agents.hapax_voice.pipeline.LLMContextAggregatorPair")
-    @patch("agents.hapax_voice.pipeline.Pipeline")
-    @patch("agents.hapax_voice.pipeline.PipelineTask")
+    @patch("agents.hapax_daimonion.pipeline.LocalAudioTransport")
+    @patch("agents.hapax_daimonion.pipeline.WhisperSTTService")
+    @patch("agents.hapax_daimonion.pipeline.OpenAILLMService")
+    @patch("agents.hapax_daimonion.pipeline.KokoroTTSService")
+    @patch("agents.hapax_daimonion.pipeline.LLMContext")
+    @patch("agents.hapax_daimonion.pipeline.LLMContextAggregatorPair")
+    @patch("agents.hapax_daimonion.pipeline.Pipeline")
+    @patch("agents.hapax_daimonion.pipeline.PipelineTask")
     def test_guest_mode_has_no_tools(
         self,
         mock_task_cls,
@@ -414,13 +414,13 @@ class TestSystemPromptContent:
     """System prompt contains expected persona elements."""
 
     def test_prompt_contains_hapax_identity(self):
-        from agents.hapax_voice.persona import system_prompt
+        from agents.hapax_daimonion.persona import system_prompt
 
         prompt = system_prompt(guest_mode=False)
         assert "hapax" in prompt.lower() or "assistant" in prompt.lower()
 
     def test_guest_prompt_differs(self):
-        from agents.hapax_voice.persona import system_prompt
+        from agents.hapax_daimonion.persona import system_prompt
 
         normal = system_prompt(guest_mode=False)
         guest = system_prompt(guest_mode=True)
@@ -429,13 +429,13 @@ class TestSystemPromptContent:
 
 - [ ] **Step 2: Run tests**
 
-Run: `uv run pytest tests/hapax_voice/test_surface_voice_roundtrip.py -v`
+Run: `uv run pytest tests/hapax_daimonion/test_surface_voice_roundtrip.py -v`
 Expected: All tests PASS
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add tests/hapax_voice/test_surface_voice_roundtrip.py
+git add tests/hapax_daimonion/test_surface_voice_roundtrip.py
 git commit -m "test: add surface 2 — voice round-trip pipeline wiring tests"
 ```
 
@@ -446,7 +446,7 @@ git commit -m "test: add surface 2 — voice round-trip pipeline wiring tests"
 ### Task 3: Surface 3 — Session Lifecycle
 
 **Files:**
-- Create: `tests/hapax_voice/test_surface_session.py`
+- Create: `tests/hapax_daimonion/test_surface_session.py`
 
 Tests the full session state machine: open, close, timeout, pause, resume. Uses a real `VoiceLifecycle` wired into a mocked daemon to test end-to-end session management.
 
@@ -466,8 +466,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agents.hapax_voice.__main__ import VoiceDaemon
-from agents.hapax_voice.session import VoiceLifecycle
+from agents.hapax_daimonion.__main__ import VoiceDaemon
+from agents.hapax_daimonion.session import VoiceLifecycle
 
 
 def _make_daemon(silence_timeout_s: int = 30) -> VoiceDaemon:
@@ -658,20 +658,20 @@ class TestGuestMode:
 
 - [ ] **Step 2: Run tests**
 
-Run: `uv run pytest tests/hapax_voice/test_surface_session.py -v`
+Run: `uv run pytest tests/hapax_daimonion/test_surface_session.py -v`
 Expected: All tests PASS
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add tests/hapax_voice/test_surface_session.py
+git add tests/hapax_daimonion/test_surface_session.py
 git commit -m "test: add surface 3 — session lifecycle integration tests"
 ```
 
 ### Task 4: Surface 4 — Tool Calling
 
 **Files:**
-- Create: `tests/hapax_voice/test_surface_tool_calling.py`
+- Create: `tests/hapax_daimonion/test_surface_tool_calling.py`
 
 Tests that tool handlers execute correctly when invoked with mock parameters, and that results are passed back via the result callback.
 
@@ -689,12 +689,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agents.hapax_voice.config import VoiceConfig
+from agents.hapax_daimonion.config import VoiceConfig
 
 
 def _setup_tools():
     """Register tools on a mock LLM and return the handler map."""
-    from agents.hapax_voice.tools import register_tool_handlers
+    from agents.hapax_daimonion.tools import register_tool_handlers
 
     mock_llm = MagicMock()
     config = VoiceConfig()
@@ -744,7 +744,7 @@ class TestSearchDocumentsTool:
         mock_results = [
             MagicMock(payload={"text": "result 1", "source": "doc1"}, score=0.9),
         ]
-        with patch("agents.hapax_voice.tools._qdrant_search", return_value=mock_results):
+        with patch("agents.hapax_daimonion.tools._qdrant_search", return_value=mock_results):
             await handler(params)
 
         params.result_callback.assert_called_once()
@@ -760,7 +760,7 @@ class TestSearchDocumentsTool:
         params.arguments = {"query": "nonexistent"}
         params.result_callback = AsyncMock()
 
-        with patch("agents.hapax_voice.tools._qdrant_search", return_value=[]):
+        with patch("agents.hapax_daimonion.tools._qdrant_search", return_value=[]):
             await handler(params)
 
         params.result_callback.assert_called_once()
@@ -780,7 +780,7 @@ class TestGetSystemStatusTool:
         params.arguments = {}
         params.result_callback = AsyncMock()
 
-        with patch("agents.hapax_voice.tools._get_system_status_report", return_value="All systems operational"):
+        with patch("agents.hapax_daimonion.tools._get_system_status_report", return_value="All systems operational"):
             await handler(params)
 
         params.result_callback.assert_called_once()
@@ -812,7 +812,7 @@ class TestSendSmsTool:
         handler = handlers["confirm_send_sms"]
 
         # Reset pending SMS state
-        import agents.hapax_voice.tools as tools_mod
+        import agents.hapax_daimonion.tools as tools_mod
         tools_mod._pending_sms = None
 
         params = MagicMock()
@@ -828,7 +828,7 @@ class TestSendSmsTool:
 
 - [ ] **Step 2: Run tests**
 
-Run: `uv run pytest tests/hapax_voice/test_surface_tool_calling.py -v`
+Run: `uv run pytest tests/hapax_daimonion/test_surface_tool_calling.py -v`
 Expected: All tests PASS (may need adjustments based on exact handler implementations)
 
 - [ ] **Step 3: Fix any handler-specific issues and re-run**
@@ -838,7 +838,7 @@ The tool handler tests test against real handler code with mocked external servi
 - [ ] **Step 4: Commit**
 
 ```bash
-git add tests/hapax_voice/test_surface_tool_calling.py
+git add tests/hapax_daimonion/test_surface_tool_calling.py
 git commit -m "test: add surface 4 — tool calling integration tests"
 ```
 
@@ -849,7 +849,7 @@ git commit -m "test: add surface 4 — tool calling integration tests"
 ### Task 5: Surface 5 — Desktop Tools via Hyprland
 
 **Files:**
-- Create: `tests/hapax_voice/test_surface_desktop.py`
+- Create: `tests/hapax_daimonion/test_surface_desktop.py`
 
 Tests that desktop tool handlers execute Hyprland IPC commands correctly and that the confirmation flow works for `open_app`.
 
@@ -867,7 +867,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agents.hapax_voice.desktop_tools import (
+from agents.hapax_daimonion.desktop_tools import (
     DESKTOP_TOOL_SCHEMAS,
     handle_confirm_open_app,
     handle_focus_window,
@@ -901,7 +901,7 @@ class TestFocusWindow:
         params.arguments = {"window_title": "Firefox"}
         params.result_callback = AsyncMock()
 
-        with patch("agents.hapax_voice.desktop_tools.HyprlandIPC") as mock_ipc:
+        with patch("agents.hapax_daimonion.desktop_tools.HyprlandIPC") as mock_ipc:
             mock_ipc.return_value.dispatch.return_value = True
             await handle_focus_window(params)
 
@@ -913,7 +913,7 @@ class TestFocusWindow:
         params.arguments = {"window_title": "NonExistent"}
         params.result_callback = AsyncMock()
 
-        with patch("agents.hapax_voice.desktop_tools.HyprlandIPC") as mock_ipc:
+        with patch("agents.hapax_daimonion.desktop_tools.HyprlandIPC") as mock_ipc:
             mock_ipc.return_value.dispatch.return_value = False
             await handle_focus_window(params)
 
@@ -930,7 +930,7 @@ class TestSwitchWorkspace:
         params.arguments = {"workspace_id": 3}
         params.result_callback = AsyncMock()
 
-        with patch("agents.hapax_voice.desktop_tools.HyprlandIPC") as mock_ipc:
+        with patch("agents.hapax_daimonion.desktop_tools.HyprlandIPC") as mock_ipc:
             mock_ipc.return_value.dispatch.return_value = True
             await handle_switch_workspace(params)
 
@@ -964,7 +964,7 @@ class TestOpenAppConfirmation:
         confirm_params.arguments = {}
         confirm_params.result_callback = AsyncMock()
 
-        with patch("agents.hapax_voice.desktop_tools.subprocess") as mock_sub:
+        with patch("agents.hapax_daimonion.desktop_tools.subprocess") as mock_sub:
             await handle_confirm_open_app(confirm_params)
 
         confirm_params.result_callback.assert_called_once()
@@ -979,7 +979,7 @@ class TestGetDesktopState:
         params.arguments = {}
         params.result_callback = AsyncMock()
 
-        with patch("agents.hapax_voice.desktop_tools.HyprlandIPC") as mock_ipc:
+        with patch("agents.hapax_daimonion.desktop_tools.HyprlandIPC") as mock_ipc:
             from shared.hyprland import WindowInfo, WorkspaceInfo
             mock_ipc.return_value.get_active_window.return_value = WindowInfo(
                 address="0x1", title="foot", class_name="foot",
@@ -997,20 +997,20 @@ class TestGetDesktopState:
 
 - [ ] **Step 2: Run tests**
 
-Run: `uv run pytest tests/hapax_voice/test_surface_desktop.py -v`
+Run: `uv run pytest tests/hapax_daimonion/test_surface_desktop.py -v`
 Expected: All tests PASS (adjust handler call patterns if needed)
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add tests/hapax_voice/test_surface_desktop.py
+git add tests/hapax_daimonion/test_surface_desktop.py
 git commit -m "test: add surface 5 — desktop tools Hyprland integration tests"
 ```
 
 ### Task 6: Surface 6 — Perception → Governor → Frame Gate
 
 **Files:**
-- Create: `tests/hapax_voice/test_surface_governor.py`
+- Create: `tests/hapax_daimonion/test_surface_governor.py`
 
 Tests the full perception→governor→frame gate chain: environment state changes produce correct governor directives, and those directives are applied to the frame gate and session.
 
@@ -1029,8 +1029,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agents.hapax_voice.governor import PipelineGovernor
-from agents.hapax_voice.perception import EnvironmentState
+from agents.hapax_daimonion.governor import PipelineGovernor
+from agents.hapax_daimonion.perception import EnvironmentState
 
 
 def _make_state(**overrides) -> EnvironmentState:
@@ -1143,8 +1143,8 @@ class TestGovernorFrameGateIntegration:
     @pytest.mark.asyncio
     async def test_process_directive_sets_frame_gate(self):
         """Verify the daemon applies governor directives to the frame gate."""
-        from agents.hapax_voice.__main__ import VoiceDaemon
-        from agents.hapax_voice.frame_gate import FrameGate
+        from agents.hapax_daimonion.__main__ import VoiceDaemon
+        from agents.hapax_daimonion.frame_gate import FrameGate
 
         with patch.object(VoiceDaemon, "__init__", lambda self, **kw: None):
             daemon = VoiceDaemon()
@@ -1169,13 +1169,13 @@ class TestGovernorFrameGateIntegration:
 
 - [ ] **Step 2: Run tests**
 
-Run: `uv run pytest tests/hapax_voice/test_surface_governor.py -v`
+Run: `uv run pytest tests/hapax_daimonion/test_surface_governor.py -v`
 Expected: All tests PASS
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add tests/hapax_voice/test_surface_governor.py
+git add tests/hapax_daimonion/test_surface_governor.py
 git commit -m "test: add surface 6 — perception → governor integration tests"
 ```
 
@@ -1186,7 +1186,7 @@ git commit -m "test: add surface 6 — perception → governor integration tests
 ### Task 7: Surface 7 — Notification Delivery
 
 **Files:**
-- Create: `tests/hapax_voice/test_surface_notifications.py`
+- Create: `tests/hapax_daimonion/test_surface_notifications.py`
 
 Tests the ntfy→queue→delivery chain: notification parsing, priority queuing, TTL expiry, and proactive delivery conditions.
 
@@ -1205,8 +1205,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agents.hapax_voice.notification_queue import NotificationQueue, VoiceNotification
-from agents.hapax_voice.ntfy_listener import parse_ntfy_event
+from agents.hapax_daimonion.notification_queue import NotificationQueue, VoiceNotification
+from agents.hapax_daimonion.ntfy_listener import parse_ntfy_event
 
 
 class TestNtfyParsing:
@@ -1283,7 +1283,7 @@ class TestProactiveDeliveryConditions:
     @pytest.mark.asyncio
     async def test_no_delivery_during_active_session(self):
         """Notifications should not be delivered during an active voice session."""
-        from agents.hapax_voice.__main__ import VoiceDaemon
+        from agents.hapax_daimonion.__main__ import VoiceDaemon
 
         with patch.object(VoiceDaemon, "__init__", lambda self, **kw: None):
             daemon = VoiceDaemon()
@@ -1304,20 +1304,20 @@ class TestProactiveDeliveryConditions:
 
 - [ ] **Step 2: Run tests**
 
-Run: `uv run pytest tests/hapax_voice/test_surface_notifications.py -v`
+Run: `uv run pytest tests/hapax_daimonion/test_surface_notifications.py -v`
 Expected: All tests PASS
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add tests/hapax_voice/test_surface_notifications.py
+git add tests/hapax_daimonion/test_surface_notifications.py
 git commit -m "test: add surface 7 — notification delivery integration tests"
 ```
 
 ### Task 8: Surface 8 — Hotkey Commands
 
 **Files:**
-- Create: `tests/hapax_voice/test_surface_hotkeys.py`
+- Create: `tests/hapax_daimonion/test_surface_hotkeys.py`
 
 Tests the hotkey socket server: command validation, dispatch to daemon, and real socket communication.
 
@@ -1337,7 +1337,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from agents.hapax_voice.hotkey import HotkeyServer
+from agents.hapax_daimonion.hotkey import HotkeyServer
 
 
 class TestHotkeyServerLifecycle:
@@ -1452,13 +1452,13 @@ class TestHotkeyCommandDispatch:
 
 - [ ] **Step 2: Run tests**
 
-Run: `uv run pytest tests/hapax_voice/test_surface_hotkeys.py -v`
+Run: `uv run pytest tests/hapax_daimonion/test_surface_hotkeys.py -v`
 Expected: All tests PASS
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add tests/hapax_voice/test_surface_hotkeys.py
+git add tests/hapax_daimonion/test_surface_hotkeys.py
 git commit -m "test: add surface 8 — hotkey socket integration tests"
 ```
 
@@ -1475,10 +1475,10 @@ Shell script that validates the running daemon end-to-end. Requires the daemon t
 #!/bin/bash
 set -euo pipefail
 
-# Live smoke tests for hapax-voice daemon
+# Live smoke tests for hapax-daimonion daemon
 # Requires: daemon running, socat installed
 
-SOCKET="/run/user/1000/hapax-voice.sock"
+SOCKET="/run/user/1000/hapax-daimonion.sock"
 PASS=0
 FAIL=0
 
@@ -1489,20 +1489,20 @@ check_log() {
     # Check journal for a pattern in the last N seconds
     local seconds=$1
     local pattern=$2
-    journalctl --user -u hapax-voice --since "${seconds} sec ago" --no-pager 2>/dev/null | grep -q "$pattern"
+    journalctl --user -u hapax-daimonion --since "${seconds} sec ago" --no-pager 2>/dev/null | grep -q "$pattern"
 }
 
-echo "=== Hapax Voice Daemon Smoke Tests ==="
+echo "=== Hapax Daimonion Daemon Smoke Tests ==="
 echo ""
 
 # --- Prerequisite checks ---
 echo "Prerequisites:"
 
-if systemctl --user is-active hapax-voice.service >/dev/null 2>&1; then
+if systemctl --user is-active hapax-daimonion.service >/dev/null 2>&1; then
     pass "Daemon is running"
 else
     fail "Daemon is not running"
-    echo "  Start with: systemctl --user start hapax-voice.service"
+    echo "  Start with: systemctl --user start hapax-daimonion.service"
     exit 1
 fi
 
@@ -1563,7 +1563,7 @@ echo ""
 echo "Surface 1: Wake Word (requires manual test)"
 echo "  → Say 'Hapax' near the microphone"
 echo "  → Verify: chime plays, session opens, pipeline starts"
-echo "  → Check: journalctl --user -u hapax-voice -f | grep -i 'wake\|session\|pipeline'"
+echo "  → Check: journalctl --user -u hapax-daimonion -f | grep -i 'wake\|session\|pipeline'"
 
 # --- Surface 2: Voice round-trip (manual) ---
 echo ""
@@ -1572,7 +1572,7 @@ echo "  → After wake word, speak a question"
 echo "  → Verify: STT transcription appears in logs"
 echo "  → Verify: LLM response generated"
 echo "  → Verify: TTS audio plays through speakers"
-echo "  → Check: journalctl --user -u hapax-voice -f"
+echo "  → Check: journalctl --user -u hapax-daimonion -f"
 
 # --- Surface 7: Notification delivery ---
 echo ""
@@ -1621,7 +1621,7 @@ Expected: All automated checks pass, manual test instructions printed
 
 ```bash
 git add scripts/smoke_test_voice.sh
-git commit -m "test: add live smoke test script for hapax-voice daemon"
+git commit -m "test: add live smoke test script for hapax-daimonion daemon"
 ```
 
 ### Task 10: Run Full Test Suite — Gate Verification
@@ -1631,15 +1631,15 @@ This final task runs all surface tests together and the full test suite to verif
 - [ ] **Step 1: Run all surface tests**
 
 ```bash
-uv run pytest tests/hapax_voice/test_surface_*.py -v
+uv run pytest tests/hapax_daimonion/test_surface_*.py -v
 ```
 
 Expected: All surface tests PASS
 
-- [ ] **Step 2: Run full hapax_voice test suite**
+- [ ] **Step 2: Run full hapax_daimonion test suite**
 
 ```bash
-uv run pytest tests/hapax_voice/ tests/test_hapax_voice_pipeline.py -q --tb=line -k "not augmentation"
+uv run pytest tests/hapax_daimonion/ tests/test_hapax_daimonion_pipeline.py -q --tb=line -k "not augmentation"
 ```
 
 Expected: All tests PASS (excluding pre-existing augmentation failures)

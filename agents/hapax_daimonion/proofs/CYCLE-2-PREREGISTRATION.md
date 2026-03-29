@@ -208,7 +208,7 @@ Report BCTau (Tarlow 2017) as supplementary effect size.
 7. Apply decision rules (Section 7.5)
 8. Sensitivity: re-run with Normal(0, 1) prior and HalfNormal(1) SD prior
 
-Code: `agents/hapax_voice/stats.py` (to be updated with BEST implementation before Phase B analysis).
+Code: `agents/hapax_daimonion/stats.py` (to be updated with BEST implementation before Phase B analysis).
 
 ### 7.7 Exploratory (not pre-registered, lower evidential status)
 - Trajectory slope comparison (does coherence improve faster in Phase B?)
@@ -251,8 +251,8 @@ See `lab-journal/posts/2026-03-21-deviation-disclosure/` for Cycle 1→2 deviati
 ## 10. Transparency
 
 - Raw session data: `proofs/claim-1-stable-frame/data/cycle-2/`
-- Analysis code: `agents/hapax_voice/stats.py`
-- Research documents: `agents/hapax_voice/proofs/`
+- Analysis code: `agents/hapax_daimonion/stats.py`
+- Research documents: `agents/hapax_daimonion/proofs/`
 - Lab journal: [GitHub Pages URL — to be enabled]
 - OSF registration: [URL — to be filed]
 - Source code: [https://github.com/ryanklee/hapax-council](https://github.com/ryanklee/hapax-council)

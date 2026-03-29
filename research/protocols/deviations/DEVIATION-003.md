@@ -6,7 +6,7 @@
 
 ## What Changed
 
-New file added: `agents/hapax_voice/proofs/CONTEXT-AS-COMPUTATION.md`
+New file added: `agents/hapax_daimonion/proofs/CONTEXT-AS-COMPUTATION.md`
 New file added: `lab-journal/posts/2026-03-22-context-as-computation/index.md`
 
 No existing files modified. No experiment code, scoring functions, or behavioral code touched.

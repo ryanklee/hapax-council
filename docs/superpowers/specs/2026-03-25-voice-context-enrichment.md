@@ -222,12 +222,12 @@ Worst case adds approximately 220 tokens. This is well within the model context 
 
 **Modified:**
 
-- `agents/hapax_voice/conversation_pipeline.py` — add 3 injection points in VOLATILE band
-- `agents/hapax_voice/__main__.py` — register 3 callbacks, pass to pipeline
+- `agents/hapax_daimonion/conversation_pipeline.py` — add 3 injection points in VOLATILE band
+- `agents/hapax_daimonion/__main__.py` — register 3 callbacks, pass to pipeline
 
 **New:**
 
-- `agents/hapax_voice/context_enrichment.py` — `_render_goals`, `_render_health`, `_render_nudges` functions
+- `agents/hapax_daimonion/context_enrichment.py` — `_render_goals`, `_render_health`, `_render_nudges` functions
 
 No new dependencies. The `logos.data` modules are already importable from the voice daemon context.
 

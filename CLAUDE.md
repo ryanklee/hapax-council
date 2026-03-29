@@ -17,7 +17,7 @@ Shared conventions (uv, ruff, testing, git workflow, pydantic-ai) are in the wor
 
 **Infrastructure**: Docker Compose for databases/proxies (13 containers), systemd user units for all application services. No process-compose in production. See `systemd/README.md` for boot sequence, resource isolation, and recovery chain.
 
-**Key services**: `hapax-secrets` (credentials) → `logos-api` (:8051) → `waybar` (GTK4 status bar) → `hapax-voice` (GPU) → `visual-layer-aggregator` → `studio-compositor` (GPU). 31 timers for sync, health, backups. Archival pipeline (audio/video recording, classification, RAG ingest) disabled — see `systemd/README.md § Disabled Services`.
+**Key services**: `hapax-secrets` (credentials) → `logos-api` (:8051) → `waybar` (GTK4 status bar) → `hapax-daimonion` (GPU) → `visual-layer-aggregator` → `studio-compositor` (GPU). 31 timers for sync, health, backups. Archival pipeline (audio/video recording, classification, RAG ingest) disabled — see `systemd/README.md § Disabled Services`.
 
 ## Design Language
 
@@ -124,8 +124,8 @@ Destructive command detection strips quoted strings before matching to prevent f
 **Key files:**
 - `pi-edge/` — Edge daemon + heartbeat code (deployed to each Pi at `~/hapax-edge/`)
 - `shared/ir_models.py` — Shared Pydantic schema (IrDetectionReport)
-- `agents/hapax_voice/backends/ir_presence.py` — Perception backend (multi-Pi fusion)
-- `agents/hapax_voice/ir_signals.py` — State file reader
+- `agents/hapax_daimonion/backends/ir_presence.py` — Perception backend (multi-Pi fusion)
+- `agents/hapax_daimonion/ir_signals.py` — State file reader
 - `agents/health_monitor.py` — `PI_FLEET` dict defines expected services per Pi
 
 **Inference:** ONNX Runtime preferred (130ms, preserves fine-tuned precision), TFLite fallback. Model: YOLOv8n fine-tuned on 30 NIR studio frames (`best.onnx`).
@@ -146,11 +146,11 @@ Destructive command detection strips quoted strings before matching to prevent f
 
 ## Voice Grounding Research Continuity
 
-Research state persists in `agents/hapax_voice/proofs/RESEARCH-STATE.md`. After any session with research decisions or implementation progress on the voice grounding project, update this file before ending. When the operator says "refresh research context" or "update research context", read the state file and selectively read the tier-2 documents it references.
+Research state persists in `agents/hapax_daimonion/proofs/RESEARCH-STATE.md`. After any session with research decisions or implementation progress on the voice grounding project, update this file before ending. When the operator says "refresh research context" or "update research context", read the state file and selectively read the tier-2 documents it references.
 
-## Composition Ladder Protocol (hapax_voice)
+## Composition Ladder Protocol (hapax_daimonion)
 
-Bottom-up building discipline for the hapax_voice type system. 10 layers (L0–L9), all proven. 7-dimension test matrix per layer. Gate rule: no new composition on layer N unless N-1 is matrix-complete. See `agents/hapax_voice/LAYER_STATUS.yaml` for current status and `tests/hapax_voice/test_type_system_matrix*.py` for the 192 matrix tests.
+Bottom-up building discipline for the hapax_daimonion type system. 10 layers (L0–L9), all proven. 7-dimension test matrix per layer. Gate rule: no new composition on layer N unless N-1 is matrix-complete. See `agents/hapax_daimonion/LAYER_STATUS.yaml` for current status and `tests/hapax_daimonion/test_type_system_matrix*.py` for the 192 matrix tests.
 
 **3-question heuristic** before every change:
 1. What layer does this touch?

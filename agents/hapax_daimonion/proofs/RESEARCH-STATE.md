@@ -178,7 +178,7 @@ Infrastructure-only. No changes to experiment code, grounding theory, or researc
 - Docker containers: `restart: unless-stopped` → `restart: always`
 
 **Service lifecycle consolidation (process-compose → pure systemd):**
-- Created `hapax-secrets.service`: centralized oneshot credential loader. All services now declare `Requires=hapax-secrets.service`. Eliminates 4x redundant `pass show` calls and race condition where logos-api read hapax-voice's env file without a dependency.
+- Created `hapax-secrets.service`: centralized oneshot credential loader. All services now declare `Requires=hapax-secrets.service`. Eliminates 4x redundant `pass show` calls and race condition where logos-api read hapax-daimonion's env file without a dependency.
 - Migrated `visual-layer-aggregator` from process-compose to systemd (unit already existed, was disabled). Now has own cgroup with 1G memory limit (was sharing cgroup, thrashing at 256M).
 - Migrated `vram-watchdog` from process-compose bash loop to systemd timer (30s interval). Updated script to use `systemctl --user show` instead of process-compose API.
 - Disabled `hapax-stack.service` (process-compose wrapper). Marked `process-compose.yaml` as development-only.

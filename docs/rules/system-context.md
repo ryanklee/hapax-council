@@ -31,7 +31,7 @@ Invoke: `cd ~/projects/hapax-council && uv run python -m agents.<name> [flags]`
 | obsidian_sync | No | `--full-sync`, `--auto`, `--stats` |
 | chrome_sync | No | `--full-sync`, `--auto`, `--stats` |
 | audio_processor | No | `--process`, `--stats`, `--reprocess FILE` |
-| hapax_voice | No | `--check`, `--config PATH` (daemon — runs as always-on service) |
+| hapax_daimonion | No | `--check`, `--config PATH` (daemon — runs as always-on service) |
 
 Shared modules: `shared/google_auth.py` (OAuth2 token management for all Google agents), `shared/calendar_context.py` (calendar-aware context for briefing/prep agents).
 
@@ -54,7 +54,7 @@ Shared modules: `shared/google_auth.py` (OAuth2 token management for all Google 
 | ~~audio-recorder~~ | Disabled | Was: continuous mic recording (FLAC archival) |
 | ~~audio-processor~~ | Disabled | Was: audio classification + RAG (archival only) |
 | audio-archiver | Daily 03:00 | rclone move raw audio to Google Drive |
-| hapax-voice | Always on | Voice interaction daemon (wake word, presence, TTS/STT) |
+| hapax-daimonion | Always on | Voice interaction daemon (wake word, presence, TTS/STT) |
 | bt-keepalive | Always on | Silent stream to iLoud BT monitors (prevents auto-standby) |
 
 ### Sync Pipeline Container

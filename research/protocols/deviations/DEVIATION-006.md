@@ -6,7 +6,7 @@
 
 ## What Changed
 
-`agents/hapax_voice/proofs/RESEARCH-STATE.md` — Added session 11 entry documenting infrastructure-only changes: system freeze diagnosis, 24/7 reliability hardening, service lifecycle consolidation (process-compose → pure systemd).
+`agents/hapax_daimonion/proofs/RESEARCH-STATE.md` — Added session 11 entry documenting infrastructure-only changes: system freeze diagnosis, 24/7 reliability hardening, service lifecycle consolidation (process-compose → pure systemd).
 
 ## Why
 

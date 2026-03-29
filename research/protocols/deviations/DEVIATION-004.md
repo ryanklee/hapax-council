@@ -6,7 +6,7 @@
 
 ## What Changed
 
-Modified: `agents/hapax_voice/proofs/RESEARCH-STATE.md` — updated session 10 findings, added context-as-computation research summary, added new open questions.
+Modified: `agents/hapax_daimonion/proofs/RESEARCH-STATE.md` — updated session 10 findings, added context-as-computation research summary, added new open questions.
 
 ## Why
 

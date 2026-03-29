@@ -601,26 +601,26 @@ Build the minimum viable conversation: wake word → listen → transcribe → r
 
 | File | Purpose |
 |------|---------|
-| `agents/hapax_voice/conversation_buffer.py` | VAD-gated audio accumulator |
-| `agents/hapax_voice/resident_stt.py` | Persistent faster-whisper wrapper |
-| `agents/hapax_voice/conversation_pipeline.py` | Main conversation orchestrator |
-| `agents/hapax_voice/sentence_accumulator.py` | LLM token → sentence splitter |
-| `agents/hapax_voice/audio_output.py` | Dedicated playback stream manager |
+| `agents/hapax_daimonion/conversation_buffer.py` | VAD-gated audio accumulator |
+| `agents/hapax_daimonion/resident_stt.py` | Persistent faster-whisper wrapper |
+| `agents/hapax_daimonion/conversation_pipeline.py` | Main conversation orchestrator |
+| `agents/hapax_daimonion/sentence_accumulator.py` | LLM token → sentence splitter |
+| `agents/hapax_daimonion/audio_output.py` | Dedicated playback stream manager |
 
 ## 15. Deleted Files (Phase 3)
 
 | File | Reason |
 |------|--------|
-| `agents/hapax_voice/pipeline.py` | Replaced by `conversation_pipeline.py` |
-| `agents/hapax_voice/pipecat_tts.py` | Kokoro used directly via `tts.py` |
-| `agents/hapax_voice/frame_gate.py` | Gating moves to ConversationBuffer |
+| `agents/hapax_daimonion/pipeline.py` | Replaced by `conversation_pipeline.py` |
+| `agents/hapax_daimonion/pipecat_tts.py` | Kokoro used directly via `tts.py` |
+| `agents/hapax_daimonion/frame_gate.py` | Gating moves to ConversationBuffer |
 
 ## 16. Modified Files
 
 | File | Change |
 |------|--------|
-| `agents/hapax_voice/__main__.py` | Third audio consumer, new pipeline lifecycle |
-| `agents/hapax_voice/tools.py` | OpenAI-format schemas, simplified handler signatures |
-| `agents/hapax_voice/consent_session.py` | Uses ConversationPipeline |
-| `agents/hapax_voice/config.py` | New fields (vad_end_of_speech_ms, max_conversation_turns) |
+| `agents/hapax_daimonion/__main__.py` | Third audio consumer, new pipeline lifecycle |
+| `agents/hapax_daimonion/tools.py` | OpenAI-format schemas, simplified handler signatures |
+| `agents/hapax_daimonion/consent_session.py` | Uses ConversationPipeline |
+| `agents/hapax_daimonion/config.py` | New fields (vad_end_of_speech_ms, max_conversation_turns) |
 | `pyproject.toml` | Remove pipecat dependency, ensure faster-whisper + litellm |

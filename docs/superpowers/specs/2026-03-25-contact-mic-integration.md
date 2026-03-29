@@ -97,7 +97,7 @@ pw-cli ls Node | grep contact_mic
 
 ## Component 2: ContactMicBackend (Perception)
 
-**File:** `agents/hapax_voice/backends/contact_mic.py` (~150 lines)
+**File:** `agents/hapax_daimonion/backends/contact_mic.py` (~150 lines)
 
 ### Architecture
 
@@ -137,7 +137,7 @@ Added to `_register_perception_backends()` in `__main__.py`:
 
 ```python
 try:
-    from agents.hapax_voice.backends.contact_mic import ContactMicBackend
+    from agents.hapax_daimonion.backends.contact_mic import ContactMicBackend
     self.perception.register_backend(
         ContactMicBackend(source_name=self.cfg.contact_mic_source)
     )
@@ -174,7 +174,7 @@ The governance wiring is ~30 lines added to `__main__.py`, following the `_setup
 
 ## Component 4: Structure-Borne Noise Reference
 
-**Extension to:** `agents/hapax_voice/multi_mic.py` (~40 lines changed)
+**Extension to:** `agents/hapax_daimonion/multi_mic.py` (~40 lines changed)
 
 ### Problem
 
@@ -263,11 +263,11 @@ CONTACT_MIC_RAW_DIR: Path = HAPAX_HOME / "audio-recording" / "contact-mic"
 |--------|------|-------|
 | Create | `~/.config/pipewire/pipewire.conf.d/10-contact-mic.conf` | ~20 |
 | Create | `~/.config/wireplumber/wireplumber.conf.d/50-studio24c.conf` | ~15 |
-| Create | `agents/hapax_voice/backends/contact_mic.py` | ~150 |
+| Create | `agents/hapax_daimonion/backends/contact_mic.py` | ~150 |
 | Create | `systemd/units/contact-mic-recorder.service` | ~15 |
-| Edit | `agents/hapax_voice/config.py` | +1 field |
-| Edit | `agents/hapax_voice/__main__.py` | +~35 lines: add `self._loop` attribute in `run()`, register backend, tap governance wiring with `run_coroutine_threadsafe`, update `NoiseReference()` constructor call |
-| Edit | `agents/hapax_voice/multi_mic.py` | +~40 lines (add `structure_sources` parameter, second noise estimate, sequential subtraction) |
+| Edit | `agents/hapax_daimonion/config.py` | +1 field |
+| Edit | `agents/hapax_daimonion/__main__.py` | +~35 lines: add `self._loop` attribute in `run()`, register backend, tap governance wiring with `run_coroutine_threadsafe`, update `NoiseReference()` constructor call |
+| Edit | `agents/hapax_daimonion/multi_mic.py` | +~40 lines (add `structure_sources` parameter, second noise estimate, sequential subtraction) |
 | Edit | `agents/audio_processor.py` | +~15 lines (add `CONTACT_MIC_RAW_DIR` constant, `pattern` param to `_find_unprocessed_files`, `source` field on `ProcessedFileInfo`, second directory scan) |
 
 **Not touched:** `perception.py`, `EnvironmentState`, `primitives.py`, `executor.py`, `commands.py`
@@ -283,7 +283,7 @@ CONTACT_MIC_RAW_DIR: Path = HAPAX_HOME / "audio-recording" / "contact-mic"
 | multi_mic.py extension | Unit test structure subtraction with synthetic noise estimate |
 | audio_processor.py | Unit test second directory discovery with temp files |
 | Recorder service | Manual: `systemctl --user start contact-mic-recorder && ls ~/audio-recording/contact-mic/` |
-| End-to-end | Plug in Cortado, tap desk, check `~/.cache/hapax-voice/perception-state.json` for desk_* behaviors |
+| End-to-end | Plug in Cortado, tap desk, check `~/.cache/hapax-daimonion/perception-state.json` for desk_* behaviors |
 
 ## Constraints
 

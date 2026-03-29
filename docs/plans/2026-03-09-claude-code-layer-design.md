@@ -26,7 +26,7 @@ Additionally, `system-context.md` (read every session) has drifted: missing 7 ag
 **File:** `hapax-system/rules/system-context.md`
 
 Changes:
-- **Agent table**: Add 7 missing agents: `activity_analyzer` (No, `--stats`), `introspect` (No, `--json`), `research` (Yes), `code_review` (Yes), `query` (Yes, `--collection NAME`), `ingest` (No, `--watch`, `--stats`), `hapax_voice` (No, `--check`, `--config PATH`). Total: 26.
+- **Agent table**: Add 7 missing agents: `activity_analyzer` (No, `--stats`), `introspect` (No, `--json`), `research` (Yes), `code_review` (Yes), `query` (Yes, `--collection NAME`), `ingest` (No, `--watch`, `--stats`), `hapax_daimonion` (No, `--check`, `--config PATH`). Total: 26.
 - **Fix shared module paths**: `shared/google_auth.py` and `shared/calendar_context.py` (not `agents/shared/`).
 - **Add cycle-mode section**: Reference `hapax-mode dev|prod` CLI, mode file at `~/.cache/hapax/cycle-mode`, 9 timer overrides in `systemd/overrides/dev/`.
 - **Timer table**: Reconcile against actual systemd units. Add missing timers, fix stale schedules.

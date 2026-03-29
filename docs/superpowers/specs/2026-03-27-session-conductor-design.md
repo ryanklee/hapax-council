@@ -247,10 +247,10 @@ topic: logos-api-bug
 context: |
   [what's broken, what files are involved]
 in_flight_files:
-  - agents/hapax_voice/pipeline.py
-  - agents/hapax_voice/salience_router.py
+  - agents/hapax_daimonion/pipeline.py
+  - agents/hapax_daimonion/salience_router.py
 do_not_touch:
-  - agents/hapax_voice/**
+  - agents/hapax_daimonion/**
   - logos/engine/**
 created: 2026-03-27T14:30:00
 status: pending
@@ -267,7 +267,7 @@ SPAWNED SESSION — fixing side issue for parent session.
 Topic: logos-api-bug
 Context: [from manifest]
 DO NOT EDIT (parent has in-flight changes):
-  - agents/hapax_voice/**
+  - agents/hapax_daimonion/**
   - logos/engine/**
 Complete the fix, PR it, and exit.
 ```

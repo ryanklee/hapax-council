@@ -182,7 +182,7 @@ Council has 9 workflows including full SDLC pipeline (Triage → Plan → Implem
 
 ### Research-Specific Gates to Add
 
-1. **Experiment Impact Gate** (Plan → Implement): If PR touches `research/` or `agents/hapax_voice/`, require linked experiment issue with hypothesis and expected outcome.
+1. **Experiment Impact Gate** (Plan → Implement): If PR touches `research/` or `agents/hapax_daimonion/`, require linked experiment issue with hypothesis and expected outcome.
 
 2. **Pre-registration Compliance Gate** (Implement → Review): During active data collection, use `prevent-file-change-action` to block changes to `research/analysis/` unless accompanied by a protocol deviation document. Phase state tracked in `experiment-phase.json`.
 
@@ -213,7 +213,7 @@ Council has 9 workflows including full SDLC pipeline (Triage → Plan → Implem
 ### SDLC Tuning for Research
 
 - **Adversarial Review:** Add research methods review prompts — p-hacking detection, degrees-of-freedom checks, pre-registration consistency
-- **Path-based gating:** Full experiment integrity pipeline for `research/` and `agents/hapax_voice/`; lighter pipeline for infrastructure
+- **Path-based gating:** Full experiment integrity pipeline for `research/` and `agents/hapax_daimonion/`; lighter pipeline for infrastructure
 - **Fast-track label:** Skip triage + plan for infrastructure-only fixes that block data collection
 
 ### Anti-Patterns

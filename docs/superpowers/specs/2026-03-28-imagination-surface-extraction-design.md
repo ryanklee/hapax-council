@@ -12,7 +12,7 @@ Extract the visual render pipeline from Tauri's in-process bridge into a standal
 
 1. **Independent lifecycle** — imagination window survives Tauri webview crashes, can run standalone for demos
 2. **Flexible display** — multi-monitor placement, fullscreen, borderless, always-on-top, dynamic resolution
-3. **Architecture alignment** — separate binary with socket IPC matches hapax-voice pattern; filesystem-as-bus for data, sockets for control
+3. **Architecture alignment** — separate binary with socket IPC matches hapax-daimonion pattern; filesystem-as-bus for data, sockets for control
 
 ## Binary & Process Lifecycle
 
@@ -45,7 +45,7 @@ Extract the visual render pipeline from Tauri's in-process bridge into a standal
 
 **Socket:** `$XDG_RUNTIME_DIR/hapax-imagination.sock` (UDS, stream mode).
 
-**Protocol:** Newline-delimited JSON, same pattern as hapax-voice's hotkey socket.
+**Protocol:** Newline-delimited JSON, same pattern as hapax-daimonion's hotkey socket.
 
 ### Commands (Tauri → imagination)
 

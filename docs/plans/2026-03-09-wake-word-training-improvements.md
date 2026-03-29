@@ -14,7 +14,7 @@
 - 17GB pre-computed negative features (2000 hours, from HuggingFace)
 - Model: DNN `(batch, 96)` — LayerNorm — Linear/ReLU x 2 — Sigmoid — ONNX
 - Training script: `scripts/train_wake_word.py` (1282 lines)
-- Inference: `agents/hapax_voice/wake_word.py` (119 lines)
+- Inference: `agents/hapax_daimonion/wake_word.py` (119 lines)
 
 ---
 
@@ -182,7 +182,7 @@ Add a post-synthesis augmentation stage that creates multiple augmented variants
 
 **Files:**
 - Modify: `scripts/train_wake_word.py:722-823` (extract_features_from_clips)
-- Create: `tests/hapax_voice/test_wake_word_augmentation.py`
+- Create: `tests/hapax_daimonion/test_wake_word_augmentation.py`
 
 **Step 1: Write the failing test**
 
@@ -235,7 +235,7 @@ def test_augment_clips_zero_augments_returns_originals():
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_voice/test_wake_word_augmentation.py -v`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_daimonion/test_wake_word_augmentation.py -v`
 Expected: FAIL with `ImportError` (functions don't exist yet)
 
 **Step 3: Implement augmentation functions**
@@ -298,13 +298,13 @@ def augment_clips(
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_voice/test_wake_word_augmentation.py -v`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_daimonion/test_wake_word_augmentation.py -v`
 Expected: All 4 tests PASS
 
 **Step 5: Commit**
 
 ```bash
-git add scripts/train_wake_word.py tests/hapax_voice/test_wake_word_augmentation.py
+git add scripts/train_wake_word.py tests/hapax_daimonion/test_wake_word_augmentation.py
 git commit -m "feat(voice): add audio augmentation pipeline for wake word training"
 ```
 
@@ -320,7 +320,7 @@ Modify `extract_features_from_clips` to augment positive clips before extracting
 
 **Step 1: Write the failing test**
 
-Add to `tests/hapax_voice/test_wake_word_augmentation.py`:
+Add to `tests/hapax_daimonion/test_wake_word_augmentation.py`:
 
 ```python
 def test_extract_features_accepts_augment_param():
@@ -334,7 +334,7 @@ def test_extract_features_accepts_augment_param():
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_voice/test_wake_word_augmentation.py::test_extract_features_accepts_augment_param -v`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_daimonion/test_wake_word_augmentation.py::test_extract_features_accepts_augment_param -v`
 Expected: FAIL (parameter doesn't exist yet)
 
 **Step 3: Add augment_positive parameter to extract_features_from_clips**
@@ -405,13 +405,13 @@ Finally, update the `run_full_pipeline` call at line 1110 to pass `augment_posit
 
 **Step 4: Run test to verify it passes**
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_voice/test_wake_word_augmentation.py -v`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_daimonion/test_wake_word_augmentation.py -v`
 Expected: All 5 tests PASS
 
 **Step 5: Commit**
 
 ```bash
-git add scripts/train_wake_word.py tests/hapax_voice/test_wake_word_augmentation.py
+git add scripts/train_wake_word.py tests/hapax_daimonion/test_wake_word_augmentation.py
 git commit -m "feat(voice): wire augmentation into feature extraction pipeline"
 ```
 
@@ -427,7 +427,7 @@ Real voice samples should be weighted higher than TTS samples during training. M
 
 **Step 1: Write the failing test**
 
-Add to `tests/hapax_voice/test_wake_word_augmentation.py`:
+Add to `tests/hapax_daimonion/test_wake_word_augmentation.py`:
 
 ```python
 def test_train_model_accepts_real_weight_param():
@@ -441,7 +441,7 @@ def test_train_model_accepts_real_weight_param():
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_voice/test_wake_word_augmentation.py::test_train_model_accepts_real_weight_param -v`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_daimonion/test_wake_word_augmentation.py::test_train_model_accepts_real_weight_param -v`
 Expected: FAIL
 
 **Step 3: Implement real sample weighting**
@@ -519,13 +519,13 @@ In `run_full_pipeline` (around line 1118), add after positive feature extraction
 
 **Step 5: Run tests**
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_voice/test_wake_word_augmentation.py -v`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_daimonion/test_wake_word_augmentation.py -v`
 Expected: All 6 tests PASS
 
 **Step 6: Commit**
 
 ```bash
-git add scripts/train_wake_word.py tests/hapax_voice/test_wake_word_augmentation.py
+git add scripts/train_wake_word.py tests/hapax_daimonion/test_wake_word_augmentation.py
 git commit -m "feat(voice): add weighted sampling for real voice features in training"
 ```
 
@@ -647,7 +647,7 @@ Expected: ~50 files
 Run: `cd ~/projects/hapax-council && uv run python scripts/train_wake_word.py --all --num-positive 10000`
 
 This runs: generate, download, extract (with augmentation), train.
-Expected: Completes with model at `~/.local/share/hapax-voice/hapax_wake_word.onnx`
+Expected: Completes with model at `~/.local/share/hapax-daimonion/hapax_wake_word.onnx`
 
 Watch for:
 - Augmentation log: "Augmenting N clips (x4 variants each)"
@@ -656,14 +656,14 @@ Watch for:
 
 **Step 4: Verify model loads in the daemon**
 
-Run: `systemctl --user restart hapax-voice && sleep 3 && journalctl --user -u hapax-voice --since "3 seconds ago" --no-pager | grep -i "wake word"`
+Run: `systemctl --user restart hapax-daimonion && sleep 3 && journalctl --user -u hapax-daimonion --since "3 seconds ago" --no-pager | grep -i "wake word"`
 
-Expected: "Wake word model loaded from ~/.local/share/hapax-voice/hapax_wake_word.onnx"
+Expected: "Wake word model loaded from ~/.local/share/hapax-daimonion/hapax_wake_word.onnx"
 
 **Step 5: Test wake word detection**
 
 Say "hapax" near the mic and check logs:
-Run: `journalctl --user -u hapax-voice -f | grep -i "wake word"`
+Run: `journalctl --user -u hapax-daimonion -f | grep -i "wake word"`
 Expected: "Wake word detected (score=X.XXX)" with score > 0.5
 
 **Step 6: Verify data/ is gitignored**
@@ -708,8 +708,8 @@ uv run python scripts/train_wake_word.py --extract-features --train
 **Step 3: Verify improved detection**
 
 ```bash
-systemctl --user restart hapax-voice
-journalctl --user -u hapax-voice -f | grep -i "wake word"
+systemctl --user restart hapax-daimonion
+journalctl --user -u hapax-daimonion -f | grep -i "wake word"
 ```
 
 Say "hapax" at various distances and volumes. All should trigger detection.

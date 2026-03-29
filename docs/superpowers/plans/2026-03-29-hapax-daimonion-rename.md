@@ -1,10 +1,10 @@
-# hapax-voice → hapax-daimonion Rename Plan
+# hapax-daimonion → hapax-daimonion Rename Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Rename the voice daemon from `hapax-voice`/`hapax_voice` to `hapax-daimonion`/`hapax_daimonion` across all code, config, systemd, docs, and runtime paths.
+**Goal:** Rename the voice daemon from `hapax-daimonion`/`hapax_daimonion` to `hapax-daimonion`/`hapax_daimonion` across all code, config, systemd, docs, and runtime paths.
 
-**Architecture:** Mechanical rename in 4 layers: (1) hapax-council Python code + config, (2) systemd/infrastructure, (3) runtime data migration, (4) other repos. The Python module `agents.hapax_voice` becomes `agents.hapax_daimonion`. All filesystem paths (`~/.cache/hapax-voice/`, `~/.local/share/hapax-voice/`, `/dev/shm/hapax-voice/`, `/run/user/1000/hapax-voice.sock`) rename correspondingly.
+**Architecture:** Mechanical rename in 4 layers: (1) hapax-council Python code + config, (2) systemd/infrastructure, (3) runtime data migration, (4) other repos. The Python module `agents.hapax_daimonion` becomes `agents.hapax_daimonion`. All filesystem paths (`~/.cache/hapax-daimonion/`, `~/.local/share/hapax-daimonion/`, `/dev/shm/hapax-daimonion/`, `/run/user/1000/hapax-daimonion.sock`) rename correspondingly.
 
 **Tech Stack:** Python, bash, systemd, git, sed
 
@@ -12,31 +12,31 @@
 
 | Old | New | Context |
 |-----|-----|---------|
-| `hapax_voice` | `hapax_daimonion` | Python module, imports, variable names |
-| `hapax-voice` | `hapax-daimonion` | Systemd, paths, CLI, config, docs |
-| `hapax voice` | `hapax daimonion` | Prose in docs (case-insensitive) |
-| `Hapax Voice` | `Hapax Daimonion` | Titles, descriptions |
+| `hapax_daimonion` | `hapax_daimonion` | Python module, imports, variable names |
+| `hapax-daimonion` | `hapax-daimonion` | Systemd, paths, CLI, config, docs |
+| `hapax daimonion` | `hapax daimonion` | Prose in docs (case-insensitive) |
+| `Hapax Daimonion` | `Hapax Daimonion` | Titles, descriptions |
 | `HAPAX_VOICE` | `HAPAX_DAIMONION` | Environment variables (if any) |
-| `hapax-voice.service` | `hapax-daimonion.service` | Systemd unit name |
-| `hapax-voice.sock` | `hapax-daimonion.sock` | Unix socket |
-| `hapax-voice.pid` | `hapax-daimonion.pid` | PID file |
-| `hapax-voice.env` | `hapax-daimonion.env` | Environment file (process-compose) |
+| `hapax-daimonion.service` | `hapax-daimonion.service` | Systemd unit name |
+| `hapax-daimonion.sock` | `hapax-daimonion.sock` | Unix socket |
+| `hapax-daimonion.pid` | `hapax-daimonion.pid` | PID file |
+| `hapax-daimonion.env` | `hapax-daimonion.env` | Environment file (process-compose) |
 | `VoiceConfig` | `DaimonionConfig` | Python class name |
 | `voice_config` | `daimonion_config` | Python variable name |
 
 **NOT renamed (conceptual, not identity):**
-- Generic uses of "voice" that aren't part of the `hapax-voice` identity (e.g., "voice cloning", "voice interaction", "voice session", "voice chain", "voice grounding")
+- Generic uses of "voice" that aren't part of the `hapax-daimonion` identity (e.g., "voice cloning", "voice interaction", "voice session", "voice chain", "voice grounding")
 - `vocal_chain.py`, `voice_chain.py` — these are internal module names describing what they do, not identity
-- The `hapax-voice-duck.conf` wireplumber config keeps its functional name (it ducks audio for voice output) — but the description updates
+- The `hapax-daimonion-duck.conf` wireplumber config keeps its functional name (it ducks audio for voice output) — but the description updates
 
 ---
 
 ## Task 1: Create branch and rename directories (hapax-council)
 
 **Files:**
-- Rename: `agents/hapax_voice/` → `agents/hapax_daimonion/`
-- Rename: `tests/hapax_voice/` → `tests/hapax_daimonion/`
-- Rename: 19 root test files `tests/test_hapax_voice_*.py` → `tests/test_hapax_daimonion_*.py`
+- Rename: `agents/hapax_daimonion/` → `agents/hapax_daimonion/`
+- Rename: `tests/hapax_daimonion/` → `tests/hapax_daimonion/`
+- Rename: 19 root test files `tests/test_hapax_daimonion_*.py` → `tests/test_hapax_daimonion_*.py`
 
 - [ ] **Step 1: Create feature branch**
 
@@ -48,27 +48,27 @@ git checkout -b feat/rename-daimonion
 - [ ] **Step 2: Rename agent directory**
 
 ```bash
-git mv agents/hapax_voice agents/hapax_daimonion
+git mv agents/hapax_daimonion agents/hapax_daimonion
 ```
 
 - [ ] **Step 3: Rename test directory**
 
 ```bash
-git mv tests/hapax_voice tests/hapax_daimonion
+git mv tests/hapax_daimonion tests/hapax_daimonion
 ```
 
 - [ ] **Step 4: Rename root-level test files**
 
 ```bash
-for f in tests/test_hapax_voice_*.py; do
-    git mv "$f" "${f/hapax_voice/hapax_daimonion}"
+for f in tests/test_hapax_daimonion_*.py; do
+    git mv "$f" "${f/hapax_daimonion/hapax_daimonion}"
 done
 ```
 
 - [ ] **Step 5: Commit directory renames**
 
 ```bash
-git commit -m "refactor: rename hapax_voice directories to hapax_daimonion"
+git commit -m "refactor: rename hapax_daimonion directories to hapax_daimonion"
 ```
 
 ---
@@ -79,44 +79,44 @@ All `.py` files in the repo. This is the largest task — ~300 files with import
 
 **Replacements (order matters — longest first to avoid partial matches):**
 
-1. `agents.hapax_voice` → `agents.hapax_daimonion` (Python imports)
-2. `hapax_voice` → `hapax_daimonion` (module references, variable names, test names)
-3. `hapax-voice` → `hapax-daimonion` (path strings, config keys, socket names)
-4. `Hapax Voice` → `Hapax Daimonion` (docstrings, comments)
+1. `agents.hapax_daimonion` → `agents.hapax_daimonion` (Python imports)
+2. `hapax_daimonion` → `hapax_daimonion` (module references, variable names, test names)
+3. `hapax-daimonion` → `hapax-daimonion` (path strings, config keys, socket names)
+4. `Hapax Daimonion` → `Hapax Daimonion` (docstrings, comments)
 
 - [ ] **Step 1: Replace Python import paths**
 
 ```bash
 cd ~/projects/hapax-council--beta
 find . -name '*.py' -not -path './.git/*' -not -path '*__pycache__*' \
-    -exec sed -i 's/agents\.hapax_voice/agents.hapax_daimonion/g' {} +
+    -exec sed -i 's/agents\.hapax_daimonion/agents.hapax_daimonion/g' {} +
 ```
 
-- [ ] **Step 2: Replace remaining hapax_voice (underscored)**
+- [ ] **Step 2: Replace remaining hapax_daimonion (underscored)**
 
 ```bash
 find . -name '*.py' -not -path './.git/*' -not -path '*__pycache__*' \
-    -exec sed -i 's/hapax_voice/hapax_daimonion/g' {} +
+    -exec sed -i 's/hapax_daimonion/hapax_daimonion/g' {} +
 ```
 
-- [ ] **Step 3: Replace hapax-voice (hyphenated) in Python files**
+- [ ] **Step 3: Replace hapax-daimonion (hyphenated) in Python files**
 
 ```bash
 find . -name '*.py' -not -path './.git/*' -not -path '*__pycache__*' \
-    -exec sed -i 's/hapax-voice/hapax-daimonion/g' {} +
+    -exec sed -i 's/hapax-daimonion/hapax-daimonion/g' {} +
 ```
 
-- [ ] **Step 4: Replace "Hapax Voice" title case in Python files**
+- [ ] **Step 4: Replace "Hapax Daimonion" title case in Python files**
 
 ```bash
 find . -name '*.py' -not -path './.git/*' -not -path '*__pycache__*' \
-    -exec sed -i 's/Hapax Voice/Hapax Daimonion/g' {} +
+    -exec sed -i 's/Hapax Daimonion/Hapax Daimonion/g' {} +
 ```
 
 - [ ] **Step 5: Verify no remaining references in Python**
 
 ```bash
-grep -rn "hapax.voice\|hapax_voice\|hapax-voice" --include="*.py" . \
+grep -rn "hapax.voice\|hapax_daimonion\|hapax-daimonion" --include="*.py" . \
     | grep -v __pycache__ | grep -v '.git/'
 ```
 
@@ -126,7 +126,7 @@ Expected: zero matches (or only generic "voice" without "hapax" prefix).
 
 ```bash
 git add -A
-git commit -m "refactor: rename all hapax_voice Python references to hapax_daimonion"
+git commit -m "refactor: rename all hapax_daimonion Python references to hapax_daimonion"
 ```
 
 ---
@@ -171,7 +171,7 @@ git commit -m "refactor: rename VoiceConfig to DaimonionConfig"
 ## Task 4: Update systemd units (hapax-council repo)
 
 **Files:**
-- Rename: `systemd/units/hapax-voice.service` → `systemd/units/hapax-daimonion.service`
+- Rename: `systemd/units/hapax-daimonion.service` → `systemd/units/hapax-daimonion.service`
 - Modify: `systemd/units/visual-layer-aggregator.service`
 - Modify: `systemd/units/studio-compositor.service`
 - Modify: `systemd/overrides/studio-compositor.service.d/ordering.conf`
@@ -182,18 +182,18 @@ git commit -m "refactor: rename VoiceConfig to DaimonionConfig"
 - [ ] **Step 1: Rename the service unit file**
 
 ```bash
-git mv systemd/units/hapax-voice.service systemd/units/hapax-daimonion.service
+git mv systemd/units/hapax-daimonion.service systemd/units/hapax-daimonion.service
 ```
 
 - [ ] **Step 2: Update content of renamed service file**
 
 In `systemd/units/hapax-daimonion.service`:
-- `Description=Hapax Voice` → `Description=Hapax Daimonion`
-- `python -m agents.hapax_voice` → `python -m agents.hapax_daimonion`
-- `SyslogIdentifier=hapax-voice` → `SyslogIdentifier=hapax-daimonion`
+- `Description=Hapax Daimonion` → `Description=Hapax Daimonion`
+- `python -m agents.hapax_daimonion` → `python -m agents.hapax_daimonion`
+- `SyslogIdentifier=hapax-daimonion` → `SyslogIdentifier=hapax-daimonion`
 
 ```bash
-sed -i 's/hapax-voice/hapax-daimonion/g; s/hapax_voice/hapax_daimonion/g; s/Hapax Voice/Hapax Daimonion/g' \
+sed -i 's/hapax-daimonion/hapax-daimonion/g; s/hapax_daimonion/hapax_daimonion/g; s/Hapax Daimonion/Hapax Daimonion/g' \
     systemd/units/hapax-daimonion.service
 ```
 
@@ -203,21 +203,21 @@ sed -i 's/hapax-voice/hapax-daimonion/g; s/hapax_voice/hapax_daimonion/g; s/Hapa
 for f in systemd/units/visual-layer-aggregator.service \
          systemd/units/studio-compositor.service \
          systemd/overrides/studio-compositor.service.d/ordering.conf; do
-    sed -i 's/hapax-voice/hapax-daimonion/g' "$f"
+    sed -i 's/hapax-daimonion/hapax-daimonion/g' "$f"
 done
 ```
 
 - [ ] **Step 4: Update rebuild-services unit**
 
 ```bash
-sed -i 's/hapax-voice/hapax-daimonion/g; s/hapax_voice/hapax_daimonion/g' \
+sed -i 's/hapax-daimonion/hapax-daimonion/g; s/hapax_daimonion/hapax_daimonion/g' \
     systemd/hapax-rebuild-services.service
 ```
 
 - [ ] **Step 5: Update systemd README**
 
 ```bash
-sed -i 's/hapax-voice/hapax-daimonion/g; s/hapax_voice/hapax_daimonion/g; s/Hapax Voice/Hapax Daimonion/g' \
+sed -i 's/hapax-daimonion/hapax-daimonion/g; s/hapax_daimonion/hapax_daimonion/g; s/Hapax Daimonion/Hapax Daimonion/g' \
     systemd/README.md
 ```
 
@@ -225,7 +225,7 @@ sed -i 's/hapax-voice/hapax-daimonion/g; s/hapax_voice/hapax_daimonion/g; s/Hapa
 
 ```bash
 git add -A
-git commit -m "refactor: rename hapax-voice systemd units to hapax-daimonion"
+git commit -m "refactor: rename hapax-daimonion systemd units to hapax-daimonion"
 ```
 
 ---
@@ -256,13 +256,13 @@ git mv scripts/smoke_test_voice.sh scripts/smoke_test_daimonion.sh
 
 ```bash
 find scripts/ -type f \( -name '*.sh' -o -name '*.py' \) \
-    -exec sed -i 's/hapax-voice/hapax-daimonion/g; s/hapax_voice/hapax_daimonion/g; s/Hapax Voice/Hapax Daimonion/g' {} +
+    -exec sed -i 's/hapax-daimonion/hapax-daimonion/g; s/hapax_daimonion/hapax_daimonion/g; s/Hapax Daimonion/Hapax Daimonion/g' {} +
 ```
 
 - [ ] **Step 3: Verify**
 
 ```bash
-grep -rn "hapax.voice\|hapax_voice\|hapax-voice" scripts/ | grep -v __pycache__
+grep -rn "hapax.voice\|hapax_daimonion\|hapax-daimonion" scripts/ | grep -v __pycache__
 ```
 
 Expected: zero matches.
@@ -271,7 +271,7 @@ Expected: zero matches.
 
 ```bash
 git add -A
-git commit -m "refactor: rename hapax-voice references in scripts to hapax-daimonion"
+git commit -m "refactor: rename hapax-daimonion references in scripts to hapax-daimonion"
 ```
 
 ---
@@ -290,27 +290,27 @@ git commit -m "refactor: rename hapax-voice references in scripts to hapax-daimo
 - [ ] **Step 1: Update CI workflows**
 
 ```bash
-sed -i 's/hapax_voice/hapax_daimonion/g; s/hapax-voice/hapax-daimonion/g' \
+sed -i 's/hapax_daimonion/hapax_daimonion/g; s/hapax-daimonion/hapax-daimonion/g' \
     .github/workflows/ci.yml .github/workflows/lab-journal.yml
 ```
 
 - [ ] **Step 2: Update .gitignore**
 
 ```bash
-sed -i 's/hapax_voice/hapax_daimonion/g' .gitignore
+sed -i 's/hapax_daimonion/hapax_daimonion/g' .gitignore
 ```
 
 - [ ] **Step 3: Update conftest files**
 
 ```bash
-sed -i 's/hapax_voice/hapax_daimonion/g; s/hapax-voice/hapax-daimonion/g' \
+sed -i 's/hapax_daimonion/hapax_daimonion/g; s/hapax-daimonion/hapax-daimonion/g' \
     conftest.py tests/conftest.py tests/consent_strategies.py
 ```
 
 - [ ] **Step 4: Update process-compose.yaml**
 
 ```bash
-sed -i 's/hapax-voice/hapax-daimonion/g; s/hapax_voice/hapax_daimonion/g; s/Hapax Voice/Hapax Daimonion/g' \
+sed -i 's/hapax-daimonion/hapax-daimonion/g; s/hapax_daimonion/hapax_daimonion/g; s/Hapax Daimonion/Hapax Daimonion/g' \
     process-compose.yaml
 ```
 
@@ -318,7 +318,7 @@ sed -i 's/hapax-voice/hapax-daimonion/g; s/hapax_voice/hapax_daimonion/g; s/Hapa
 
 ```bash
 git add -A
-git commit -m "refactor: rename hapax-voice in CI, config, and process-compose"
+git commit -m "refactor: rename hapax-daimonion in CI, config, and process-compose"
 ```
 
 ---
@@ -332,7 +332,7 @@ git commit -m "refactor: rename hapax-voice in CI, config, and process-compose"
 
 In `hapax-logos/src-tauri/src/commands/system_flow.rs:113`:
 ```
-"{}/.cache/hapax-voice/perception-state.json"
+"{}/.cache/hapax-daimonion/perception-state.json"
 ```
 →
 ```
@@ -340,14 +340,14 @@ In `hapax-logos/src-tauri/src/commands/system_flow.rs:113`:
 ```
 
 ```bash
-sed -i 's/hapax-voice/hapax-daimonion/g' \
+sed -i 's/hapax-daimonion/hapax-daimonion/g' \
     hapax-logos/src-tauri/src/commands/system_flow.rs
 ```
 
 - [ ] **Step 2: Check for any other frontend references**
 
 ```bash
-grep -rn "hapax.voice\|hapax_voice\|hapax-voice" hapax-logos/src/ hapax-logos/src-tauri/src/ \
+grep -rn "hapax.voice\|hapax_daimonion\|hapax-daimonion" hapax-logos/src/ hapax-logos/src-tauri/src/ \
     --include="*.ts" --include="*.tsx" --include="*.rs" 2>/dev/null
 ```
 
@@ -357,7 +357,7 @@ Expected: zero matches.
 
 ```bash
 git add -A
-git commit -m "refactor: rename hapax-voice path in Tauri Rust code"
+git commit -m "refactor: rename hapax-daimonion path in Tauri Rust code"
 ```
 
 ---
@@ -377,20 +377,20 @@ git commit -m "refactor: rename hapax-voice path in Tauri Rust code"
 
 ```bash
 find . -name '*.md' -not -path './.git/*' \
-    -exec sed -i 's/hapax_voice/hapax_daimonion/g; s/hapax-voice/hapax-daimonion/g; s/Hapax Voice/Hapax Daimonion/g; s/hapax voice/hapax daimonion/g' {} +
+    -exec sed -i 's/hapax_daimonion/hapax_daimonion/g; s/hapax-daimonion/hapax-daimonion/g; s/Hapax Daimonion/Hapax Daimonion/g; s/hapax daimonion/hapax daimonion/g' {} +
 ```
 
 - [ ] **Step 2: Update YAML files**
 
 ```bash
 find . -name '*.yaml' -o -name '*.yml' | grep -v .git | grep -v node_modules | \
-    xargs sed -i 's/hapax_voice/hapax_daimonion/g; s/hapax-voice/hapax-daimonion/g; s/Hapax Voice/Hapax Daimonion/g'
+    xargs sed -i 's/hapax_daimonion/hapax_daimonion/g; s/hapax-daimonion/hapax-daimonion/g; s/Hapax Daimonion/Hapax Daimonion/g'
 ```
 
 - [ ] **Step 3: Verify no remaining references in docs**
 
 ```bash
-grep -rn "hapax.voice\|hapax_voice\|hapax-voice" --include="*.md" --include="*.yaml" --include="*.yml" . \
+grep -rn "hapax.voice\|hapax_daimonion\|hapax-daimonion" --include="*.md" --include="*.yaml" --include="*.yml" . \
     | grep -v .git/ | grep -v node_modules
 ```
 
@@ -400,7 +400,7 @@ Expected: zero matches (or only generic "voice" without "hapax" prefix).
 
 ```bash
 git add -A
-git commit -m "docs: rename hapax-voice references to hapax-daimonion"
+git commit -m "docs: rename hapax-daimonion references to hapax-daimonion"
 ```
 
 ---
@@ -469,42 +469,42 @@ A one-shot script to migrate runtime data directories on the live system.
 
 ```bash
 #!/usr/bin/env bash
-# One-shot migration: move hapax-voice runtime data to hapax-daimonion.
+# One-shot migration: move hapax-daimonion runtime data to hapax-daimonion.
 # Run once after deploying the rename. Idempotent — safe to re-run.
 set -euo pipefail
 
-echo "=== Migrating hapax-voice → hapax-daimonion runtime data ==="
+echo "=== Migrating hapax-daimonion → hapax-daimonion runtime data ==="
 
 # Stop the daemon first
-systemctl --user stop hapax-voice.service 2>/dev/null || true
+systemctl --user stop hapax-daimonion.service 2>/dev/null || true
 
 # 1. Cache directory
-if [ -d "$HOME/.cache/hapax-voice" ]; then
+if [ -d "$HOME/.cache/hapax-daimonion" ]; then
     mkdir -p "$HOME/.cache/hapax-daimonion"
-    cp -a "$HOME/.cache/hapax-voice/"* "$HOME/.cache/hapax-daimonion/" 2>/dev/null || true
-    echo "  ✓ ~/.cache/hapax-voice → ~/.cache/hapax-daimonion"
+    cp -a "$HOME/.cache/hapax-daimonion/"* "$HOME/.cache/hapax-daimonion/" 2>/dev/null || true
+    echo "  ✓ ~/.cache/hapax-daimonion → ~/.cache/hapax-daimonion"
 fi
 
 # 2. Local share directory
-if [ -d "$HOME/.local/share/hapax-voice" ]; then
+if [ -d "$HOME/.local/share/hapax-daimonion" ]; then
     mkdir -p "$HOME/.local/share/hapax-daimonion"
-    cp -a "$HOME/.local/share/hapax-voice/"* "$HOME/.local/share/hapax-daimonion/" 2>/dev/null || true
-    echo "  ✓ ~/.local/share/hapax-voice → ~/.local/share/hapax-daimonion"
+    cp -a "$HOME/.local/share/hapax-daimonion/"* "$HOME/.local/share/hapax-daimonion/" 2>/dev/null || true
+    echo "  ✓ ~/.local/share/hapax-daimonion → ~/.local/share/hapax-daimonion"
 fi
 
 # 3. Config directory
-if [ -d "$HOME/.config/hapax-voice" ]; then
+if [ -d "$HOME/.config/hapax-daimonion" ]; then
     mkdir -p "$HOME/.config/hapax-daimonion"
-    cp -a "$HOME/.config/hapax-voice/"* "$HOME/.config/hapax-daimonion/" 2>/dev/null || true
-    echo "  ✓ ~/.config/hapax-voice → ~/.config/hapax-daimonion"
+    cp -a "$HOME/.config/hapax-daimonion/"* "$HOME/.config/hapax-daimonion/" 2>/dev/null || true
+    echo "  ✓ ~/.config/hapax-daimonion → ~/.config/hapax-daimonion"
 fi
 
 # 4. Shared memory (ephemeral — just create the new dir)
 mkdir -p /dev/shm/hapax-daimonion
 
 # 5. Clean up old socket and PID
-rm -f /run/user/$(id -u)/hapax-voice.sock
-rm -f /run/user/$(id -u)/hapax-voice.pid
+rm -f /run/user/$(id -u)/hapax-daimonion.sock
+rm -f /run/user/$(id -u)/hapax-daimonion.pid
 
 # 6. Install new systemd unit, remove old
 echo "  Installing hapax-daimonion.service..."
@@ -513,8 +513,8 @@ UNIT_DST="$HOME/.config/systemd/user/hapax-daimonion.service"
 if [ -f "$UNIT_SRC" ]; then
     cp "$UNIT_SRC" "$UNIT_DST"
 fi
-systemctl --user disable hapax-voice.service 2>/dev/null || true
-rm -f "$HOME/.config/systemd/user/hapax-voice.service"
+systemctl --user disable hapax-daimonion.service 2>/dev/null || true
+rm -f "$HOME/.config/systemd/user/hapax-daimonion.service"
 
 # 7. Update dependency units
 for unit in visual-layer-aggregator.service studio-compositor.service; do
@@ -544,9 +544,9 @@ systemctl --user start hapax-daimonion.service
 echo ""
 echo "=== Migration complete ==="
 echo "Old directories preserved (remove manually when confirmed working):"
-echo "  rm -rf ~/.cache/hapax-voice"
-echo "  rm -rf ~/.local/share/hapax-voice"
-echo "  rm -rf ~/.config/hapax-voice"
+echo "  rm -rf ~/.cache/hapax-daimonion"
+echo "  rm -rf ~/.local/share/hapax-daimonion"
+echo "  rm -rf ~/.config/hapax-daimonion"
 ```
 
 - [ ] **Step 2: Make executable and commit**
@@ -562,18 +562,18 @@ git commit -m "feat: add one-shot migration script for voice→daimonion runtime
 ## Task 11: Update wireplumber config
 
 **Files:**
-- Modify: `~/.config/wireplumber/wireplumber.conf.d/50-hapax-voice-duck.conf` (system config, not in repo)
+- Modify: `~/.config/wireplumber/wireplumber.conf.d/50-hapax-daimonion-duck.conf` (system config, not in repo)
 
 - [ ] **Step 1: Update wireplumber description**
 
-In `~/.config/wireplumber/wireplumber.conf.d/50-hapax-voice-duck.conf`:
-- Update comment: `Hapax Voice` → `Hapax Daimonion`
-- Update `node.description`: `"Hapax Voice Assistant"` → `"Hapax Daimonion Assistant"`
-- Keep filename as `50-hapax-voice-duck.conf` (functional name, describes what it does)
+In `~/.config/wireplumber/wireplumber.conf.d/50-hapax-daimonion-duck.conf`:
+- Update comment: `Hapax Daimonion` → `Hapax Daimonion`
+- Update `node.description`: `"Hapax Daimonion Assistant"` → `"Hapax Daimonion Assistant"`
+- Keep filename as `50-hapax-daimonion-duck.conf` (functional name, describes what it does)
 
 ```bash
-sed -i 's/Hapax Voice/Hapax Daimonion/g' \
-    ~/.config/wireplumber/wireplumber.conf.d/50-hapax-voice-duck.conf
+sed -i 's/Hapax Daimonion/Hapax Daimonion/g' \
+    ~/.config/wireplumber/wireplumber.conf.d/50-hapax-daimonion-duck.conf
 ```
 
 ---
@@ -584,7 +584,7 @@ sed -i 's/Hapax Voice/Hapax Daimonion/g' \
 
 ```bash
 # Ensure no stale references remain
-grep -rn "hapax.voice\b\|hapax_voice\|hapax-voice" --include="*.py" --include="*.rs" \
+grep -rn "hapax.voice\b\|hapax_daimonion\|hapax-daimonion" --include="*.py" --include="*.rs" \
     --include="*.service" --include="*.timer" --include="*.sh" --include="*.yaml" \
     --include="*.yml" --include="*.toml" . 2>/dev/null \
     | grep -v .git/ | grep -v __pycache__ | grep -v node_modules | grep -v target/
@@ -596,13 +596,13 @@ Expected: zero matches.
 
 ```bash
 git push -u origin feat/rename-daimonion
-gh pr create --title "refactor: rename hapax-voice to hapax-daimonion" \
+gh pr create --title "refactor: rename hapax-daimonion to hapax-daimonion" \
     --body "$(cat <<'PREOF'
 ## Summary
-- Rename `agents/hapax_voice/` → `agents/hapax_daimonion/` (105 Python modules, 25 backends, 6 salience modules)
-- Rename `tests/hapax_voice/` → `tests/hapax_daimonion/` (145 test files) + 19 root test files
+- Rename `agents/hapax_daimonion/` → `agents/hapax_daimonion/` (105 Python modules, 25 backends, 6 salience modules)
+- Rename `tests/hapax_daimonion/` → `tests/hapax_daimonion/` (145 test files) + 19 root test files
 - Update all imports, path strings, systemd units, scripts, CI, docs
-- Systemd: `hapax-voice.service` → `hapax-daimonion.service`
+- Systemd: `hapax-daimonion.service` → `hapax-daimonion.service`
 - Runtime paths: `~/.cache/hapax-daimonion/`, `~/.local/share/hapax-daimonion/`, `/dev/shm/hapax-daimonion/`
 - Migration script: `scripts/migrate-voice-to-daimonion.sh`
 
@@ -641,10 +641,10 @@ Each repo gets its own branch and PR. These are documentation-only changes.
 cd ~/projects/hapax-constitution
 git checkout -b docs/rename-daimonion
 find . -name '*.md' -o -name '*.yaml' -o -name '*.yml' | xargs \
-    sed -i 's/hapax_voice/hapax_daimonion/g; s/hapax-voice/hapax-daimonion/g; s/Hapax Voice/Hapax Daimonion/g'
-git add -A && git commit -m "docs: rename hapax-voice to hapax-daimonion"
+    sed -i 's/hapax_daimonion/hapax_daimonion/g; s/hapax-daimonion/hapax-daimonion/g; s/Hapax Daimonion/Hapax Daimonion/g'
+git add -A && git commit -m "docs: rename hapax-daimonion to hapax-daimonion"
 git push -u origin docs/rename-daimonion
-gh pr create --title "docs: rename hapax-voice to hapax-daimonion" --body "Tracks council rename PR."
+gh pr create --title "docs: rename hapax-daimonion to hapax-daimonion" --body "Tracks council rename PR."
 ```
 
 ### 13b: hapax-officium
@@ -652,10 +652,10 @@ gh pr create --title "docs: rename hapax-voice to hapax-daimonion" --body "Track
 ```bash
 cd ~/projects/hapax-officium
 git checkout -b docs/rename-daimonion
-find docs/ -name '*.md' | xargs sed -i 's/hapax_voice/hapax_daimonion/g; s/hapax-voice/hapax-daimonion/g'
-git add -A && git commit -m "docs: rename hapax-voice to hapax-daimonion"
+find docs/ -name '*.md' | xargs sed -i 's/hapax_daimonion/hapax_daimonion/g; s/hapax-daimonion/hapax-daimonion/g'
+git add -A && git commit -m "docs: rename hapax-daimonion to hapax-daimonion"
 git push -u origin docs/rename-daimonion
-gh pr create --title "docs: rename hapax-voice to hapax-daimonion" --body "Tracks council rename PR."
+gh pr create --title "docs: rename hapax-daimonion to hapax-daimonion" --body "Tracks council rename PR."
 ```
 
 ### 13c: hapax-watch
@@ -663,10 +663,10 @@ gh pr create --title "docs: rename hapax-voice to hapax-daimonion" --body "Track
 ```bash
 cd ~/projects/hapax-watch
 git checkout -b docs/rename-daimonion
-find docs/ -name '*.md' | xargs sed -i 's/hapax_voice/hapax_daimonion/g; s/hapax-voice/hapax-daimonion/g; s/Hapax Voice/Hapax Daimonion/g'
-git add -A && git commit -m "docs: rename hapax-voice to hapax-daimonion"
+find docs/ -name '*.md' | xargs sed -i 's/hapax_daimonion/hapax_daimonion/g; s/hapax-daimonion/hapax-daimonion/g; s/Hapax Daimonion/Hapax Daimonion/g'
+git add -A && git commit -m "docs: rename hapax-daimonion to hapax-daimonion"
 git push -u origin docs/rename-daimonion
-gh pr create --title "docs: rename hapax-voice to hapax-daimonion" --body "Tracks council rename PR."
+gh pr create --title "docs: rename hapax-daimonion to hapax-daimonion" --body "Tracks council rename PR."
 ```
 
 ### 13d: distro-work
@@ -675,10 +675,10 @@ gh pr create --title "docs: rename hapax-voice to hapax-daimonion" --body "Track
 cd ~/projects/distro-work
 git checkout -b docs/rename-daimonion
 find . -name '*.sh' -o -name '*.md' | xargs \
-    sed -i 's/hapax_voice/hapax_daimonion/g; s/hapax-voice/hapax-daimonion/g; s/Hapax Voice/Hapax Daimonion/g'
-git add -A && git commit -m "docs: rename hapax-voice to hapax-daimonion"
+    sed -i 's/hapax_daimonion/hapax_daimonion/g; s/hapax-daimonion/hapax-daimonion/g; s/Hapax Daimonion/Hapax Daimonion/g'
+git add -A && git commit -m "docs: rename hapax-daimonion to hapax-daimonion"
 git push -u origin docs/rename-daimonion
-gh pr create --title "docs: rename hapax-voice to hapax-daimonion" --body "Tracks council rename PR."
+gh pr create --title "docs: rename hapax-daimonion to hapax-daimonion" --body "Tracks council rename PR."
 ```
 
 ### 13e: hapax-mcp
@@ -687,7 +687,7 @@ Check for references:
 
 ```bash
 cd ~/projects/hapax-mcp
-grep -rn "hapax_voice\|hapax-voice" --include="*.py" --include="*.md" .
+grep -rn "hapax_daimonion\|hapax-daimonion" --include="*.py" --include="*.md" .
 ```
 
 If found, same pattern: branch, sed, commit, PR.
@@ -708,19 +708,19 @@ If found, same pattern: branch, sed, commit, PR.
 
 ```bash
 find ~/.cache/hapax/relay/ -type f \( -name '*.md' -o -name '*.yaml' -o -name '*.log' \) \
-    -exec sed -i 's/hapax_voice/hapax_daimonion/g; s/hapax-voice/hapax-daimonion/g; s/Hapax Voice/Hapax Daimonion/g' {} +
+    -exec sed -i 's/hapax_daimonion/hapax_daimonion/g; s/hapax-daimonion/hapax-daimonion/g; s/Hapax Daimonion/Hapax Daimonion/g' {} +
 ```
 
 - [ ] **Step 2: Update memory files**
 
-Review and update any memory files that reference hapax-voice.
+Review and update any memory files that reference hapax-daimonion.
 
 ---
 
 ## Risk Notes
 
-1. **VoiceConfig rename**: Any external tools or scripts referencing `VoiceConfig` by string (e.g., YAML config files loading classes by name) will break. Check `~/.config/hapax-voice/config.yaml` if it exists.
-2. **Langfuse traces**: Historical traces will reference `hapax_voice`. No action needed — these are historical records.
-3. **Qdrant collections**: If any collection metadata references `hapax_voice`, it's read-only historical data.
-4. **Journal logs**: `journalctl -u hapax-voice` will show old logs. New logs under `hapax-daimonion`.
+1. **VoiceConfig rename**: Any external tools or scripts referencing `VoiceConfig` by string (e.g., YAML config files loading classes by name) will break. Check `~/.config/hapax-daimonion/config.yaml` if it exists.
+2. **Langfuse traces**: Historical traces will reference `hapax_daimonion`. No action needed — these are historical records.
+3. **Qdrant collections**: If any collection metadata references `hapax_daimonion`, it's read-only historical data.
+4. **Journal logs**: `journalctl -u hapax-daimonion` will show old logs. New logs under `hapax-daimonion`.
 5. **Old data dirs preserved**: Migration script copies, doesn't move. Manual cleanup after verification.

@@ -6,11 +6,11 @@
 
 ## What Changed
 
-`agents/hapax_voice/conversation_pipeline.py`:
+`agents/hapax_daimonion/conversation_pipeline.py`:
 - Added `generate_spontaneous_speech(impingement)` method (~50 lines)
 - Bypasses STT, routes impingement context to LLM, LLM decides whether to speak or [silence]
 
-`agents/hapax_voice/cognitive_loop.py`:
+`agents/hapax_daimonion/cognitive_loop.py`:
 - Added spontaneous speech polling in utterance dispatch block (~10 lines)
 - Added `_dispatch_spontaneous_speech(impingement)` method (~15 lines)
 - Only fires during MUTUAL_SILENCE phase

@@ -2,7 +2,7 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Add structured JSONL event logging and Langfuse trace integration to hapax-voice audio-vision layers for debugging and improvement assessment.
+**Goal:** Add structured JSONL event logging and Langfuse trace integration to hapax-daimonion audio-vision layers for debugging and improvement assessment.
 
 **Architecture:** Two new modules — `event_log.py` (JSONL file writer with daily rotation) and `tracing.py` (Langfuse SDK wrapper). Both are instantiated in VoiceDaemon and passed to subsystems via setter methods. SessionManager gets a `session_id` field so events and traces can be correlated. All observability is fail-open — failures never crash the daemon.
 
@@ -21,13 +21,13 @@
 SessionManager (VoiceLifecycle) needs a unique ID per session so events and traces can be correlated.
 
 **Files:**
-- Modify: `agents/hapax_voice/session.py`
-- Modify: `tests/hapax_voice/test_session.py`
+- Modify: `agents/hapax_daimonion/session.py`
+- Modify: `tests/hapax_daimonion/test_session.py`
 
 **Step 1: Write the failing test**
 
 ```python
-# tests/hapax_voice/test_session.py — append to existing file
+# tests/hapax_daimonion/test_session.py — append to existing file
 
 def test_session_id_generated_on_open():
     sm = SessionManager(silence_timeout_s=10)
@@ -60,12 +60,12 @@ def test_session_id_stable_during_session():
 
 **Step 2: Run tests to verify they fail**
 
-Run: `uv run pytest tests/hapax_voice/test_session.py -v -k "session_id"`
+Run: `uv run pytest tests/hapax_daimonion/test_session.py -v -k "session_id"`
 Expected: FAIL with `AttributeError: 'VoiceLifecycle' object has no attribute 'session_id'`
 
 **Step 3: Implement session_id**
 
-In `agents/hapax_voice/session.py`:
+In `agents/hapax_daimonion/session.py`:
 - Add `import uuid` at top
 - Add `self.session_id: str | None = None` in `__init__`
 - In `open()`: set `self.session_id = uuid.uuid4().hex[:12]`
@@ -73,13 +73,13 @@ In `agents/hapax_voice/session.py`:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `uv run pytest tests/hapax_voice/test_session.py -v`
+Run: `uv run pytest tests/hapax_daimonion/test_session.py -v`
 Expected: ALL PASS
 
 **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/session.py tests/hapax_voice/test_session.py
+git add agents/hapax_daimonion/session.py tests/hapax_daimonion/test_session.py
 git commit -m "feat(voice): add session_id to SessionManager for observability correlation"
 ```
 
@@ -90,18 +90,18 @@ git commit -m "feat(voice): add session_id to SessionManager for observability c
 Create the structured event log writer.
 
 **Files:**
-- Create: `agents/hapax_voice/event_log.py`
-- Create: `tests/hapax_voice/test_event_log.py`
+- Create: `agents/hapax_daimonion/event_log.py`
+- Create: `tests/hapax_daimonion/test_event_log.py`
 
 **Step 1: Write the failing tests**
 
 ```python
-# tests/hapax_voice/test_event_log.py
+# tests/hapax_daimonion/test_event_log.py
 import json
 import time
 from pathlib import Path
 
-from agents.hapax_voice.event_log import EventLog
+from agents.hapax_daimonion.event_log import EventLog
 
 
 def test_emit_writes_jsonl(tmp_path):
@@ -118,7 +118,7 @@ def test_emit_writes_jsonl(tmp_path):
     assert event["type"] == "test_event"
     assert event["foo"] == "bar"
     assert event["count"] == 42
-    assert event["source_service"] == "hapax-voice"
+    assert event["source_service"] == "hapax-daimonion"
     assert "ts" in event
     assert "session_id" in event
 
@@ -195,13 +195,13 @@ def test_disabled_event_log(tmp_path):
 
 **Step 2: Run tests to verify they fail**
 
-Run: `uv run pytest tests/hapax_voice/test_event_log.py -v`
-Expected: FAIL with `ModuleNotFoundError: No module named 'agents.hapax_voice.event_log'`
+Run: `uv run pytest tests/hapax_daimonion/test_event_log.py -v`
+Expected: FAIL with `ModuleNotFoundError: No module named 'agents.hapax_daimonion.event_log'`
 
 **Step 3: Implement EventLog**
 
 ```python
-# agents/hapax_voice/event_log.py
+# agents/hapax_daimonion/event_log.py
 """Structured JSONL event log for voice daemon observability."""
 from __future__ import annotations
 
@@ -213,7 +213,7 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-_DEFAULT_DIR = Path.home() / ".local" / "share" / "hapax-voice"
+_DEFAULT_DIR = Path.home() / ".local" / "share" / "hapax-daimonion"
 
 
 class EventLog:
@@ -248,7 +248,7 @@ class EventLog:
             "ts": time.time(),
             "type": event_type,
             "session_id": self._session_id,
-            "source_service": "hapax-voice",
+            "source_service": "hapax-daimonion",
             **fields,
         }
         try:
@@ -292,13 +292,13 @@ class EventLog:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `uv run pytest tests/hapax_voice/test_event_log.py -v`
+Run: `uv run pytest tests/hapax_daimonion/test_event_log.py -v`
 Expected: ALL PASS (7 tests)
 
 **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/event_log.py tests/hapax_voice/test_event_log.py
+git add agents/hapax_daimonion/event_log.py tests/hapax_daimonion/test_event_log.py
 git commit -m "feat(voice): add EventLog structured JSONL event writer"
 ```
 
@@ -309,16 +309,16 @@ git commit -m "feat(voice): add EventLog structured JSONL event writer"
 Create the Langfuse trace wrapper.
 
 **Files:**
-- Create: `agents/hapax_voice/tracing.py`
-- Create: `tests/hapax_voice/test_tracing.py`
+- Create: `agents/hapax_daimonion/tracing.py`
+- Create: `tests/hapax_daimonion/test_tracing.py`
 
 **Step 1: Write the failing tests**
 
 ```python
-# tests/hapax_voice/test_tracing.py
+# tests/hapax_daimonion/test_tracing.py
 from unittest.mock import patch, MagicMock
 
-from agents.hapax_voice.tracing import VoiceTracer
+from agents.hapax_daimonion.tracing import VoiceTracer
 
 
 def test_disabled_tracer_is_noop():
@@ -334,7 +334,7 @@ def test_enabled_tracer_creates_langfuse_client():
         "LANGFUSE_SECRET_KEY": "sk-test",
         "LANGFUSE_HOST": "http://localhost:3000",
     }):
-        with patch("agents.hapax_voice.tracing.Langfuse") as mock_cls:
+        with patch("agents.hapax_daimonion.tracing.Langfuse") as mock_cls:
             mock_instance = MagicMock()
             mock_cls.return_value = mock_instance
             tracer = VoiceTracer(enabled=True)
@@ -368,14 +368,14 @@ def test_trace_delivery_context_manager():
 
 **Step 2: Run tests to verify they fail**
 
-Run: `uv run pytest tests/hapax_voice/test_tracing.py -v`
-Expected: FAIL with `ModuleNotFoundError: No module named 'agents.hapax_voice.tracing'`
+Run: `uv run pytest tests/hapax_daimonion/test_tracing.py -v`
+Expected: FAIL with `ModuleNotFoundError: No module named 'agents.hapax_daimonion.tracing'`
 
 **Step 3: Implement VoiceTracer**
 
 ```python
-# agents/hapax_voice/tracing.py
-"""Langfuse trace integration for hapax-voice observability."""
+# agents/hapax_daimonion/tracing.py
+"""Langfuse trace integration for hapax-daimonion observability."""
 from __future__ import annotations
 
 import contextlib
@@ -407,7 +407,7 @@ class NoOpSpan:
 
 
 class VoiceTracer:
-    """Wraps Langfuse SDK for hapax-voice trace creation.
+    """Wraps Langfuse SDK for hapax-daimonion trace creation.
 
     Fail-open: if Langfuse is unreachable, credentials missing, or SDK
     unavailable, all methods become no-ops. Never crashes the daemon.
@@ -462,9 +462,9 @@ class VoiceTracer:
             trace = client.trace(
                 name="workspace_analysis",
                 session_id=session_id,
-                tags=["hapax-voice"],
+                tags=["hapax-daimonion"],
                 metadata={
-                    "source_service": "hapax-voice",
+                    "source_service": "hapax-daimonion",
                     "presence_score": presence_score,
                     "images_sent": images_sent,
                     "activity_mode": activity_mode,
@@ -493,9 +493,9 @@ class VoiceTracer:
             trace = client.trace(
                 name="voice_session",
                 session_id=session_id,
-                tags=["hapax-voice"],
+                tags=["hapax-daimonion"],
                 metadata={
-                    "source_service": "hapax-voice",
+                    "source_service": "hapax-daimonion",
                     "trigger": trigger,
                 },
             )
@@ -522,9 +522,9 @@ class VoiceTracer:
             trace = client.trace(
                 name="proactive_delivery",
                 session_id=session_id,
-                tags=["hapax-voice"],
+                tags=["hapax-daimonion"],
                 metadata={
-                    "source_service": "hapax-voice",
+                    "source_service": "hapax-daimonion",
                     "presence_score": presence_score,
                     "gate_reason": gate_reason,
                     "notification_priority": notification_priority,
@@ -546,13 +546,13 @@ class VoiceTracer:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `uv run pytest tests/hapax_voice/test_tracing.py -v`
+Run: `uv run pytest tests/hapax_daimonion/test_tracing.py -v`
 Expected: ALL PASS (5 tests)
 
 **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/tracing.py tests/hapax_voice/test_tracing.py
+git add agents/hapax_daimonion/tracing.py tests/hapax_daimonion/test_tracing.py
 git commit -m "feat(voice): add VoiceTracer Langfuse trace wrapper"
 ```
 
@@ -563,15 +563,15 @@ git commit -m "feat(voice): add VoiceTracer Langfuse trace wrapper"
 Add observability config fields to VoiceConfig.
 
 **Files:**
-- Modify: `agents/hapax_voice/config.py`
-- Modify: `tests/hapax_voice/test_config.py` (if exists, else create)
+- Modify: `agents/hapax_daimonion/config.py`
+- Modify: `tests/hapax_daimonion/test_config.py` (if exists, else create)
 
 **Step 1: Write the failing test**
 
 ```python
-# tests/hapax_voice/test_config.py — append or create
+# tests/hapax_daimonion/test_config.py — append or create
 
-from agents.hapax_voice.config import VoiceConfig
+from agents.hapax_daimonion.config import VoiceConfig
 
 
 def test_observability_config_defaults():
@@ -583,12 +583,12 @@ def test_observability_config_defaults():
 
 **Step 2: Run test to verify it fails**
 
-Run: `uv run pytest tests/hapax_voice/test_config.py::test_observability_config_defaults -v`
+Run: `uv run pytest tests/hapax_daimonion/test_config.py::test_observability_config_defaults -v`
 Expected: FAIL with `ValidationError` (fields don't exist yet)
 
 **Step 3: Add config fields**
 
-In `agents/hapax_voice/config.py`, add after the timelapse fields:
+In `agents/hapax_daimonion/config.py`, add after the timelapse fields:
 
 ```python
     # Observability
@@ -599,13 +599,13 @@ In `agents/hapax_voice/config.py`, add after the timelapse fields:
 
 **Step 4: Run test to verify it passes**
 
-Run: `uv run pytest tests/hapax_voice/test_config.py -v`
+Run: `uv run pytest tests/hapax_daimonion/test_config.py -v`
 Expected: PASS
 
 **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/config.py tests/hapax_voice/test_config.py
+git add agents/hapax_daimonion/config.py tests/hapax_daimonion/test_config.py
 git commit -m "feat(voice): add observability config fields"
 ```
 
@@ -618,27 +618,27 @@ git commit -m "feat(voice): add observability config fields"
 Create EventLog and VoiceTracer in VoiceDaemon, wire session_id updates.
 
 **Files:**
-- Modify: `agents/hapax_voice/__main__.py`
-- Modify: `tests/hapax_voice/test_daemon_screen_integration.py`
+- Modify: `agents/hapax_daimonion/__main__.py`
+- Modify: `tests/hapax_daimonion/test_daemon_screen_integration.py`
 
 **Step 1: Write the failing test**
 
 ```python
-# tests/hapax_voice/test_daemon_screen_integration.py — append
+# tests/hapax_daimonion/test_daemon_screen_integration.py — append
 
 def test_daemon_creates_event_log():
     """VoiceDaemon should create EventLog and VoiceTracer."""
     from unittest.mock import patch, MagicMock
-    from agents.hapax_voice.config import VoiceConfig
+    from agents.hapax_daimonion.config import VoiceConfig
 
     cfg = VoiceConfig(
         screen_monitor_enabled=False,
         webcam_enabled=False,
     )
-    with patch("agents.hapax_voice.__main__.HotkeyServer"), \
-         patch("agents.hapax_voice.__main__.WakeWordDetector"), \
-         patch("agents.hapax_voice.__main__.TTSManager"):
-        from agents.hapax_voice.__main__ import VoiceDaemon
+    with patch("agents.hapax_daimonion.__main__.HotkeyServer"), \
+         patch("agents.hapax_daimonion.__main__.WakeWordDetector"), \
+         patch("agents.hapax_daimonion.__main__.TTSManager"):
+        from agents.hapax_daimonion.__main__ import VoiceDaemon
         daemon = VoiceDaemon(cfg=cfg)
         assert hasattr(daemon, "event_log")
         assert hasattr(daemon, "tracer")
@@ -648,23 +648,23 @@ def test_daemon_creates_event_log():
 
 **Step 2: Run test to verify it fails**
 
-Run: `uv run pytest tests/hapax_voice/test_daemon_screen_integration.py::test_daemon_creates_event_log -v`
+Run: `uv run pytest tests/hapax_daimonion/test_daemon_screen_integration.py::test_daemon_creates_event_log -v`
 Expected: FAIL with `AssertionError`
 
 **Step 3: Implement**
 
-In `agents/hapax_voice/__main__.py`:
+In `agents/hapax_daimonion/__main__.py`:
 
 Add imports:
 ```python
-from agents.hapax_voice.event_log import EventLog
-from agents.hapax_voice.tracing import VoiceTracer
+from agents.hapax_daimonion.event_log import EventLog
+from agents.hapax_daimonion.tracing import VoiceTracer
 ```
 
 In `VoiceDaemon.__init__()`, after `self._background_tasks` line, add:
 ```python
         # Observability
-        events_dir = Path.home() / ".local" / "share" / "hapax-voice"
+        events_dir = Path.home() / ".local" / "share" / "hapax-daimonion"
         self.event_log = EventLog(
             base_dir=events_dir,
             retention_days=self.cfg.observability_events_retention_days,
@@ -694,13 +694,13 @@ In `run()` finally block, add:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `uv run pytest tests/hapax_voice/test_daemon_screen_integration.py -v`
+Run: `uv run pytest tests/hapax_daimonion/test_daemon_screen_integration.py -v`
 Expected: ALL PASS
 
 **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/__main__.py tests/hapax_voice/test_daemon_screen_integration.py
+git add agents/hapax_daimonion/__main__.py tests/hapax_daimonion/test_daemon_screen_integration.py
 git commit -m "feat(voice): wire EventLog and VoiceTracer into VoiceDaemon"
 ```
 
@@ -711,17 +711,17 @@ git commit -m "feat(voice): wire EventLog and VoiceTracer into VoiceDaemon"
 Emit `presence_transition` events when the composite score changes.
 
 **Files:**
-- Modify: `agents/hapax_voice/presence.py`
-- Create: `tests/hapax_voice/test_presence_events.py`
+- Modify: `agents/hapax_daimonion/presence.py`
+- Create: `tests/hapax_daimonion/test_presence_events.py`
 
 **Step 1: Write the failing tests**
 
 ```python
-# tests/hapax_voice/test_presence_events.py
+# tests/hapax_daimonion/test_presence_events.py
 import time
 from unittest.mock import MagicMock
 
-from agents.hapax_voice.presence import PresenceDetector
+from agents.hapax_daimonion.presence import PresenceDetector
 
 
 def test_presence_emits_transition_on_score_change():
@@ -769,12 +769,12 @@ def test_presence_no_event_without_event_log():
 
 **Step 2: Run tests to verify they fail**
 
-Run: `uv run pytest tests/hapax_voice/test_presence_events.py -v`
+Run: `uv run pytest tests/hapax_daimonion/test_presence_events.py -v`
 Expected: FAIL with `AttributeError: 'PresenceDetector' object has no attribute 'set_event_log'`
 
 **Step 3: Implement**
 
-In `agents/hapax_voice/presence.py`:
+In `agents/hapax_daimonion/presence.py`:
 
 Add to `__init__`:
 ```python
@@ -817,13 +817,13 @@ Modify `score` property to check for transitions:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `uv run pytest tests/hapax_voice/test_presence_events.py -v && uv run pytest tests/hapax_voice/test_presence_face.py -v`
+Run: `uv run pytest tests/hapax_daimonion/test_presence_events.py -v && uv run pytest tests/hapax_daimonion/test_presence_face.py -v`
 Expected: ALL PASS (both old and new tests)
 
 **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/presence.py tests/hapax_voice/test_presence_events.py
+git add agents/hapax_daimonion/presence.py tests/hapax_daimonion/test_presence_events.py
 git commit -m "feat(voice): emit presence_transition events on score changes"
 ```
 
@@ -834,17 +834,17 @@ git commit -m "feat(voice): emit presence_transition events on score changes"
 Emit `gate_decision` events from ContextGate, including `subprocess_failed` for wpctl/aconnect failures.
 
 **Files:**
-- Modify: `agents/hapax_voice/context_gate.py`
-- Create: `tests/hapax_voice/test_gate_events.py`
+- Modify: `agents/hapax_daimonion/context_gate.py`
+- Create: `tests/hapax_daimonion/test_gate_events.py`
 
 **Step 1: Write the failing tests**
 
 ```python
-# tests/hapax_voice/test_gate_events.py
+# tests/hapax_daimonion/test_gate_events.py
 from unittest.mock import MagicMock, patch
 
-from agents.hapax_voice.context_gate import ContextGate
-from agents.hapax_voice.session import SessionManager
+from agents.hapax_daimonion.context_gate import ContextGate
+from agents.hapax_daimonion.session import SessionManager
 
 
 def test_gate_emits_decision_event():
@@ -897,12 +897,12 @@ def test_gate_emits_subprocess_failed_on_wpctl_error():
 
 **Step 2: Run tests to verify they fail**
 
-Run: `uv run pytest tests/hapax_voice/test_gate_events.py -v`
+Run: `uv run pytest tests/hapax_daimonion/test_gate_events.py -v`
 Expected: FAIL with `AttributeError`
 
 **Step 3: Implement**
 
-In `agents/hapax_voice/context_gate.py`:
+In `agents/hapax_daimonion/context_gate.py`:
 
 Add to `__init__`:
 ```python
@@ -955,13 +955,13 @@ In `_check_studio()`, in the except block, add:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `uv run pytest tests/hapax_voice/test_gate_events.py -v && uv run pytest tests/hapax_voice/test_context_gate_activity.py -v`
+Run: `uv run pytest tests/hapax_daimonion/test_gate_events.py -v && uv run pytest tests/hapax_daimonion/test_context_gate_activity.py -v`
 Expected: ALL PASS
 
 **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/context_gate.py tests/hapax_voice/test_gate_events.py
+git add agents/hapax_daimonion/context_gate.py tests/hapax_daimonion/test_gate_events.py
 git commit -m "feat(voice): emit gate_decision and subprocess_failed events from ContextGate"
 ```
 
@@ -972,18 +972,18 @@ git commit -m "feat(voice): emit gate_decision and subprocess_failed events from
 Emit `face_result`, `analysis_complete`, `analysis_failed`, and `model_loaded` events from WorkspaceMonitor.
 
 **Files:**
-- Modify: `agents/hapax_voice/workspace_monitor.py`
-- Create: `tests/hapax_voice/test_monitor_events.py`
+- Modify: `agents/hapax_daimonion/workspace_monitor.py`
+- Create: `tests/hapax_daimonion/test_monitor_events.py`
 
 **Step 1: Write the failing tests**
 
 ```python
-# tests/hapax_voice/test_monitor_events.py
+# tests/hapax_daimonion/test_monitor_events.py
 import asyncio
 from unittest.mock import MagicMock, AsyncMock, patch
 
-from agents.hapax_voice.workspace_monitor import WorkspaceMonitor
-from agents.hapax_voice.screen_models import WorkspaceAnalysis
+from agents.hapax_daimonion.workspace_monitor import WorkspaceMonitor
+from agents.hapax_daimonion.screen_models import WorkspaceAnalysis
 
 
 def test_monitor_emits_analysis_complete():
@@ -1046,12 +1046,12 @@ def test_monitor_no_event_without_log():
 
 **Step 2: Run tests to verify they fail**
 
-Run: `uv run pytest tests/hapax_voice/test_monitor_events.py -v`
+Run: `uv run pytest tests/hapax_daimonion/test_monitor_events.py -v`
 Expected: FAIL with `AttributeError: 'WorkspaceMonitor' object has no attribute 'set_event_log'`
 
 **Step 3: Implement**
 
-In `agents/hapax_voice/workspace_monitor.py`:
+In `agents/hapax_daimonion/workspace_monitor.py`:
 
 Add to `__init__`:
 ```python
@@ -1119,13 +1119,13 @@ In `_face_detection_loop()`, wrap face detection with timing:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `uv run pytest tests/hapax_voice/test_monitor_events.py -v && uv run pytest tests/hapax_voice/test_workspace_monitor.py -v`
+Run: `uv run pytest tests/hapax_daimonion/test_monitor_events.py -v && uv run pytest tests/hapax_daimonion/test_workspace_monitor.py -v`
 Expected: ALL PASS
 
 **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/workspace_monitor.py tests/hapax_voice/test_monitor_events.py
+git add agents/hapax_daimonion/workspace_monitor.py tests/hapax_daimonion/test_monitor_events.py
 git commit -m "feat(voice): emit face_result, analysis_complete/failed events from WorkspaceMonitor"
 ```
 
@@ -1136,16 +1136,16 @@ git commit -m "feat(voice): emit face_result, analysis_complete/failed events fr
 Emit `notification_lifecycle` events from NotificationQueue.
 
 **Files:**
-- Modify: `agents/hapax_voice/notification_queue.py`
-- Create: `tests/hapax_voice/test_notification_events.py`
+- Modify: `agents/hapax_daimonion/notification_queue.py`
+- Create: `tests/hapax_daimonion/test_notification_events.py`
 
 **Step 1: Write the failing tests**
 
 ```python
-# tests/hapax_voice/test_notification_events.py
+# tests/hapax_daimonion/test_notification_events.py
 from unittest.mock import MagicMock
 
-from agents.hapax_voice.notification_queue import NotificationQueue, VoiceNotification
+from agents.hapax_daimonion.notification_queue import NotificationQueue, VoiceNotification
 
 
 def test_notification_emits_queued_event():
@@ -1194,12 +1194,12 @@ def test_notification_no_event_without_log():
 
 **Step 2: Run tests to verify they fail**
 
-Run: `uv run pytest tests/hapax_voice/test_notification_events.py -v`
+Run: `uv run pytest tests/hapax_daimonion/test_notification_events.py -v`
 Expected: FAIL with `AttributeError`
 
 **Step 3: Implement**
 
-In `agents/hapax_voice/notification_queue.py`:
+In `agents/hapax_daimonion/notification_queue.py`:
 
 Add to `__init__`:
 ```python
@@ -1237,13 +1237,13 @@ In `prune_expired()`, in the else branch where items are pruned, add:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `uv run pytest tests/hapax_voice/test_notification_events.py -v`
+Run: `uv run pytest tests/hapax_daimonion/test_notification_events.py -v`
 Expected: ALL PASS (3 tests)
 
 **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/notification_queue.py tests/hapax_voice/test_notification_events.py
+git add agents/hapax_daimonion/notification_queue.py tests/hapax_daimonion/test_notification_events.py
 git commit -m "feat(voice): emit notification_lifecycle events from NotificationQueue"
 ```
 
@@ -1256,13 +1256,13 @@ git commit -m "feat(voice): emit notification_lifecycle events from Notification
 Wrap workspace analysis calls with Langfuse traces in WorkspaceMonitor.
 
 **Files:**
-- Modify: `agents/hapax_voice/workspace_monitor.py`
-- Modify: `tests/hapax_voice/test_monitor_events.py`
+- Modify: `agents/hapax_daimonion/workspace_monitor.py`
+- Modify: `tests/hapax_daimonion/test_monitor_events.py`
 
 **Step 1: Write the failing test**
 
 ```python
-# tests/hapax_voice/test_monitor_events.py — append
+# tests/hapax_daimonion/test_monitor_events.py — append
 
 def test_monitor_uses_tracer_for_analysis():
     """WorkspaceMonitor should wrap analysis with tracer.trace_analysis."""
@@ -1279,7 +1279,7 @@ def test_monitor_uses_tracer_for_analysis():
 
 **Step 2: Run test to verify it fails**
 
-Run: `uv run pytest tests/hapax_voice/test_monitor_events.py::test_monitor_uses_tracer_for_analysis -v`
+Run: `uv run pytest tests/hapax_daimonion/test_monitor_events.py::test_monitor_uses_tracer_for_analysis -v`
 Expected: PASS (set_tracer already added in Task 8). If so, this test just validates wiring.
 
 **Step 3: Implement trace wrapping**
@@ -1343,13 +1343,13 @@ Add `import contextlib` at top of file.
 
 **Step 4: Run tests to verify they pass**
 
-Run: `uv run pytest tests/hapax_voice/ -v -q`
+Run: `uv run pytest tests/hapax_daimonion/ -v -q`
 Expected: ALL PASS
 
 **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/workspace_monitor.py tests/hapax_voice/test_monitor_events.py
+git add agents/hapax_daimonion/workspace_monitor.py tests/hapax_daimonion/test_monitor_events.py
 git commit -m "feat(voice): wrap workspace analysis with Langfuse traces"
 ```
 
@@ -1360,26 +1360,26 @@ git commit -m "feat(voice): wrap workspace analysis with Langfuse traces"
 Connect event_log to PresenceDetector, ContextGate, WorkspaceMonitor, NotificationQueue from VoiceDaemon.
 
 **Files:**
-- Modify: `agents/hapax_voice/__main__.py`
-- Modify: `tests/hapax_voice/test_daemon_screen_integration.py`
+- Modify: `agents/hapax_daimonion/__main__.py`
+- Modify: `tests/hapax_daimonion/test_daemon_screen_integration.py`
 
 **Step 1: Write the failing test**
 
 ```python
-# tests/hapax_voice/test_daemon_screen_integration.py — append
+# tests/hapax_daimonion/test_daemon_screen_integration.py — append
 
 def test_daemon_wires_event_log_to_subsystems():
     from unittest.mock import patch
-    from agents.hapax_voice.config import VoiceConfig
+    from agents.hapax_daimonion.config import VoiceConfig
 
     cfg = VoiceConfig(
         screen_monitor_enabled=False,
         webcam_enabled=False,
     )
-    with patch("agents.hapax_voice.__main__.HotkeyServer"), \
-         patch("agents.hapax_voice.__main__.WakeWordDetector"), \
-         patch("agents.hapax_voice.__main__.TTSManager"):
-        from agents.hapax_voice.__main__ import VoiceDaemon
+    with patch("agents.hapax_daimonion.__main__.HotkeyServer"), \
+         patch("agents.hapax_daimonion.__main__.WakeWordDetector"), \
+         patch("agents.hapax_daimonion.__main__.TTSManager"):
+        from agents.hapax_daimonion.__main__ import VoiceDaemon
         daemon = VoiceDaemon(cfg=cfg)
         assert daemon.presence._event_log is daemon.event_log
         assert daemon.gate._event_log is daemon.event_log
@@ -1390,7 +1390,7 @@ def test_daemon_wires_event_log_to_subsystems():
 
 **Step 2: Run test to verify it fails**
 
-Run: `uv run pytest tests/hapax_voice/test_daemon_screen_integration.py::test_daemon_wires_event_log_to_subsystems -v`
+Run: `uv run pytest tests/hapax_daimonion/test_daemon_screen_integration.py::test_daemon_wires_event_log_to_subsystems -v`
 Expected: FAIL
 
 **Step 3: Implement**
@@ -1407,13 +1407,13 @@ In `VoiceDaemon.__init__()`, after creating event_log and tracer, add:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `uv run pytest tests/hapax_voice/ -v -q`
+Run: `uv run pytest tests/hapax_daimonion/ -v -q`
 Expected: ALL PASS
 
 **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/__main__.py tests/hapax_voice/test_daemon_screen_integration.py
+git add agents/hapax_daimonion/__main__.py tests/hapax_daimonion/test_daemon_screen_integration.py
 git commit -m "feat(voice): wire EventLog and VoiceTracer to all subsystems in daemon"
 ```
 
@@ -1426,7 +1426,7 @@ git commit -m "feat(voice): wire EventLog and VoiceTracer to all subsystems in d
 Add periodic event log cleanup and event log cleanup on daemon startup.
 
 **Files:**
-- Modify: `agents/hapax_voice/__main__.py`
+- Modify: `agents/hapax_daimonion/__main__.py`
 
 **Step 1: No new test needed**
 
@@ -1443,13 +1443,13 @@ In `VoiceDaemon.run()`, after subsystem initialization logging, add:
 
 **Step 3: Run all tests**
 
-Run: `uv run pytest tests/hapax_voice/ -v -q`
+Run: `uv run pytest tests/hapax_daimonion/ -v -q`
 Expected: ALL PASS
 
 **Step 4: Commit**
 
 ```bash
-git add agents/hapax_voice/__main__.py
+git add agents/hapax_daimonion/__main__.py
 git commit -m "feat(voice): run event log cleanup on daemon startup"
 ```
 
@@ -1460,20 +1460,20 @@ git commit -m "feat(voice): run event log cleanup on daemon startup"
 End-to-end test verifying events flow through the system.
 
 **Files:**
-- Create: `tests/hapax_voice/test_observability_integration.py`
+- Create: `tests/hapax_daimonion/test_observability_integration.py`
 
 **Step 1: Write the integration test**
 
 ```python
-# tests/hapax_voice/test_observability_integration.py
+# tests/hapax_daimonion/test_observability_integration.py
 """Integration test: verify observability events flow end-to-end."""
 import json
 
-from agents.hapax_voice.event_log import EventLog
-from agents.hapax_voice.presence import PresenceDetector
-from agents.hapax_voice.context_gate import ContextGate
-from agents.hapax_voice.notification_queue import NotificationQueue, VoiceNotification
-from agents.hapax_voice.session import SessionManager
+from agents.hapax_daimonion.event_log import EventLog
+from agents.hapax_daimonion.presence import PresenceDetector
+from agents.hapax_daimonion.context_gate import ContextGate
+from agents.hapax_daimonion.notification_queue import NotificationQueue, VoiceNotification
+from agents.hapax_daimonion.session import SessionManager
 
 
 def test_full_event_flow(tmp_path):
@@ -1522,7 +1522,7 @@ def test_full_event_flow(tmp_path):
     for e in events:
         assert "ts" in e
         assert "source_service" in e
-        assert e["source_service"] == "hapax-voice"
+        assert e["source_service"] == "hapax-daimonion"
         assert "session_id" in e
 
     # Session events have the session_id set
@@ -1534,13 +1534,13 @@ def test_full_event_flow(tmp_path):
 
 **Step 2: Run test**
 
-Run: `uv run pytest tests/hapax_voice/test_observability_integration.py -v`
+Run: `uv run pytest tests/hapax_daimonion/test_observability_integration.py -v`
 Expected: PASS
 
 **Step 3: Commit**
 
 ```bash
-git add tests/hapax_voice/test_observability_integration.py
+git add tests/hapax_daimonion/test_observability_integration.py
 git commit -m "test(voice): add end-to-end observability integration test"
 ```
 
@@ -1548,9 +1548,9 @@ git commit -m "test(voice): add end-to-end observability integration test"
 
 ### Task 14: Run Full Test Suite
 
-**Step 1: Run all hapax_voice tests**
+**Step 1: Run all hapax_daimonion tests**
 
-Run: `uv run pytest tests/hapax_voice/ -v`
+Run: `uv run pytest tests/hapax_daimonion/ -v`
 Expected: ALL PASS (previous 91 + new tests)
 
 **Step 2: Verify no regressions**

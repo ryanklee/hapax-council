@@ -4,8 +4,8 @@
 
 ```
 1. Daemon active:     process-compose process list (voice = running)
-   Fallback:          systemctl --user is-active hapax-voice
-2. Presence:          cat ~/.cache/hapax-voice/perception-state.json | jq .presence_state
+   Fallback:          systemctl --user is-active hapax-daimonion
+2. Presence:          cat ~/.cache/hapax-daimonion/perception-state.json | jq .presence_state
    Must be:           "PRESENT"
 3. Langfuse:          curl -s http://127.0.0.1:3000/api/public/health
    Must return:       {"status":"OK"}

@@ -468,7 +468,7 @@ components:
       - "real-time voice AI framework python"
       - "speech to speech pipeline framework"
     eval_notes: >
-      Medium migration cost. Core of Hapax Voice daemon. Pipeline processors
+      Medium migration cost. Core of Hapax Daimonion daemon. Pipeline processors
       are abstracted but framework change would require rewriting pipeline.py
       and gemini_live.py integration.
 

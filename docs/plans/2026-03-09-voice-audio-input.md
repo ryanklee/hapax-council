@@ -2,7 +2,7 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Wire continuous microphone audio into the hapax-voice daemon so wake word detection, VAD presence scoring, and Gemini Live streaming all function in real time.
+**Goal:** Wire continuous microphone audio into the hapax-daimonion daemon so wake word detection, VAD presence scoring, and Gemini Live streaming all function in real time.
 
 **Architecture:** A new `AudioInputStream` class opens a PyAudio callback stream on the PipeWire echo-cancelled virtual source (`echo_cancel_capture`). An async distribution loop in `VoiceDaemon` fans each 30ms frame to WakeWordDetector, PresenceDetector, and (when active) GeminiLiveSession. The daemon degrades gracefully to visual-only mode if audio hardware is unavailable.
 
@@ -15,14 +15,14 @@
 ## Task 1: AudioInputStream — Core Class
 
 **Files:**
-- Create: `agents/hapax_voice/audio_input.py`
-- Test: `tests/hapax_voice/test_audio_input.py`
+- Create: `agents/hapax_daimonion/audio_input.py`
+- Test: `tests/hapax_daimonion/test_audio_input.py`
 
 **Context:** This class wraps PyAudio in callback mode. The callback writes raw PCM frames to a thread-safe `queue.Queue`. The async `get_frame()` method pulls from the queue using `run_in_executor`. The class selects the echo-cancelled PipeWire source by name, falling back to the default input device.
 
 **Step 1: Write the failing tests**
 
-Create `tests/hapax_voice/test_audio_input.py`:
+Create `tests/hapax_daimonion/test_audio_input.py`:
 
 ```python
 """Tests for AudioInputStream — PyAudio wrapper with device selection."""
@@ -33,7 +33,7 @@ from unittest.mock import MagicMock, patch, PropertyMock
 
 import pytest
 
-from agents.hapax_voice.audio_input import AudioInputStream
+from agents.hapax_daimonion.audio_input import AudioInputStream
 
 
 # --- Device selection ---
@@ -50,7 +50,7 @@ class TestDeviceSelection:
             {"index": 1, "name": "echo_cancel_capture", "maxInputChannels": 1},
             {"index": 2, "name": "Monitor of Built-in Audio", "maxInputChannels": 2},
         ]
-        with patch("agents.hapax_voice.audio_input.pyaudio.PyAudio", return_value=mock_pa):
+        with patch("agents.hapax_daimonion.audio_input.pyaudio.PyAudio", return_value=mock_pa):
             stream = AudioInputStream(source_name="echo_cancel_capture")
             assert stream._device_index == 1
 
@@ -61,7 +61,7 @@ class TestDeviceSelection:
         mock_pa.get_device_info_by_index.side_effect = [
             {"index": 0, "name": "Built-in Microphone", "maxInputChannels": 2},
         ]
-        with patch("agents.hapax_voice.audio_input.pyaudio.PyAudio", return_value=mock_pa):
+        with patch("agents.hapax_daimonion.audio_input.pyaudio.PyAudio", return_value=mock_pa):
             stream = AudioInputStream(source_name="echo_cancel_capture")
             assert stream._device_index is None
 
@@ -73,7 +73,7 @@ class TestDeviceSelection:
             {"index": 0, "name": "echo_cancel_capture", "maxInputChannels": 0},
             {"index": 1, "name": "echo_cancel_capture input", "maxInputChannels": 1},
         ]
-        with patch("agents.hapax_voice.audio_input.pyaudio.PyAudio", return_value=mock_pa):
+        with patch("agents.hapax_daimonion.audio_input.pyaudio.PyAudio", return_value=mock_pa):
             stream = AudioInputStream(source_name="echo_cancel_capture")
             assert stream._device_index == 1
 
@@ -87,7 +87,7 @@ class TestFrameQueue:
         """PyAudio callback writes audio data to internal queue."""
         mock_pa = MagicMock()
         mock_pa.get_device_count.return_value = 0
-        with patch("agents.hapax_voice.audio_input.pyaudio.PyAudio", return_value=mock_pa):
+        with patch("agents.hapax_daimonion.audio_input.pyaudio.PyAudio", return_value=mock_pa):
             stream = AudioInputStream()
             audio_data = b"\x00" * 960
             # Simulate PyAudio callback
@@ -99,7 +99,7 @@ class TestFrameQueue:
         """Callback drops frames when queue is full instead of blocking."""
         mock_pa = MagicMock()
         mock_pa.get_device_count.return_value = 0
-        with patch("agents.hapax_voice.audio_input.pyaudio.PyAudio", return_value=mock_pa):
+        with patch("agents.hapax_daimonion.audio_input.pyaudio.PyAudio", return_value=mock_pa):
             stream = AudioInputStream()
             stream._queue = queue.Queue(maxsize=2)
             stream._queue.put(b"a")
@@ -114,7 +114,7 @@ class TestFrameQueue:
         """get_frame() returns bytes from the queue."""
         mock_pa = MagicMock()
         mock_pa.get_device_count.return_value = 0
-        with patch("agents.hapax_voice.audio_input.pyaudio.PyAudio", return_value=mock_pa):
+        with patch("agents.hapax_daimonion.audio_input.pyaudio.PyAudio", return_value=mock_pa):
             stream = AudioInputStream()
             stream._queue.put(b"\x01" * 960)
             frame = await stream.get_frame(timeout=0.1)
@@ -125,7 +125,7 @@ class TestFrameQueue:
         """get_frame() returns None when queue is empty after timeout."""
         mock_pa = MagicMock()
         mock_pa.get_device_count.return_value = 0
-        with patch("agents.hapax_voice.audio_input.pyaudio.PyAudio", return_value=mock_pa):
+        with patch("agents.hapax_daimonion.audio_input.pyaudio.PyAudio", return_value=mock_pa):
             stream = AudioInputStream()
             frame = await stream.get_frame(timeout=0.01)
             assert frame is None
@@ -142,7 +142,7 @@ class TestLifecycle:
         mock_pa.get_device_count.return_value = 0
         mock_stream = MagicMock()
         mock_pa.open.return_value = mock_stream
-        with patch("agents.hapax_voice.audio_input.pyaudio.PyAudio", return_value=mock_pa):
+        with patch("agents.hapax_daimonion.audio_input.pyaudio.PyAudio", return_value=mock_pa):
             stream = AudioInputStream()
             stream.start()
             mock_pa.open.assert_called_once()
@@ -159,7 +159,7 @@ class TestLifecycle:
         mock_pa.get_device_count.return_value = 0
         mock_stream = MagicMock()
         mock_pa.open.return_value = mock_stream
-        with patch("agents.hapax_voice.audio_input.pyaudio.PyAudio", return_value=mock_pa):
+        with patch("agents.hapax_daimonion.audio_input.pyaudio.PyAudio", return_value=mock_pa):
             stream = AudioInputStream()
             stream.start()
             stream.stop()
@@ -172,7 +172,7 @@ class TestLifecycle:
         """stop() can be called multiple times without error."""
         mock_pa = MagicMock()
         mock_pa.get_device_count.return_value = 0
-        with patch("agents.hapax_voice.audio_input.pyaudio.PyAudio", return_value=mock_pa):
+        with patch("agents.hapax_daimonion.audio_input.pyaudio.PyAudio", return_value=mock_pa):
             stream = AudioInputStream()
             stream.stop()  # Never started
             stream.stop()  # Again
@@ -183,7 +183,7 @@ class TestLifecycle:
         mock_pa = MagicMock()
         mock_pa.get_device_count.return_value = 0
         mock_pa.open.side_effect = OSError("No audio device")
-        with patch("agents.hapax_voice.audio_input.pyaudio.PyAudio", return_value=mock_pa):
+        with patch("agents.hapax_daimonion.audio_input.pyaudio.PyAudio", return_value=mock_pa):
             stream = AudioInputStream()
             stream.start()  # Should not raise
             assert stream.is_active is False
@@ -198,7 +198,7 @@ class TestFrameSize:
         """30ms at 16kHz mono int16 = 480 samples = 960 bytes."""
         mock_pa = MagicMock()
         mock_pa.get_device_count.return_value = 0
-        with patch("agents.hapax_voice.audio_input.pyaudio.PyAudio", return_value=mock_pa):
+        with patch("agents.hapax_daimonion.audio_input.pyaudio.PyAudio", return_value=mock_pa):
             stream = AudioInputStream(sample_rate=16000, frame_ms=30)
             assert stream.frame_samples == 480
             assert stream.frame_bytes == 960
@@ -206,12 +206,12 @@ class TestFrameSize:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_audio_input.py -v`
-Expected: FAIL with `ModuleNotFoundError: No module named 'agents.hapax_voice.audio_input'`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_audio_input.py -v`
+Expected: FAIL with `ModuleNotFoundError: No module named 'agents.hapax_daimonion.audio_input'`
 
 **Step 3: Write the implementation**
 
-Create `agents/hapax_voice/audio_input.py`:
+Create `agents/hapax_daimonion/audio_input.py`:
 
 ```python
 """Continuous audio input from PipeWire/ALSA via PyAudio callback stream."""
@@ -349,14 +349,14 @@ class AudioInputStream:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_audio_input.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_audio_input.py -v`
 Expected: All 12 tests PASS
 
 **Step 5: Commit**
 
 ```bash
 cd ~/projects/ai-agents
-git add agents/hapax_voice/audio_input.py tests/hapax_voice/test_audio_input.py
+git add agents/hapax_daimonion/audio_input.py tests/hapax_daimonion/test_audio_input.py
 git commit -m "feat(voice): add AudioInputStream — PyAudio wrapper with device selection"
 ```
 
@@ -365,14 +365,14 @@ git commit -m "feat(voice): add AudioInputStream — PyAudio wrapper with device
 ## Task 2: Audio Distribution Loop
 
 **Files:**
-- Modify: `agents/hapax_voice/__main__.py`
-- Test: `tests/hapax_voice/test_audio_loop.py`
+- Modify: `agents/hapax_daimonion/__main__.py`
+- Test: `tests/hapax_daimonion/test_audio_loop.py`
 
 **Context:** The `VoiceDaemon` needs an `_audio_loop()` async method that reads frames from `AudioInputStream` and distributes them to wake word detection, VAD presence scoring, and (when connected) Gemini Live streaming. One consumer failing must not kill the loop.
 
 **Step 1: Write the failing tests**
 
-Create `tests/hapax_voice/test_audio_loop.py`:
+Create `tests/hapax_daimonion/test_audio_loop.py`:
 
 ```python
 """Tests for VoiceDaemon._audio_loop() frame distribution."""
@@ -391,7 +391,7 @@ class TestAudioLoopDistribution:
     @pytest.mark.asyncio
     async def test_frame_sent_to_wake_word(self):
         """Each frame is converted to numpy and passed to wake_word.process_audio()."""
-        from agents.hapax_voice.__main__ import VoiceDaemon
+        from agents.hapax_daimonion.__main__ import VoiceDaemon
 
         with patch.object(VoiceDaemon, "__init__", lambda self, **kw: None):
             daemon = VoiceDaemon()
@@ -427,7 +427,7 @@ class TestAudioLoopDistribution:
     @pytest.mark.asyncio
     async def test_frame_sent_to_presence(self):
         """Each frame is passed as raw bytes to presence.process_audio_frame()."""
-        from agents.hapax_voice.__main__ import VoiceDaemon
+        from agents.hapax_daimonion.__main__ import VoiceDaemon
 
         with patch.object(VoiceDaemon, "__init__", lambda self, **kw: None):
             daemon = VoiceDaemon()
@@ -459,7 +459,7 @@ class TestAudioLoopDistribution:
     @pytest.mark.asyncio
     async def test_frame_sent_to_gemini_when_connected(self):
         """Frame sent to gemini_session.send_audio() when session is connected."""
-        from agents.hapax_voice.__main__ import VoiceDaemon
+        from agents.hapax_daimonion.__main__ import VoiceDaemon
 
         with patch.object(VoiceDaemon, "__init__", lambda self, **kw: None):
             daemon = VoiceDaemon()
@@ -492,7 +492,7 @@ class TestAudioLoopDistribution:
     @pytest.mark.asyncio
     async def test_frame_not_sent_to_gemini_when_disconnected(self):
         """Frame NOT sent to gemini_session when session is not connected."""
-        from agents.hapax_voice.__main__ import VoiceDaemon
+        from agents.hapax_daimonion.__main__ import VoiceDaemon
 
         with patch.object(VoiceDaemon, "__init__", lambda self, **kw: None):
             daemon = VoiceDaemon()
@@ -525,7 +525,7 @@ class TestAudioLoopDistribution:
     @pytest.mark.asyncio
     async def test_no_gemini_session_attribute(self):
         """Loop works when _gemini_session is None."""
-        from agents.hapax_voice.__main__ import VoiceDaemon
+        from agents.hapax_daimonion.__main__ import VoiceDaemon
 
         with patch.object(VoiceDaemon, "__init__", lambda self, **kw: None):
             daemon = VoiceDaemon()
@@ -562,7 +562,7 @@ class TestAudioLoopErrorHandling:
     @pytest.mark.asyncio
     async def test_continues_after_wake_word_exception(self):
         """Loop continues distributing after wake_word.process_audio raises."""
-        from agents.hapax_voice.__main__ import VoiceDaemon
+        from agents.hapax_daimonion.__main__ import VoiceDaemon
 
         with patch.object(VoiceDaemon, "__init__", lambda self, **kw: None):
             daemon = VoiceDaemon()
@@ -595,7 +595,7 @@ class TestAudioLoopErrorHandling:
     @pytest.mark.asyncio
     async def test_continues_after_presence_exception(self):
         """Loop continues distributing after presence.process_audio_frame raises."""
-        from agents.hapax_voice.__main__ import VoiceDaemon
+        from agents.hapax_daimonion.__main__ import VoiceDaemon
 
         with patch.object(VoiceDaemon, "__init__", lambda self, **kw: None):
             daemon = VoiceDaemon()
@@ -628,7 +628,7 @@ class TestAudioLoopErrorHandling:
     @pytest.mark.asyncio
     async def test_continues_after_gemini_exception(self):
         """Loop continues after gemini_session.send_audio raises."""
-        from agents.hapax_voice.__main__ import VoiceDaemon
+        from agents.hapax_daimonion.__main__ import VoiceDaemon
 
         with patch.object(VoiceDaemon, "__init__", lambda self, **kw: None):
             daemon = VoiceDaemon()
@@ -663,7 +663,7 @@ class TestAudioLoopErrorHandling:
     @pytest.mark.asyncio
     async def test_skips_none_frames(self):
         """get_frame() returning None (timeout) causes loop to continue."""
-        from agents.hapax_voice.__main__ import VoiceDaemon
+        from agents.hapax_daimonion.__main__ import VoiceDaemon
 
         with patch.object(VoiceDaemon, "__init__", lambda self, **kw: None):
             daemon = VoiceDaemon()
@@ -698,7 +698,7 @@ class TestAudioLoopErrorHandling:
     @pytest.mark.asyncio
     async def test_exits_when_not_running(self):
         """Loop exits cleanly when _running is set to False."""
-        from agents.hapax_voice.__main__ import VoiceDaemon
+        from agents.hapax_daimonion.__main__ import VoiceDaemon
 
         with patch.object(VoiceDaemon, "__init__", lambda self, **kw: None):
             daemon = VoiceDaemon()
@@ -716,12 +716,12 @@ class TestAudioLoopErrorHandling:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_audio_loop.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_audio_loop.py -v`
 Expected: FAIL with `AttributeError: 'VoiceDaemon' object has no attribute '_audio_loop'`
 
 **Step 3: Implement _audio_loop in VoiceDaemon**
 
-Add this method to the `VoiceDaemon` class in `agents/hapax_voice/__main__.py`, after the existing `_on_wake_word` method:
+Add this method to the `VoiceDaemon` class in `agents/hapax_daimonion/__main__.py`, after the existing `_on_wake_word` method:
 
 ```python
     async def _audio_loop(self) -> None:
@@ -758,14 +758,14 @@ Also add `import numpy as np` at the top of the file if not already present (but
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_audio_loop.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_audio_loop.py -v`
 Expected: All 10 tests PASS
 
 **Step 5: Commit**
 
 ```bash
 cd ~/projects/ai-agents
-git add agents/hapax_voice/__main__.py tests/hapax_voice/test_audio_loop.py
+git add agents/hapax_daimonion/__main__.py tests/hapax_daimonion/test_audio_loop.py
 git commit -m "feat(voice): add audio distribution loop — frames to wake word, VAD, Gemini"
 ```
 
@@ -774,18 +774,18 @@ git commit -m "feat(voice): add audio distribution loop — frames to wake word,
 ## Task 3: Config Addition
 
 **Files:**
-- Modify: `agents/hapax_voice/config.py`
-- Test: `tests/hapax_voice/test_config_audio.py`
+- Modify: `agents/hapax_daimonion/config.py`
+- Test: `tests/hapax_daimonion/test_config_audio.py`
 
 **Context:** The `VoiceConfig` Pydantic model needs a new field `audio_input_source` so the PipeWire source name is configurable. Default: `"echo_cancel_capture"`.
 
 **Step 1: Write the failing test**
 
-Create `tests/hapax_voice/test_config_audio.py`:
+Create `tests/hapax_daimonion/test_config_audio.py`:
 
 ```python
 """Tests for audio_input_source config field."""
-from agents.hapax_voice.config import VoiceConfig
+from agents.hapax_daimonion.config import VoiceConfig
 
 
 def test_default_audio_input_source():
@@ -802,12 +802,12 @@ def test_custom_audio_input_source():
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_config_audio.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_config_audio.py -v`
 Expected: FAIL with `ValidationError` (field not in model)
 
 **Step 3: Add the field to VoiceConfig**
 
-In `agents/hapax_voice/config.py`, add to the `VoiceConfig` class fields:
+In `agents/hapax_daimonion/config.py`, add to the `VoiceConfig` class fields:
 
 ```python
     audio_input_source: str = "echo_cancel_capture"
@@ -815,14 +815,14 @@ In `agents/hapax_voice/config.py`, add to the `VoiceConfig` class fields:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_config_audio.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_config_audio.py -v`
 Expected: All 2 tests PASS
 
 **Step 5: Commit**
 
 ```bash
 cd ~/projects/ai-agents
-git add agents/hapax_voice/config.py tests/hapax_voice/test_config_audio.py
+git add agents/hapax_daimonion/config.py tests/hapax_daimonion/test_config_audio.py
 git commit -m "feat(voice): add audio_input_source config field"
 ```
 
@@ -831,14 +831,14 @@ git commit -m "feat(voice): add audio_input_source config field"
 ## Task 4: Daemon Wiring — Init and Lifecycle
 
 **Files:**
-- Modify: `agents/hapax_voice/__main__.py`
-- Test: `tests/hapax_voice/test_daemon_audio_wiring.py`
+- Modify: `agents/hapax_daimonion/__main__.py`
+- Test: `tests/hapax_daimonion/test_daemon_audio_wiring.py`
 
 **Context:** Wire `AudioInputStream` into `VoiceDaemon.__init__()`, start it in `run()`, add `_audio_loop()` as a background task, and stop it in the `finally` block. If PyAudio can't open the stream, the daemon continues in visual-only mode.
 
 **Step 1: Write the failing tests**
 
-Create `tests/hapax_voice/test_daemon_audio_wiring.py`:
+Create `tests/hapax_daimonion/test_daemon_audio_wiring.py`:
 
 ```python
 """Tests for audio input wiring in VoiceDaemon lifecycle."""
@@ -855,7 +855,7 @@ class TestDaemonAudioInit:
 
     def test_audio_input_created(self):
         """VoiceDaemon creates AudioInputStream with configured source."""
-        with patch("agents.hapax_voice.__main__.AudioInputStream") as MockAIS:
+        with patch("agents.hapax_daimonion.__main__.AudioInputStream") as MockAIS:
             mock_cfg = MagicMock()
             mock_cfg.audio_input_source = "test_source"
             mock_cfg.silence_timeout_s = 30
@@ -877,19 +877,19 @@ class TestDaemonAudioInit:
             mock_cfg.webcam_cooldown_s = 30.0
             mock_cfg.face_interval_s = 8.0
             mock_cfg.face_min_confidence = 0.3
-            mock_cfg.hotkey_socket = "/tmp/hapax-voice.sock"
+            mock_cfg.hotkey_socket = "/tmp/hapax-daimonion.sock"
             mock_cfg.event_log_enabled = True
             mock_cfg.event_log_dir = "/tmp/test-events"
             mock_cfg.event_log_retention_days = 14
             mock_cfg.ntfy_topic = ""
             mock_cfg.ambient_classification = False
 
-            with patch("agents.hapax_voice.__main__.load_config", return_value=mock_cfg):
-                with patch("agents.hapax_voice.__main__.WakeWordDetector"):
-                    with patch("agents.hapax_voice.__main__.TTSManager"):
-                        with patch("agents.hapax_voice.__main__.WorkspaceMonitor"):
-                            with patch("agents.hapax_voice.__main__.HotkeyServer"):
-                                from agents.hapax_voice.__main__ import VoiceDaemon
+            with patch("agents.hapax_daimonion.__main__.load_config", return_value=mock_cfg):
+                with patch("agents.hapax_daimonion.__main__.WakeWordDetector"):
+                    with patch("agents.hapax_daimonion.__main__.TTSManager"):
+                        with patch("agents.hapax_daimonion.__main__.WorkspaceMonitor"):
+                            with patch("agents.hapax_daimonion.__main__.HotkeyServer"):
+                                from agents.hapax_daimonion.__main__ import VoiceDaemon
                                 daemon = VoiceDaemon()
 
             MockAIS.assert_called_once_with(source_name="test_source")
@@ -901,7 +901,7 @@ class TestDaemonAudioLifecycle:
     @pytest.mark.asyncio
     async def test_audio_started_event_emitted(self):
         """audio_input_started event emitted when stream opens successfully."""
-        from agents.hapax_voice.__main__ import VoiceDaemon
+        from agents.hapax_daimonion.__main__ import VoiceDaemon
 
         with patch.object(VoiceDaemon, "__init__", lambda self, **kw: None):
             daemon = VoiceDaemon()
@@ -936,7 +936,7 @@ class TestDaemonAudioLifecycle:
     @pytest.mark.asyncio
     async def test_audio_failed_event_on_stream_failure(self):
         """audio_input_failed event emitted when stream cannot open."""
-        from agents.hapax_voice.__main__ import VoiceDaemon
+        from agents.hapax_daimonion.__main__ import VoiceDaemon
 
         with patch.object(VoiceDaemon, "__init__", lambda self, **kw: None):
             daemon = VoiceDaemon()
@@ -974,7 +974,7 @@ class TestDaemonAudioLifecycle:
     @pytest.mark.asyncio
     async def test_audio_stopped_on_shutdown(self):
         """audio_input.stop() called in finally block."""
-        from agents.hapax_voice.__main__ import VoiceDaemon
+        from agents.hapax_daimonion.__main__ import VoiceDaemon
 
         with patch.object(VoiceDaemon, "__init__", lambda self, **kw: None):
             daemon = VoiceDaemon()
@@ -1008,7 +1008,7 @@ class TestDaemonAudioLifecycle:
     @pytest.mark.asyncio
     async def test_audio_loop_added_as_background_task(self):
         """_audio_loop() is added to background tasks when stream is active."""
-        from agents.hapax_voice.__main__ import VoiceDaemon
+        from agents.hapax_daimonion.__main__ import VoiceDaemon
 
         with patch.object(VoiceDaemon, "__init__", lambda self, **kw: None):
             daemon = VoiceDaemon()
@@ -1047,16 +1047,16 @@ class TestDaemonAudioLifecycle:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_daemon_audio_wiring.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_daemon_audio_wiring.py -v`
 Expected: FAIL — `AudioInputStream` not imported, not created in `__init__`, not wired in `run()`
 
 **Step 3: Wire AudioInputStream into VoiceDaemon**
 
-In `agents/hapax_voice/__main__.py`:
+In `agents/hapax_daimonion/__main__.py`:
 
 1. **Add import at top:**
 ```python
-from agents.hapax_voice.audio_input import AudioInputStream
+from agents.hapax_daimonion.audio_input import AudioInputStream
 ```
 
 2. **Add to `__init__()`, after `self.wake_word = WakeWordDetector()` line:**
@@ -1087,14 +1087,14 @@ from agents.hapax_voice.audio_input import AudioInputStream
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_daemon_audio_wiring.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_daemon_audio_wiring.py -v`
 Expected: All 4 tests PASS
 
 **Step 5: Commit**
 
 ```bash
 cd ~/projects/ai-agents
-git add agents/hapax_voice/__main__.py tests/hapax_voice/test_daemon_audio_wiring.py
+git add agents/hapax_daimonion/__main__.py tests/hapax_daimonion/test_daemon_audio_wiring.py
 git commit -m "feat(voice): wire AudioInputStream into daemon lifecycle"
 ```
 
@@ -1103,14 +1103,14 @@ git commit -m "feat(voice): wire AudioInputStream into daemon lifecycle"
 ## Task 5: Stream Recovery
 
 **Files:**
-- Modify: `agents/hapax_voice/__main__.py` (the `_audio_loop` method)
-- Modify: `tests/hapax_voice/test_audio_loop.py`
+- Modify: `agents/hapax_daimonion/__main__.py` (the `_audio_loop` method)
+- Modify: `tests/hapax_daimonion/test_audio_loop.py`
 
 **Context:** If `AudioInputStream` dies (stream error), the audio loop should log a warning and attempt to reopen after a 5-second delay, rather than crashing the loop entirely.
 
 **Step 1: Write the failing test**
 
-Add to `tests/hapax_voice/test_audio_loop.py`:
+Add to `tests/hapax_daimonion/test_audio_loop.py`:
 
 ```python
 class TestAudioLoopRecovery:
@@ -1119,7 +1119,7 @@ class TestAudioLoopRecovery:
     @pytest.mark.asyncio
     async def test_reopens_after_stream_death(self):
         """If get_frame raises OSError, loop waits 5s and retries."""
-        from agents.hapax_voice.__main__ import VoiceDaemon
+        from agents.hapax_daimonion.__main__ import VoiceDaemon
 
         with patch.object(VoiceDaemon, "__init__", lambda self, **kw: None):
             daemon = VoiceDaemon()
@@ -1158,12 +1158,12 @@ class TestAudioLoopRecovery:
 
 **Step 2: Run tests to verify it fails**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_audio_loop.py::TestAudioLoopRecovery -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_audio_loop.py::TestAudioLoopRecovery -v`
 Expected: FAIL — `_audio_loop` doesn't handle OSError from `get_frame`
 
 **Step 3: Update _audio_loop with recovery**
 
-Replace the `_audio_loop` method in `agents/hapax_voice/__main__.py`:
+Replace the `_audio_loop` method in `agents/hapax_daimonion/__main__.py`:
 
 ```python
     async def _audio_loop(self) -> None:
@@ -1206,14 +1206,14 @@ Replace the `_audio_loop` method in `agents/hapax_voice/__main__.py`:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_audio_loop.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_audio_loop.py -v`
 Expected: All 11 tests PASS
 
 **Step 5: Commit**
 
 ```bash
 cd ~/projects/ai-agents
-git add agents/hapax_voice/__main__.py tests/hapax_voice/test_audio_loop.py
+git add agents/hapax_daimonion/__main__.py tests/hapax_daimonion/test_audio_loop.py
 git commit -m "feat(voice): add stream recovery to audio distribution loop"
 ```
 
@@ -1222,18 +1222,18 @@ git commit -m "feat(voice): add stream recovery to audio distribution loop"
 ## Task 6: Hardware Integration Tests
 
 **Files:**
-- Create: `tests/hapax_voice/test_audio_hardware.py`
+- Create: `tests/hapax_daimonion/test_audio_hardware.py`
 
 **Context:** These tests run against real hardware (PyAudio + PipeWire). They are marked with `@pytest.mark.hardware` and skipped automatically by the conftest when hardware isn't available.
 
 **Step 1: Write the tests**
 
-Create `tests/hapax_voice/test_audio_hardware.py`:
+Create `tests/hapax_daimonion/test_audio_hardware.py`:
 
 ```python
 """Hardware integration tests for AudioInputStream.
 
-Run with: pytest tests/hapax_voice/test_audio_hardware.py -v -m hardware
+Run with: pytest tests/hapax_daimonion/test_audio_hardware.py -v -m hardware
 Requires: PipeWire running, echo_cancel_capture source available.
 """
 from __future__ import annotations
@@ -1242,7 +1242,7 @@ import asyncio
 
 import pytest
 
-from agents.hapax_voice.audio_input import AudioInputStream
+from agents.hapax_daimonion.audio_input import AudioInputStream
 
 
 @pytest.mark.hardware
@@ -1321,14 +1321,14 @@ class TestRealAudioStream:
 
 **Step 2: Run tests (hardware-specific)**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_audio_hardware.py -v -m hardware`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_audio_hardware.py -v -m hardware`
 Expected: PASS if PipeWire is running with echo_cancel_capture; SKIP otherwise (conftest auto-skip)
 
 **Step 3: Commit**
 
 ```bash
 cd ~/projects/ai-agents
-git add tests/hapax_voice/test_audio_hardware.py
+git add tests/hapax_daimonion/test_audio_hardware.py
 git commit -m "test(voice): add hardware integration tests for audio input stream"
 ```
 
@@ -1337,13 +1337,13 @@ git commit -m "test(voice): add hardware integration tests for audio input strea
 ## Task 7: Full Integration Smoke Test
 
 **Files:**
-- Modify: `tests/hapax_voice/test_cross_component_integration.py`
+- Modify: `tests/hapax_daimonion/test_cross_component_integration.py`
 
 **Context:** Add an integration test that verifies the full audio pipeline mock: `AudioInputStream` → `_audio_loop` → wake word fires → session opens → event emitted. This is a cross-component test with everything mocked except the control flow.
 
 **Step 1: Write the test**
 
-Add to `tests/hapax_voice/test_cross_component_integration.py`:
+Add to `tests/hapax_daimonion/test_cross_component_integration.py`:
 
 ```python
 class TestAudioPipelineIntegration:
@@ -1352,7 +1352,7 @@ class TestAudioPipelineIntegration:
     @pytest.mark.asyncio
     async def test_audio_to_wake_word_to_session(self):
         """Audio frame triggers wake word which opens a session."""
-        from agents.hapax_voice.__main__ import VoiceDaemon
+        from agents.hapax_daimonion.__main__ import VoiceDaemon
 
         with patch.object(VoiceDaemon, "__init__", lambda self, **kw: None):
             daemon = VoiceDaemon()
@@ -1413,14 +1413,14 @@ class TestAudioPipelineIntegration:
 
 **Step 2: Run tests to verify they pass**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_cross_component_integration.py::TestAudioPipelineIntegration -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_cross_component_integration.py::TestAudioPipelineIntegration -v`
 Expected: PASS (uses the _audio_loop implemented in Task 2)
 
 **Step 3: Commit**
 
 ```bash
 cd ~/projects/ai-agents
-git add tests/hapax_voice/test_cross_component_integration.py
+git add tests/hapax_daimonion/test_cross_component_integration.py
 git commit -m "test(voice): add audio pipeline integration test — input to wake word to session"
 ```
 
@@ -1430,19 +1430,19 @@ git commit -m "test(voice): add audio pipeline integration test — input to wak
 
 **Files:** None (verification only)
 
-**Step 1: Run all hapax_voice tests (excluding hardware)**
+**Step 1: Run all hapax_daimonion tests (excluding hardware)**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/ -v --ignore=tests/hapax_voice/test_audio_hardware.py -x`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/ -v --ignore=tests/hapax_daimonion/test_audio_hardware.py -x`
 Expected: All tests PASS (existing 247 tests + new tests from Tasks 1-7)
 
 **Step 2: Run hardware tests separately (if hardware available)**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_audio_hardware.py -v -m hardware`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_audio_hardware.py -v -m hardware`
 Expected: PASS or SKIP
 
 **Step 3: Verify daemon starts with audio input**
 
-Run: `cd ~/projects/ai-agents && timeout 10 .venv/bin/python -m agents.hapax_voice 2>&1 | head -30`
+Run: `cd ~/projects/ai-agents && timeout 10 .venv/bin/python -m agents.hapax_daimonion 2>&1 | head -30`
 Expected: Should see `Audio input stream started` or `Failed to open audio input stream` in output — either is valid, the important thing is it doesn't crash.
 
 ---

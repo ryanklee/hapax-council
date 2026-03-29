@@ -2,7 +2,7 @@
 
 > **Status:** Design (architectural specification)
 > **Date:** 2026-03-23
-> **Scope:** `agents/hapax_voice/backends/`, DFHack Lua scripts — bidirectional bridge between Dwarf Fortress and the perception engine
+> **Scope:** `agents/hapax_daimonion/backends/`, DFHack Lua scripts — bidirectional bridge between Dwarf Fortress and the perception engine
 > **Builds on:** [Perception Primitives Design](2026-03-11-perception-primitives-design.md), [Multi-Role Composition Design](2026-03-12-multi-role-composition-design.md)
 
 ## Problem

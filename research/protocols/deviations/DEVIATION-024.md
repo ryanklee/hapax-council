@@ -6,9 +6,9 @@
 
 ## What Changed
 
-`agents/hapax_voice/conversation_pipeline.py` lines 432-453: `generate_spontaneous_speech` now detects `source == "imagination"` impingements and uses an imagination-specific prompt that includes the fragment narrative and content reference summaries, instead of the generic metric-based prompt.
+`agents/hapax_daimonion/conversation_pipeline.py` lines 432-453: `generate_spontaneous_speech` now detects `source == "imagination"` impingements and uses an imagination-specific prompt that includes the fragment narrative and content reference summaries, instead of the generic metric-based prompt.
 
-`agents/hapax_voice/__main__.py` lines 1894-1900: proactive gate now calls `generate_spontaneous_speech(imp)` via `asyncio.create_task` when the gate passes, instead of only logging.
+`agents/hapax_daimonion/__main__.py` lines 1894-1900: proactive gate now calls `generate_spontaneous_speech(imp)` via `asyncio.create_task` when the gate passes, instead of only logging.
 
 ## Why
 

@@ -2,7 +2,7 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Add a `generate_image` voice tool to hapax-voice that generates/edits images via Imagen 3.0 (google-genai SDK), with optional webcam capture as input, saving results to disk and displaying on screen.
+**Goal:** Add a `generate_image` voice tool to hapax-daimonion that generates/edits images via Imagen 3.0 (google-genai SDK), with optional webcam capture as input, saving results to disk and displaying on screen.
 
 **Architecture:** New tool follows the existing 8-tool pattern in `tools.py` — FunctionSchema + async handler + registration. Uses `google-genai` SDK directly (not LiteLLM — Imagen API is a separate namespace). Webcam capture reuses existing `WebcamCapturer`. Output saved to `~/Pictures/hapax-generated/` and opened with `xdg-open`.
 
@@ -17,8 +17,8 @@
 ### Task 1: Add `generate_image` tool schema
 
 **Files:**
-- Modify: `agents/hapax_voice/tools.py:188-199` (after `_get_system_status`, before `TOOL_SCHEMAS`)
-- Test: `tests/hapax_voice/test_generate_image.py`
+- Modify: `agents/hapax_daimonion/tools.py:188-199` (after `_get_system_status`, before `TOOL_SCHEMAS`)
+- Test: `tests/hapax_daimonion/test_generate_image.py`
 
 **Step 1: Write the failing test**
 
@@ -26,7 +26,7 @@
 """Tests for generate_image tool schema and handler."""
 from pipecat.adapters.schemas.function_schema import FunctionSchema
 
-from agents.hapax_voice.tools import TOOL_SCHEMAS
+from agents.hapax_daimonion.tools import TOOL_SCHEMAS
 
 
 class TestGenerateImageSchema:
@@ -50,7 +50,7 @@ class TestGenerateImageSchema:
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_generate_image.py::TestGenerateImageSchema -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_generate_image.py::TestGenerateImageSchema -v`
 Expected: FAIL — `generate_image` not in TOOL_SCHEMAS
 
 **Step 3: Write minimal implementation**
@@ -98,13 +98,13 @@ TOOL_SCHEMAS: list[FunctionSchema] = [
 
 **Step 4: Run test to verify it passes**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_generate_image.py::TestGenerateImageSchema -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_generate_image.py::TestGenerateImageSchema -v`
 Expected: PASS (4 tests)
 
 **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/tools.py tests/hapax_voice/test_generate_image.py
+git add agents/hapax_daimonion/tools.py tests/hapax_daimonion/test_generate_image.py
 git commit -m "feat(voice): add generate_image tool schema"
 ```
 
@@ -113,8 +113,8 @@ git commit -m "feat(voice): add generate_image tool schema"
 ### Task 2: Implement `handle_generate_image` handler (text-to-image)
 
 **Files:**
-- Modify: `agents/hapax_voice/tools.py` (add handler after search_drive handler, before tool registration)
-- Test: `tests/hapax_voice/test_generate_image.py`
+- Modify: `agents/hapax_daimonion/tools.py` (add handler after search_drive handler, before tool registration)
+- Test: `tests/hapax_daimonion/test_generate_image.py`
 
 **Context:** The handler calls `google.genai.Client().models.generate_images()` with Imagen 3.0. Follow the exact pattern from `agents/demo_pipeline/illustrations.py:47-78`. The handler must:
 1. Call Imagen API with the prompt
@@ -124,7 +124,7 @@ git commit -m "feat(voice): add generate_image tool schema"
 
 **Step 1: Write the failing tests**
 
-Add to `tests/hapax_voice/test_generate_image.py`:
+Add to `tests/hapax_daimonion/test_generate_image.py`:
 
 ```python
 import base64
@@ -152,30 +152,30 @@ def _mock_genai_response(image_bytes: bytes = _FAKE_PNG):
 
 
 class TestHandleGenerateImageTextToImage:
-    @patch("agents.hapax_voice.tools.subprocess.Popen")
-    @patch("agents.hapax_voice.tools._genai_generate_image")
+    @patch("agents.hapax_daimonion.tools.subprocess.Popen")
+    @patch("agents.hapax_daimonion.tools._genai_generate_image")
     async def test_saves_png_to_output_dir(self, mock_gen, mock_popen, tmp_path):
         mock_gen.return_value = _FAKE_PNG
         params = _make_params({"prompt": "a red circle"})
 
-        from agents.hapax_voice.tools import handle_generate_image
+        from agents.hapax_daimonion.tools import handle_generate_image
 
-        with patch("agents.hapax_voice.tools._IMAGE_OUTPUT_DIR", tmp_path):
+        with patch("agents.hapax_daimonion.tools._IMAGE_OUTPUT_DIR", tmp_path):
             await handle_generate_image(params)
 
         pngs = list(tmp_path.glob("*.png"))
         assert len(pngs) == 1
         assert pngs[0].read_bytes() == _FAKE_PNG
 
-    @patch("agents.hapax_voice.tools.subprocess.Popen")
-    @patch("agents.hapax_voice.tools._genai_generate_image")
+    @patch("agents.hapax_daimonion.tools.subprocess.Popen")
+    @patch("agents.hapax_daimonion.tools._genai_generate_image")
     async def test_opens_with_xdg_open(self, mock_gen, mock_popen, tmp_path):
         mock_gen.return_value = _FAKE_PNG
         params = _make_params({"prompt": "a red circle"})
 
-        from agents.hapax_voice.tools import handle_generate_image
+        from agents.hapax_daimonion.tools import handle_generate_image
 
-        with patch("agents.hapax_voice.tools._IMAGE_OUTPUT_DIR", tmp_path):
+        with patch("agents.hapax_daimonion.tools._IMAGE_OUTPUT_DIR", tmp_path):
             await handle_generate_image(params)
 
         mock_popen.assert_called_once()
@@ -183,29 +183,29 @@ class TestHandleGenerateImageTextToImage:
         assert args[0] == "xdg-open"
         assert args[1].endswith(".png")
 
-    @patch("agents.hapax_voice.tools.subprocess.Popen")
-    @patch("agents.hapax_voice.tools._genai_generate_image")
+    @patch("agents.hapax_daimonion.tools.subprocess.Popen")
+    @patch("agents.hapax_daimonion.tools._genai_generate_image")
     async def test_result_callback_reports_success(self, mock_gen, mock_popen, tmp_path):
         mock_gen.return_value = _FAKE_PNG
         params = _make_params({"prompt": "a red circle"})
 
-        from agents.hapax_voice.tools import handle_generate_image
+        from agents.hapax_daimonion.tools import handle_generate_image
 
-        with patch("agents.hapax_voice.tools._IMAGE_OUTPUT_DIR", tmp_path):
+        with patch("agents.hapax_daimonion.tools._IMAGE_OUTPUT_DIR", tmp_path):
             await handle_generate_image(params)
 
         result = params.result_callback.call_args[0][0]
         assert result["status"] == "generated"
         assert "path" in result
 
-    @patch("agents.hapax_voice.tools._genai_generate_image")
+    @patch("agents.hapax_daimonion.tools._genai_generate_image")
     async def test_no_image_returns_error(self, mock_gen, tmp_path):
         mock_gen.return_value = None
         params = _make_params({"prompt": "a red circle"})
 
-        from agents.hapax_voice.tools import handle_generate_image
+        from agents.hapax_daimonion.tools import handle_generate_image
 
-        with patch("agents.hapax_voice.tools._IMAGE_OUTPUT_DIR", tmp_path):
+        with patch("agents.hapax_daimonion.tools._IMAGE_OUTPUT_DIR", tmp_path):
             await handle_generate_image(params)
 
         result = params.result_callback.call_args[0][0]
@@ -214,7 +214,7 @@ class TestHandleGenerateImageTextToImage:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_generate_image.py::TestHandleGenerateImageTextToImage -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_generate_image.py::TestHandleGenerateImageTextToImage -v`
 Expected: FAIL — `handle_generate_image` and `_genai_generate_image` don't exist
 
 **Step 3: Write minimal implementation**
@@ -300,13 +300,13 @@ async def handle_generate_image(params) -> None:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_generate_image.py::TestHandleGenerateImageTextToImage -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_generate_image.py::TestHandleGenerateImageTextToImage -v`
 Expected: PASS (4 tests)
 
 **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/tools.py tests/hapax_voice/test_generate_image.py
+git add agents/hapax_daimonion/tools.py tests/hapax_daimonion/test_generate_image.py
 git commit -m "feat(voice): implement generate_image handler with Imagen 3.0"
 ```
 
@@ -315,24 +315,24 @@ git commit -m "feat(voice): implement generate_image handler with Imagen 3.0"
 ### Task 3: Add webcam capture integration to generate_image
 
 **Files:**
-- Modify: `agents/hapax_voice/tools.py` (handler already has camera logic from Task 2)
-- Test: `tests/hapax_voice/test_generate_image.py`
+- Modify: `agents/hapax_daimonion/tools.py` (handler already has camera logic from Task 2)
+- Test: `tests/hapax_daimonion/test_generate_image.py`
 
 **Context:** The handler already has camera capture code. These tests verify it integrates correctly with WebcamCapturer and ScreenCapturer, reusing the same patterns from `handle_analyze_scene` (lines 535-566).
 
 **Step 1: Write the failing tests**
 
-Add to `tests/hapax_voice/test_generate_image.py`:
+Add to `tests/hapax_daimonion/test_generate_image.py`:
 
 ```python
 class TestHandleGenerateImageWithCamera:
-    @patch("agents.hapax_voice.tools.subprocess.Popen")
-    @patch("agents.hapax_voice.tools._genai_generate_image")
+    @patch("agents.hapax_daimonion.tools.subprocess.Popen")
+    @patch("agents.hapax_daimonion.tools._genai_generate_image")
     async def test_captures_from_webcam_when_operator(self, mock_gen, mock_popen, tmp_path):
         mock_gen.return_value = _FAKE_PNG
         params = _make_params({"prompt": "make it a cartoon", "camera_source": "operator"})
 
-        import agents.hapax_voice.tools as tools_mod
+        import agents.hapax_daimonion.tools as tools_mod
         mock_cam = MagicMock()
         mock_cam.capture.return_value = "base64data"
         original_cam = tools_mod._webcam_capturer
@@ -345,13 +345,13 @@ class TestHandleGenerateImageWithCamera:
         finally:
             tools_mod._webcam_capturer = original_cam
 
-    @patch("agents.hapax_voice.tools.subprocess.Popen")
-    @patch("agents.hapax_voice.tools._genai_generate_image")
+    @patch("agents.hapax_daimonion.tools.subprocess.Popen")
+    @patch("agents.hapax_daimonion.tools._genai_generate_image")
     async def test_captures_from_screen_capturer(self, mock_gen, mock_popen, tmp_path):
         mock_gen.return_value = _FAKE_PNG
         params = _make_params({"prompt": "improve the lighting", "camera_source": "screen"})
 
-        import agents.hapax_voice.tools as tools_mod
+        import agents.hapax_daimonion.tools as tools_mod
         mock_screen = MagicMock()
         mock_screen.capture.return_value = "screen_b64"
         original_screen = tools_mod._screen_capturer
@@ -364,13 +364,13 @@ class TestHandleGenerateImageWithCamera:
         finally:
             tools_mod._screen_capturer = original_screen
 
-    @patch("agents.hapax_voice.tools.subprocess.Popen")
-    @patch("agents.hapax_voice.tools._genai_generate_image")
+    @patch("agents.hapax_daimonion.tools.subprocess.Popen")
+    @patch("agents.hapax_daimonion.tools._genai_generate_image")
     async def test_no_camera_skips_capture(self, mock_gen, mock_popen, tmp_path):
         mock_gen.return_value = _FAKE_PNG
         params = _make_params({"prompt": "album art for boom bap"})
 
-        import agents.hapax_voice.tools as tools_mod
+        import agents.hapax_daimonion.tools as tools_mod
         with patch.object(tools_mod, "_IMAGE_OUTPUT_DIR", tmp_path):
             await tools_mod.handle_generate_image(params)
 
@@ -378,13 +378,13 @@ class TestHandleGenerateImageWithCamera:
         result = params.result_callback.call_args[0][0]
         assert result["status"] == "generated"
 
-    @patch("agents.hapax_voice.tools.subprocess.Popen")
-    @patch("agents.hapax_voice.tools._genai_generate_image")
+    @patch("agents.hapax_daimonion.tools.subprocess.Popen")
+    @patch("agents.hapax_daimonion.tools._genai_generate_image")
     async def test_camera_unavailable_still_generates(self, mock_gen, mock_popen, tmp_path):
         mock_gen.return_value = _FAKE_PNG
         params = _make_params({"prompt": "edit this", "camera_source": "operator"})
 
-        import agents.hapax_voice.tools as tools_mod
+        import agents.hapax_daimonion.tools as tools_mod
         original_cam = tools_mod._webcam_capturer
         tools_mod._webcam_capturer = None  # No camera
 
@@ -399,7 +399,7 @@ class TestHandleGenerateImageWithCamera:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_generate_image.py::TestHandleGenerateImageWithCamera -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_generate_image.py::TestHandleGenerateImageWithCamera -v`
 Expected: FAIL (handler exists from Task 2 but may need adjustments)
 
 **Step 3: Adjust implementation if needed**
@@ -411,13 +411,13 @@ The handler from Task 2 already has the camera logic. If any tests fail, adjust 
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_generate_image.py::TestHandleGenerateImageWithCamera -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_generate_image.py::TestHandleGenerateImageWithCamera -v`
 Expected: PASS (4 tests)
 
 **Step 5: Commit**
 
 ```bash
-git add tests/hapax_voice/test_generate_image.py agents/hapax_voice/tools.py
+git add tests/hapax_daimonion/test_generate_image.py agents/hapax_daimonion/tools.py
 git commit -m "test(voice): add webcam capture integration tests for generate_image"
 ```
 
@@ -426,12 +426,12 @@ git commit -m "test(voice): add webcam capture integration tests for generate_im
 ### Task 4: Register generate_image handler and update tool count
 
 **Files:**
-- Modify: `agents/hapax_voice/tools.py:655-688` (registration function)
-- Test: `tests/hapax_voice/test_generate_image.py`
+- Modify: `agents/hapax_daimonion/tools.py:655-688` (registration function)
+- Test: `tests/hapax_daimonion/test_generate_image.py`
 
 **Step 1: Write the failing test**
 
-Add to `tests/hapax_voice/test_generate_image.py`:
+Add to `tests/hapax_daimonion/test_generate_image.py`:
 
 ```python
 class TestGenerateImageRegistration:
@@ -439,8 +439,8 @@ class TestGenerateImageRegistration:
         """Verify generate_image is registered with the LLM service."""
         from unittest.mock import MagicMock
 
-        from agents.hapax_voice.config import VoiceConfig
-        from agents.hapax_voice.tools import register_tool_handlers
+        from agents.hapax_daimonion.config import VoiceConfig
+        from agents.hapax_daimonion.tools import register_tool_handlers
 
         mock_llm = MagicMock()
         config = VoiceConfig()
@@ -452,8 +452,8 @@ class TestGenerateImageRegistration:
     def test_total_tool_count_is_nine(self):
         from unittest.mock import MagicMock
 
-        from agents.hapax_voice.config import VoiceConfig
-        from agents.hapax_voice.tools import register_tool_handlers
+        from agents.hapax_daimonion.config import VoiceConfig
+        from agents.hapax_daimonion.tools import register_tool_handlers
 
         mock_llm = MagicMock()
         config = VoiceConfig()
@@ -464,7 +464,7 @@ class TestGenerateImageRegistration:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_generate_image.py::TestGenerateImageRegistration -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_generate_image.py::TestGenerateImageRegistration -v`
 Expected: FAIL — generate_image not registered, count is 8
 
 **Step 3: Write minimal implementation**
@@ -479,13 +479,13 @@ In `register_tool_handlers()`, add the registration line and update the count:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_generate_image.py::TestGenerateImageRegistration -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_generate_image.py::TestGenerateImageRegistration -v`
 Expected: PASS (2 tests)
 
 **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/tools.py tests/hapax_voice/test_generate_image.py
+git add agents/hapax_daimonion/tools.py tests/hapax_daimonion/test_generate_image.py
 git commit -m "feat(voice): register generate_image handler (9 tools total)"
 ```
 
@@ -494,12 +494,12 @@ git commit -m "feat(voice): register generate_image handler (9 tools total)"
 ### Task 5: Update system prompt with image generation capability
 
 **Files:**
-- Modify: `agents/hapax_voice/persona.py:14-37` (`_SYSTEM_PROMPT`)
-- Test: `tests/hapax_voice/test_persona_bridges.py`
+- Modify: `agents/hapax_daimonion/persona.py:14-37` (`_SYSTEM_PROMPT`)
+- Test: `tests/hapax_daimonion/test_persona_bridges.py`
 
 **Step 1: Write the failing test**
 
-Add to `tests/hapax_voice/test_persona_bridges.py`:
+Add to `tests/hapax_daimonion/test_persona_bridges.py`:
 
 ```python
 class TestImageGenInstruction:
@@ -519,7 +519,7 @@ class TestImageGenInstruction:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_persona_bridges.py::TestImageGenInstruction -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_persona_bridges.py::TestImageGenInstruction -v`
 Expected: FAIL — prompt doesn't mention image generation
 
 **Step 3: Write minimal implementation**
@@ -533,13 +533,13 @@ Add to `_SYSTEM_PROMPT` in `persona.py`, after the "see through cameras" line:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_persona_bridges.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_persona_bridges.py -v`
 Expected: PASS (all tests including new ones)
 
 **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/persona.py tests/hapax_voice/test_persona_bridges.py
+git add agents/hapax_daimonion/persona.py tests/hapax_daimonion/test_persona_bridges.py
 git commit -m "feat(voice): add image generation to system prompt"
 ```
 
@@ -548,26 +548,26 @@ git commit -m "feat(voice): add image generation to system prompt"
 ### Task 6: Add _genai_generate_image unit tests
 
 **Files:**
-- Test: `tests/hapax_voice/test_generate_image.py`
+- Test: `tests/hapax_daimonion/test_generate_image.py`
 
 **Context:** The `_genai_generate_image` helper wraps the google-genai SDK. Test it in isolation with mocked SDK calls to verify correct model/config usage and error handling.
 
 **Step 1: Write the tests**
 
-Add to `tests/hapax_voice/test_generate_image.py`:
+Add to `tests/hapax_daimonion/test_generate_image.py`:
 
 ```python
 class TestGenaiGenerateImage:
-    @patch("agents.hapax_voice.tools.genai", create=True)
+    @patch("agents.hapax_daimonion.tools.genai", create=True)
     def test_calls_imagen_model(self):
         """Verify correct model and config are used."""
-        from agents.hapax_voice.tools import _genai_generate_image
+        from agents.hapax_daimonion.tools import _genai_generate_image
 
         # We need to mock the lazy import inside the function
         with patch.dict("sys.modules", {"google": MagicMock(), "google.genai": MagicMock()}) as modules:
             mock_genai = MagicMock()
             mock_genai.Client.return_value.models.generate_images.return_value = _mock_genai_response()
-            with patch("agents.hapax_voice.tools._genai_generate_image") as mock_fn:
+            with patch("agents.hapax_daimonion.tools._genai_generate_image") as mock_fn:
                 mock_fn.return_value = _FAKE_PNG
                 result = mock_fn("a red circle")
                 assert result == _FAKE_PNG
@@ -579,7 +579,7 @@ class TestGenaiGenerateImage:
             mock_response.generated_images = []
             mock_client.models.generate_images.return_value = mock_response
 
-            from agents.hapax_voice.tools import _genai_generate_image
+            from agents.hapax_daimonion.tools import _genai_generate_image
             result = _genai_generate_image("test prompt")
             assert result is None
 
@@ -587,20 +587,20 @@ class TestGenaiGenerateImage:
         with patch("google.genai.Client") as mock_client_cls:
             mock_client_cls.side_effect = Exception("API error")
 
-            from agents.hapax_voice.tools import _genai_generate_image
+            from agents.hapax_daimonion.tools import _genai_generate_image
             result = _genai_generate_image("test prompt")
             assert result is None
 ```
 
 **Step 2: Run tests**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_generate_image.py::TestGenaiGenerateImage -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_generate_image.py::TestGenaiGenerateImage -v`
 Expected: PASS (the helper already handles these cases from Task 2)
 
 **Step 3: Commit**
 
 ```bash
-git add tests/hapax_voice/test_generate_image.py
+git add tests/hapax_daimonion/test_generate_image.py
 git commit -m "test(voice): add _genai_generate_image unit tests"
 ```
 
@@ -609,36 +609,36 @@ git commit -m "test(voice): add _genai_generate_image unit tests"
 ### Task 7: Add handler error path tests
 
 **Files:**
-- Test: `tests/hapax_voice/test_generate_image.py`
+- Test: `tests/hapax_daimonion/test_generate_image.py`
 
 **Step 1: Write the tests**
 
-Add to `tests/hapax_voice/test_generate_image.py`:
+Add to `tests/hapax_daimonion/test_generate_image.py`:
 
 ```python
 class TestHandleGenerateImageErrors:
-    @patch("agents.hapax_voice.tools._genai_generate_image")
+    @patch("agents.hapax_daimonion.tools._genai_generate_image")
     async def test_api_exception_returns_error(self, mock_gen, tmp_path):
         mock_gen.side_effect = Exception("Network timeout")
         params = _make_params({"prompt": "anything"})
 
-        from agents.hapax_voice.tools import handle_generate_image
+        from agents.hapax_daimonion.tools import handle_generate_image
 
-        with patch("agents.hapax_voice.tools._IMAGE_OUTPUT_DIR", tmp_path):
+        with patch("agents.hapax_daimonion.tools._IMAGE_OUTPUT_DIR", tmp_path):
             await handle_generate_image(params)
 
         result = params.result_callback.call_args[0][0]
         assert "error" in result.get("status", "")
 
-    @patch("agents.hapax_voice.tools.subprocess.Popen")
-    @patch("agents.hapax_voice.tools._genai_generate_image")
+    @patch("agents.hapax_daimonion.tools.subprocess.Popen")
+    @patch("agents.hapax_daimonion.tools._genai_generate_image")
     async def test_timestamp_in_filename(self, mock_gen, mock_popen, tmp_path):
         mock_gen.return_value = _FAKE_PNG
         params = _make_params({"prompt": "test"})
 
-        from agents.hapax_voice.tools import handle_generate_image
+        from agents.hapax_daimonion.tools import handle_generate_image
 
-        with patch("agents.hapax_voice.tools._IMAGE_OUTPUT_DIR", tmp_path):
+        with patch("agents.hapax_daimonion.tools._IMAGE_OUTPUT_DIR", tmp_path):
             await handle_generate_image(params)
 
         pngs = list(tmp_path.glob("*.png"))
@@ -648,16 +648,16 @@ class TestHandleGenerateImageErrors:
         assert len(stem) == 15  # 8 digits + dash + 6 digits
         assert stem[8] == "-"
 
-    @patch("agents.hapax_voice.tools.subprocess.Popen")
-    @patch("agents.hapax_voice.tools._genai_generate_image")
+    @patch("agents.hapax_daimonion.tools.subprocess.Popen")
+    @patch("agents.hapax_daimonion.tools._genai_generate_image")
     async def test_output_dir_created_if_missing(self, mock_gen, mock_popen, tmp_path):
         mock_gen.return_value = _FAKE_PNG
         params = _make_params({"prompt": "test"})
         nested = tmp_path / "sub" / "dir"
 
-        from agents.hapax_voice.tools import handle_generate_image
+        from agents.hapax_daimonion.tools import handle_generate_image
 
-        with patch("agents.hapax_voice.tools._IMAGE_OUTPUT_DIR", nested):
+        with patch("agents.hapax_daimonion.tools._IMAGE_OUTPUT_DIR", nested):
             await handle_generate_image(params)
 
         assert nested.exists()
@@ -666,13 +666,13 @@ class TestHandleGenerateImageErrors:
 
 **Step 2: Run tests**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_generate_image.py::TestHandleGenerateImageErrors -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_generate_image.py::TestHandleGenerateImageErrors -v`
 Expected: PASS
 
 **Step 3: Commit**
 
 ```bash
-git add tests/hapax_voice/test_generate_image.py
+git add tests/hapax_daimonion/test_generate_image.py
 git commit -m "test(voice): add generate_image error path and edge case tests"
 ```
 
@@ -683,21 +683,21 @@ git commit -m "test(voice): add generate_image error path and edge case tests"
 **Files:**
 - No code changes — verification only
 
-**Step 1: Run all hapax_voice tests**
+**Step 1: Run all hapax_daimonion tests**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/ -v --tb=short`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/ -v --tb=short`
 Expected: All tests pass (previous 155 + new ~17 = ~172 total)
 
 **Step 2: Run the specific new test file**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_generate_image.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_generate_image.py -v`
 Expected: All ~17 tests pass
 
 **Step 3: Verify tool count in existing tests**
 
 Check if any existing tests assert on tool count (8) that need updating:
 
-Run: `cd ~/projects/ai-agents && grep -rn "8.*tool\|tool.*8\|Registered 8" tests/hapax_voice/`
+Run: `cd ~/projects/ai-agents && grep -rn "8.*tool\|tool.*8\|Registered 8" tests/hapax_daimonion/`
 
 If found, update those assertions to 9.
 

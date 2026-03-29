@@ -6,9 +6,9 @@
 
 ## What Changed
 
-`agents/hapax_voice/conversation_pipeline.py` — added `deliver_notification()` method (23 lines). Direct TTS delivery of queued notifications during active silence, bypassing LLM round-trip.
+`agents/hapax_daimonion/conversation_pipeline.py` — added `deliver_notification()` method (23 lines). Direct TTS delivery of queued notifications during active silence, bypassing LLM round-trip.
 
-`agents/hapax_voice/cognitive_loop.py` — replaced TODO comment in `_handle_silence()` with actual dequeue-and-deliver call (10 lines). Requeues on failed delivery.
+`agents/hapax_daimonion/cognitive_loop.py` — replaced TODO comment in `_handle_silence()` with actual dequeue-and-deliver call (10 lines). Requeues on failed delivery.
 
 ## Why
 

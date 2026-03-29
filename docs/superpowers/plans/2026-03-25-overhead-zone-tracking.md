@@ -87,8 +87,8 @@ def point_in_zone(x: int, y: int) -> str:
 ## Task 2: Vision Backend — Overhead Hand Zones + Fusion
 
 **Files:**
-- Edit: `agents/hapax_voice/backends/vision.py`
-- Create: `tests/hapax_voice/test_overhead_zones.py`
+- Edit: `agents/hapax_daimonion/backends/vision.py`
+- Create: `tests/hapax_daimonion/test_overhead_zones.py`
 
 This is the largest task. Follow the spec closely for:
 1. `_run_overhead_hand_zones()` method using `self._gesture_recognizer`
@@ -106,7 +106,7 @@ Tests should mock MediaPipe and test the fusion rules directly.
 ```python
 """Tests for overhead zone tracking in vision backend."""
 from __future__ import annotations
-from agents.hapax_voice.backends.vision import _infer_cross_modal_activity
+from agents.hapax_daimonion.backends.vision import _infer_cross_modal_activity
 
 class TestCrossModalFusionWithZones:
     def test_scratching_turntable_zone(self):
@@ -156,7 +156,7 @@ class TestCrossModalFusionWithZones:
 ## Task 3: Pipeline Wiring + Push
 
 **Files:**
-- Edit: `agents/hapax_voice/_perception_state_writer.py`
+- Edit: `agents/hapax_daimonion/_perception_state_writer.py`
 - Edit: `agents/studio_compositor.py`
 
 - [ ] **Step 1: Add overhead_hand_zones to state writer**

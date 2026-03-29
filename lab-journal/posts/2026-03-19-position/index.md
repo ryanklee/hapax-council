@@ -5,4 +5,4 @@ categories: [theory]
 description: "Why the industry's convergence on profile-gated retrieval is the wrong architecture for conversational continuity."
 ---
 
-{{< include ../../../../agents/hapax_voice/proofs/POSITION.md >}}
+{{< include ../../../../agents/hapax_daimonion/proofs/POSITION.md >}}

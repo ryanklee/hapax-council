@@ -13,7 +13,7 @@
                         │         Agent Layer          │
                         │                              │
                         │  knowledge/query.py          │
-                        │  hapax_voice/tools.py        │
+                        │  hapax_daimonion/tools.py        │
                         │  cockpit/chat_agent.py       │
                         │  demo_pipeline/research.py   │
                         │  demo_pipeline/dossier.py    │
@@ -59,7 +59,7 @@
 
 Council:
 - `cockpit/chat_agent.py` — inline search_documents tool
-- `agents/hapax_voice/tools.py` — handle_search_documents, workspace context
+- `agents/hapax_daimonion/tools.py` — handle_search_documents, workspace context
 - `agents/demo_pipeline/research.py` — 5 tool functions with direct embed+qdrant
 - `agents/demo_pipeline/dossier.py` — profile embedding + qdrant upsert
 - `agents/demo_pipeline/sufficiency.py` — coverage check via embed+qdrant

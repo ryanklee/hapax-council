@@ -3,7 +3,7 @@
 **Status**: Proposed
 **Date**: 2026-03-19
 **Author**: Claude Opus 4.6 + operator
-**Scope**: hapax-voice conversation pipeline, cognitive loop, session lifecycle
+**Scope**: hapax-daimonion conversation pipeline, cognitive loop, session lifecycle
 
 ---
 

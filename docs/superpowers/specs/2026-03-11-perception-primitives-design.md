@@ -2,7 +2,7 @@
 
 > **Status:** Proposed
 > **Date:** 2026-03-11
-> **Scope:** `agents/hapax_voice/`, `shared/` — foundational type system for multi-cadence perception-to-actuation
+> **Scope:** `agents/hapax_daimonion/`, `shared/` — foundational type system for multi-cadence perception-to-actuation
 > **Builds on:** [Perception Layer Design](2026-03-10-perception-layer-design.md), [Backup MC North Star](2026-03-11-backup-mc-north-star-design.md), [Prior Art Survey](../research/2026-03-11-prior-art-survey.md), [Inside-Out Analysis](../research/2026-03-11-inside-out-analysis.md), [Comparative Evaluation](../research/2026-03-11-comparative-evaluation.md)
 
 ## Problem
@@ -565,35 +565,35 @@ Each guarantee is a structural consequence of the type system. If the types are 
 Implement `Behavior[T]`, `Event[T]`, `Stamped[T]`, `Watermark` as library types. Wrap existing signals in Behaviors. Wrap existing callbacks in Events. The existing PerceptionEngine continues to work — it just reads from Behaviors instead of internal fields.
 
 New files:
-- `agents/hapax_voice/primitives.py` — Behavior, Event, Stamped, Watermark types
-- `agents/hapax_voice/timeline.py` — TimelineMapping
+- `agents/hapax_daimonion/primitives.py` — Behavior, Event, Stamped, Watermark types
+- `agents/hapax_daimonion/timeline.py` — TimelineMapping
 
 Modified files:
-- `agents/hapax_voice/config.py` — freshness threshold config fields
-- `agents/hapax_voice/perception.py` — PerceptionEngine wraps signals as Behaviors internally
+- `agents/hapax_daimonion/config.py` — freshness threshold config fields
+- `agents/hapax_daimonion/perception.py` — PerceptionEngine wraps signals as Behaviors internally
 
 **Phase 2 — Introduce Detectives.**
 
 Implement Combinator, VetoChain, FallbackChain, FreshnessGuard. Refactor Governor into VetoChain (safety) + FallbackChain (selection). Refactor ContextGate into additional vetoes. The output is still a directive string, but produced by typed governance.
 
 New files:
-- `agents/hapax_voice/governance.py` — VetoChain, FallbackChain, FreshnessGuard
-- `agents/hapax_voice/combinator.py` — withLatestFrom Combinator
+- `agents/hapax_daimonion/governance.py` — VetoChain, FallbackChain, FreshnessGuard
+- `agents/hapax_daimonion/combinator.py` — withLatestFrom Combinator
 
 Modified files:
-- `agents/hapax_voice/governor.py` — decompose into VetoChain + FallbackChain
-- `agents/hapax_voice/context_gate.py` — migrate layers to vetoes
+- `agents/hapax_daimonion/governor.py` — decompose into VetoChain + FallbackChain
+- `agents/hapax_daimonion/context_gate.py` — migrate layers to vetoes
 
 **Phase 3 — Introduce Directives.**
 
 Implement Command and Schedule. Replace bare directive strings with typed Commands. Add TimelineMapping for beat-time resolution. Wire pre-scheduling for beat-aligned actuation.
 
 New files:
-- `agents/hapax_voice/commands.py` — Command, Schedule types
+- `agents/hapax_daimonion/commands.py` — Command, Schedule types
 
 Modified files:
-- `agents/hapax_voice/frame_gate.py` — accept Command instead of string directive
-- `agents/hapax_voice/__main__.py` — wire new Combinator-based evaluation
+- `agents/hapax_daimonion/frame_gate.py` — accept Command instead of string directive
+- `agents/hapax_daimonion/__main__.py` — wire new Combinator-based evaluation
 
 ---
 

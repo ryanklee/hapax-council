@@ -23,7 +23,7 @@ In Docker, officium remaps to different host ports (8051, 4100, 6433) to avoid c
 
 **None found.** Exhaustive grep for cross-service HTTP calls:
 
-- hapax-council's voice daemon (`agents/hapax_voice/`) has zero references to officium ports (8050, 8051) or the string "officium"
+- hapax-council's voice daemon (`agents/hapax_daimonion/`) has zero references to officium ports (8050, 8051) or the string "officium"
 - hapax-officium's cockpit (`cockpit/`) has zero references to council ports (8051) or the string "council"
 - No `httpx`, `requests`, `fetch`, or `aiohttp` call in either codebase targets the other service's API
 
@@ -51,7 +51,7 @@ There is no Docker network, message queue, or event bus connecting the two servi
 
 ### Voice Daemon and Cockpit SPA
 
-- The voice daemon (`hapax-council/agents/hapax_voice/`) calls only LiteLLM (:4000) and Hyprland IPC. No cross-service calls.
+- The voice daemon (`hapax-council/agents/hapax_daimonion/`) calls only LiteLLM (:4000) and Hyprland IPC. No cross-service calls.
 - Council's React SPA (`council-web/`) proxies exclusively to council's cockpit API at :8051.
 - Officium's cockpit CORS allows only :8050 (its own SPA origin).
 

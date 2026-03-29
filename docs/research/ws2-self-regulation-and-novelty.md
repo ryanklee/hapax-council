@@ -192,7 +192,7 @@ This vector would be:
 
 Novelty detection maps to multiple points in the existing architecture:
 
-**Perception Engine Level** (`agents/hapax_voice/perception.py`):
+**Perception Engine Level** (`agents/hapax_daimonion/perception.py`):
 
 The perception engine already has tiered backends (FAST/SLOW/EVENT). Each backend's `contribute()` method produces `Behavior` values. Novelty detection would add a confidence/novelty annotation to each behavior:
 

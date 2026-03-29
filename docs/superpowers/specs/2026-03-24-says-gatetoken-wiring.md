@@ -2,7 +2,7 @@
 
 **Date**: 2026-03-24
 **Session**: beta
-**Scope**: `shared/governance/says.py`, `shared/governance/gate_token.py`, `agents/hapax_voice/conversation_pipeline.py`
+**Scope**: `shared/governance/says.py`, `shared/governance/gate_token.py`, `agents/hapax_daimonion/conversation_pipeline.py`
 **Companion to**: `2026-03-24-governance-enforcement-hardening.md`
 **Prior art**: Deferred formalisms #1 (Says/DCC) and #4 (GateToken/linear discipline)
 
@@ -239,8 +239,8 @@ AD-9 depends on both (event log reads principal from Says and gate decision from
 - `shared/governance/gate_token.py` — Add context var, `last_gate_decision()`, `set_gate_decision()`
 - `shared/governance/consent_gate.py` — Set context var in `check()` and `check_and_write()`
 - `shared/governance/qdrant_gate.py` — Set context var in `upsert()` and `set_payload()`
-- `agents/hapax_voice/conversation_pipeline.py` — ThreadEntry.principal_id, _message_attribution, tool principal creation, Says wiring at 3 data flow points
-- `agents/hapax_voice/event_log.py` — Add principal_id, gate_decision fields to events
+- `agents/hapax_daimonion/conversation_pipeline.py` — ThreadEntry.principal_id, _message_attribution, tool principal creation, Says wiring at 3 data flow points
+- `agents/hapax_daimonion/event_log.py` — Add principal_id, gate_decision fields to events
 
 ### No new files needed
 All changes extend existing modules.
@@ -248,4 +248,4 @@ All changes extend existing modules.
 ### Test files
 - `tests/test_gate_token.py` — Test context var set/get
 - `tests/test_says_monad.py` — Test tool principal delegation + to_labeled bridge
-- `tests/hapax_voice/test_conversation_pipeline_says.py` — New: test Says wiring in pipeline
+- `tests/hapax_daimonion/test_conversation_pipeline_says.py` — New: test Says wiring in pipeline

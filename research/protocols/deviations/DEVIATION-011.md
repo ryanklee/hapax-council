@@ -6,7 +6,7 @@
 
 ## What Changed
 
-`agents/hapax_voice/proofs/RESEARCH-STATE.md` — added Session 15 entry documenting feature audit, notification wiring, hapax-bar module completion, documentation fixes.
+`agents/hapax_daimonion/proofs/RESEARCH-STATE.md` — added Session 15 entry documenting feature audit, notification wiring, hapax-bar module completion, documentation fixes.
 
 ## Why
 

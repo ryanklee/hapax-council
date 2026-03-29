@@ -1,8 +1,8 @@
-# Hapax Voice — Voice-First Modality Design
+# Hapax Daimonion — Voice-First Modality Design
 
 **Goal:** Make voice interaction a first-class modality on the workstation — speech in, speech out, interruptions, proactive system-initiated conversations, and ambient presence awareness.
 
-**Architecture:** Persistent daemon (`hapax-voice`) orchestrated by Pipecat with dual backends: Gemini 2.5 Flash Native Audio (primary, quality-first) and local cascaded pipeline (fallback, full tool access). Intent router classifies utterances and selects backend. Presence detection and context gating enable proactive speech. Speaker identification distinguishes the operator from visitors.
+**Architecture:** Persistent daemon (`hapax-daimonion`) orchestrated by Pipecat with dual backends: Gemini 2.5 Flash Native Audio (primary, quality-first) and local cascaded pipeline (fallback, full tool access). Intent router classifies utterances and selects backend. Presence detection and context gating enable proactive speech. Speaker identification distinguishes the operator from visitors.
 
 **Tech Stack:** Pipecat, Gemini Live API, NVIDIA Parakeet TDT 0.6B (STT), Kokoro 82M (TTS), Piper (lightweight TTS), Silero VAD, OpenWakeWord, pyannote (speaker embedding), PipeWire echo cancellation, systemd user service.
 
@@ -10,7 +10,7 @@
 
 ## 1. System Architecture Overview
 
-Hapax Voice is a persistent daemon running as a systemd user service with four subsystems:
+Hapax Daimonion is a persistent daemon running as a systemd user service with four subsystems:
 
 1. **Voice Conversation Engine** — Pipecat-orchestrated dual-backend voice interaction
 2. **Presence Detector** — lightweight real-time occupancy sensing via the always-on mic
@@ -224,7 +224,7 @@ System-initiated spoken notifications and conversations.
 ```
 Blue Yeti (physical) ──→ PipeWire
                             ├──→ Echo Cancel Module ──→ Virtual Source (echo-cancelled)
-                            │                              ├──→ Hapax Voice Engine
+                            │                              ├──→ Hapax Daimonion Engine
                             │                              ├──→ Ambient Audio Recorder
                             │                              └──→ Presence Detector
                             └──→ Raw source (available if needed)
@@ -324,7 +324,7 @@ Hapax TTS Output ──→ PipeWire Default Sink ──→ Speakers
 
 ### Systemd Deployment
 
-- `hapax-voice.service` — user service, `Type=simple`, `Restart=always`
+- `hapax-daimonion.service` — user service, `Type=simple`, `Restart=always`
 - `After=pipewire.service pipewire-pulse.service`
 - Graceful degradation without network (local fallback only)
 - `OnFailure=notify-failure@%n.service`
@@ -342,6 +342,6 @@ Hapax TTS Output ──→ PipeWire Default Sink ──→ Speakers
 
 ### Configuration
 
-- `~/.config/hapax-voice/config.yaml`
+- `~/.config/hapax-daimonion/config.yaml`
 - Tunables: presence window, VAD thresholds, silence timeout, volume threshold, priority TTLs, Gemini model
 - Restart service to apply changes (no hot-reload initially)

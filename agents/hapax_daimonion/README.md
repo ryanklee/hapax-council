@@ -1,4 +1,4 @@
-# hapax_voice — A Perception Type System for Governed Voice Interaction
+# hapax_daimonion — A Perception Type System for Governed Voice Interaction
 
 A 10-layer composition ladder for fusing signals at different temporal rates into governance decisions. Each layer's algebraic properties are proven via a 7-dimension test matrix and Hypothesis property-based tests. 192 matrix tests + 62 hypothesis tests across all layers.
 
@@ -171,7 +171,7 @@ Eight backends in `backends/`: PipeWire (audio energy, emotion), Hyprland (windo
 ## Package Structure
 
 ```
-agents/hapax_voice/
+agents/hapax_daimonion/
 ├── primitives.py           Behavior[T], Event[T], Stamped[T]
 ├── governance.py           VetoChain, FallbackChain, FreshnessGuard, FusedContext
 ├── combinator.py           with_latest_from

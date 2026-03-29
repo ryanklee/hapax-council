@@ -16,9 +16,9 @@
 
 | File | Responsibility |
 |------|---------------|
-| `agents/hapax_voice/perception.py` | `EnvironmentState` frozen dataclass + `PerceptionEngine` class (tick loops, signal fusion, subscriber notification) |
-| `agents/hapax_voice/governor.py` | `PipelineGovernor` class (maps EnvironmentState → directive string) |
-| `agents/hapax_voice/frame_gate.py` | `FrameGate(FrameProcessor)` for Pipecat pipeline (drops/passes audio frames based on directive) |
+| `agents/hapax_daimonion/perception.py` | `EnvironmentState` frozen dataclass + `PerceptionEngine` class (tick loops, signal fusion, subscriber notification) |
+| `agents/hapax_daimonion/governor.py` | `PipelineGovernor` class (maps EnvironmentState → directive string) |
+| `agents/hapax_daimonion/frame_gate.py` | `FrameGate(FrameProcessor)` for Pipecat pipeline (drops/passes audio frames based on directive) |
 | `tests/test_perception.py` | Tests for EnvironmentState and PerceptionEngine |
 | `tests/test_governor.py` | Tests for PipelineGovernor directive logic |
 | `tests/test_frame_gate.py` | Tests for FrameGate frame filtering |
@@ -27,12 +27,12 @@
 
 | File | Lines | Changes |
 |------|-------|---------|
-| `agents/hapax_voice/config.py:21-117` | Add 6 perception config fields to `VoiceConfig` |
-| `agents/hapax_voice/presence.py:61-82` | Add `latest_vad_confidence` property to `PresenceDetector` |
-| `agents/hapax_voice/session.py:14-78` | Add `pause()`, `resume()`, `is_paused` property |
-| `agents/hapax_voice/context_gate.py:21-164` | Simplify: add `set_environment_state()`, delegate activity mode check to perception |
-| `agents/hapax_voice/pipeline.py:133-194` | Accept optional `FrameGate`, insert before STT in pipeline |
-| `agents/hapax_voice/__main__.py:60-610` | Wire PerceptionEngine + Governor into daemon lifecycle |
+| `agents/hapax_daimonion/config.py:21-117` | Add 6 perception config fields to `VoiceConfig` |
+| `agents/hapax_daimonion/presence.py:61-82` | Add `latest_vad_confidence` property to `PresenceDetector` |
+| `agents/hapax_daimonion/session.py:14-78` | Add `pause()`, `resume()`, `is_paused` property |
+| `agents/hapax_daimonion/context_gate.py:21-164` | Simplify: add `set_environment_state()`, delegate activity mode check to perception |
+| `agents/hapax_daimonion/pipeline.py:133-194` | Accept optional `FrameGate`, insert before STT in pipeline |
+| `agents/hapax_daimonion/__main__.py:60-610` | Wire PerceptionEngine + Governor into daemon lifecycle |
 
 ---
 
@@ -41,17 +41,17 @@
 ### Task 1: Add perception config fields to VoiceConfig
 
 **Files:**
-- Modify: `agents/hapax_voice/config.py:76-84` (after workspace analysis fields)
-- Test: `tests/test_hapax_voice_config.py` (existing, add new test)
+- Modify: `agents/hapax_daimonion/config.py:76-84` (after workspace analysis fields)
+- Test: `tests/test_hapax_daimonion_config.py` (existing, add new test)
 
 - [ ] **Step 1: Write the failing test**
 
-In `tests/test_hapax_voice_config.py`, add:
+In `tests/test_hapax_daimonion_config.py`, add:
 
 ```python
 def test_perception_config_defaults():
     """Perception fields have sensible defaults."""
-    from agents.hapax_voice.config import VoiceConfig
+    from agents.hapax_daimonion.config import VoiceConfig
     cfg = VoiceConfig()
     assert cfg.perception_fast_tick_s == 2.5
     assert cfg.perception_slow_tick_s == 12.0
@@ -63,12 +63,12 @@ def test_perception_config_defaults():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/test_hapax_voice_config.py::test_perception_config_defaults -v`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/test_hapax_daimonion_config.py::test_perception_config_defaults -v`
 Expected: FAIL with `AttributeError: 'VoiceConfig' object has no attribute 'perception_fast_tick_s'`
 
 - [ ] **Step 3: Add config fields**
 
-In `agents/hapax_voice/config.py`, after line 84 (`timelapse_path`), add:
+In `agents/hapax_daimonion/config.py`, after line 84 (`timelapse_path`), add:
 
 ```python
     # Perception layer
@@ -82,13 +82,13 @@ In `agents/hapax_voice/config.py`, after line 84 (`timelapse_path`), add:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/test_hapax_voice_config.py::test_perception_config_defaults -v`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/test_hapax_daimonion_config.py::test_perception_config_defaults -v`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/config.py tests/test_hapax_voice_config.py
+git add agents/hapax_daimonion/config.py tests/test_hapax_daimonion_config.py
 git commit -m "feat(voice): add perception layer config fields"
 ```
 
@@ -99,12 +99,12 @@ git commit -m "feat(voice): add perception layer config fields"
 `PerceptionEngine` needs to read the latest VAD confidence from `PresenceDetector`, but the class currently only stores events above threshold — it discards the actual probability. We need to expose it.
 
 **Files:**
-- Modify: `agents/hapax_voice/presence.py:61-82`
-- Modify: `tests/test_hapax_voice_presence.py` (existing)
+- Modify: `agents/hapax_daimonion/presence.py:61-82`
+- Modify: `tests/test_hapax_daimonion_presence.py` (existing)
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `tests/test_hapax_voice_presence.py`:
+Append to `tests/test_hapax_daimonion_presence.py`:
 
 ```python
 def test_latest_vad_confidence_stored():
@@ -123,12 +123,12 @@ def test_latest_vad_confidence_stored():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/test_hapax_voice_presence.py::test_latest_vad_confidence_stored -v`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/test_hapax_daimonion_presence.py::test_latest_vad_confidence_stored -v`
 Expected: FAIL with `AttributeError: 'PresenceDetector' object has no attribute 'latest_vad_confidence'`
 
 - [ ] **Step 3: Add latest_vad_confidence to PresenceDetector**
 
-In `agents/hapax_voice/presence.py`:
+In `agents/hapax_daimonion/presence.py`:
 
 Add field in `__init__` (after line 39, `self._last_score`):
 
@@ -153,13 +153,13 @@ In `process_audio_frame` (line 79, after `probability: float = model(tensor, SAM
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/test_hapax_voice_presence.py -v`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/test_hapax_daimonion_presence.py -v`
 Expected: ALL PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/presence.py tests/test_hapax_voice_presence.py
+git add agents/hapax_daimonion/presence.py tests/test_hapax_daimonion_presence.py
 git commit -m "feat(voice): expose latest_vad_confidence on PresenceDetector"
 ```
 
@@ -168,7 +168,7 @@ git commit -m "feat(voice): expose latest_vad_confidence on PresenceDetector"
 ### Task 3: Create EnvironmentState dataclass
 
 **Files:**
-- Create: `agents/hapax_voice/perception.py`
+- Create: `agents/hapax_daimonion/perception.py`
 - Create: `tests/test_perception.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -184,7 +184,7 @@ from unittest.mock import MagicMock, patch, AsyncMock
 
 import pytest
 
-from agents.hapax_voice.perception import EnvironmentState
+from agents.hapax_daimonion.perception import EnvironmentState
 
 
 def test_environment_state_is_frozen():
@@ -240,14 +240,14 @@ def test_environment_state_no_conversation_no_speech():
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `cd ~/projects/hapax-council && uv run pytest tests/test_perception.py -v`
-Expected: FAIL with `ModuleNotFoundError: No module named 'agents.hapax_voice.perception'`
+Expected: FAIL with `ModuleNotFoundError: No module named 'agents.hapax_daimonion.perception'`
 
 - [ ] **Step 3: Create perception.py with EnvironmentState**
 
-Create `agents/hapax_voice/perception.py`:
+Create `agents/hapax_daimonion/perception.py`:
 
 ```python
-"""Unified perception layer for the Hapax Voice daemon.
+"""Unified perception layer for the Hapax Daimonion daemon.
 
 Fuses audio and visual signals into a single EnvironmentState snapshot
 every fast tick (2-3s). Slow enrichment (10-15s) adds LLM workspace
@@ -307,7 +307,7 @@ Expected: PASS (5 tests)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/perception.py tests/test_perception.py
+git add agents/hapax_daimonion/perception.py tests/test_perception.py
 git commit -m "feat(voice): add EnvironmentState dataclass for unified perception"
 ```
 
@@ -316,12 +316,12 @@ git commit -m "feat(voice): add EnvironmentState dataclass for unified perceptio
 ### Task 4: Add pause/resume to VoiceLifecycle
 
 **Files:**
-- Modify: `agents/hapax_voice/session.py:14-78`
-- Modify: `tests/test_hapax_voice_session.py` (existing)
+- Modify: `agents/hapax_daimonion/session.py:14-78`
+- Modify: `tests/test_hapax_daimonion_session.py` (existing)
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `tests/test_hapax_voice_session.py`:
+Append to `tests/test_hapax_daimonion_session.py`:
 
 ```python
 def test_pause_stops_timeout_clock():
@@ -363,12 +363,12 @@ def test_resume_noop_when_not_paused():
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/test_hapax_voice_session.py::test_pause_stops_timeout_clock -v`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/test_hapax_daimonion_session.py::test_pause_stops_timeout_clock -v`
 Expected: FAIL with `AttributeError: 'VoiceLifecycle' object has no attribute 'pause'`
 
 - [ ] **Step 3: Add pause/resume to VoiceLifecycle**
 
-In `agents/hapax_voice/session.py`, add a `_paused` field in `__init__` and new methods:
+In `agents/hapax_daimonion/session.py`, add a `_paused` field in `__init__` and new methods:
 
 After line 30 (`self._opened_at: float = 0.0`), add:
 
@@ -417,13 +417,13 @@ Also reset `_paused` in `close()` — after line 67 (`self.speaker_confidence = 
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/test_hapax_voice_session.py -v`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/test_hapax_daimonion_session.py -v`
 Expected: ALL PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/session.py tests/test_hapax_voice_session.py
+git add agents/hapax_daimonion/session.py tests/test_hapax_daimonion_session.py
 git commit -m "feat(voice): add pause/resume to VoiceLifecycle for conversation mode"
 ```
 
@@ -434,7 +434,7 @@ git commit -m "feat(voice): add pause/resume to VoiceLifecycle for conversation 
 ### Task 5: Create PipelineGovernor
 
 **Files:**
-- Create: `agents/hapax_voice/governor.py`
+- Create: `agents/hapax_daimonion/governor.py`
 - Create: `tests/test_governor.py`
 
 - [ ] **Step 1: Write the failing tests**
@@ -449,8 +449,8 @@ import time
 
 import pytest
 
-from agents.hapax_voice.perception import EnvironmentState
-from agents.hapax_voice.governor import PipelineGovernor
+from agents.hapax_daimonion.perception import EnvironmentState
+from agents.hapax_daimonion.governor import PipelineGovernor
 
 
 def _state(**overrides) -> EnvironmentState:
@@ -578,11 +578,11 @@ def test_environment_clear_resume_resets_on_new_conversation():
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `cd ~/projects/hapax-council && uv run pytest tests/test_governor.py -v`
-Expected: FAIL with `ModuleNotFoundError: No module named 'agents.hapax_voice.governor'`
+Expected: FAIL with `ModuleNotFoundError: No module named 'agents.hapax_daimonion.governor'`
 
 - [ ] **Step 3: Create governor.py**
 
-Create `agents/hapax_voice/governor.py`:
+Create `agents/hapax_daimonion/governor.py`:
 
 ```python
 """Pipeline governor — maps EnvironmentState to pipeline directives.
@@ -597,7 +597,7 @@ from __future__ import annotations
 import logging
 import time
 
-from agents.hapax_voice.perception import EnvironmentState
+from agents.hapax_daimonion.perception import EnvironmentState
 
 log = logging.getLogger(__name__)
 
@@ -694,7 +694,7 @@ Expected: ALL PASS (10 tests)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/governor.py tests/test_governor.py
+git add agents/hapax_daimonion/governor.py tests/test_governor.py
 git commit -m "feat(voice): add PipelineGovernor for environment-based pipeline control"
 ```
 
@@ -703,7 +703,7 @@ git commit -m "feat(voice): add PipelineGovernor for environment-based pipeline 
 ### Task 6: Create FrameGate Pipecat processor
 
 **Files:**
-- Create: `agents/hapax_voice/frame_gate.py`
+- Create: `agents/hapax_daimonion/frame_gate.py`
 - Create: `tests/test_frame_gate.py`
 
 - [ ] **Step 1: Write the failing tests**
@@ -718,7 +718,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agents.hapax_voice.frame_gate import FrameGate
+from agents.hapax_daimonion.frame_gate import FrameGate
 
 
 @pytest.mark.asyncio
@@ -794,11 +794,11 @@ def test_directive_default_is_process():
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `cd ~/projects/hapax-council && uv run pytest tests/test_frame_gate.py -v`
-Expected: FAIL with `ModuleNotFoundError: No module named 'agents.hapax_voice.frame_gate'`
+Expected: FAIL with `ModuleNotFoundError: No module named 'agents.hapax_daimonion.frame_gate'`
 
 - [ ] **Step 3: Create frame_gate.py**
 
-Create `agents/hapax_voice/frame_gate.py`:
+Create `agents/hapax_daimonion/frame_gate.py`:
 
 ```python
 """FrameGate — Pipecat processor that gates audio based on governor directive.
@@ -864,7 +864,7 @@ Expected: ALL PASS (5 tests)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/frame_gate.py tests/test_frame_gate.py
+git add agents/hapax_daimonion/frame_gate.py tests/test_frame_gate.py
 git commit -m "feat(voice): add FrameGate Pipecat processor for audio gating"
 ```
 
@@ -873,28 +873,28 @@ git commit -m "feat(voice): add FrameGate Pipecat processor for audio gating"
 ### Task 7: Insert FrameGate into pipeline construction
 
 **Files:**
-- Modify: `agents/hapax_voice/pipeline.py:133-194`
-- Modify: `tests/test_hapax_voice_pipeline.py` (existing)
+- Modify: `agents/hapax_daimonion/pipeline.py:133-194`
+- Modify: `tests/test_hapax_daimonion_pipeline.py` (existing)
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `tests/test_hapax_voice_pipeline.py`:
+Append to `tests/test_hapax_daimonion_pipeline.py`:
 
 ```python
 def test_frame_gate_inserted_before_stt():
     """When a FrameGate is provided, it appears before STT in pipeline."""
     from unittest.mock import MagicMock, patch
-    from agents.hapax_voice.frame_gate import FrameGate
+    from agents.hapax_daimonion.frame_gate import FrameGate
 
     gate = FrameGate()
 
-    with patch("agents.hapax_voice.pipeline.LocalAudioTransport") as MockTransport, \
-         patch("agents.hapax_voice.pipeline.WhisperSTTService") as MockSTT, \
-         patch("agents.hapax_voice.pipeline.OpenAILLMService") as MockLLM, \
-         patch("agents.hapax_voice.pipeline.KokoroTTSService") as MockTTS, \
-         patch("agents.hapax_voice.pipeline.Pipeline") as MockPipeline, \
-         patch("agents.hapax_voice.pipeline.PipelineTask") as MockTask, \
-         patch("agents.hapax_voice.pipeline.system_prompt", return_value="test"):
+    with patch("agents.hapax_daimonion.pipeline.LocalAudioTransport") as MockTransport, \
+         patch("agents.hapax_daimonion.pipeline.WhisperSTTService") as MockSTT, \
+         patch("agents.hapax_daimonion.pipeline.OpenAILLMService") as MockLLM, \
+         patch("agents.hapax_daimonion.pipeline.KokoroTTSService") as MockTTS, \
+         patch("agents.hapax_daimonion.pipeline.Pipeline") as MockPipeline, \
+         patch("agents.hapax_daimonion.pipeline.PipelineTask") as MockTask, \
+         patch("agents.hapax_daimonion.pipeline.system_prompt", return_value="test"):
 
         mock_transport = MockTransport.return_value
         mock_transport.input.return_value = MagicMock()
@@ -905,9 +905,9 @@ def test_frame_gate_inserted_before_stt():
             assistant=MagicMock(return_value=MagicMock()),
         )
 
-        with patch("agents.hapax_voice.pipeline.get_tool_schemas", return_value=None), \
-             patch("agents.hapax_voice.pipeline.register_tool_handlers"):
-            from agents.hapax_voice.pipeline import build_pipeline_task
+        with patch("agents.hapax_daimonion.pipeline.get_tool_schemas", return_value=None), \
+             patch("agents.hapax_daimonion.pipeline.register_tool_handlers"):
+            from agents.hapax_daimonion.pipeline import build_pipeline_task
             build_pipeline_task(frame_gate=gate)
 
         # Check the processors list passed to Pipeline
@@ -927,12 +927,12 @@ def test_frame_gate_inserted_before_stt():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/test_hapax_voice_pipeline.py::test_frame_gate_inserted_before_stt -v`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/test_hapax_daimonion_pipeline.py::test_frame_gate_inserted_before_stt -v`
 Expected: FAIL with `TypeError: build_pipeline_task() got an unexpected keyword argument 'frame_gate'`
 
 - [ ] **Step 3: Add frame_gate parameter to build_pipeline_task**
 
-In `agents/hapax_voice/pipeline.py`, modify `build_pipeline_task` signature (line 133) to accept `frame_gate`:
+In `agents/hapax_daimonion/pipeline.py`, modify `build_pipeline_task` signature (line 133) to accept `frame_gate`:
 
 Add import at the top of the file (after line 10):
 
@@ -940,7 +940,7 @@ Add import at the top of the file (after line 10):
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from agents.hapax_voice.frame_gate import FrameGate
+    from agents.hapax_daimonion.frame_gate import FrameGate
 ```
 
 Modify function signature (line 133-142) to add `frame_gate` parameter:
@@ -996,13 +996,13 @@ With:
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/test_hapax_voice_pipeline.py -v`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/test_hapax_daimonion_pipeline.py -v`
 Expected: ALL PASS (existing tests still pass + new test passes)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/pipeline.py tests/test_hapax_voice_pipeline.py
+git add agents/hapax_daimonion/pipeline.py tests/test_hapax_daimonion_pipeline.py
 git commit -m "feat(voice): insert FrameGate before STT in Pipecat pipeline"
 ```
 
@@ -1013,7 +1013,7 @@ git commit -m "feat(voice): insert FrameGate before STT in Pipecat pipeline"
 ### Task 8: Build PerceptionEngine with fast tick
 
 **Files:**
-- Modify: `agents/hapax_voice/perception.py` (add PerceptionEngine class)
+- Modify: `agents/hapax_daimonion/perception.py` (add PerceptionEngine class)
 - Modify: `tests/test_perception.py` (add engine tests)
 
 - [ ] **Step 1: Write the failing tests**
@@ -1021,7 +1021,7 @@ git commit -m "feat(voice): insert FrameGate before STT in Pipecat pipeline"
 Append to `tests/test_perception.py`:
 
 ```python
-from agents.hapax_voice.perception import PerceptionEngine
+from agents.hapax_daimonion.perception import PerceptionEngine
 
 
 def _make_mock_presence(**overrides):
@@ -1115,7 +1115,7 @@ Expected: FAIL with `ImportError: cannot import name 'PerceptionEngine'`
 
 - [ ] **Step 3: Add PerceptionEngine to perception.py**
 
-Append to `agents/hapax_voice/perception.py`:
+Append to `agents/hapax_daimonion/perception.py`:
 
 ```python
 class PerceptionEngine:
@@ -1214,7 +1214,7 @@ Expected: ALL PASS (10 tests)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/perception.py tests/test_perception.py
+git add agents/hapax_daimonion/perception.py tests/test_perception.py
 git commit -m "feat(voice): add PerceptionEngine with fast-tick signal fusion"
 ```
 
@@ -1225,17 +1225,17 @@ git commit -m "feat(voice): add PerceptionEngine with fast-tick signal fusion"
 ### Task 9: Simplify ContextGate to use PerceptionEngine
 
 **Files:**
-- Modify: `agents/hapax_voice/context_gate.py`
-- Modify: `tests/test_hapax_voice_context_gate.py` (existing)
+- Modify: `agents/hapax_daimonion/context_gate.py`
+- Modify: `tests/test_hapax_daimonion_context_gate.py` (existing)
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `tests/test_hapax_voice_context_gate.py`:
+Append to `tests/test_hapax_daimonion_context_gate.py`:
 
 ```python
 def test_gate_respects_environment_state_conversation():
     """Gate blocks when EnvironmentState shows conversation."""
-    from agents.hapax_voice.perception import EnvironmentState
+    from agents.hapax_daimonion.perception import EnvironmentState
     import time
 
     session = SessionManager(silence_timeout_s=30)
@@ -1253,12 +1253,12 @@ def test_gate_respects_environment_state_conversation():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/test_hapax_voice_context_gate.py::test_gate_respects_environment_state_conversation -v`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/test_hapax_daimonion_context_gate.py::test_gate_respects_environment_state_conversation -v`
 Expected: FAIL with `AttributeError: 'ContextGate' object has no attribute 'set_environment_state'`
 
 - [ ] **Step 3: Add set_environment_state and conversation blocking**
 
-In `agents/hapax_voice/context_gate.py`, add after `set_event_log` method (line 49):
+In `agents/hapax_daimonion/context_gate.py`, add after `set_event_log` method (line 49):
 
 ```python
     def set_environment_state(self, state) -> None:
@@ -1283,13 +1283,13 @@ Modify `_check_activity_mode` (lines 87-90) to also block on "conversation":
 
 - [ ] **Step 4: Run all context gate tests**
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/test_hapax_voice_context_gate.py -v`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/test_hapax_daimonion_context_gate.py -v`
 Expected: ALL PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/context_gate.py tests/test_hapax_voice_context_gate.py
+git add agents/hapax_daimonion/context_gate.py tests/test_hapax_daimonion_context_gate.py
 git commit -m "feat(voice): extend ContextGate with environment state and conversation blocking"
 ```
 
@@ -1304,26 +1304,26 @@ This is the integration task. It modifies `__main__.py` to:
 4. Apply governor directives to FrameGate and session
 
 **Files:**
-- Modify: `agents/hapax_voice/__main__.py`
-- Modify: `tests/test_hapax_voice_daemon_pipeline.py` (existing)
+- Modify: `agents/hapax_daimonion/__main__.py`
+- Modify: `tests/test_hapax_daimonion_daemon_pipeline.py` (existing)
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `tests/test_hapax_voice_daemon_pipeline.py`:
+Append to `tests/test_hapax_daimonion_daemon_pipeline.py`:
 
 ```python
 def test_daemon_creates_perception_engine():
     """VoiceDaemon initializes a PerceptionEngine."""
-    from agents.hapax_voice.__main__ import VoiceDaemon
-    from agents.hapax_voice.config import VoiceConfig
+    from agents.hapax_daimonion.__main__ import VoiceDaemon
+    from agents.hapax_daimonion.config import VoiceConfig
     from unittest.mock import patch, MagicMock
 
-    with patch("agents.hapax_voice.__main__.AudioInputStream"), \
-         patch("agents.hapax_voice.__main__.WorkspaceMonitor") as MockWM, \
-         patch("agents.hapax_voice.__main__.TTSManager"), \
-         patch("agents.hapax_voice.__main__.ChimePlayer"), \
-         patch("agents.hapax_voice.__main__.EventLog"), \
-         patch("agents.hapax_voice.__main__.VoiceTracer"):
+    with patch("agents.hapax_daimonion.__main__.AudioInputStream"), \
+         patch("agents.hapax_daimonion.__main__.WorkspaceMonitor") as MockWM, \
+         patch("agents.hapax_daimonion.__main__.TTSManager"), \
+         patch("agents.hapax_daimonion.__main__.ChimePlayer"), \
+         patch("agents.hapax_daimonion.__main__.EventLog"), \
+         patch("agents.hapax_daimonion.__main__.VoiceTracer"):
         MockWM.return_value.set_notification_queue = MagicMock()
         MockWM.return_value.set_presence = MagicMock()
         MockWM.return_value.set_event_log = MagicMock()
@@ -1336,17 +1336,17 @@ def test_daemon_creates_perception_engine():
 
 def test_daemon_passes_frame_gate_to_pipeline():
     """Pipeline builder receives the FrameGate."""
-    from agents.hapax_voice.__main__ import VoiceDaemon
-    from agents.hapax_voice.config import VoiceConfig
+    from agents.hapax_daimonion.__main__ import VoiceDaemon
+    from agents.hapax_daimonion.config import VoiceConfig
     from unittest.mock import patch, MagicMock, AsyncMock
 
-    with patch("agents.hapax_voice.__main__.AudioInputStream") as MockAI, \
-         patch("agents.hapax_voice.__main__.WorkspaceMonitor") as MockWM, \
-         patch("agents.hapax_voice.__main__.TTSManager"), \
-         patch("agents.hapax_voice.__main__.ChimePlayer"), \
-         patch("agents.hapax_voice.__main__.EventLog"), \
-         patch("agents.hapax_voice.__main__.VoiceTracer"), \
-         patch("agents.hapax_voice.__main__.PorcupineWakeWord") as MockWW:
+    with patch("agents.hapax_daimonion.__main__.AudioInputStream") as MockAI, \
+         patch("agents.hapax_daimonion.__main__.WorkspaceMonitor") as MockWM, \
+         patch("agents.hapax_daimonion.__main__.TTSManager"), \
+         patch("agents.hapax_daimonion.__main__.ChimePlayer"), \
+         patch("agents.hapax_daimonion.__main__.EventLog"), \
+         patch("agents.hapax_daimonion.__main__.VoiceTracer"), \
+         patch("agents.hapax_daimonion.__main__.PorcupineWakeWord") as MockWW:
         MockWM.return_value.set_notification_queue = MagicMock()
         MockWM.return_value.set_presence = MagicMock()
         MockWM.return_value.set_event_log = MagicMock()
@@ -1355,7 +1355,7 @@ def test_daemon_passes_frame_gate_to_pipeline():
         MockAI.return_value.is_active = True
         daemon = VoiceDaemon(cfg=VoiceConfig())
 
-    with patch("agents.hapax_voice.pipeline.build_pipeline_task") as mock_build:
+    with patch("agents.hapax_daimonion.pipeline.build_pipeline_task") as mock_build:
         mock_build.return_value = (MagicMock(), MagicMock())
         with patch("pipecat.pipeline.runner.PipelineRunner"):
             import asyncio
@@ -1368,19 +1368,19 @@ def test_daemon_passes_frame_gate_to_pipeline():
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/test_hapax_voice_daemon_pipeline.py::test_daemon_creates_perception_engine -v`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/test_hapax_daimonion_daemon_pipeline.py::test_daemon_creates_perception_engine -v`
 Expected: FAIL with `AssertionError` (daemon doesn't have `perception` attribute yet)
 
 - [ ] **Step 3: Wire perception into VoiceDaemon**
 
-In `agents/hapax_voice/__main__.py`:
+In `agents/hapax_daimonion/__main__.py`:
 
 **Add imports** (after line 29):
 
 ```python
-from agents.hapax_voice.perception import PerceptionEngine
-from agents.hapax_voice.governor import PipelineGovernor
-from agents.hapax_voice.frame_gate import FrameGate
+from agents.hapax_daimonion.perception import PerceptionEngine
+from agents.hapax_daimonion.governor import PipelineGovernor
+from agents.hapax_daimonion.frame_gate import FrameGate
 ```
 
 **Add initialization** in `__init__` (after line 126, after workspace_monitor setup):
@@ -1507,7 +1507,7 @@ Add before the session open:
 
 - [ ] **Step 4: Run all daemon tests**
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/test_hapax_voice_daemon_pipeline.py -v`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/test_hapax_daimonion_daemon_pipeline.py -v`
 Expected: ALL PASS
 
 - [ ] **Step 5: Run the full test suite to check for regressions**
@@ -1518,7 +1518,7 @@ Expected: All tests pass (no regressions)
 - [ ] **Step 6: Commit**
 
 ```bash
-git add agents/hapax_voice/__main__.py tests/test_hapax_voice_daemon_pipeline.py
+git add agents/hapax_daimonion/__main__.py tests/test_hapax_daimonion_daemon_pipeline.py
 git commit -m "feat(voice): wire PerceptionEngine + Governor + FrameGate into VoiceDaemon"
 ```
 
@@ -1542,10 +1542,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from agents.hapax_voice.perception import PerceptionEngine, EnvironmentState
-from agents.hapax_voice.governor import PipelineGovernor
-from agents.hapax_voice.frame_gate import FrameGate
-from agents.hapax_voice.session import VoiceLifecycle
+from agents.hapax_daimonion.perception import PerceptionEngine, EnvironmentState
+from agents.hapax_daimonion.governor import PipelineGovernor
+from agents.hapax_daimonion.frame_gate import FrameGate
+from agents.hapax_daimonion.session import VoiceLifecycle
 
 
 def _mock_presence(**overrides):
@@ -1671,7 +1671,7 @@ Expected: All new tests pass
 
 - [ ] **Step 3: Verify imports are clean**
 
-Run: `cd ~/projects/hapax-council && uv run python -c "from agents.hapax_voice.perception import PerceptionEngine, EnvironmentState; from agents.hapax_voice.governor import PipelineGovernor; from agents.hapax_voice.frame_gate import FrameGate; print('All imports OK')"`
+Run: `cd ~/projects/hapax-council && uv run python -c "from agents.hapax_daimonion.perception import PerceptionEngine, EnvironmentState; from agents.hapax_daimonion.governor import PipelineGovernor; from agents.hapax_daimonion.frame_gate import FrameGate; print('All imports OK')"`
 Expected: "All imports OK"
 
 - [ ] **Step 4: Final commit (if any test fixes needed)**

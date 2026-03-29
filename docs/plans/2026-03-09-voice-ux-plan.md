@@ -15,8 +15,8 @@
 Generate the "Crystal Tap" earcon family as WAV files using numpy.
 
 **Files:**
-- Create: `agents/hapax_voice/chime_synthesis.py`
-- Test: `tests/hapax_voice/test_chime_synthesis.py`
+- Create: `agents/hapax_daimonion/chime_synthesis.py`
+- Test: `tests/hapax_daimonion/test_chime_synthesis.py`
 
 **Step 1: Write the failing tests**
 
@@ -29,7 +29,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from agents.hapax_voice.chime_synthesis import synthesize_chime, generate_all_chimes, CHIME_SPECS
+from agents.hapax_daimonion.chime_synthesis import synthesize_chime, generate_all_chimes, CHIME_SPECS
 
 
 class TestSynthesizeChime:
@@ -106,8 +106,8 @@ class TestGenerateAllChimes:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_chime_synthesis.py -v`
-Expected: FAIL — `ModuleNotFoundError: No module named 'agents.hapax_voice.chime_synthesis'`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_chime_synthesis.py -v`
+Expected: FAIL — `ModuleNotFoundError: No module named 'agents.hapax_daimonion.chime_synthesis'`
 
 **Step 3: Write the implementation**
 
@@ -293,14 +293,14 @@ def generate_all_chimes(output_dir: Path) -> None:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_chime_synthesis.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_chime_synthesis.py -v`
 Expected: All 11 tests PASS
 
 **Step 5: Commit**
 
 ```bash
 cd ~/projects/ai-agents
-git add agents/hapax_voice/chime_synthesis.py tests/hapax_voice/test_chime_synthesis.py
+git add agents/hapax_daimonion/chime_synthesis.py tests/hapax_daimonion/test_chime_synthesis.py
 git commit -m "feat(voice): add Crystal Tap chime synthesis module
 
 Generates four inharmonic bell-like earcons (activation, deactivation,
@@ -316,8 +316,8 @@ from musical instruments."
 Loads pre-rendered WAVs into memory and plays them through PyAudio with minimal latency.
 
 **Files:**
-- Create: `agents/hapax_voice/chime_player.py`
-- Test: `tests/hapax_voice/test_chime_player.py`
+- Create: `agents/hapax_daimonion/chime_player.py`
+- Test: `tests/hapax_daimonion/test_chime_player.py`
 
 **Step 1: Write the failing tests**
 
@@ -329,7 +329,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from agents.hapax_voice.chime_player import ChimePlayer
+from agents.hapax_daimonion.chime_player import ChimePlayer
 
 
 @pytest.fixture
@@ -376,7 +376,7 @@ class TestChimePlayerLoad:
 
 
 class TestChimePlayerPlay:
-    @patch("agents.hapax_voice.chime_player.pyaudio")
+    @patch("agents.hapax_daimonion.chime_player.pyaudio")
     def test_play_known_chime(self, mock_pa, chime_dir):
         mock_stream = MagicMock()
         mock_pa.PyAudio.return_value.open.return_value = mock_stream
@@ -386,14 +386,14 @@ class TestChimePlayerPlay:
         player.play("activation")
         mock_stream.write.assert_called_once()
 
-    @patch("agents.hapax_voice.chime_player.pyaudio")
+    @patch("agents.hapax_daimonion.chime_player.pyaudio")
     def test_play_unknown_chime_no_error(self, mock_pa, chime_dir):
         player = ChimePlayer(chime_dir)
         player.load()
         # Should log warning but not raise
         player.play("nonexistent")
 
-    @patch("agents.hapax_voice.chime_player.pyaudio")
+    @patch("agents.hapax_daimonion.chime_player.pyaudio")
     def test_play_before_load_no_error(self, mock_pa, chime_dir):
         player = ChimePlayer(chime_dir)
         # Should handle gracefully
@@ -401,7 +401,7 @@ class TestChimePlayerPlay:
 
 
 class TestChimePlayerAutoGenerate:
-    @patch("agents.hapax_voice.chime_player.pyaudio")
+    @patch("agents.hapax_daimonion.chime_player.pyaudio")
     def test_auto_generates_if_dir_empty(self, mock_pa, tmp_path):
         chime_dir = tmp_path / "chimes"
         chime_dir.mkdir()
@@ -411,7 +411,7 @@ class TestChimePlayerAutoGenerate:
         assert len(player._buffers) == 4
         assert (chime_dir / "activation.wav").exists()
 
-    @patch("agents.hapax_voice.chime_player.pyaudio")
+    @patch("agents.hapax_daimonion.chime_player.pyaudio")
     def test_auto_generates_if_dir_missing(self, mock_pa, tmp_path):
         chime_dir = tmp_path / "chimes_new"
         player = ChimePlayer(chime_dir, auto_generate=True)
@@ -420,7 +420,7 @@ class TestChimePlayerAutoGenerate:
 
 
 class TestChimePlayerClose:
-    @patch("agents.hapax_voice.chime_player.pyaudio")
+    @patch("agents.hapax_daimonion.chime_player.pyaudio")
     def test_close_terminates_pyaudio(self, mock_pa, chime_dir):
         mock_instance = mock_pa.PyAudio.return_value
         player = ChimePlayer(chime_dir)
@@ -431,8 +431,8 @@ class TestChimePlayerClose:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_chime_player.py -v`
-Expected: FAIL — `ModuleNotFoundError: No module named 'agents.hapax_voice.chime_player'`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_chime_player.py -v`
+Expected: FAIL — `ModuleNotFoundError: No module named 'agents.hapax_daimonion.chime_player'`
 
 **Step 3: Write the implementation**
 
@@ -556,7 +556,7 @@ class ChimePlayer:
 
         log.info("Generating chime WAVs in %s", self._chime_dir)
         try:
-            from agents.hapax_voice.chime_synthesis import generate_all_chimes
+            from agents.hapax_daimonion.chime_synthesis import generate_all_chimes
             generate_all_chimes(self._chime_dir)
         except Exception as exc:
             log.warning("Failed to generate chimes: %s", exc)
@@ -564,14 +564,14 @@ class ChimePlayer:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_chime_player.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_chime_player.py -v`
 Expected: All 10 tests PASS
 
 **Step 5: Commit**
 
 ```bash
 cd ~/projects/ai-agents
-git add agents/hapax_voice/chime_player.py tests/hapax_voice/test_chime_player.py
+git add agents/hapax_daimonion/chime_player.py tests/hapax_daimonion/test_chime_player.py
 git commit -m "feat(voice): add ChimePlayer for non-blocking WAV playback
 
 Pre-loads chime WAVs into memory at daemon startup and plays via
@@ -586,9 +586,9 @@ Designed for sub-50ms latency on play() calls."
 Connect the ChimePlayer to the daemon lifecycle and wake word handler.
 
 **Files:**
-- Modify: `agents/hapax_voice/__main__.py`
-- Modify: `agents/hapax_voice/config.py`
-- Test: `tests/hapax_voice/test_daemon_chime_wiring.py`
+- Modify: `agents/hapax_daimonion/__main__.py`
+- Modify: `agents/hapax_daimonion/config.py`
+- Test: `tests/hapax_daimonion/test_daemon_chime_wiring.py`
 
 **Step 1: Write the failing tests**
 
@@ -599,7 +599,7 @@ from unittest.mock import MagicMock, patch, AsyncMock
 
 import pytest
 
-from agents.hapax_voice.config import VoiceConfig
+from agents.hapax_daimonion.config import VoiceConfig
 
 
 class TestVoiceConfigChime:
@@ -617,25 +617,25 @@ class TestVoiceConfigChime:
 
 
 class TestDaemonChimeWiring:
-    @patch("agents.hapax_voice.__main__.AudioInputStream")
-    @patch("agents.hapax_voice.__main__.TTSManager")
-    @patch("agents.hapax_voice.__main__.WakeWordDetector")
-    @patch("agents.hapax_voice.__main__.HotkeyServer")
-    @patch("agents.hapax_voice.__main__.ChimePlayer")
+    @patch("agents.hapax_daimonion.__main__.AudioInputStream")
+    @patch("agents.hapax_daimonion.__main__.TTSManager")
+    @patch("agents.hapax_daimonion.__main__.WakeWordDetector")
+    @patch("agents.hapax_daimonion.__main__.HotkeyServer")
+    @patch("agents.hapax_daimonion.__main__.ChimePlayer")
     def test_daemon_creates_chime_player(self, MockChime, *_):
-        from agents.hapax_voice.__main__ import VoiceDaemon
+        from agents.hapax_daimonion.__main__ import VoiceDaemon
 
         cfg = VoiceConfig()
         daemon = VoiceDaemon(cfg=cfg)
         MockChime.assert_called_once()
 
-    @patch("agents.hapax_voice.__main__.AudioInputStream")
-    @patch("agents.hapax_voice.__main__.TTSManager")
-    @patch("agents.hapax_voice.__main__.WakeWordDetector")
-    @patch("agents.hapax_voice.__main__.HotkeyServer")
-    @patch("agents.hapax_voice.__main__.ChimePlayer")
+    @patch("agents.hapax_daimonion.__main__.AudioInputStream")
+    @patch("agents.hapax_daimonion.__main__.TTSManager")
+    @patch("agents.hapax_daimonion.__main__.WakeWordDetector")
+    @patch("agents.hapax_daimonion.__main__.HotkeyServer")
+    @patch("agents.hapax_daimonion.__main__.ChimePlayer")
     def test_on_wake_word_plays_activation_chime(self, MockChime, *_):
-        from agents.hapax_voice.__main__ import VoiceDaemon
+        from agents.hapax_daimonion.__main__ import VoiceDaemon
 
         cfg = VoiceConfig()
         daemon = VoiceDaemon(cfg=cfg)
@@ -647,13 +647,13 @@ class TestDaemonChimeWiring:
         daemon._on_wake_word()
         mock_player.play.assert_called_once_with("activation")
 
-    @patch("agents.hapax_voice.__main__.AudioInputStream")
-    @patch("agents.hapax_voice.__main__.TTSManager")
-    @patch("agents.hapax_voice.__main__.WakeWordDetector")
-    @patch("agents.hapax_voice.__main__.HotkeyServer")
-    @patch("agents.hapax_voice.__main__.ChimePlayer")
+    @patch("agents.hapax_daimonion.__main__.AudioInputStream")
+    @patch("agents.hapax_daimonion.__main__.TTSManager")
+    @patch("agents.hapax_daimonion.__main__.WakeWordDetector")
+    @patch("agents.hapax_daimonion.__main__.HotkeyServer")
+    @patch("agents.hapax_daimonion.__main__.ChimePlayer")
     def test_chime_disabled_skips_playback(self, MockChime, *_):
-        from agents.hapax_voice.__main__ import VoiceDaemon
+        from agents.hapax_daimonion.__main__ import VoiceDaemon
 
         cfg = VoiceConfig(chime_enabled=False)
         daemon = VoiceDaemon(cfg=cfg)
@@ -666,27 +666,27 @@ class TestDaemonChimeWiring:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_daemon_chime_wiring.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_daemon_chime_wiring.py -v`
 Expected: FAIL — `chime_enabled` not in VoiceConfig, `ChimePlayer` not imported
 
 **Step 3: Add config fields**
 
-In `agents/hapax_voice/config.py`, add after the `vision_refresh_interval` field (line 102):
+In `agents/hapax_daimonion/config.py`, add after the `vision_refresh_interval` field (line 102):
 
 ```python
     # Chime settings
     chime_enabled: bool = True
     chime_volume: float = 0.7
-    chime_dir: str = "~/.local/share/hapax-voice/chimes"
+    chime_dir: str = "~/.local/share/hapax-daimonion/chimes"
 ```
 
 **Step 4: Wire ChimePlayer into VoiceDaemon**
 
-In `agents/hapax_voice/__main__.py`:
+In `agents/hapax_daimonion/__main__.py`:
 
 Add import after the existing imports (after line 27):
 ```python
-from agents.hapax_voice.chime_player import ChimePlayer
+from agents.hapax_daimonion.chime_player import ChimePlayer
 ```
 
 In `__init__`, after `self.tts = TTSManager(...)` (after line 67), add:
@@ -718,14 +718,14 @@ In the `finally` block of `run()` (after `self._audio_input.stop()`), add:
 
 **Step 5: Run tests to verify they pass**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_daemon_chime_wiring.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_daemon_chime_wiring.py -v`
 Expected: All 6 tests PASS
 
 **Step 6: Commit**
 
 ```bash
 cd ~/projects/ai-agents
-git add agents/hapax_voice/__main__.py agents/hapax_voice/config.py tests/hapax_voice/test_daemon_chime_wiring.py
+git add agents/hapax_daimonion/__main__.py agents/hapax_daimonion/config.py tests/hapax_daimonion/test_daemon_chime_wiring.py
 git commit -m "feat(voice): wire ChimePlayer into daemon wake word handler
 
 Plays activation chime immediately on wake word detection, before
@@ -740,8 +740,8 @@ Controllable via chime_enabled and chime_volume config fields."
 Play deactivation chime on session close and error chime on pipeline failures.
 
 **Files:**
-- Modify: `agents/hapax_voice/__main__.py`
-- Test: `tests/hapax_voice/test_daemon_lifecycle_chimes.py`
+- Modify: `agents/hapax_daimonion/__main__.py`
+- Test: `tests/hapax_daimonion/test_daemon_lifecycle_chimes.py`
 
 **Step 1: Write the failing tests**
 
@@ -751,17 +751,17 @@ from unittest.mock import MagicMock, patch, AsyncMock
 
 import pytest
 
-from agents.hapax_voice.config import VoiceConfig
+from agents.hapax_daimonion.config import VoiceConfig
 
 
 class TestDeactivationChime:
-    @patch("agents.hapax_voice.__main__.AudioInputStream")
-    @patch("agents.hapax_voice.__main__.TTSManager")
-    @patch("agents.hapax_voice.__main__.WakeWordDetector")
-    @patch("agents.hapax_voice.__main__.HotkeyServer")
-    @patch("agents.hapax_voice.__main__.ChimePlayer")
+    @patch("agents.hapax_daimonion.__main__.AudioInputStream")
+    @patch("agents.hapax_daimonion.__main__.TTSManager")
+    @patch("agents.hapax_daimonion.__main__.WakeWordDetector")
+    @patch("agents.hapax_daimonion.__main__.HotkeyServer")
+    @patch("agents.hapax_daimonion.__main__.ChimePlayer")
     def test_close_session_plays_deactivation(self, MockChime, *_):
-        from agents.hapax_voice.__main__ import VoiceDaemon
+        from agents.hapax_daimonion.__main__ import VoiceDaemon
 
         cfg = VoiceConfig()
         daemon = VoiceDaemon(cfg=cfg)
@@ -777,13 +777,13 @@ class TestDeactivationChime:
         )
         mock_player.play.assert_called_with("deactivation")
 
-    @patch("agents.hapax_voice.__main__.AudioInputStream")
-    @patch("agents.hapax_voice.__main__.TTSManager")
-    @patch("agents.hapax_voice.__main__.WakeWordDetector")
-    @patch("agents.hapax_voice.__main__.HotkeyServer")
-    @patch("agents.hapax_voice.__main__.ChimePlayer")
+    @patch("agents.hapax_daimonion.__main__.AudioInputStream")
+    @patch("agents.hapax_daimonion.__main__.TTSManager")
+    @patch("agents.hapax_daimonion.__main__.WakeWordDetector")
+    @patch("agents.hapax_daimonion.__main__.HotkeyServer")
+    @patch("agents.hapax_daimonion.__main__.ChimePlayer")
     def test_chime_disabled_skips_deactivation(self, MockChime, *_):
-        from agents.hapax_voice.__main__ import VoiceDaemon
+        from agents.hapax_daimonion.__main__ import VoiceDaemon
 
         cfg = VoiceConfig(chime_enabled=False)
         daemon = VoiceDaemon(cfg=cfg)
@@ -801,12 +801,12 @@ class TestDeactivationChime:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_daemon_lifecycle_chimes.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_daemon_lifecycle_chimes.py -v`
 Expected: FAIL — deactivation chime not played in `_close_session`
 
 **Step 3: Add deactivation chime to `_close_session`**
 
-In `agents/hapax_voice/__main__.py`, in `_close_session()`, add after `await self._stop_pipeline()` and before `if self.session.is_active:`:
+In `agents/hapax_daimonion/__main__.py`, in `_close_session()`, add after `await self._stop_pipeline()` and before `if self.session.is_active:`:
 
 ```python
         if self.cfg.chime_enabled:
@@ -815,14 +815,14 @@ In `agents/hapax_voice/__main__.py`, in `_close_session()`, add after `await sel
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_daemon_lifecycle_chimes.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_daemon_lifecycle_chimes.py -v`
 Expected: All tests PASS
 
 **Step 5: Commit**
 
 ```bash
 cd ~/projects/ai-agents
-git add agents/hapax_voice/__main__.py tests/hapax_voice/test_daemon_lifecycle_chimes.py
+git add agents/hapax_daimonion/__main__.py tests/hapax_daimonion/test_daemon_lifecycle_chimes.py
 git commit -m "feat(voice): play deactivation chime on session close
 
 Ascending chime on wake, descending chime on close — prosodic
@@ -836,14 +836,14 @@ bookends for the voice session lifecycle."
 Remove dead chime/ack entries from the TTS tier map. These are now handled by ChimePlayer, not TTS.
 
 **Files:**
-- Modify: `agents/hapax_voice/tts.py`
-- Modify: `tests/hapax_voice/test_tts.py` (if exists, otherwise create)
+- Modify: `agents/hapax_daimonion/tts.py`
+- Modify: `tests/hapax_daimonion/test_tts.py` (if exists, otherwise create)
 
 **Step 1: Write the failing tests**
 
 ```python
 """Tests for TTS tier map after chime cleanup."""
-from agents.hapax_voice.tts import _TIER_MAP, select_tier
+from agents.hapax_daimonion.tts import _TIER_MAP, select_tier
 
 
 class TestTierMapCleanup:
@@ -871,12 +871,12 @@ class TestTierMapCleanup:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_tts_tier_cleanup.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_tts_tier_cleanup.py -v`
 Expected: FAIL — `"chime"` still in `_TIER_MAP`
 
 **Step 3: Remove dead entries from tts.py**
 
-In `agents/hapax_voice/tts.py`, change `_TIER_MAP` (lines 12-20) to:
+In `agents/hapax_daimonion/tts.py`, change `_TIER_MAP` (lines 12-20) to:
 
 ```python
 _TIER_MAP: dict[str, str] = {
@@ -889,14 +889,14 @@ _TIER_MAP: dict[str, str] = {
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_tts_tier_cleanup.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_tts_tier_cleanup.py -v`
 Expected: All 6 tests PASS
 
 **Step 5: Commit**
 
 ```bash
 cd ~/projects/ai-agents
-git add agents/hapax_voice/tts.py tests/hapax_voice/test_tts_tier_cleanup.py
+git add agents/hapax_daimonion/tts.py tests/hapax_daimonion/test_tts_tier_cleanup.py
 git commit -m "refactor(voice): remove dead chime/ack entries from TTS tier map
 
 Chimes are now pre-rendered WAVs played by ChimePlayer.
@@ -911,14 +911,14 @@ a TTS tier routing entry."
 Update the system prompt to instruct the LLM to emit natural verbal bridges before tool calls.
 
 **Files:**
-- Modify: `agents/hapax_voice/persona.py`
-- Test: `tests/hapax_voice/test_persona_bridges.py`
+- Modify: `agents/hapax_daimonion/persona.py`
+- Test: `tests/hapax_daimonion/test_persona_bridges.py`
 
 **Step 1: Write the failing tests**
 
 ```python
 """Tests for verbal bridge instructions in system prompt."""
-from agents.hapax_voice.persona import system_prompt
+from agents.hapax_daimonion.persona import system_prompt
 
 
 class TestBridgeInstructions:
@@ -939,12 +939,12 @@ class TestBridgeInstructions:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_persona_bridges.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_persona_bridges.py -v`
 Expected: FAIL — no bridge/vary instructions in current prompt
 
 **Step 3: Update the system prompt**
 
-In `agents/hapax_voice/persona.py`, update `_SYSTEM_PROMPT` to:
+In `agents/hapax_daimonion/persona.py`, update `_SYSTEM_PROMPT` to:
 
 ```python
 _SYSTEM_PROMPT = (
@@ -969,14 +969,14 @@ _SYSTEM_PROMPT = (
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_persona_bridges.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_persona_bridges.py -v`
 Expected: All 3 tests PASS
 
 **Step 5: Commit**
 
 ```bash
 cd ~/projects/ai-agents
-git add agents/hapax_voice/persona.py tests/hapax_voice/test_persona_bridges.py
+git add agents/hapax_daimonion/persona.py tests/hapax_daimonion/test_persona_bridges.py
 git commit -m "feat(voice): add verbal bridge instructions to system prompt
 
 Instructs the LLM to say a brief natural phrase before tool calls
@@ -991,8 +991,8 @@ Pipecat streams bridge text to TTS while tools execute in parallel."
 The hotkey handler also opens sessions but doesn't play a chime. Add activation chime to hotkey open paths.
 
 **Files:**
-- Modify: `agents/hapax_voice/__main__.py`
-- Test: `tests/hapax_voice/test_hotkey_chime.py`
+- Modify: `agents/hapax_daimonion/__main__.py`
+- Test: `tests/hapax_daimonion/test_hotkey_chime.py`
 
 **Step 1: Write the failing tests**
 
@@ -1002,18 +1002,18 @@ from unittest.mock import MagicMock, patch, AsyncMock
 
 import pytest
 
-from agents.hapax_voice.config import VoiceConfig
+from agents.hapax_daimonion.config import VoiceConfig
 
 
 class TestHotkeyChime:
-    @patch("agents.hapax_voice.__main__.AudioInputStream")
-    @patch("agents.hapax_voice.__main__.TTSManager")
-    @patch("agents.hapax_voice.__main__.WakeWordDetector")
-    @patch("agents.hapax_voice.__main__.HotkeyServer")
-    @patch("agents.hapax_voice.__main__.ChimePlayer")
+    @patch("agents.hapax_daimonion.__main__.AudioInputStream")
+    @patch("agents.hapax_daimonion.__main__.TTSManager")
+    @patch("agents.hapax_daimonion.__main__.WakeWordDetector")
+    @patch("agents.hapax_daimonion.__main__.HotkeyServer")
+    @patch("agents.hapax_daimonion.__main__.ChimePlayer")
     def test_toggle_open_plays_activation(self, MockChime, *_):
         import asyncio
-        from agents.hapax_voice.__main__ import VoiceDaemon
+        from agents.hapax_daimonion.__main__ import VoiceDaemon
 
         cfg = VoiceConfig()
         daemon = VoiceDaemon(cfg=cfg)
@@ -1026,14 +1026,14 @@ class TestHotkeyChime:
         )
         mock_player.play.assert_called_with("activation")
 
-    @patch("agents.hapax_voice.__main__.AudioInputStream")
-    @patch("agents.hapax_voice.__main__.TTSManager")
-    @patch("agents.hapax_voice.__main__.WakeWordDetector")
-    @patch("agents.hapax_voice.__main__.HotkeyServer")
-    @patch("agents.hapax_voice.__main__.ChimePlayer")
+    @patch("agents.hapax_daimonion.__main__.AudioInputStream")
+    @patch("agents.hapax_daimonion.__main__.TTSManager")
+    @patch("agents.hapax_daimonion.__main__.WakeWordDetector")
+    @patch("agents.hapax_daimonion.__main__.HotkeyServer")
+    @patch("agents.hapax_daimonion.__main__.ChimePlayer")
     def test_open_cmd_plays_activation(self, MockChime, *_):
         import asyncio
-        from agents.hapax_voice.__main__ import VoiceDaemon
+        from agents.hapax_daimonion.__main__ import VoiceDaemon
 
         cfg = VoiceConfig()
         daemon = VoiceDaemon(cfg=cfg)
@@ -1048,12 +1048,12 @@ class TestHotkeyChime:
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_hotkey_chime.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_hotkey_chime.py -v`
 Expected: FAIL — hotkey handler doesn't call `chime_player.play`
 
 **Step 3: Add activation chime to hotkey open paths**
 
-In `agents/hapax_voice/__main__.py`, in `_handle_hotkey()`:
+In `agents/hapax_daimonion/__main__.py`, in `_handle_hotkey()`:
 
 For the `"toggle"` branch, in the `else` (opening) path, add before `self.session.open(trigger="hotkey")`:
 ```python
@@ -1069,14 +1069,14 @@ For the `"open"` branch, add before `self.session.open(trigger="hotkey")`:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_hotkey_chime.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_hotkey_chime.py -v`
 Expected: All tests PASS
 
 **Step 5: Commit**
 
 ```bash
 cd ~/projects/ai-agents
-git add agents/hapax_voice/__main__.py tests/hapax_voice/test_hotkey_chime.py
+git add agents/hapax_daimonion/__main__.py tests/hapax_daimonion/test_hotkey_chime.py
 git commit -m "feat(voice): play activation chime on hotkey session open
 
 Both toggle-open and explicit open commands now play the activation
@@ -1090,7 +1090,7 @@ chime, matching the wake word behavior."
 End-to-end test verifying chime synthesis → load → play → session close flow.
 
 **Files:**
-- Test: `tests/hapax_voice/test_chime_integration.py`
+- Test: `tests/hapax_daimonion/test_chime_integration.py`
 
 **Step 1: Write the integration test**
 
@@ -1103,8 +1103,8 @@ from unittest.mock import patch, MagicMock
 import numpy as np
 import pytest
 
-from agents.hapax_voice.chime_synthesis import generate_all_chimes, synthesize_chime, SAMPLE_RATE
-from agents.hapax_voice.chime_player import ChimePlayer
+from agents.hapax_daimonion.chime_synthesis import generate_all_chimes, synthesize_chime, SAMPLE_RATE
+from agents.hapax_daimonion.chime_player import ChimePlayer
 
 
 class TestChimeIntegration:
@@ -1159,7 +1159,7 @@ class TestChimeIntegration:
         assert fft1[g6_bin1] > np.median(fft1) * 5
         assert fft2[d6_bin2] > np.median(fft2) * 3
 
-    @patch("agents.hapax_voice.chime_player.pyaudio")
+    @patch("agents.hapax_daimonion.chime_player.pyaudio")
     def test_auto_generate_and_play(self, mock_pa, tmp_path):
         """Auto-generate chimes, then play activation."""
         mock_stream = MagicMock()
@@ -1183,14 +1183,14 @@ class TestChimeIntegration:
 
 **Step 2: Run integration tests**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_chime_integration.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_chime_integration.py -v`
 Expected: All 4 tests PASS
 
 **Step 3: Commit**
 
 ```bash
 cd ~/projects/ai-agents
-git add tests/hapax_voice/test_chime_integration.py
+git add tests/hapax_daimonion/test_chime_integration.py
 git commit -m "test(voice): add chime integration tests
 
 Verifies synthesis→load→play roundtrip, frequency content (D6/G6),

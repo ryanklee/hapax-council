@@ -70,8 +70,8 @@ Store matching patterns in `self._active_patterns`. Surface in perception data f
 Remove stale reads of `llm_confidence` and `llm_activity` (never written to JSON file, always default values at runtime).
 
 ### Files
-- `agents/hapax_voice/_perception_state_writer.py` — remove 12 dead fields
-- `agents/hapax_voice/workspace_monitor.py` — remove stale reads
+- `agents/hapax_daimonion/_perception_state_writer.py` — remove 12 dead fields
+- `agents/hapax_daimonion/workspace_monitor.py` — remove stale reads
 
 ---
 
@@ -84,8 +84,8 @@ Remove stale reads of `llm_confidence` and `llm_activity` (never written to JSON
 - `agents/visual_layer_aggregator.py`
 
 ### Batch C: Dead Field Cleanup
-- `agents/hapax_voice/_perception_state_writer.py`
-- `agents/hapax_voice/workspace_monitor.py`
+- `agents/hapax_daimonion/_perception_state_writer.py`
+- `agents/hapax_daimonion/workspace_monitor.py`
 
 ---
 

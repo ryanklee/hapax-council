@@ -19,19 +19,19 @@ research/
 
 ## Theoretical Foundations
 
-Theory documents live in [`../agents/hapax_voice/proofs/`](../agents/hapax_voice/proofs/):
+Theory documents live in [`../agents/hapax_daimonion/proofs/`](../agents/hapax_daimonion/proofs/):
 
 | Document | Content |
 |----------|---------|
-| [RESEARCH-STATE.md](../agents/hapax_voice/proofs/RESEARCH-STATE.md) | Current research state (living document) |
-| [THEORETICAL-FOUNDATIONS.md](../agents/hapax_voice/proofs/THEORETICAL-FOUNDATIONS.md) | Literature review: Clark, Traum, Brennan, SCED methodology |
-| [POSITION.md](../agents/hapax_voice/proofs/POSITION.md) | Counter-positioning vs profile retrieval |
-| [REFINEMENT-RESEARCH.md](../agents/hapax_voice/proofs/REFINEMENT-RESEARCH.md) | 8 research streams, refined model design |
-| [PACKAGE-ASSESSMENT.md](../agents/hapax_voice/proofs/PACKAGE-ASSESSMENT.md) | Component analysis, 2x2 matrix, SCED methodology |
-| [WHY-NO-ONE-IMPLEMENTED-CLARK.md](../agents/hapax_voice/proofs/WHY-NO-ONE-IMPLEMENTED-CLARK.md) | 32-year gap analysis |
-| [CYCLE-2-PREREGISTRATION.md](../agents/hapax_voice/proofs/CYCLE-2-PREREGISTRATION.md) | Experiment design: ABA, BEST, HDI+ROPE |
-| [CYCLE-1-PILOT-REPORT.md](../agents/hapax_voice/proofs/CYCLE-1-PILOT-REPORT.md) | Pilot methods, results, deviations |
-| [BASELINE-ANALYSIS.md](../agents/hapax_voice/proofs/BASELINE-ANALYSIS.md) | 17 sessions, 8 patterns |
+| [RESEARCH-STATE.md](../agents/hapax_daimonion/proofs/RESEARCH-STATE.md) | Current research state (living document) |
+| [THEORETICAL-FOUNDATIONS.md](../agents/hapax_daimonion/proofs/THEORETICAL-FOUNDATIONS.md) | Literature review: Clark, Traum, Brennan, SCED methodology |
+| [POSITION.md](../agents/hapax_daimonion/proofs/POSITION.md) | Counter-positioning vs profile retrieval |
+| [REFINEMENT-RESEARCH.md](../agents/hapax_daimonion/proofs/REFINEMENT-RESEARCH.md) | 8 research streams, refined model design |
+| [PACKAGE-ASSESSMENT.md](../agents/hapax_daimonion/proofs/PACKAGE-ASSESSMENT.md) | Component analysis, 2x2 matrix, SCED methodology |
+| [WHY-NO-ONE-IMPLEMENTED-CLARK.md](../agents/hapax_daimonion/proofs/WHY-NO-ONE-IMPLEMENTED-CLARK.md) | 32-year gap analysis |
+| [CYCLE-2-PREREGISTRATION.md](../agents/hapax_daimonion/proofs/CYCLE-2-PREREGISTRATION.md) | Experiment design: ABA, BEST, HDI+ROPE |
+| [CYCLE-1-PILOT-REPORT.md](../agents/hapax_daimonion/proofs/CYCLE-1-PILOT-REPORT.md) | Pilot methods, results, deviations |
+| [BASELINE-ANALYSIS.md](../agents/hapax_daimonion/proofs/BASELINE-ANALYSIS.md) | 17 sessions, 8 patterns |
 
 ## Lab Journal
 

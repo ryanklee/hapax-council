@@ -14,7 +14,7 @@ The contact mic produces `desk_activity`, `desk_energy`, `desk_onset_rate`, and 
 
 ## Component 1: OBS Governance — Activity-Aware Scene Selection
 
-**File:** `agents/hapax_voice/obs_governance.py`
+**File:** `agents/hapax_daimonion/obs_governance.py`
 
 ### Current Behavior
 
@@ -56,7 +56,7 @@ Candidate(
 
 ## Component 2: MC Governance — Scratch Suppression
 
-**File:** `agents/hapax_voice/mc_governance.py`
+**File:** `agents/hapax_daimonion/mc_governance.py`
 
 ### Current Behavior
 
@@ -85,7 +85,7 @@ Drumming and tapping ALLOW throws because pad playing and MC vocal samples are c
 
 ## Component 3: Export Additional DSP Metrics
 
-**File:** `agents/hapax_voice/backends/contact_mic.py`
+**File:** `agents/hapax_daimonion/backends/contact_mic.py`
 
 ### Current State
 
@@ -144,13 +144,13 @@ Add to `_perception_state_writer.py`:
 
 | Action | Path | Scope |
 |--------|------|-------|
-| Edit | `agents/hapax_voice/obs_governance.py` | Add instrument_focus candidate |
-| Edit | `agents/hapax_voice/mc_governance.py` | Add desk_allows_throw veto |
-| Edit | `agents/hapax_voice/backends/contact_mic.py` | Export spectral_centroid + autocorr_peak as behaviors |
-| Edit | `agents/hapax_voice/_perception_state_writer.py` | Export 2 new fields |
-| Create | `tests/hapax_voice/test_obs_desk_activity.py` | OBS instrument_focus candidate tests |
-| Create | `tests/hapax_voice/test_mc_desk_suppression.py` | MC scratch suppression tests |
-| Edit | `tests/hapax_voice/test_contact_mic_backend.py` | Update for 2 new behaviors in protocol test |
+| Edit | `agents/hapax_daimonion/obs_governance.py` | Add instrument_focus candidate |
+| Edit | `agents/hapax_daimonion/mc_governance.py` | Add desk_allows_throw veto |
+| Edit | `agents/hapax_daimonion/backends/contact_mic.py` | Export spectral_centroid + autocorr_peak as behaviors |
+| Edit | `agents/hapax_daimonion/_perception_state_writer.py` | Export 2 new fields |
+| Create | `tests/hapax_daimonion/test_obs_desk_activity.py` | OBS instrument_focus candidate tests |
+| Create | `tests/hapax_daimonion/test_mc_desk_suppression.py` | MC scratch suppression tests |
+| Edit | `tests/hapax_daimonion/test_contact_mic_backend.py` | Update for 2 new behaviors in protocol test |
 
 ## Testing
 

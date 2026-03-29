@@ -21,17 +21,17 @@
 |------|--------|---------------|
 | `shared/hyprland.py` | Create | Thin IPC wrapper: query, dispatch, batch, event listener |
 | `tests/test_hyprland.py` | Create | Unit tests for IPC wrapper (mocked subprocess/sockets) |
-| `agents/hapax_voice/hyprland_listener.py` | Create | Async Socket2 event listener replacing AT-SPI2 ChangeDetector |
-| `tests/hapax_voice/test_hyprland_listener.py` | Create | Unit tests for event listener |
-| `agents/hapax_voice/perception.py` | Modify | Add desktop topology fields to EnvironmentState |
-| `tests/hapax_voice/test_perception_desktop.py` | Create | Tests for enriched EnvironmentState |
-| `agents/hapax_voice/workspace_monitor.py` | Modify | Replace ChangeDetector with HyprlandEventListener, add hyprctl optimization |
-| `tests/hapax_voice/test_workspace_monitor.py` | Modify | Update for new listener interface |
-| `agents/hapax_voice/desktop_tools.py` | Create | Voice LLM tools: focus_window, switch_workspace, open_app, get_desktop_state |
-| `tests/hapax_voice/test_desktop_tools.py` | Create | Tests for desktop tools |
-| `agents/hapax_voice/tools.py` | Modify | Register desktop tools alongside existing tools |
-| `agents/hapax_voice/__main__.py` | Modify | Wire HyprlandEventListener + desktop tools |
-| `agents/hapax_voice/screen_change_detector.py` | Delete | Replaced by hyprland_listener.py |
+| `agents/hapax_daimonion/hyprland_listener.py` | Create | Async Socket2 event listener replacing AT-SPI2 ChangeDetector |
+| `tests/hapax_daimonion/test_hyprland_listener.py` | Create | Unit tests for event listener |
+| `agents/hapax_daimonion/perception.py` | Modify | Add desktop topology fields to EnvironmentState |
+| `tests/hapax_daimonion/test_perception_desktop.py` | Create | Tests for enriched EnvironmentState |
+| `agents/hapax_daimonion/workspace_monitor.py` | Modify | Replace ChangeDetector with HyprlandEventListener, add hyprctl optimization |
+| `tests/hapax_daimonion/test_workspace_monitor.py` | Modify | Update for new listener interface |
+| `agents/hapax_daimonion/desktop_tools.py` | Create | Voice LLM tools: focus_window, switch_workspace, open_app, get_desktop_state |
+| `tests/hapax_daimonion/test_desktop_tools.py` | Create | Tests for desktop tools |
+| `agents/hapax_daimonion/tools.py` | Modify | Register desktop tools alongside existing tools |
+| `agents/hapax_daimonion/__main__.py` | Modify | Wire HyprlandEventListener + desktop tools |
+| `agents/hapax_daimonion/screen_change_detector.py` | Delete | Replaced by hyprland_listener.py |
 
 ---
 
@@ -339,19 +339,19 @@ git commit -m "feat: add shared/hyprland.py IPC wrapper for desktop state and ac
 ### Task 2: Create `HyprlandEventListener`
 
 **Files:**
-- Create: `agents/hapax_voice/hyprland_listener.py`
-- Create: `tests/hapax_voice/test_hyprland_listener.py`
+- Create: `agents/hapax_daimonion/hyprland_listener.py`
+- Create: `tests/hapax_daimonion/test_hyprland_listener.py`
 
 - [ ] **Step 1: Write failing tests**
 
 ```python
-# tests/hapax_voice/test_hyprland_listener.py
+# tests/hapax_daimonion/test_hyprland_listener.py
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agents.hapax_voice.hyprland_listener import (
+from agents.hapax_daimonion.hyprland_listener import (
     HyprlandEventListener,
     FocusEvent,
 )
@@ -478,13 +478,13 @@ class TestFallback:
             assert listener.available is False
 ```
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_voice/test_hyprland_listener.py -v`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_daimonion/test_hyprland_listener.py -v`
 Expected: FAIL — module does not exist
 
 - [ ] **Step 2: Implement `hyprland_listener.py`**
 
 ```python
-# agents/hapax_voice/hyprland_listener.py
+# agents/hapax_daimonion/hyprland_listener.py
 """Real-time Hyprland event listener replacing AT-SPI2 polling.
 
 Connects to Hyprland Socket2 for instant window focus, open/close,
@@ -674,13 +674,13 @@ class HyprlandEventListener:
 
 - [ ] **Step 3: Run tests**
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_voice/test_hyprland_listener.py -v`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_daimonion/test_hyprland_listener.py -v`
 Expected: All PASS
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add agents/hapax_voice/hyprland_listener.py tests/hapax_voice/test_hyprland_listener.py
+git add agents/hapax_daimonion/hyprland_listener.py tests/hapax_daimonion/test_hyprland_listener.py
 git commit -m "feat: add HyprlandEventListener replacing AT-SPI2 polling"
 ```
 
@@ -691,17 +691,17 @@ git commit -m "feat: add HyprlandEventListener replacing AT-SPI2 polling"
 ### Task 3: Add desktop fields to `EnvironmentState`
 
 **Files:**
-- Modify: `agents/hapax_voice/perception.py`
-- Create: `tests/hapax_voice/test_perception_desktop.py`
+- Modify: `agents/hapax_daimonion/perception.py`
+- Create: `tests/hapax_daimonion/test_perception_desktop.py`
 
 - [ ] **Step 1: Write failing tests**
 
 ```python
-# tests/hapax_voice/test_perception_desktop.py
+# tests/hapax_daimonion/test_perception_desktop.py
 import time
 from unittest.mock import MagicMock
 
-from agents.hapax_voice.perception import EnvironmentState, PerceptionEngine
+from agents.hapax_daimonion.perception import EnvironmentState, PerceptionEngine
 from shared.hyprland import WindowInfo
 
 
@@ -755,12 +755,12 @@ def test_perception_engine_tick_includes_desktop():
     assert state.window_count == 4
 ```
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_voice/test_perception_desktop.py -v`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_daimonion/test_perception_desktop.py -v`
 Expected: FAIL — fields don't exist
 
 - [ ] **Step 2: Add desktop fields to EnvironmentState**
 
-In `agents/hapax_voice/perception.py`, add to `EnvironmentState`:
+In `agents/hapax_daimonion/perception.py`, add to `EnvironmentState`:
 
 ```python
     # Desktop topology (updated by HyprlandEventListener)
@@ -808,18 +808,18 @@ Add these fields to the `EnvironmentState(...)` construction in `tick()`:
 
 - [ ] **Step 3: Run tests**
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_voice/test_perception_desktop.py -v`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_daimonion/test_perception_desktop.py -v`
 Expected: All PASS
 
 - [ ] **Step 4: Run existing perception-related tests for regressions**
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_voice/ -k "perception or governor or frame_gate" -v`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_daimonion/ -k "perception or governor or frame_gate" -v`
 Expected: All PASS (new fields have defaults, existing code unchanged)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/perception.py tests/hapax_voice/test_perception_desktop.py
+git add agents/hapax_daimonion/perception.py tests/hapax_daimonion/test_perception_desktop.py
 git commit -m "feat: add desktop topology fields to EnvironmentState"
 ```
 
@@ -830,22 +830,22 @@ git commit -m "feat: add desktop topology fields to EnvironmentState"
 ### Task 4: Replace ChangeDetector with HyprlandEventListener
 
 **Files:**
-- Modify: `agents/hapax_voice/workspace_monitor.py`
-- Modify: `tests/hapax_voice/test_workspace_monitor.py`
+- Modify: `agents/hapax_daimonion/workspace_monitor.py`
+- Modify: `tests/hapax_daimonion/test_workspace_monitor.py`
 
 - [ ] **Step 1: Write failing test for new listener integration**
 
 ```python
-# Add to tests/hapax_voice/test_workspace_monitor.py
+# Add to tests/hapax_daimonion/test_workspace_monitor.py
 
 def test_workspace_monitor_uses_hyprland_listener():
     """WorkspaceMonitor should accept a HyprlandEventListener."""
     from unittest.mock import MagicMock, patch
-    from agents.hapax_voice.workspace_monitor import WorkspaceMonitor
+    from agents.hapax_daimonion.workspace_monitor import WorkspaceMonitor
 
-    with patch("agents.hapax_voice.workspace_monitor.HyprlandEventListener") as MockListener, \
-         patch("agents.hapax_voice.workspace_monitor.ScreenCapturer"), \
-         patch("agents.hapax_voice.workspace_monitor.WorkspaceAnalyzer"):
+    with patch("agents.hapax_daimonion.workspace_monitor.HyprlandEventListener") as MockListener, \
+         patch("agents.hapax_daimonion.workspace_monitor.ScreenCapturer"), \
+         patch("agents.hapax_daimonion.workspace_monitor.WorkspaceAnalyzer"):
         mock_instance = MagicMock()
         mock_instance.available = True
         MockListener.return_value = mock_instance
@@ -855,20 +855,20 @@ def test_workspace_monitor_uses_hyprland_listener():
         assert mock_instance.on_focus_changed is not None
 ```
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_voice/test_workspace_monitor.py::test_workspace_monitor_uses_hyprland_listener -v`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_daimonion/test_workspace_monitor.py::test_workspace_monitor_uses_hyprland_listener -v`
 Expected: FAIL — HyprlandEventListener not imported
 
 - [ ] **Step 2: Update WorkspaceMonitor imports and constructor**
 
-In `agents/hapax_voice/workspace_monitor.py`:
+In `agents/hapax_daimonion/workspace_monitor.py`:
 
 Replace:
 ```python
-from agents.hapax_voice.screen_change_detector import ChangeDetector, FocusState
+from agents.hapax_daimonion.screen_change_detector import ChangeDetector, FocusState
 ```
 With:
 ```python
-from agents.hapax_voice.hyprland_listener import HyprlandEventListener, FocusEvent
+from agents.hapax_daimonion.hyprland_listener import HyprlandEventListener, FocusEvent
 ```
 
 Replace the `ChangeDetector` creation in `__init__`:
@@ -922,25 +922,25 @@ And update the guard:
 
 - [ ] **Step 3: Run workspace monitor tests**
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_voice/test_workspace_monitor.py -v`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_daimonion/test_workspace_monitor.py -v`
 Expected: All PASS
 
 - [ ] **Step 4: Run full voice daemon test suite for regressions**
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_voice/ -v --timeout=60`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_daimonion/ -v --timeout=60`
 Expected: All pass except known pre-existing failures (tool_registration, wake_word_augmentation)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/workspace_monitor.py tests/hapax_voice/test_workspace_monitor.py
+git add agents/hapax_daimonion/workspace_monitor.py tests/hapax_daimonion/test_workspace_monitor.py
 git commit -m "refactor: replace AT-SPI2 ChangeDetector with HyprlandEventListener"
 ```
 
 ### Task 5: Wire listener into daemon and perception engine
 
 **Files:**
-- Modify: `agents/hapax_voice/__main__.py`
+- Modify: `agents/hapax_daimonion/__main__.py`
 
 - [ ] **Step 1: Update daemon to feed desktop state to perception**
 
@@ -970,22 +970,22 @@ In `__main__.py`, add to `VoiceDaemon.__init__()` after the perception engine cr
 
 - [ ] **Step 2: Run full voice daemon tests**
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_voice/ -v --timeout=60`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_daimonion/ -v --timeout=60`
 Expected: No new failures
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add agents/hapax_voice/__main__.py
+git add agents/hapax_daimonion/__main__.py
 git commit -m "feat: wire Hyprland desktop state into perception engine"
 ```
 
 ### Task 6: Delete AT-SPI2 change detector
 
 **Files:**
-- Delete: `agents/hapax_voice/screen_change_detector.py`
-- Modify: `tests/hapax_voice/test_screen_change_detector.py` (rename/repurpose)
-- Modify: `tests/hapax_voice/test_hardware_integration.py` (remove ChangeDetector ref)
+- Delete: `agents/hapax_daimonion/screen_change_detector.py`
+- Modify: `tests/hapax_daimonion/test_screen_change_detector.py` (rename/repurpose)
+- Modify: `tests/hapax_daimonion/test_hardware_integration.py` (remove ChangeDetector ref)
 
 - [ ] **Step 1: Check remaining imports of screen_change_detector**
 
@@ -1015,13 +1015,13 @@ Remove any `ChangeDetector` import or assertion. Replace with `HyprlandEventList
 - [ ] **Step 5: Delete screen_change_detector.py**
 
 ```bash
-git rm agents/hapax_voice/screen_change_detector.py
-git rm tests/hapax_voice/test_screen_change_detector.py
+git rm agents/hapax_daimonion/screen_change_detector.py
+git rm tests/hapax_daimonion/test_screen_change_detector.py
 ```
 
 - [ ] **Step 6: Run full test suite**
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_voice/ -v --timeout=60`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_daimonion/ -v --timeout=60`
 Expected: No new failures
 
 - [ ] **Step 7: Commit**
@@ -1038,19 +1038,19 @@ git commit -m "refactor: remove AT-SPI2 screen_change_detector (replaced by Hypr
 ### Task 7: Create `desktop_tools.py`
 
 **Files:**
-- Create: `agents/hapax_voice/desktop_tools.py`
-- Create: `tests/hapax_voice/test_desktop_tools.py`
+- Create: `agents/hapax_daimonion/desktop_tools.py`
+- Create: `tests/hapax_daimonion/test_desktop_tools.py`
 
 - [ ] **Step 1: Write failing tests**
 
 ```python
-# tests/hapax_voice/test_desktop_tools.py
+# tests/hapax_daimonion/test_desktop_tools.py
 import json
 from unittest.mock import MagicMock, patch, AsyncMock
 
 import pytest
 
-from agents.hapax_voice.desktop_tools import (
+from agents.hapax_daimonion.desktop_tools import (
     DESKTOP_TOOL_SCHEMAS,
     handle_focus_window,
     handle_switch_workspace,
@@ -1076,7 +1076,7 @@ class TestFocusWindow:
         params.arguments = {"target": "google-chrome"}
         params.result_callback = AsyncMock()
 
-        with patch("agents.hapax_voice.desktop_tools._ipc") as mock_ipc:
+        with patch("agents.hapax_daimonion.desktop_tools._ipc") as mock_ipc:
             mock_ipc.dispatch.return_value = True
             await handle_focus_window(params)
 
@@ -1093,7 +1093,7 @@ class TestSwitchWorkspace:
         params.arguments = {"workspace": 3}
         params.result_callback = AsyncMock()
 
-        with patch("agents.hapax_voice.desktop_tools._ipc") as mock_ipc:
+        with patch("agents.hapax_daimonion.desktop_tools._ipc") as mock_ipc:
             mock_ipc.dispatch.return_value = True
             await handle_switch_workspace(params)
 
@@ -1103,7 +1103,7 @@ class TestSwitchWorkspace:
 class TestOpenApp:
     @pytest.mark.asyncio
     async def test_open_returns_pending_confirmation(self):
-        import agents.hapax_voice.desktop_tools as dt
+        import agents.hapax_daimonion.desktop_tools as dt
         dt._pending_open = None  # Reset state
 
         params = MagicMock()
@@ -1118,14 +1118,14 @@ class TestOpenApp:
 
     @pytest.mark.asyncio
     async def test_confirm_launches_pending(self):
-        import agents.hapax_voice.desktop_tools as dt
+        import agents.hapax_daimonion.desktop_tools as dt
         dt._pending_open = {"command": "foot", "workspace": 2}
 
         params = MagicMock()
         params.arguments = {}
         params.result_callback = AsyncMock()
 
-        with patch("agents.hapax_voice.desktop_tools._ipc") as mock_ipc:
+        with patch("agents.hapax_daimonion.desktop_tools._ipc") as mock_ipc:
             mock_ipc.dispatch.return_value = True
             await handle_confirm_open_app(params)
 
@@ -1153,7 +1153,7 @@ class TestGetDesktopState:
             WorkspaceInfo(3, "3", 1, "chrome", "DP-1"),
         ]
 
-        with patch("agents.hapax_voice.desktop_tools._ipc") as mock_ipc:
+        with patch("agents.hapax_daimonion.desktop_tools._ipc") as mock_ipc:
             mock_ipc.get_clients.return_value = mock_clients
             mock_ipc.get_workspaces.return_value = mock_workspaces
             mock_ipc.get_active_window.return_value = mock_clients[0]
@@ -1165,13 +1165,13 @@ class TestGetDesktopState:
         assert len(result["workspaces"]) == 2
 ```
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_voice/test_desktop_tools.py -v`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_daimonion/test_desktop_tools.py -v`
 Expected: FAIL — module does not exist
 
 - [ ] **Step 2: Implement `desktop_tools.py`**
 
 ```python
-# agents/hapax_voice/desktop_tools.py
+# agents/hapax_daimonion/desktop_tools.py
 """Desktop management tools for the voice assistant.
 
 Exposes Hyprland window management as LLM function-calling tools:
@@ -1335,26 +1335,26 @@ async def handle_get_desktop_state(params) -> None:
 
 - [ ] **Step 3: Run tests**
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_voice/test_desktop_tools.py -v`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_daimonion/test_desktop_tools.py -v`
 Expected: All PASS
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add agents/hapax_voice/desktop_tools.py tests/hapax_voice/test_desktop_tools.py
+git add agents/hapax_daimonion/desktop_tools.py tests/hapax_daimonion/test_desktop_tools.py
 git commit -m "feat: add desktop management tools for voice assistant"
 ```
 
 ### Task 8: Register desktop tools in tools.py
 
 **Files:**
-- Modify: `agents/hapax_voice/tools.py:753-786`
+- Modify: `agents/hapax_daimonion/tools.py:753-786`
 
 - [ ] **Step 1: Add imports and registration**
 
 At the top of `tools.py`, add:
 ```python
-from agents.hapax_voice.desktop_tools import (
+from agents.hapax_daimonion.desktop_tools import (
     DESKTOP_TOOL_SCHEMAS,
     handle_focus_window,
     handle_switch_workspace,
@@ -1391,13 +1391,13 @@ This ensures `pipeline.py` passes all 13 tool schemas to `OpenAILLMContext(tools
 
 - [ ] **Step 3: Run tool-related tests**
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_voice/ -k "tool" -v`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_daimonion/ -k "tool" -v`
 Expected: All PASS
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add agents/hapax_voice/tools.py
+git add agents/hapax_daimonion/tools.py
 git commit -m "feat: register desktop tools in voice assistant tool registry"
 ```
 
@@ -1408,18 +1408,18 @@ git commit -m "feat: register desktop tools in voice assistant tool registry"
 ### Task 9: Add hyprctl pre-check to workspace analysis
 
 **Files:**
-- Modify: `agents/hapax_voice/workspace_monitor.py`
-- Create: `tests/hapax_voice/test_workspace_monitor_optimization.py`
+- Modify: `agents/hapax_daimonion/workspace_monitor.py`
+- Create: `tests/hapax_daimonion/test_workspace_monitor_optimization.py`
 
 - [ ] **Step 1: Write failing test**
 
 ```python
-# tests/hapax_voice/test_workspace_monitor_optimization.py
+# tests/hapax_daimonion/test_workspace_monitor_optimization.py
 from unittest.mock import MagicMock, AsyncMock, patch
 
 import pytest
 
-from agents.hapax_voice.workspace_monitor import WorkspaceMonitor
+from agents.hapax_daimonion.workspace_monitor import WorkspaceMonitor
 
 
 class TestDeterministicContext:
@@ -1434,7 +1434,7 @@ class TestDeterministicContext:
             WindowInfo("0x2", "google-chrome", "hapax-logos", 3, 20, 0, 0, 1920, 1080, False, False),
         ]
 
-        with patch("agents.hapax_voice.workspace_monitor.HyprlandIPC") as MockIPC:
+        with patch("agents.hapax_daimonion.workspace_monitor.HyprlandIPC") as MockIPC:
             mock_ipc = MagicMock()
             mock_ipc.get_clients.return_value = mock_clients
             MockIPC.return_value = mock_ipc
@@ -1447,7 +1447,7 @@ class TestDeterministicContext:
         assert "ai-agents" in context
 ```
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_voice/test_workspace_monitor_optimization.py -v`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_daimonion/test_workspace_monitor_optimization.py -v`
 Expected: FAIL — method doesn't exist
 
 - [ ] **Step 2: Add `_build_deterministic_context()` method**
@@ -1494,13 +1494,13 @@ Then pass `combined_context` instead of `rag_context` to `extra_context=`.
 
 - [ ] **Step 4: Run tests**
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_voice/test_workspace_monitor_optimization.py tests/hapax_voice/test_workspace_monitor.py -v`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_daimonion/test_workspace_monitor_optimization.py tests/hapax_daimonion/test_workspace_monitor.py -v`
 Expected: All PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/workspace_monitor.py tests/hapax_voice/test_workspace_monitor_optimization.py
+git add agents/hapax_daimonion/workspace_monitor.py tests/hapax_daimonion/test_workspace_monitor_optimization.py
 git commit -m "feat: inject deterministic hyprctl context into workspace analysis"
 ```
 

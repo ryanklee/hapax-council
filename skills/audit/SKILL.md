@@ -9,7 +9,7 @@ Deep audit of a Logos subsystem using parallel Agent fan-out. Argument: subsyste
 
 | Argument | Paths to explore |
 |----------|-----------------|
-| `voice` or `hapax-voice` | `agents/hapax_voice/`, `shared/voice*.py` |
+| `voice` or `hapax-daimonion` | `agents/hapax_daimonion/`, `shared/voice*.py` |
 | `reactive-engine` or `engine` | `logos/engine/`, `logos/rules/` |
 | `api` or `logos-api` | `logos/api/`, `logos/routes/` |
 | `profiler` or `profile` | `agents/profiler/`, `profiles/`, `shared/dimensions.py` |

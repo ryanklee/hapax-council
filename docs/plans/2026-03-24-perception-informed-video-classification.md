@@ -34,7 +34,7 @@ MinuteBuffer emits a MinuteSummary every 60 seconds. Currently,
 MultiScaleAggregator.tick() swallows the return value. Change it to return
 the MinuteSummary, then persist in the aggregator.
 
-**File**: `~/.cache/hapax-voice/perception-minutes.jsonl`
+**File**: `~/.cache/hapax-daimonion/perception-minutes.jsonl`
 
 **Enriched MinuteSummary**: Add 4 fields to MinuteSummary (all with defaults,
 backward-compatible with frozen model):

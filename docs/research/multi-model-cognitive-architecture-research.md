@@ -39,7 +39,7 @@ Eugene Asahara (2026) proposes System i (using the imaginary unit symbol) as a t
 
 In AI implementation: a background discovery layer (System i) continuously mines large spaces of data and relationships, validates analytical patterns, builds ML models, and deploys them. It also continuously updates existing models with current data and tests new models.
 
-This is the closest published articulation to the hapax voice daemon's architecture: a continuously-running local model maintaining situational awareness that feeds into on-demand deliberative processing.
+This is the closest published articulation to the hapax daimonion daemon's architecture: a continuously-running local model maintaining situational awareness that feeds into on-demand deliberative processing.
 
 **Source:**
 - [System i: The Default Mode Network of AGI](https://eugeneasahara.com/2026/01/08/system-0-the-default-mode-network-of-agi/)
@@ -98,7 +98,7 @@ This is the closest published articulation to the hapax voice daemon's architect
 
 **Context management:** Virtual context management inspired by OS page tables. The model sees a fixed-size context window but has access to unbounded external storage. Interrupts manage control flow between the agent and the user/environment.
 
-**Relevance to hapax voice:** Letta's self-editing memory is directly applicable. A continuously-running background model could maintain a Letta-style memory system — editing situation model blocks, archiving completed episodes, retrieving relevant context when the cloud model is invoked.
+**Relevance to hapax daimonion:** Letta's self-editing memory is directly applicable. A continuously-running background model could maintain a Letta-style memory system — editing situation model blocks, archiving completed episodes, retrieving relevant context when the cloud model is invoked.
 
 **Sources:**
 - [Letta v1 Agent Loop](https://www.letta.com/blog/letta-v1-agent)
@@ -219,7 +219,7 @@ Efficient and adaptive architecture that partitions the LLM into edge and cloud 
 
 **Performance:** Outperforms baselines by 8.5% in proactive predictions and 6.0% in tool calling accuracy.
 
-**Relevance to hapax voice:** This is the closest published system to the desired architecture — continuous sensory processing feeding into proactive LLM reasoning. However, ContextAgent does not maintain a continuously-running background model; it processes sensor data on-demand.
+**Relevance to hapax daimonion:** This is the closest published system to the desired architecture — continuous sensory processing feeding into proactive LLM reasoning. However, ContextAgent does not maintain a continuously-running background model; it processes sensor data on-demand.
 
 **Sources:**
 - [ContextAgent: Context-Aware Proactive LLM Agents](https://arxiv.org/abs/2505.14668)
@@ -301,7 +301,7 @@ Related findings:
 - For situation model maintenance (the DMN analogue), the task is primarily: summarize current state, detect meaningful changes, assess uncertainty, format context for the cloud model. This is classification + summarization, not complex reasoning — plausibly achievable at 3B with task-specific fine-tuning.
 - Apple ships a ~3B on-device model for production use in Apple Intelligence.
 
-**Recommendation for hapax voice:** A 3B model (e.g., Qwen 2.5 3B, Phi-3.5 Mini 3.8B) is the minimum viable size for background situation model maintenance. A 7B model (e.g., Qwen 2.5 7B, Mistral 7B) provides a comfortable margin for self-verification and uncertainty estimation. Both fit comfortably on the RTX 3090 alongside the voice pipeline's existing VRAM usage (whisper + TTS).
+**Recommendation for hapax daimonion:** A 3B model (e.g., Qwen 2.5 3B, Phi-3.5 Mini 3.8B) is the minimum viable size for background situation model maintenance. A 7B model (e.g., Qwen 2.5 7B, Mistral 7B) provides a comfortable margin for self-verification and uncertainty estimation. Both fit comfortably on the RTX 3090 alongside the voice pipeline's existing VRAM usage (whisper + TTS).
 
 **Sources:**
 - [LLM Model Sizes Explained](https://apxml.com/courses/getting-started-local-llms/chapter-3-finding-selecting-local-llms/model-sizes-parameters)
@@ -311,7 +311,7 @@ Related findings:
 
 ---
 
-## 8. Synthesis: Architecture Patterns for Hapax Voice
+## 8. Synthesis: Architecture Patterns for Hapax Daimonion
 
 ### 8.1 What the Literature Supports
 

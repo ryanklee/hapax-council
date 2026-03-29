@@ -1,4 +1,4 @@
-# Composition Ladder Status — hapax_voice type system
+# Composition Ladder Status — hapax_daimonion type system
 #
 # Tracks matrix-completion state for each layer.
 # Gate rule: no NEW composition on layer N unless N-1 is matrix-complete.
@@ -25,8 +25,8 @@ layers:
     state: proven
     tests:
       files:
-        - tests/hapax_voice/test_primitives.py::TestStamped  # 9 tests
-        - tests/hapax_voice/test_hypothesis_L0.py  # 5 hypothesis property tests
+        - tests/hapax_daimonion/test_primitives.py::TestStamped  # 9 tests
+        - tests/hapax_daimonion/test_hypothesis_L0.py  # 5 hypothesis property tests
       count: 14
       dimensions: [A, B, C, D, G]
     hypothesis:
@@ -41,12 +41,12 @@ layers:
     state: proven
     tests:
       files:
-        - tests/hapax_voice/test_primitives.py::TestBehavior  # 9 tests
-        - tests/hapax_voice/test_primitives.py::TestEvent  # 7 tests
-        - tests/hapax_voice/test_type_system_matrix_2.py::TestEventLifecycleAndFanOut  # 12 tests
-        - tests/hapax_voice/test_type_system_matrix_6.py::TestBehaviorPerturbation  # 12 tests
-        - tests/hapax_voice/test_hypothesis_L1.py  # 8 hypothesis property tests
-        - tests/hapax_voice/test_consent_threading_L1.py  # 22 tests (18 example + 4 hypothesis)
+        - tests/hapax_daimonion/test_primitives.py::TestBehavior  # 9 tests
+        - tests/hapax_daimonion/test_primitives.py::TestEvent  # 7 tests
+        - tests/hapax_daimonion/test_type_system_matrix_2.py::TestEventLifecycleAndFanOut  # 12 tests
+        - tests/hapax_daimonion/test_type_system_matrix_6.py::TestBehaviorPerturbation  # 12 tests
+        - tests/hapax_daimonion/test_hypothesis_L1.py  # 8 hypothesis property tests
+        - tests/hapax_daimonion/test_consent_threading_L1.py  # 22 tests (18 example + 4 hypothesis)
       count: 70
       dimensions: [A, B, C, D, E, F, G]
     hypothesis:
@@ -67,14 +67,14 @@ layers:
     state: proven
     tests:
       files:
-        - tests/hapax_voice/test_governance.py  # 6 hypothesis + 41 example
-        - tests/hapax_voice/test_type_system_matrix.py::TestImmutabilityBarriers
-        - tests/hapax_voice/test_type_system_matrix.py::TestFreshnessComposition
-        - tests/hapax_voice/test_type_system_matrix_3.py  # error boundaries
-        - tests/hapax_voice/test_type_system_matrix_4.py  # algebraic properties
-        - tests/hapax_voice/test_hypothesis_L2.py  # 7 hypothesis property tests
-        - tests/hapax_voice/test_consent_threading_L2L3.py::TestFusedContextConsent  # 4 tests
-        - tests/hapax_voice/test_consent_threading_L2L3.py::TestConsentVeto  # 7 tests
+        - tests/hapax_daimonion/test_governance.py  # 6 hypothesis + 41 example
+        - tests/hapax_daimonion/test_type_system_matrix.py::TestImmutabilityBarriers
+        - tests/hapax_daimonion/test_type_system_matrix.py::TestFreshnessComposition
+        - tests/hapax_daimonion/test_type_system_matrix_3.py  # error boundaries
+        - tests/hapax_daimonion/test_type_system_matrix_4.py  # algebraic properties
+        - tests/hapax_daimonion/test_hypothesis_L2.py  # 7 hypothesis property tests
+        - tests/hapax_daimonion/test_consent_threading_L2L3.py::TestFusedContextConsent  # 4 tests
+        - tests/hapax_daimonion/test_consent_threading_L2L3.py::TestConsentVeto  # 7 tests
       count: 85+
       dimensions: [A, B, C, D, E, F, G]
     hypothesis:
@@ -96,11 +96,11 @@ layers:
     state: proven
     tests:
       files:
-        - tests/hapax_voice/test_combinator.py::TestWithLatestFrom  # 13 tests
-        - tests/hapax_voice/test_type_system_matrix_5.py  # forward pipeline flow
-        - tests/hapax_voice/test_hypothesis_L3.py  # 5 hypothesis property tests
-        - tests/hapax_voice/test_consent_threading_L2L3.py::TestWithLatestFromConsent  # 6 tests
-        - tests/hapax_voice/test_consent_threading_L2L3.py::TestConsentL2L3Hypothesis  # 3 hypothesis
+        - tests/hapax_daimonion/test_combinator.py::TestWithLatestFrom  # 13 tests
+        - tests/hapax_daimonion/test_type_system_matrix_5.py  # forward pipeline flow
+        - tests/hapax_daimonion/test_hypothesis_L3.py  # 5 hypothesis property tests
+        - tests/hapax_daimonion/test_consent_threading_L2L3.py::TestWithLatestFromConsent  # 6 tests
+        - tests/hapax_daimonion/test_consent_threading_L2L3.py::TestConsentL2L3Hypothesis  # 3 hypothesis
       count: 39
       dimensions: [A, B, C, D, E, F, G]
     hypothesis:
@@ -119,10 +119,10 @@ layers:
     state: proven
     tests:
       files:
-        - tests/hapax_voice/test_commands.py  # 17 tests
-        - tests/hapax_voice/test_type_system_matrix_9.py  # provenance tracing
-        - tests/hapax_voice/test_hypothesis_L4.py  # 6 hypothesis property tests
-        - tests/hapax_voice/test_consent_threading_L4L6.py  # 6 tests
+        - tests/hapax_daimonion/test_commands.py  # 17 tests
+        - tests/hapax_daimonion/test_type_system_matrix_9.py  # provenance tracing
+        - tests/hapax_daimonion/test_hypothesis_L4.py  # 6 hypothesis property tests
+        - tests/hapax_daimonion/test_consent_threading_L4L6.py  # 6 tests
       count: 41
       dimensions: [A, B, C, D, E, F, G]
     hypothesis:
@@ -141,9 +141,9 @@ layers:
     tests:
       files:
         - tests/test_suppression_field.py  # 33 tests
-        - tests/hapax_voice/test_type_system_matrix_8.py  # reconfiguration invariants
+        - tests/hapax_daimonion/test_type_system_matrix_8.py  # reconfiguration invariants
         - tests/test_musical_position.py  # 20 tests (from tests/ root)
-        - tests/hapax_voice/test_hypothesis_L5.py  # 9 hypothesis property tests
+        - tests/hapax_daimonion/test_hypothesis_L5.py  # 9 hypothesis property tests
       count: 74
       dimensions: [A, B, C, D, E, F, G]
     hypothesis:
@@ -162,7 +162,7 @@ layers:
       files:
         - tests/test_arbiter.py  # 29 tests
         - tests/test_executor.py  # 23 tests
-        - tests/hapax_voice/test_hypothesis_L6.py  # 7 hypothesis property tests
+        - tests/hapax_daimonion/test_hypothesis_L6.py  # 7 hypothesis property tests
       count: 59
       dimensions: [A, B, C, D, E, F, G]
     hypothesis:
@@ -177,11 +177,11 @@ layers:
     state: proven
     tests:
       files:
-        - tests/hapax_voice/test_governance_composition.py  # 47 tests (A, B, D, G)
+        - tests/hapax_daimonion/test_governance_composition.py  # 47 tests (A, B, D, G)
         - tests/test_composition_integration.py  # 12 tests (C, E, G)
-        - tests/hapax_voice/test_type_system_matrix_7.py  # convergent pipelines
-        - tests/hapax_voice/test_type_system_matrix_10.py  # feedback/re-entry
-        - tests/hapax_voice/test_hypothesis_L7.py  # 5 hypothesis property tests
+        - tests/hapax_daimonion/test_type_system_matrix_7.py  # convergent pipelines
+        - tests/hapax_daimonion/test_type_system_matrix_10.py  # feedback/re-entry
+        - tests/hapax_daimonion/test_hypothesis_L7.py  # 5 hypothesis property tests
       count: 88
       dimensions: [A, B, C, D, E, F, G]
     hypothesis:
@@ -200,17 +200,17 @@ layers:
     tests:
       files:
         - tests/test_perception.py  # 54 tests
-        - tests/hapax_voice/test_governor.py  # 11 tests
-        - tests/hapax_voice/test_type_system_matrix_11.py  # lifecycle simulation Q1
-        - tests/hapax_voice/test_type_system_matrix_12.py  # multi-path coherence Q2
-        - tests/hapax_voice/test_type_system_matrix_13.py  # adaptive resilience Q3
-        - tests/hapax_voice/test_type_system_matrix_14.py  # degradation & recovery Q4
-        - tests/hapax_voice/test_type_system_matrix_15.py  # accountable evolution Q5
-        - tests/hapax_voice/test_type_system_matrix_16.py  # holistic steady-state Q6
-        - tests/hapax_voice/test_hypothesis_L8.py  # 6 hypothesis property tests
-        - tests/hapax_voice/test_consent_threading_L8L9.py::TestActuationEventConsent  # 3 tests
-        - tests/hapax_voice/test_consent_threading_L8L9.py::TestFrameGateConsentProvenance  # 2 tests
-        - tests/hapax_voice/test_consent_threading_L8L9.py::TestExecutorRegistryConsentPropagation  # 3 tests
+        - tests/hapax_daimonion/test_governor.py  # 11 tests
+        - tests/hapax_daimonion/test_type_system_matrix_11.py  # lifecycle simulation Q1
+        - tests/hapax_daimonion/test_type_system_matrix_12.py  # multi-path coherence Q2
+        - tests/hapax_daimonion/test_type_system_matrix_13.py  # adaptive resilience Q3
+        - tests/hapax_daimonion/test_type_system_matrix_14.py  # degradation & recovery Q4
+        - tests/hapax_daimonion/test_type_system_matrix_15.py  # accountable evolution Q5
+        - tests/hapax_daimonion/test_type_system_matrix_16.py  # holistic steady-state Q6
+        - tests/hapax_daimonion/test_hypothesis_L8.py  # 6 hypothesis property tests
+        - tests/hapax_daimonion/test_consent_threading_L8L9.py::TestActuationEventConsent  # 3 tests
+        - tests/hapax_daimonion/test_consent_threading_L8L9.py::TestFrameGateConsentProvenance  # 2 tests
+        - tests/hapax_daimonion/test_consent_threading_L8L9.py::TestExecutorRegistryConsentPropagation  # 3 tests
       count: 151
       dimensions: [A, B, C, D, E, F, G]
     hypothesis:
@@ -231,13 +231,13 @@ layers:
     state: proven
     tests:
       files:
-        - tests/hapax_voice/test_daemon_lifecycle_matrix.py  # 34 tests (B, D, E, G)
-        - tests/test_hapax_voice_daemon_pipeline.py  # 11 tests (A, C)
-        - tests/hapax_voice/test_e2e_use_case_matrix.py
-        - tests/hapax_voice/test_hypothesis_L9.py  # 4 hypothesis property tests
-        - tests/hapax_voice/test_consent_threading_L8L9.py::TestFeedbackConsentPropagation  # 6 tests
-        - tests/hapax_voice/test_consent_threading_L8L9.py::TestConsentLoopClosure  # 1 test
-        - tests/hapax_voice/test_consent_threading_L8L9.py::TestConsentL8L9Hypothesis  # 3 hypothesis
+        - tests/hapax_daimonion/test_daemon_lifecycle_matrix.py  # 34 tests (B, D, E, G)
+        - tests/test_hapax_daimonion_daemon_pipeline.py  # 11 tests (A, C)
+        - tests/hapax_daimonion/test_e2e_use_case_matrix.py
+        - tests/hapax_daimonion/test_hypothesis_L9.py  # 4 hypothesis property tests
+        - tests/hapax_daimonion/test_consent_threading_L8L9.py::TestFeedbackConsentPropagation  # 6 tests
+        - tests/hapax_daimonion/test_consent_threading_L8L9.py::TestConsentLoopClosure  # 1 test
+        - tests/hapax_daimonion/test_consent_threading_L8L9.py::TestConsentL8L9Hypothesis  # 3 hypothesis
       count: 71
       dimensions: [A, B, C, D, E, F, G]
     hypothesis:
@@ -250,7 +250,7 @@ layers:
       dimensions: [A, B, C]
       notes: "Feedback loop propagates ActuationEvent.consent_label → Behavior updates via join. Closes the IFC loop: perception → FusedContext → Command → ActuationEvent → feedback Behaviors → back to perception. 3 hypothesis properties: passthrough, loop preservation, join commutativity."
 
-# Hypothesis strategy library: tests/hapax_voice/hypothesis_strategies.py
+# Hypothesis strategy library: tests/hapax_daimonion/hypothesis_strategies.py
 # 16 @st.composite strategies building bottom-up (L0→L1→L2→L4→L6, L5→L7, L8)
 #
 # Matrix test files (192 tests across 6 themes + 6 trinary combos):

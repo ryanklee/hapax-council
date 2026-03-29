@@ -2,7 +2,7 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Add 8 function-calling tools to the hapax-voice Pipecat pipeline so the voice assistant can search documents, check calendar, query emails, send SMS, analyze scenes, and report system status.
+**Goal:** Add 8 function-calling tools to the hapax-daimonion Pipecat pipeline so the voice assistant can search documents, check calendar, query emails, send SMS, analyze scenes, and report system status.
 
 **Architecture:** Tools are registered as Pipecat `FunctionSchema` objects on the `OpenAILLMService`, with async handlers in a new `tools.py` module. The LLM decides when to call tools mid-conversation. SMS has a two-step confirmation flow. Guest mode disables all tools.
 
@@ -15,15 +15,15 @@
 ### Task 1: Config additions for tools
 
 **Files:**
-- Modify: `agents/hapax_voice/config.py` (add fields after line ~95)
-- Test: `tests/hapax_voice/test_tools_config.py`
+- Modify: `agents/hapax_daimonion/config.py` (add fields after line ~95)
+- Test: `tests/hapax_daimonion/test_tools_config.py`
 
 **Step 1: Write the failing test**
 
 ```python
-# tests/hapax_voice/test_tools_config.py
+# tests/hapax_daimonion/test_tools_config.py
 """Tests for voice tool config fields."""
-from agents.hapax_voice.config import VoiceConfig
+from agents.hapax_daimonion.config import VoiceConfig
 
 
 def test_tools_enabled_default():
@@ -51,12 +51,12 @@ def test_vision_spontaneous_defaults():
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_tools_config.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_tools_config.py -v`
 Expected: FAIL — missing fields on VoiceConfig
 
 **Step 3: Write minimal implementation**
 
-Add to `agents/hapax_voice/config.py` inside the `VoiceConfig` class, after the observability fields:
+Add to `agents/hapax_daimonion/config.py` inside the `VoiceConfig` class, after the observability fields:
 
 ```python
     # Tools
@@ -75,13 +75,13 @@ Add to `agents/hapax_voice/config.py` inside the `VoiceConfig` class, after the 
 
 **Step 4: Run test to verify it passes**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_tools_config.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_tools_config.py -v`
 Expected: 4 PASSED
 
 **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/config.py tests/hapax_voice/test_tools_config.py
+git add agents/hapax_daimonion/config.py tests/hapax_daimonion/test_tools_config.py
 git commit -m "feat(voice): add tool config fields — SMS gateway, vision, tools toggle"
 ```
 
@@ -90,19 +90,19 @@ git commit -m "feat(voice): add tool config fields — SMS gateway, vision, tool
 ### Task 2: Tool schemas module — `search_documents` and `search_drive`
 
 **Files:**
-- Create: `agents/hapax_voice/tools.py`
-- Test: `tests/hapax_voice/test_tool_schemas.py`
+- Create: `agents/hapax_daimonion/tools.py`
+- Test: `tests/hapax_daimonion/test_tool_schemas.py`
 
 **Step 1: Write the failing test**
 
 ```python
-# tests/hapax_voice/test_tool_schemas.py
+# tests/hapax_daimonion/test_tool_schemas.py
 """Tests for voice tool schema definitions and registration."""
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agents.hapax_voice.tools import get_tool_schemas, TOOL_SCHEMAS
+from agents.hapax_daimonion.tools import get_tool_schemas, TOOL_SCHEMAS
 
 
 def test_tool_schemas_returns_tools_schema():
@@ -139,13 +139,13 @@ def test_all_schemas_have_description():
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_tool_schemas.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_tool_schemas.py -v`
 Expected: FAIL — cannot import `tools`
 
 **Step 3: Write minimal implementation**
 
 ```python
-# agents/hapax_voice/tools.py
+# agents/hapax_daimonion/tools.py
 """Voice assistant tool schemas and handlers for Pipecat function calling.
 
 Defines FunctionSchema objects for each tool and async handlers that execute
@@ -163,7 +163,7 @@ if TYPE_CHECKING:
     from pipecat.services.llm_service import FunctionCallParams
     from pipecat.services.openai.llm import OpenAILLMService
 
-    from agents.hapax_voice.config import VoiceConfig
+    from agents.hapax_daimonion.config import VoiceConfig
 
 log = logging.getLogger(__name__)
 
@@ -233,13 +233,13 @@ def get_tool_schemas(guest_mode: bool = False) -> ToolsSchema | None:
 
 **Step 4: Run test to verify it passes**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_tool_schemas.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_tool_schemas.py -v`
 Expected: 6 PASSED
 
 **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/tools.py tests/hapax_voice/test_tool_schemas.py
+git add agents/hapax_daimonion/tools.py tests/hapax_daimonion/test_tool_schemas.py
 git commit -m "feat(voice): add tool schemas module with search_documents and search_drive"
 ```
 
@@ -248,12 +248,12 @@ git commit -m "feat(voice): add tool schemas module with search_documents and se
 ### Task 3: Add remaining tool schemas (calendar, emails, SMS, vision, status)
 
 **Files:**
-- Modify: `agents/hapax_voice/tools.py`
-- Modify: `tests/hapax_voice/test_tool_schemas.py`
+- Modify: `agents/hapax_daimonion/tools.py`
+- Modify: `tests/hapax_daimonion/test_tool_schemas.py`
 
 **Step 1: Write the failing test**
 
-Add to `tests/hapax_voice/test_tool_schemas.py`:
+Add to `tests/hapax_daimonion/test_tool_schemas.py`:
 
 ```python
 EXPECTED_TOOL_NAMES = [
@@ -291,12 +291,12 @@ def test_confirm_send_sms_requires_confirmation_id():
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_tool_schemas.py::test_all_expected_tools_present -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_tool_schemas.py::test_all_expected_tools_present -v`
 Expected: FAIL — missing schemas
 
 **Step 3: Write minimal implementation**
 
-Add to `agents/hapax_voice/tools.py` before the `TOOL_SCHEMAS` list:
+Add to `agents/hapax_daimonion/tools.py` before the `TOOL_SCHEMAS` list:
 
 ```python
 _get_calendar_today = FunctionSchema(
@@ -412,13 +412,13 @@ TOOL_SCHEMAS: list[FunctionSchema] = [
 
 **Step 4: Run test to verify it passes**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_tool_schemas.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_tool_schemas.py -v`
 Expected: 10 PASSED
 
 **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/tools.py tests/hapax_voice/test_tool_schemas.py
+git add agents/hapax_daimonion/tools.py tests/hapax_daimonion/test_tool_schemas.py
 git commit -m "feat(voice): add all 8 tool schemas — calendar, email, SMS, vision, status"
 ```
 
@@ -427,13 +427,13 @@ git commit -m "feat(voice): add all 8 tool schemas — calendar, email, SMS, vis
 ### Task 4: Implement `search_documents` handler
 
 **Files:**
-- Modify: `agents/hapax_voice/tools.py`
-- Test: `tests/hapax_voice/test_tool_handlers.py`
+- Modify: `agents/hapax_daimonion/tools.py`
+- Test: `tests/hapax_daimonion/test_tool_handlers.py`
 
 **Step 1: Write the failing test**
 
 ```python
-# tests/hapax_voice/test_tool_handlers.py
+# tests/hapax_daimonion/test_tool_handlers.py
 """Tests for voice tool handler implementations."""
 from __future__ import annotations
 
@@ -473,12 +473,12 @@ def mock_fn_params():
 class TestSearchDocumentsHandler:
     @pytest.mark.asyncio
     async def test_basic_search(self, mock_fn_params, mock_qdrant, mock_embed):
-        from agents.hapax_voice.tools import handle_search_documents
+        from agents.hapax_daimonion.tools import handle_search_documents
 
         mock_fn_params.arguments = {"query": "meeting notes"}
 
-        with patch("agents.hapax_voice.tools.get_qdrant", return_value=mock_qdrant), \
-             patch("agents.hapax_voice.tools.embed", mock_embed):
+        with patch("agents.hapax_daimonion.tools.get_qdrant", return_value=mock_qdrant), \
+             patch("agents.hapax_daimonion.tools.embed", mock_embed):
             await handle_search_documents(mock_fn_params)
 
         mock_embed.assert_called_once_with("meeting notes", prefix="search_query")
@@ -490,12 +490,12 @@ class TestSearchDocumentsHandler:
 
     @pytest.mark.asyncio
     async def test_source_filter(self, mock_fn_params, mock_qdrant, mock_embed):
-        from agents.hapax_voice.tools import handle_search_documents
+        from agents.hapax_daimonion.tools import handle_search_documents
 
         mock_fn_params.arguments = {"query": "budget", "source_filter": "gdrive"}
 
-        with patch("agents.hapax_voice.tools.get_qdrant", return_value=mock_qdrant), \
-             patch("agents.hapax_voice.tools.embed", mock_embed):
+        with patch("agents.hapax_daimonion.tools.get_qdrant", return_value=mock_qdrant), \
+             patch("agents.hapax_daimonion.tools.embed", mock_embed):
             await handle_search_documents(mock_fn_params)
 
         call_kwargs = mock_qdrant.query_points.call_args
@@ -504,7 +504,7 @@ class TestSearchDocumentsHandler:
 
     @pytest.mark.asyncio
     async def test_no_results(self, mock_fn_params, mock_embed):
-        from agents.hapax_voice.tools import handle_search_documents
+        from agents.hapax_daimonion.tools import handle_search_documents
 
         mock_fn_params.arguments = {"query": "nonexistent"}
         empty_client = MagicMock()
@@ -512,8 +512,8 @@ class TestSearchDocumentsHandler:
         empty_response.points = []
         empty_client.query_points.return_value = empty_response
 
-        with patch("agents.hapax_voice.tools.get_qdrant", return_value=empty_client), \
-             patch("agents.hapax_voice.tools.embed", mock_embed):
+        with patch("agents.hapax_daimonion.tools.get_qdrant", return_value=empty_client), \
+             patch("agents.hapax_daimonion.tools.embed", mock_embed):
             await handle_search_documents(mock_fn_params)
 
         result = mock_fn_params.result_callback.call_args[0][0]
@@ -521,11 +521,11 @@ class TestSearchDocumentsHandler:
 
     @pytest.mark.asyncio
     async def test_error_handling(self, mock_fn_params):
-        from agents.hapax_voice.tools import handle_search_documents
+        from agents.hapax_daimonion.tools import handle_search_documents
 
         mock_fn_params.arguments = {"query": "test"}
 
-        with patch("agents.hapax_voice.tools.get_qdrant", side_effect=RuntimeError("connection failed")):
+        with patch("agents.hapax_daimonion.tools.get_qdrant", side_effect=RuntimeError("connection failed")):
             await handle_search_documents(mock_fn_params)
 
         result = mock_fn_params.result_callback.call_args[0][0]
@@ -534,12 +534,12 @@ class TestSearchDocumentsHandler:
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_tool_handlers.py::TestSearchDocumentsHandler -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_tool_handlers.py::TestSearchDocumentsHandler -v`
 Expected: FAIL — `handle_search_documents` not found
 
 **Step 3: Write minimal implementation**
 
-Add to `agents/hapax_voice/tools.py`:
+Add to `agents/hapax_daimonion/tools.py`:
 
 ```python
 from qdrant_client.models import FieldCondition, Filter, MatchValue
@@ -595,13 +595,13 @@ async def handle_search_documents(params: FunctionCallParams) -> None:
 
 **Step 4: Run test to verify it passes**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_tool_handlers.py::TestSearchDocumentsHandler -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_tool_handlers.py::TestSearchDocumentsHandler -v`
 Expected: 4 PASSED
 
 **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/tools.py tests/hapax_voice/test_tool_handlers.py
+git add agents/hapax_daimonion/tools.py tests/hapax_daimonion/test_tool_handlers.py
 git commit -m "feat(voice): implement search_documents tool handler with Qdrant search"
 ```
 
@@ -610,12 +610,12 @@ git commit -m "feat(voice): implement search_documents tool handler with Qdrant 
 ### Task 5: Implement `get_calendar_today` handler
 
 **Files:**
-- Modify: `agents/hapax_voice/tools.py`
-- Modify: `tests/hapax_voice/test_tool_handlers.py`
+- Modify: `agents/hapax_daimonion/tools.py`
+- Modify: `tests/hapax_daimonion/test_tool_handlers.py`
 
 **Step 1: Write the failing test**
 
-Add to `tests/hapax_voice/test_tool_handlers.py`:
+Add to `tests/hapax_daimonion/test_tool_handlers.py`:
 
 ```python
 from datetime import datetime, timezone
@@ -624,7 +624,7 @@ from datetime import datetime, timezone
 class TestGetCalendarTodayHandler:
     @pytest.mark.asyncio
     async def test_returns_events(self, mock_fn_params):
-        from agents.hapax_voice.tools import handle_get_calendar_today
+        from agents.hapax_daimonion.tools import handle_get_calendar_today
 
         mock_fn_params.arguments = {}
 
@@ -649,7 +649,7 @@ class TestGetCalendarTodayHandler:
             ]
         }
 
-        with patch("agents.hapax_voice.tools.build_service", return_value=mock_service):
+        with patch("agents.hapax_daimonion.tools.build_service", return_value=mock_service):
             await handle_get_calendar_today(mock_fn_params)
 
         result = mock_fn_params.result_callback.call_args[0][0]
@@ -658,7 +658,7 @@ class TestGetCalendarTodayHandler:
 
     @pytest.mark.asyncio
     async def test_no_events(self, mock_fn_params):
-        from agents.hapax_voice.tools import handle_get_calendar_today
+        from agents.hapax_daimonion.tools import handle_get_calendar_today
 
         mock_fn_params.arguments = {}
 
@@ -669,7 +669,7 @@ class TestGetCalendarTodayHandler:
         mock_events.list.return_value = mock_list
         mock_list.execute.return_value = {"items": []}
 
-        with patch("agents.hapax_voice.tools.build_service", return_value=mock_service):
+        with patch("agents.hapax_daimonion.tools.build_service", return_value=mock_service):
             await handle_get_calendar_today(mock_fn_params)
 
         result = mock_fn_params.result_callback.call_args[0][0]
@@ -677,11 +677,11 @@ class TestGetCalendarTodayHandler:
 
     @pytest.mark.asyncio
     async def test_api_error(self, mock_fn_params):
-        from agents.hapax_voice.tools import handle_get_calendar_today
+        from agents.hapax_daimonion.tools import handle_get_calendar_today
 
         mock_fn_params.arguments = {}
 
-        with patch("agents.hapax_voice.tools.build_service", side_effect=Exception("auth failed")):
+        with patch("agents.hapax_daimonion.tools.build_service", side_effect=Exception("auth failed")):
             await handle_get_calendar_today(mock_fn_params)
 
         result = mock_fn_params.result_callback.call_args[0][0]
@@ -690,12 +690,12 @@ class TestGetCalendarTodayHandler:
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_tool_handlers.py::TestGetCalendarTodayHandler -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_tool_handlers.py::TestGetCalendarTodayHandler -v`
 Expected: FAIL — `handle_get_calendar_today` not found
 
 **Step 3: Write minimal implementation**
 
-Add to `agents/hapax_voice/tools.py`:
+Add to `agents/hapax_daimonion/tools.py`:
 
 ```python
 from datetime import datetime, timedelta, timezone
@@ -758,13 +758,13 @@ async def handle_get_calendar_today(params: FunctionCallParams) -> None:
 
 **Step 4: Run test to verify it passes**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_tool_handlers.py::TestGetCalendarTodayHandler -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_tool_handlers.py::TestGetCalendarTodayHandler -v`
 Expected: 3 PASSED
 
 **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/tools.py tests/hapax_voice/test_tool_handlers.py
+git add agents/hapax_daimonion/tools.py tests/hapax_daimonion/test_tool_handlers.py
 git commit -m "feat(voice): implement get_calendar_today handler with Google Calendar API"
 ```
 
@@ -773,23 +773,23 @@ git commit -m "feat(voice): implement get_calendar_today handler with Google Cal
 ### Task 6: Implement `search_emails` handler
 
 **Files:**
-- Modify: `agents/hapax_voice/tools.py`
-- Modify: `tests/hapax_voice/test_tool_handlers.py`
+- Modify: `agents/hapax_daimonion/tools.py`
+- Modify: `tests/hapax_daimonion/test_tool_handlers.py`
 
 **Step 1: Write the failing test**
 
-Add to `tests/hapax_voice/test_tool_handlers.py`:
+Add to `tests/hapax_daimonion/test_tool_handlers.py`:
 
 ```python
 class TestSearchEmailsHandler:
     @pytest.mark.asyncio
     async def test_qdrant_search_default(self, mock_fn_params, mock_qdrant, mock_embed):
-        from agents.hapax_voice.tools import handle_search_emails
+        from agents.hapax_daimonion.tools import handle_search_emails
 
         mock_fn_params.arguments = {"query": "invoice from Sarah"}
 
-        with patch("agents.hapax_voice.tools.get_qdrant", return_value=mock_qdrant), \
-             patch("agents.hapax_voice.tools.embed", mock_embed):
+        with patch("agents.hapax_daimonion.tools.get_qdrant", return_value=mock_qdrant), \
+             patch("agents.hapax_daimonion.tools.embed", mock_embed):
             await handle_search_emails(mock_fn_params)
 
         # Default mode should use Qdrant
@@ -798,7 +798,7 @@ class TestSearchEmailsHandler:
 
     @pytest.mark.asyncio
     async def test_recent_only_uses_gmail_api(self, mock_fn_params):
-        from agents.hapax_voice.tools import handle_search_emails
+        from agents.hapax_daimonion.tools import handle_search_emails
 
         mock_fn_params.arguments = {"query": "from:sarah", "recent_only": True}
 
@@ -826,7 +826,7 @@ class TestSearchEmailsHandler:
             },
         }
 
-        with patch("agents.hapax_voice.tools.build_service", return_value=mock_service):
+        with patch("agents.hapax_daimonion.tools.build_service", return_value=mock_service):
             await handle_search_emails(mock_fn_params)
 
         result = mock_fn_params.result_callback.call_args[0][0]
@@ -834,7 +834,7 @@ class TestSearchEmailsHandler:
 
     @pytest.mark.asyncio
     async def test_no_results(self, mock_fn_params, mock_embed):
-        from agents.hapax_voice.tools import handle_search_emails
+        from agents.hapax_daimonion.tools import handle_search_emails
 
         mock_fn_params.arguments = {"query": "nonexistent"}
         empty_client = MagicMock()
@@ -842,8 +842,8 @@ class TestSearchEmailsHandler:
         empty_response.points = []
         empty_client.query_points.return_value = empty_response
 
-        with patch("agents.hapax_voice.tools.get_qdrant", return_value=empty_client), \
-             patch("agents.hapax_voice.tools.embed", mock_embed):
+        with patch("agents.hapax_daimonion.tools.get_qdrant", return_value=empty_client), \
+             patch("agents.hapax_daimonion.tools.embed", mock_embed):
             await handle_search_emails(mock_fn_params)
 
         result = mock_fn_params.result_callback.call_args[0][0]
@@ -852,12 +852,12 @@ class TestSearchEmailsHandler:
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_tool_handlers.py::TestSearchEmailsHandler -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_tool_handlers.py::TestSearchEmailsHandler -v`
 Expected: FAIL — `handle_search_emails` not found
 
 **Step 3: Write minimal implementation**
 
-Add to `agents/hapax_voice/tools.py`:
+Add to `agents/hapax_daimonion/tools.py`:
 
 ```python
 _GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
@@ -944,13 +944,13 @@ async def _search_emails_gmail(
 
 **Step 4: Run test to verify it passes**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_tool_handlers.py::TestSearchEmailsHandler -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_tool_handlers.py::TestSearchEmailsHandler -v`
 Expected: 3 PASSED
 
 **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/tools.py tests/hapax_voice/test_tool_handlers.py
+git add agents/hapax_daimonion/tools.py tests/hapax_daimonion/test_tool_handlers.py
 git commit -m "feat(voice): implement search_emails handler with Qdrant + Gmail API fallback"
 ```
 
@@ -959,19 +959,19 @@ git commit -m "feat(voice): implement search_emails handler with Qdrant + Gmail 
 ### Task 7: Implement `send_sms` and `confirm_send_sms` handlers
 
 **Files:**
-- Modify: `agents/hapax_voice/tools.py`
-- Modify: `tests/hapax_voice/test_tool_handlers.py`
+- Modify: `agents/hapax_daimonion/tools.py`
+- Modify: `tests/hapax_daimonion/test_tool_handlers.py`
 - Dependency note: `httpx` is dev-only in pyproject.toml — add to main deps
 
 **Step 1: Write the failing test**
 
-Add to `tests/hapax_voice/test_tool_handlers.py`:
+Add to `tests/hapax_daimonion/test_tool_handlers.py`:
 
 ```python
 class TestSendSmsHandler:
     @pytest.mark.asyncio
     async def test_prepare_sms_returns_confirmation(self, mock_fn_params):
-        from agents.hapax_voice.tools import handle_send_sms, _pending_sms
+        from agents.hapax_daimonion.tools import handle_send_sms, _pending_sms
 
         _pending_sms.clear()
         mock_fn_params.arguments = {"recipient": "Wife", "message": "Running late"}
@@ -979,7 +979,7 @@ class TestSendSmsHandler:
         mock_cfg = MagicMock()
         mock_cfg.sms_contacts = {"Wife": "+15551234567"}
 
-        with patch("agents.hapax_voice.tools._voice_config", mock_cfg):
+        with patch("agents.hapax_daimonion.tools._voice_config", mock_cfg):
             await handle_send_sms(mock_fn_params)
 
         result = mock_fn_params.result_callback.call_args[0][0]
@@ -989,14 +989,14 @@ class TestSendSmsHandler:
 
     @pytest.mark.asyncio
     async def test_unknown_recipient(self, mock_fn_params):
-        from agents.hapax_voice.tools import handle_send_sms
+        from agents.hapax_daimonion.tools import handle_send_sms
 
         mock_fn_params.arguments = {"recipient": "Unknown Person", "message": "Hello"}
 
         mock_cfg = MagicMock()
         mock_cfg.sms_contacts = {"Wife": "+15551234567"}
 
-        with patch("agents.hapax_voice.tools._voice_config", mock_cfg):
+        with patch("agents.hapax_daimonion.tools._voice_config", mock_cfg):
             await handle_send_sms(mock_fn_params)
 
         result = mock_fn_params.result_callback.call_args[0][0]
@@ -1006,7 +1006,7 @@ class TestSendSmsHandler:
 class TestConfirmSendSmsHandler:
     @pytest.mark.asyncio
     async def test_confirm_sends_sms(self, mock_fn_params):
-        from agents.hapax_voice.tools import handle_confirm_send_sms, _pending_sms
+        from agents.hapax_daimonion.tools import handle_confirm_send_sms, _pending_sms
 
         _pending_sms.clear()
         _pending_sms["test-123"] = {
@@ -1020,14 +1020,14 @@ class TestConfirmSendSmsHandler:
         mock_response.status_code = 202
         mock_response.json.return_value = {"state": "Pending"}
 
-        with patch("agents.hapax_voice.tools.httpx") as mock_httpx:
+        with patch("agents.hapax_daimonion.tools.httpx") as mock_httpx:
             mock_httpx.post.return_value = mock_response
             mock_cfg = MagicMock()
             mock_cfg.sms_gateway_host = "192.168.1.42:8080"
             mock_cfg.sms_gateway_user = "user"
             mock_cfg.sms_gateway_pass_key = "sms/pass"
-            with patch("agents.hapax_voice.tools._voice_config", mock_cfg), \
-                 patch("agents.hapax_voice.tools._get_sms_password", return_value="secret"):
+            with patch("agents.hapax_daimonion.tools._voice_config", mock_cfg), \
+                 patch("agents.hapax_daimonion.tools._get_sms_password", return_value="secret"):
                 await handle_confirm_send_sms(mock_fn_params)
 
         result = mock_fn_params.result_callback.call_args[0][0]
@@ -1036,7 +1036,7 @@ class TestConfirmSendSmsHandler:
 
     @pytest.mark.asyncio
     async def test_invalid_confirmation_id(self, mock_fn_params):
-        from agents.hapax_voice.tools import handle_confirm_send_sms, _pending_sms
+        from agents.hapax_daimonion.tools import handle_confirm_send_sms, _pending_sms
 
         _pending_sms.clear()
         mock_fn_params.arguments = {"confirmation_id": "nonexistent"}
@@ -1049,7 +1049,7 @@ class TestConfirmSendSmsHandler:
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_tool_handlers.py::TestSendSmsHandler -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_tool_handlers.py::TestSendSmsHandler -v`
 Expected: FAIL — `handle_send_sms` not found
 
 **Step 3: Add httpx to main dependencies**
@@ -1058,7 +1058,7 @@ In `pyproject.toml`, add `"httpx>=0.28.0"` to the main `dependencies` list (not 
 
 **Step 4: Write minimal implementation**
 
-Add to `agents/hapax_voice/tools.py`:
+Add to `agents/hapax_daimonion/tools.py`:
 
 ```python
 import subprocess
@@ -1177,13 +1177,13 @@ async def handle_confirm_send_sms(params: FunctionCallParams) -> None:
 
 **Step 5: Run test to verify it passes**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_tool_handlers.py::TestSendSmsHandler tests/hapax_voice/test_tool_handlers.py::TestConfirmSendSmsHandler -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_tool_handlers.py::TestSendSmsHandler tests/hapax_daimonion/test_tool_handlers.py::TestConfirmSendSmsHandler -v`
 Expected: 4 PASSED
 
 **Step 6: Commit**
 
 ```bash
-git add agents/hapax_voice/tools.py tests/hapax_voice/test_tool_handlers.py pyproject.toml
+git add agents/hapax_daimonion/tools.py tests/hapax_daimonion/test_tool_handlers.py pyproject.toml
 git commit -m "feat(voice): implement SMS send/confirm handlers with Android SMS Gateway"
 ```
 
@@ -1192,18 +1192,18 @@ git commit -m "feat(voice): implement SMS send/confirm handlers with Android SMS
 ### Task 8: Implement `analyze_scene` handler
 
 **Files:**
-- Modify: `agents/hapax_voice/tools.py`
-- Modify: `tests/hapax_voice/test_tool_handlers.py`
+- Modify: `agents/hapax_daimonion/tools.py`
+- Modify: `tests/hapax_daimonion/test_tool_handlers.py`
 
 **Step 1: Write the failing test**
 
-Add to `tests/hapax_voice/test_tool_handlers.py`:
+Add to `tests/hapax_daimonion/test_tool_handlers.py`:
 
 ```python
 class TestAnalyzeSceneHandler:
     @pytest.mark.asyncio
     async def test_captures_and_analyzes(self, mock_fn_params):
-        from agents.hapax_voice.tools import handle_analyze_scene
+        from agents.hapax_daimonion.tools import handle_analyze_scene
 
         mock_fn_params.arguments = {"question": "What equipment is visible?"}
 
@@ -1220,9 +1220,9 @@ class TestAnalyzeSceneHandler:
         mock_response.choices = [MagicMock()]
         mock_response.choices[0].message.content = "I can see a mixer and two SP-404s"
 
-        with patch("agents.hapax_voice.tools._webcam_capturer", mock_webcam), \
-             patch("agents.hapax_voice.tools._screen_capturer", mock_screen), \
-             patch("agents.hapax_voice.tools._vision_analyze", return_value="I can see a mixer and two SP-404s"):
+        with patch("agents.hapax_daimonion.tools._webcam_capturer", mock_webcam), \
+             patch("agents.hapax_daimonion.tools._screen_capturer", mock_screen), \
+             patch("agents.hapax_daimonion.tools._vision_analyze", return_value="I can see a mixer and two SP-404s"):
             await handle_analyze_scene(mock_fn_params)
 
         result = mock_fn_params.result_callback.call_args[0][0]
@@ -1230,7 +1230,7 @@ class TestAnalyzeSceneHandler:
 
     @pytest.mark.asyncio
     async def test_no_cameras_available(self, mock_fn_params):
-        from agents.hapax_voice.tools import handle_analyze_scene
+        from agents.hapax_daimonion.tools import handle_analyze_scene
 
         mock_fn_params.arguments = {}
 
@@ -1241,8 +1241,8 @@ class TestAnalyzeSceneHandler:
         mock_screen = MagicMock()
         mock_screen.capture.return_value = None
 
-        with patch("agents.hapax_voice.tools._webcam_capturer", mock_webcam), \
-             patch("agents.hapax_voice.tools._screen_capturer", mock_screen):
+        with patch("agents.hapax_daimonion.tools._webcam_capturer", mock_webcam), \
+             patch("agents.hapax_daimonion.tools._screen_capturer", mock_screen):
             await handle_analyze_scene(mock_fn_params)
 
         result = mock_fn_params.result_callback.call_args[0][0]
@@ -1251,12 +1251,12 @@ class TestAnalyzeSceneHandler:
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_tool_handlers.py::TestAnalyzeSceneHandler -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_tool_handlers.py::TestAnalyzeSceneHandler -v`
 Expected: FAIL — `handle_analyze_scene` not found
 
 **Step 3: Write minimal implementation**
 
-Add to `agents/hapax_voice/tools.py`:
+Add to `agents/hapax_daimonion/tools.py`:
 
 ```python
 import os
@@ -1326,13 +1326,13 @@ async def handle_analyze_scene(params: FunctionCallParams) -> None:
 
 **Step 4: Run test to verify it passes**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_tool_handlers.py::TestAnalyzeSceneHandler -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_tool_handlers.py::TestAnalyzeSceneHandler -v`
 Expected: 2 PASSED
 
 **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/tools.py tests/hapax_voice/test_tool_handlers.py
+git add agents/hapax_daimonion/tools.py tests/hapax_daimonion/test_tool_handlers.py
 git commit -m "feat(voice): implement analyze_scene handler with camera capture + Gemini Flash"
 ```
 
@@ -1341,18 +1341,18 @@ git commit -m "feat(voice): implement analyze_scene handler with camera capture 
 ### Task 9: Implement `get_system_status` handler
 
 **Files:**
-- Modify: `agents/hapax_voice/tools.py`
-- Modify: `tests/hapax_voice/test_tool_handlers.py`
+- Modify: `agents/hapax_daimonion/tools.py`
+- Modify: `tests/hapax_daimonion/test_tool_handlers.py`
 
 **Step 1: Write the failing test**
 
-Add to `tests/hapax_voice/test_tool_handlers.py`:
+Add to `tests/hapax_daimonion/test_tool_handlers.py`:
 
 ```python
 class TestGetSystemStatusHandler:
     @pytest.mark.asyncio
     async def test_returns_status_summary(self, mock_fn_params):
-        from agents.hapax_voice.tools import handle_get_system_status
+        from agents.hapax_daimonion.tools import handle_get_system_status
 
         mock_fn_params.arguments = {}
 
@@ -1363,7 +1363,7 @@ class TestGetSystemStatusHandler:
                       message="10GB/24GB used", detail=None),
         ]
 
-        with patch("agents.hapax_voice.tools._run_health_checks", return_value=mock_results):
+        with patch("agents.hapax_daimonion.tools._run_health_checks", return_value=mock_results):
             await handle_get_system_status(mock_fn_params)
 
         result = mock_fn_params.result_callback.call_args[0][0]
@@ -1371,7 +1371,7 @@ class TestGetSystemStatusHandler:
 
     @pytest.mark.asyncio
     async def test_category_filter(self, mock_fn_params):
-        from agents.hapax_voice.tools import handle_get_system_status
+        from agents.hapax_daimonion.tools import handle_get_system_status
 
         mock_fn_params.arguments = {"category": "gpu"}
 
@@ -1380,7 +1380,7 @@ class TestGetSystemStatusHandler:
                       message="10GB/24GB", detail=None),
         ]
 
-        with patch("agents.hapax_voice.tools._run_health_checks", return_value=mock_results):
+        with patch("agents.hapax_daimonion.tools._run_health_checks", return_value=mock_results):
             await handle_get_system_status(mock_fn_params)
 
         result = mock_fn_params.result_callback.call_args[0][0]
@@ -1389,12 +1389,12 @@ class TestGetSystemStatusHandler:
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_tool_handlers.py::TestGetSystemStatusHandler -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_tool_handlers.py::TestGetSystemStatusHandler -v`
 Expected: FAIL — `handle_get_system_status` not found
 
 **Step 3: Write minimal implementation**
 
-Add to `agents/hapax_voice/tools.py`:
+Add to `agents/hapax_daimonion/tools.py`:
 
 ```python
 import asyncio
@@ -1470,13 +1470,13 @@ async def handle_get_system_status(params: FunctionCallParams) -> None:
 
 **Step 4: Run test to verify it passes**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_tool_handlers.py::TestGetSystemStatusHandler -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_tool_handlers.py::TestGetSystemStatusHandler -v`
 Expected: 2 PASSED
 
 **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/tools.py tests/hapax_voice/test_tool_handlers.py
+git add agents/hapax_daimonion/tools.py tests/hapax_daimonion/test_tool_handlers.py
 git commit -m "feat(voice): implement get_system_status handler with health check cache"
 ```
 
@@ -1485,24 +1485,24 @@ git commit -m "feat(voice): implement get_system_status handler with health chec
 ### Task 10: Tool registration function and pipeline integration
 
 **Files:**
-- Modify: `agents/hapax_voice/tools.py` (add `register_tool_handlers`)
-- Modify: `agents/hapax_voice/pipeline.py` (wire tools into pipeline)
-- Test: `tests/hapax_voice/test_tool_registration.py`
+- Modify: `agents/hapax_daimonion/tools.py` (add `register_tool_handlers`)
+- Modify: `agents/hapax_daimonion/pipeline.py` (wire tools into pipeline)
+- Test: `tests/hapax_daimonion/test_tool_registration.py`
 
 **Step 1: Write the failing test**
 
 ```python
-# tests/hapax_voice/test_tool_registration.py
+# tests/hapax_daimonion/test_tool_registration.py
 """Tests for tool registration on the Pipecat LLM service."""
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agents.hapax_voice.config import VoiceConfig
+from agents.hapax_daimonion.config import VoiceConfig
 
 
 def test_register_tool_handlers_calls_register_function():
-    from agents.hapax_voice.tools import register_tool_handlers
+    from agents.hapax_daimonion.tools import register_tool_handlers
 
     mock_llm = MagicMock()
     cfg = VoiceConfig(tools_enabled=True)
@@ -1524,7 +1524,7 @@ def test_register_tool_handlers_calls_register_function():
 
 
 def test_register_skipped_when_tools_disabled():
-    from agents.hapax_voice.tools import register_tool_handlers
+    from agents.hapax_daimonion.tools import register_tool_handlers
 
     mock_llm = MagicMock()
     cfg = VoiceConfig(tools_enabled=False)
@@ -1536,7 +1536,7 @@ def test_register_skipped_when_tools_disabled():
 
 def test_build_pipeline_task_accepts_tools():
     """Verify pipeline.build_pipeline_task signature accepts tools parameter."""
-    from agents.hapax_voice.pipeline import build_pipeline_task
+    from agents.hapax_daimonion.pipeline import build_pipeline_task
     import inspect
 
     sig = inspect.signature(build_pipeline_task)
@@ -1545,12 +1545,12 @@ def test_build_pipeline_task_accepts_tools():
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_tool_registration.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_tool_registration.py -v`
 Expected: FAIL — `register_tool_handlers` not found
 
 **Step 3: Write minimal implementation**
 
-Add to `agents/hapax_voice/tools.py`:
+Add to `agents/hapax_daimonion/tools.py`:
 
 ```python
 def register_tool_handlers(
@@ -1597,7 +1597,7 @@ async def handle_search_drive(params: FunctionCallParams) -> None:
 
 **Step 4: Modify `pipeline.py` to accept and wire tools**
 
-Update `build_pipeline_task` in `agents/hapax_voice/pipeline.py`:
+Update `build_pipeline_task` in `agents/hapax_daimonion/pipeline.py`:
 
 ```python
 def build_pipeline_task(
@@ -1616,7 +1616,7 @@ Add after `llm = _build_llm(...)`:
 
 ```python
     # Register tools
-    from agents.hapax_voice.tools import get_tool_schemas, register_tool_handlers
+    from agents.hapax_daimonion.tools import get_tool_schemas, register_tool_handlers
     tools = get_tool_schemas(guest_mode=guest_mode)
     if config is not None:
         register_tool_handlers(llm, config, webcam_capturer, screen_capturer)
@@ -1634,18 +1634,18 @@ Update `_build_context` call:
 Add import at top of `pipeline.py`:
 
 ```python
-from agents.hapax_voice.config import VoiceConfig
+from agents.hapax_daimonion.config import VoiceConfig
 ```
 
 **Step 5: Run test to verify it passes**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_tool_registration.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_tool_registration.py -v`
 Expected: 3 PASSED
 
 **Step 6: Commit**
 
 ```bash
-git add agents/hapax_voice/tools.py agents/hapax_voice/pipeline.py tests/hapax_voice/test_tool_registration.py
+git add agents/hapax_daimonion/tools.py agents/hapax_daimonion/pipeline.py tests/hapax_daimonion/test_tool_registration.py
 git commit -m "feat(voice): wire tool registration into pipeline — 8 handlers + schema injection"
 ```
 
@@ -1654,15 +1654,15 @@ git commit -m "feat(voice): wire tool registration into pipeline — 8 handlers 
 ### Task 11: Update system prompt for tool awareness
 
 **Files:**
-- Modify: `agents/hapax_voice/persona.py`
-- Test: `tests/hapax_voice/test_persona.py` (if exists, add test; otherwise create)
+- Modify: `agents/hapax_daimonion/persona.py`
+- Test: `tests/hapax_daimonion/test_persona.py` (if exists, add test; otherwise create)
 
 **Step 1: Write the failing test**
 
 ```python
-# tests/hapax_voice/test_tool_persona.py
+# tests/hapax_daimonion/test_tool_persona.py
 """Tests for tool-aware system prompt."""
-from agents.hapax_voice.persona import system_prompt
+from agents.hapax_daimonion.persona import system_prompt
 
 
 def test_operator_prompt_mentions_tools():
@@ -1681,12 +1681,12 @@ def test_guest_prompt_does_not_mention_tools():
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_tool_persona.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_tool_persona.py -v`
 Expected: FAIL — prompt doesn't mention tools yet
 
 **Step 3: Write minimal implementation**
 
-Edit `agents/hapax_voice/persona.py`, replace `_SYSTEM_PROMPT`:
+Edit `agents/hapax_daimonion/persona.py`, replace `_SYSTEM_PROMPT`:
 
 ```python
 _SYSTEM_PROMPT = (
@@ -1707,13 +1707,13 @@ _SYSTEM_PROMPT = (
 
 **Step 4: Run test to verify it passes**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_tool_persona.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_tool_persona.py -v`
 Expected: 2 PASSED
 
 **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/persona.py tests/hapax_voice/test_tool_persona.py
+git add agents/hapax_daimonion/persona.py tests/hapax_daimonion/test_tool_persona.py
 git commit -m "feat(voice): update system prompt with tool capabilities"
 ```
 
@@ -1722,12 +1722,12 @@ git commit -m "feat(voice): update system prompt with tool capabilities"
 ### Task 12: Wire daemon to pass config and capturers to pipeline
 
 **Files:**
-- Modify: `agents/hapax_voice/__main__.py` (~line 212-246, `_start_local_pipeline`)
+- Modify: `agents/hapax_daimonion/__main__.py` (~line 212-246, `_start_local_pipeline`)
 
 **Step 1: Write the failing test**
 
 ```python
-# tests/hapax_voice/test_daemon_tool_wiring.py
+# tests/hapax_daimonion/test_daemon_tool_wiring.py
 """Test that VoiceDaemon passes config and capturers to pipeline."""
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -1737,14 +1737,14 @@ import pytest
 @pytest.mark.asyncio
 async def test_start_local_pipeline_passes_config():
     """Verify _start_local_pipeline passes config, webcam, screen to build_pipeline_task."""
-    with patch("agents.hapax_voice.__main__.build_pipeline_task") as mock_build:
+    with patch("agents.hapax_daimonion.__main__.build_pipeline_task") as mock_build:
         mock_task = MagicMock()
         mock_transport = MagicMock()
         mock_build.return_value = (mock_task, mock_transport)
 
         # Import after patching
-        from agents.hapax_voice.__main__ import VoiceDaemon
-        from agents.hapax_voice.config import VoiceConfig
+        from agents.hapax_daimonion.__main__ import VoiceDaemon
+        from agents.hapax_daimonion.config import VoiceConfig
 
         cfg = VoiceConfig()
         daemon = VoiceDaemon.__new__(VoiceDaemon)
@@ -1760,7 +1760,7 @@ async def test_start_local_pipeline_passes_config():
         daemon.workspace_monitor.webcam_capturer = MagicMock()
         daemon.workspace_monitor.screen_capturer = MagicMock()
 
-        with patch("agents.hapax_voice.__main__.PipelineRunner") as mock_runner_cls:
+        with patch("agents.hapax_daimonion.__main__.PipelineRunner") as mock_runner_cls:
             mock_runner = AsyncMock()
             mock_runner_cls.return_value = mock_runner
             await daemon._start_local_pipeline()
@@ -1772,12 +1772,12 @@ async def test_start_local_pipeline_passes_config():
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_daemon_tool_wiring.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_daemon_tool_wiring.py -v`
 Expected: FAIL — `config` kwarg not passed
 
 **Step 3: Write minimal implementation**
 
-In `agents/hapax_voice/__main__.py`, update `_start_local_pipeline()` to pass config and capturers:
+In `agents/hapax_daimonion/__main__.py`, update `_start_local_pipeline()` to pass config and capturers:
 
 Find the `build_pipeline_task(` call (~line 220) and update to:
 
@@ -1795,13 +1795,13 @@ Find the `build_pipeline_task(` call (~line 220) and update to:
 
 **Step 4: Run test to verify it passes**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_daemon_tool_wiring.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_daemon_tool_wiring.py -v`
 Expected: PASS
 
 **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/__main__.py tests/hapax_voice/test_daemon_tool_wiring.py
+git add agents/hapax_daimonion/__main__.py tests/hapax_daimonion/test_daemon_tool_wiring.py
 git commit -m "feat(voice): pass config and capturers from daemon to pipeline for tool access"
 ```
 
@@ -1814,12 +1814,12 @@ git commit -m "feat(voice): pass config and capturers from daemon to pipeline fo
 
 **Step 1: Run all new tests**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/test_tools_config.py tests/hapax_voice/test_tool_schemas.py tests/hapax_voice/test_tool_handlers.py tests/hapax_voice/test_tool_registration.py tests/hapax_voice/test_tool_persona.py tests/hapax_voice/test_daemon_tool_wiring.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/test_tools_config.py tests/hapax_daimonion/test_tool_schemas.py tests/hapax_daimonion/test_tool_handlers.py tests/hapax_daimonion/test_tool_registration.py tests/hapax_daimonion/test_tool_persona.py tests/hapax_daimonion/test_daemon_tool_wiring.py -v`
 Expected: All PASSED
 
-**Step 2: Run existing hapax_voice tests to verify no regressions**
+**Step 2: Run existing hapax_daimonion tests to verify no regressions**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_voice/ -v --ignore=tests/hapax_voice/test_hardware.py -x`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/hapax_daimonion/ -v --ignore=tests/hapax_daimonion/test_hardware.py -x`
 Expected: All PASSED, no regressions
 
 **Step 3: Fix any failures**
@@ -1859,7 +1859,7 @@ pass insert sms-gateway/password
 
 **Step 4: Update voice config YAML**
 
-Edit `~/.config/hapax-voice/config.yaml`:
+Edit `~/.config/hapax-daimonion/config.yaml`:
 
 ```yaml
 sms_gateway_host: "192.168.1.XX:8080"  # Replace with phone IP
@@ -1884,7 +1884,7 @@ curl -X POST -u hapax:$(pass show sms-gateway/password) \
 **Step 1: Start the voice daemon**
 
 ```bash
-cd ~/projects/ai-agents && uv run python -m agents.hapax_voice --config ~/.config/hapax-voice/config.yaml
+cd ~/projects/ai-agents && uv run python -m agents.hapax_daimonion --config ~/.config/hapax-daimonion/config.yaml
 ```
 
 **Step 2: Test document search**

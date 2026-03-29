@@ -40,7 +40,7 @@ Maps theoretical claims from Clark & Brennan (1991), Traum (1994), and Brennan &
 
 ## Critical Decisions
 
-Numbered decisions from [RESEARCH-STATE.md](../agents/hapax_voice/proofs/RESEARCH-STATE.md#critical-decisions-with-reasoning):
+Numbered decisions from [RESEARCH-STATE.md](../agents/hapax_daimonion/proofs/RESEARCH-STATE.md#critical-decisions-with-reasoning):
 
 | # | Decision | Theoretical Justification |
 |---|----------|--------------------------|
@@ -57,7 +57,7 @@ Numbered decisions from [RESEARCH-STATE.md](../agents/hapax_voice/proofs/RESEARC
 
 ## References
 
-All code paths are relative to `agents/hapax_voice/`:
+All code paths are relative to `agents/hapax_daimonion/`:
 - `grounding_ledger.py` — DU state machine, GQI, effort calibration
 - `grounding_evaluator.py` — Acceptance classification, scoring, RLHF monitoring
 - `conversation_pipeline.py` — ThreadEntry, thread rendering, pipeline integration
@@ -65,7 +65,7 @@ All code paths are relative to `agents/hapax_voice/`:
 - `persona.py` — System prompts (standard, guest, experiment)
 - `env_context.py` — Environmental/perceptual context
 
-All test paths are relative to `tests/hapax_voice/`:
+All test paths are relative to `tests/hapax_daimonion/`:
 - `test_grounding_ledger.py` — Ledger unit tests
 - `test_thread_entry.py` — ThreadEntry and substance extraction
 - `test_conversational_continuity.py` — End-to-end continuity

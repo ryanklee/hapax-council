@@ -45,7 +45,7 @@ This directory contains the formal types and enforcement infrastructure that the
 |---------|-----------|--------|-------|
 | ApperceptionCascade (7-step) | Kohut, ACT, Merleau-Ponty | [`apperception.py`](apperception.py) | 113 cascade matrix tests (step × source × stimmung) + 6 safeguard tests |
 | ApperceptionTick (standalone) | — | [`apperception_tick.py`](apperception_tick.py) | Event wiring tests |
-| Phenomenal context renderer | Husserl, Dreyfus, Gibson | [`../agents/hapax_voice/phenomenal_context.py`](../agents/hapax_voice/phenomenal_context.py) | 18 progressive fidelity tests |
+| Phenomenal context renderer | Husserl, Dreyfus, Gibson | [`../agents/hapax_daimonion/phenomenal_context.py`](../agents/hapax_daimonion/phenomenal_context.py) | 18 progressive fidelity tests |
 
 ### Carrier dynamics (Paper B)
 

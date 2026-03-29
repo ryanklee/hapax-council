@@ -70,7 +70,7 @@ grounding acts. [Full theoretical analysis](posts/2026-03-21-theoretical-foundat
 ## Data
 
 All session data (JSON) is in the
-[proofs directory](https://github.com/ryanklee/hapax-council/tree/main/agents/hapax_voice/proofs).
+[proofs directory](https://github.com/ryanklee/hapax-council/tree/main/agents/hapax_daimonion/proofs).
 
 ## License
 

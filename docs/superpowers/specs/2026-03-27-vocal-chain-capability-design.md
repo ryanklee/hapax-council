@@ -77,7 +77,7 @@ Mapping is piecewise linear interpolation between breakpoints. Each CC has its o
 
 ### MIDI Output
 
-**New module: `agents/hapax_voice/midi_output.py`**
+**New module: `agents/hapax_daimonion/midi_output.py`**
 
 - Wraps `mido.open_output()` with lazy initialization.
 - Configured via `VoiceConfig`: `midi_output_port` (default: empty string = first available), `midi_evil_pet_channel` (default: 0, 0-indexed), `midi_s4_channel` (default: 1).
@@ -91,7 +91,7 @@ Follows fortress daemon pattern exactly:
 
 ```python
 # In voice daemon startup:
-from agents.hapax_voice.vocal_chain import VocalChainCapability, VOCAL_CHAIN_RECORDS
+from agents.hapax_daimonion.vocal_chain import VocalChainCapability, VOCAL_CHAIN_RECORDS
 
 self._vocal_chain = VocalChainCapability(midi_output=self._midi_output)
 
@@ -105,9 +105,9 @@ No interrupt tokens registered — vocal chain is never safety-critical. Pure se
 
 | File | Responsibility |
 |---|---|
-| `agents/hapax_voice/vocal_chain.py` | `VocalChainCapability` class, 9 dimension definitions with CC mappings, `VOCAL_CHAIN_RECORDS` list of `CapabilityRecord`s, hold-and-decay state management |
-| `agents/hapax_voice/midi_output.py` | `MidiOutput` class — thin mido wrapper, lazy port init, graceful degradation |
-| `agents/hapax_voice/config.py` | New fields: `midi_output_port`, `midi_evil_pet_channel`, `midi_s4_channel` |
+| `agents/hapax_daimonion/vocal_chain.py` | `VocalChainCapability` class, 9 dimension definitions with CC mappings, `VOCAL_CHAIN_RECORDS` list of `CapabilityRecord`s, hold-and-decay state management |
+| `agents/hapax_daimonion/midi_output.py` | `MidiOutput` class — thin mido wrapper, lazy port init, graceful degradation |
+| `agents/hapax_daimonion/config.py` | New fields: `midi_output_port`, `midi_evil_pet_channel`, `midi_s4_channel` |
 | `tests/test_vocal_chain.py` | Capability tests: dimension activation, decay over time, CC mapping curves, dimension independence, multi-dimension interaction |
 | `tests/test_midi_output.py` | MIDI output tests: CC sending, channel routing, port unavailable graceful skip |
 

@@ -21,7 +21,7 @@ The **amplitude envelope autocorrelation** is the single strongest discriminator
 
 ## Component 1: Scratch Detection DSP
 
-**File:** `agents/hapax_voice/backends/contact_mic.py`
+**File:** `agents/hapax_daimonion/backends/contact_mic.py`
 
 ### Algorithm
 
@@ -103,7 +103,7 @@ Autocorrelation of a 60-element float array is trivial — ~0.01ms via NumPy `np
 
 ## Component 2: Perception State Export
 
-**File:** `agents/hapax_voice/_perception_state_writer.py`
+**File:** `agents/hapax_daimonion/_perception_state_writer.py`
 
 The perception state writer does **not** automatically export new behaviors. Each must be explicitly added to the state dict (line ~322). Add four lines:
 
@@ -137,7 +137,7 @@ Once in the model, camera profile conditions like `condition="desk_activity=scra
 
 ## Component 4: Flow State Integration
 
-**File:** `agents/hapax_voice/_perception_state_writer.py` (lines 248-283)
+**File:** `agents/hapax_daimonion/_perception_state_writer.py` (lines 248-283)
 
 Flow state is computed **inline in the perception state writer**, NOT via `FlowStateMachine` (which exists in `shared/flow_state.py` but is unused in production). The writer computes `flow_score = base_flow + flow_modifier` where modifiers come from gaze, posture, emotion, gesture, and audio signals.
 
@@ -181,11 +181,11 @@ No code change needed. The audio processor already tags contact mic recordings w
 
 | Action | Path | Scope |
 |--------|------|-------|
-| Edit | `agents/hapax_voice/backends/contact_mic.py` | Add autocorrelation, update classify_activity signature, "scratching" class |
-| Edit | `tests/hapax_voice/test_contact_mic_backend.py` | Add scratch detection tests, update classify_activity call sites |
-| Edit | `agents/hapax_voice/_perception_state_writer.py:322` | Add 4 desk_* behavior exports |
+| Edit | `agents/hapax_daimonion/backends/contact_mic.py` | Add autocorrelation, update classify_activity signature, "scratching" class |
+| Edit | `tests/hapax_daimonion/test_contact_mic_backend.py` | Add scratch detection tests, update classify_activity call sites |
+| Edit | `agents/hapax_daimonion/_perception_state_writer.py:322` | Add 4 desk_* behavior exports |
 | Edit | `agents/studio_compositor.py:303` | Add desk_activity to OverlayData |
-| Edit | `agents/hapax_voice/_perception_state_writer.py:275` | Add desk_activity flow modifier (scratching/drumming/tapping) |
+| Edit | `agents/hapax_daimonion/_perception_state_writer.py:275` | Add desk_activity flow modifier (scratching/drumming/tapping) |
 | Config | `~/.config/hapax-compositor/profiles.yaml` | Add scratching-focus profile |
 
 **Not touched:** `perception.py`, `EnvironmentState`, `multi_mic.py`, `__main__.py` backend registration (already done), `audio_processor.py`

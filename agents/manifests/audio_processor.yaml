@@ -3,7 +3,7 @@ name: Audio Processor
 version: "1.0.0"
 category: interaction
 reports_to: operator
-peers: [hapax_voice, ingest]
+peers: [hapax_daimonion, ingest]
 depends_on: []
 
 purpose: Process ambient audio for the RAG pipeline — transcription, classification, and knowledge extraction from audio sources.

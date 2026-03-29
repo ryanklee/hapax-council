@@ -14,24 +14,24 @@
 
 | File | Action | Responsibility |
 |------|--------|---------------|
-| `agents/hapax_voice/multi_mic.py` | Rewrite | pw-record capture, multi-source noise averaging |
-| `agents/hapax_voice/enrollment.py` | Modify | Add validation phase + stability report |
-| `agents/hapax_voice/config.py` | Modify | Add `noise_ref_room_patterns`, `noise_ref_structure_patterns` |
-| `agents/hapax_voice/__main__.py` | Modify | Pass new config fields to NoiseReference |
-| `agents/hapax_voice/tse_benchmark.py` | Create | Standalone TSE benchmark script |
-| `tests/hapax_voice/test_multi_mic.py` | Create | Tests for multi-source averaging |
-| `tests/hapax_voice/test_enrollment_validation.py` | Create | Tests for enrollment validation math |
+| `agents/hapax_daimonion/multi_mic.py` | Rewrite | pw-record capture, multi-source noise averaging |
+| `agents/hapax_daimonion/enrollment.py` | Modify | Add validation phase + stability report |
+| `agents/hapax_daimonion/config.py` | Modify | Add `noise_ref_room_patterns`, `noise_ref_structure_patterns` |
+| `agents/hapax_daimonion/__main__.py` | Modify | Pass new config fields to NoiseReference |
+| `agents/hapax_daimonion/tse_benchmark.py` | Create | Standalone TSE benchmark script |
+| `tests/hapax_daimonion/test_multi_mic.py` | Create | Tests for multi-source averaging |
+| `tests/hapax_daimonion/test_enrollment_validation.py` | Create | Tests for enrollment validation math |
 
 ---
 
 ### Task 1: Add config fields for noise reference patterns
 
 **Files:**
-- Modify: `agents/hapax_voice/config.py:69-70`
+- Modify: `agents/hapax_daimonion/config.py:69-70`
 
 - [ ] **Step 1: Add noise reference config fields**
 
-In `agents/hapax_voice/config.py`, after line 70 (`contact_mic_source: str = "Contact Microphone"`), add:
+In `agents/hapax_daimonion/config.py`, after line 70 (`contact_mic_source: str = "Contact Microphone"`), add:
 
 ```python
     # Multi-mic noise reference patterns (substring match against PipeWire source names)
@@ -41,14 +41,14 @@ In `agents/hapax_voice/config.py`, after line 70 (`contact_mic_source: str = "Co
 
 - [ ] **Step 2: Verify config loads**
 
-Run: `cd ~/projects/hapax-council && uv run python -c "from agents.hapax_voice.config import VoiceConfig; c = VoiceConfig(); print(c.noise_ref_room_patterns, c.noise_ref_structure_patterns)"`
+Run: `cd ~/projects/hapax-council && uv run python -c "from agents.hapax_daimonion.config import VoiceConfig; c = VoiceConfig(); print(c.noise_ref_room_patterns, c.noise_ref_structure_patterns)"`
 
 Expected: `['HD Pro Webcam C920', 'Logitech BRIO'] ['Contact Microphone']`
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add agents/hapax_voice/config.py
+git add agents/hapax_daimonion/config.py
 git commit -m "feat(voice): add noise_ref_room_patterns and noise_ref_structure_patterns config"
 ```
 
@@ -57,11 +57,11 @@ git commit -m "feat(voice): add noise_ref_room_patterns and noise_ref_structure_
 ### Task 2: Write tests for multi-source noise averaging
 
 **Files:**
-- Create: `tests/hapax_voice/test_multi_mic.py`
+- Create: `tests/hapax_daimonion/test_multi_mic.py`
 
 - [ ] **Step 1: Write test file**
 
-Create `tests/hapax_voice/test_multi_mic.py`:
+Create `tests/hapax_daimonion/test_multi_mic.py`:
 
 ```python
 """Tests for multi-mic noise reference subtraction."""
@@ -83,7 +83,7 @@ class TestApplySubtraction:
     """Test the static spectral subtraction math."""
 
     def test_subtraction_reduces_magnitude(self):
-        from agents.hapax_voice.multi_mic import NoiseReference
+        from agents.hapax_daimonion.multi_mic import NoiseReference
 
         mag = np.array([10.0, 20.0, 30.0])
         noise = np.array([5.0, 10.0, 15.0])
@@ -92,7 +92,7 @@ class TestApplySubtraction:
         np.testing.assert_array_almost_equal(result, expected)
 
     def test_subtraction_floors_at_beta(self):
-        from agents.hapax_voice.multi_mic import NoiseReference
+        from agents.hapax_daimonion.multi_mic import NoiseReference
 
         mag = np.array([10.0, 10.0])
         noise = np.array([100.0, 100.0])  # noise >> signal
@@ -101,14 +101,14 @@ class TestApplySubtraction:
         np.testing.assert_array_almost_equal(result, expected)
 
     def test_subtraction_none_noise_is_passthrough(self):
-        from agents.hapax_voice.multi_mic import NoiseReference
+        from agents.hapax_daimonion.multi_mic import NoiseReference
 
         mag = np.array([10.0, 20.0])
         result = NoiseReference._apply_subtraction(mag, None, alpha=1.5, beta=0.01)
         np.testing.assert_array_equal(result, mag)
 
     def test_subtraction_mismatched_length_is_passthrough(self):
-        from agents.hapax_voice.multi_mic import NoiseReference
+        from agents.hapax_daimonion.multi_mic import NoiseReference
 
         mag = np.array([10.0, 20.0])
         noise = np.array([5.0])  # wrong length
@@ -120,7 +120,7 @@ class TestMultiSourceAveraging:
     """Test that multiple room estimates are averaged correctly."""
 
     def test_averaged_noise_estimate_from_multiple_sources(self):
-        from agents.hapax_voice.multi_mic import NoiseReference
+        from agents.hapax_daimonion.multi_mic import NoiseReference
 
         ref = NoiseReference(room_sources=[], structure_sources=[], sample_rate=16000)
 
@@ -135,7 +135,7 @@ class TestMultiSourceAveraging:
         np.testing.assert_array_almost_equal(avg, expected)
 
     def test_averaged_noise_estimate_single_source(self):
-        from agents.hapax_voice.multi_mic import NoiseReference
+        from agents.hapax_daimonion.multi_mic import NoiseReference
 
         ref = NoiseReference(room_sources=[], structure_sources=[], sample_rate=16000)
         est = np.array([10.0, 20.0])
@@ -145,13 +145,13 @@ class TestMultiSourceAveraging:
         np.testing.assert_array_equal(avg, est)
 
     def test_averaged_noise_estimate_empty(self):
-        from agents.hapax_voice.multi_mic import NoiseReference
+        from agents.hapax_daimonion.multi_mic import NoiseReference
 
         ref = NoiseReference(room_sources=[], structure_sources=[], sample_rate=16000)
         assert ref._averaged_room_estimate() is None
 
     def test_subtract_uses_averaged_room_estimate(self):
-        from agents.hapax_voice.multi_mic import NoiseReference
+        from agents.hapax_daimonion.multi_mic import NoiseReference
 
         ref = NoiseReference(room_sources=[], structure_sources=[], sample_rate=16000)
 
@@ -170,7 +170,7 @@ class TestMultiSourceAveraging:
         assert result != frame
 
     def test_subtract_passthrough_when_no_estimates(self):
-        from agents.hapax_voice.multi_mic import NoiseReference
+        from agents.hapax_daimonion.multi_mic import NoiseReference
 
         ref = NoiseReference(room_sources=[], structure_sources=[], sample_rate=16000)
         frame = _make_pcm_frame(440.0, 16000, 512)
@@ -182,7 +182,7 @@ class TestSourceDiscovery:
     """Test PipeWire source enumeration."""
 
     def test_discover_sources_matches_patterns(self):
-        from agents.hapax_voice.multi_mic import discover_pipewire_sources
+        from agents.hapax_daimonion.multi_mic import discover_pipewire_sources
 
         # Mock pactl output
         pactl_output = (
@@ -198,7 +198,7 @@ class TestSourceDiscovery:
         assert all("C920" in s or "BRIO" in s for s in sources)
 
     def test_discover_sources_no_matches(self):
-        from agents.hapax_voice.multi_mic import discover_pipewire_sources
+        from agents.hapax_daimonion.multi_mic import discover_pipewire_sources
 
         pactl_output = "130\talsa_output.pci-0000_0c_00.4.iec958-stereo.monitor\tPipeWire\n"
         sources = discover_pipewire_sources(["HD Pro Webcam C920"], _pactl_output=pactl_output)
@@ -207,14 +207,14 @@ class TestSourceDiscovery:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_voice/test_multi_mic.py -v 2>&1 | tail -20`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_daimonion/test_multi_mic.py -v 2>&1 | tail -20`
 
 Expected: FAIL — `_room_estimates`, `_averaged_room_estimate`, and `discover_pipewire_sources` don't exist yet.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add tests/hapax_voice/test_multi_mic.py
+git add tests/hapax_daimonion/test_multi_mic.py
 git commit -m "test(voice): add multi-mic noise averaging tests (red)"
 ```
 
@@ -223,11 +223,11 @@ git commit -m "test(voice): add multi-mic noise averaging tests (red)"
 ### Task 3: Rewrite multi_mic.py with pw-record and multi-source averaging
 
 **Files:**
-- Rewrite: `agents/hapax_voice/multi_mic.py`
+- Rewrite: `agents/hapax_daimonion/multi_mic.py`
 
 - [ ] **Step 1: Rewrite multi_mic.py**
 
-Replace the entire contents of `agents/hapax_voice/multi_mic.py` with:
+Replace the entire contents of `agents/hapax_daimonion/multi_mic.py` with:
 
 ```python
 """Multi-microphone noise reference subtraction.
@@ -566,20 +566,20 @@ class NoiseReference:
 
 - [ ] **Step 2: Run tests**
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_voice/test_multi_mic.py -v`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_daimonion/test_multi_mic.py -v`
 
 Expected: All tests PASS.
 
 - [ ] **Step 3: Run ruff**
 
-Run: `cd ~/projects/hapax-council && uv run ruff check agents/hapax_voice/multi_mic.py && uv run ruff format --check agents/hapax_voice/multi_mic.py`
+Run: `cd ~/projects/hapax-council && uv run ruff check agents/hapax_daimonion/multi_mic.py && uv run ruff format --check agents/hapax_daimonion/multi_mic.py`
 
 Expected: Clean.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add agents/hapax_voice/multi_mic.py
+git add agents/hapax_daimonion/multi_mic.py
 git commit -m "feat(voice): rewrite multi_mic.py with pw-record and multi-source averaging"
 ```
 
@@ -588,15 +588,15 @@ git commit -m "feat(voice): rewrite multi_mic.py with pw-record and multi-source
 ### Task 4: Wire new config into __main__.py
 
 **Files:**
-- Modify: `agents/hapax_voice/__main__.py:317-328`
+- Modify: `agents/hapax_daimonion/__main__.py:317-328`
 
 - [ ] **Step 1: Update NoiseReference initialization**
 
-In `agents/hapax_voice/__main__.py`, replace lines 317-328:
+In `agents/hapax_daimonion/__main__.py`, replace lines 317-328:
 
 ```python
         # Multi-mic noise reference (C920 webcam mics as ambient reference)
-        from agents.hapax_voice.multi_mic import NoiseReference
+        from agents.hapax_daimonion.multi_mic import NoiseReference
 
         self._noise_reference = NoiseReference(
             room_sources=[
@@ -613,7 +613,7 @@ With:
 
 ```python
         # Multi-mic noise reference (pw-record capture from all matching sources)
-        from agents.hapax_voice.multi_mic import NoiseReference, discover_pipewire_sources
+        from agents.hapax_daimonion.multi_mic import NoiseReference, discover_pipewire_sources
 
         _room_sources = discover_pipewire_sources(self.cfg.noise_ref_room_patterns)
         _structure_sources = discover_pipewire_sources(self.cfg.noise_ref_structure_patterns)
@@ -633,14 +633,14 @@ With:
 
 - [ ] **Step 2: Verify import works**
 
-Run: `cd ~/projects/hapax-council && uv run python -c "from agents.hapax_voice.multi_mic import NoiseReference, discover_pipewire_sources; print('OK')"`
+Run: `cd ~/projects/hapax-council && uv run python -c "from agents.hapax_daimonion.multi_mic import NoiseReference, discover_pipewire_sources; print('OK')"`
 
 Expected: `OK`
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add agents/hapax_voice/__main__.py
+git add agents/hapax_daimonion/__main__.py
 git commit -m "feat(voice): wire multi-source discovery into daemon startup"
 ```
 
@@ -649,11 +649,11 @@ git commit -m "feat(voice): wire multi-source discovery into daemon startup"
 ### Task 5: Write tests for enrollment validation
 
 **Files:**
-- Create: `tests/hapax_voice/test_enrollment_validation.py`
+- Create: `tests/hapax_daimonion/test_enrollment_validation.py`
 
 - [ ] **Step 1: Write test file**
 
-Create `tests/hapax_voice/test_enrollment_validation.py`:
+Create `tests/hapax_daimonion/test_enrollment_validation.py`:
 
 ```python
 """Tests for enrollment quality validation math."""
@@ -688,7 +688,7 @@ def _similar_vectors(base: np.ndarray, n: int, noise_scale: float = 0.1) -> list
 
 class TestPairwiseSimilarity:
     def test_identical_vectors_have_similarity_one(self):
-        from agents.hapax_voice.enrollment import compute_pairwise_similarity
+        from agents.hapax_daimonion.enrollment import compute_pairwise_similarity
 
         v = _random_unit_vector()
         embeddings = [v, v, v]
@@ -697,7 +697,7 @@ class TestPairwiseSimilarity:
         assert abs(stats["stddev"]) < 0.001
 
     def test_orthogonal_vectors_have_low_similarity(self):
-        from agents.hapax_voice.enrollment import compute_pairwise_similarity
+        from agents.hapax_daimonion.enrollment import compute_pairwise_similarity
 
         dim = 512
         e1 = np.zeros(dim)
@@ -711,7 +711,7 @@ class TestPairwiseSimilarity:
         assert stats["min"] < 0.01
 
     def test_similar_vectors_have_high_mean(self):
-        from agents.hapax_voice.enrollment import compute_pairwise_similarity
+        from agents.hapax_daimonion.enrollment import compute_pairwise_similarity
 
         base = _random_unit_vector()
         embeddings = _similar_vectors(base, 10, noise_scale=0.1)
@@ -720,7 +720,7 @@ class TestPairwiseSimilarity:
         assert stats["stddev"] < 0.15
 
     def test_returns_correct_keys(self):
-        from agents.hapax_voice.enrollment import compute_pairwise_similarity
+        from agents.hapax_daimonion.enrollment import compute_pairwise_similarity
 
         base = _random_unit_vector()
         embeddings = _similar_vectors(base, 5, noise_scale=0.1)
@@ -728,7 +728,7 @@ class TestPairwiseSimilarity:
         assert set(stats.keys()) == {"min", "max", "mean", "stddev"}
 
     def test_two_embeddings(self):
-        from agents.hapax_voice.enrollment import compute_pairwise_similarity
+        from agents.hapax_daimonion.enrollment import compute_pairwise_similarity
 
         base = _random_unit_vector()
         embeddings = _similar_vectors(base, 2, noise_scale=0.1)
@@ -739,7 +739,7 @@ class TestPairwiseSimilarity:
 
 class TestOutlierDetection:
     def test_no_outliers_in_clean_set(self):
-        from agents.hapax_voice.enrollment import detect_outliers
+        from agents.hapax_daimonion.enrollment import detect_outliers
 
         base = _random_unit_vector()
         embeddings = _similar_vectors(base, 10, noise_scale=0.1)
@@ -747,7 +747,7 @@ class TestOutlierDetection:
         assert outliers == []
 
     def test_detects_orthogonal_outlier(self):
-        from agents.hapax_voice.enrollment import detect_outliers
+        from agents.hapax_daimonion.enrollment import detect_outliers
 
         base = _random_unit_vector(dim=512, rng=np.random.default_rng(42))
         good = _similar_vectors(base, 9, noise_scale=0.1)
@@ -762,7 +762,7 @@ class TestOutlierDetection:
 
 class TestThresholdTest:
     def test_all_above_threshold(self):
-        from agents.hapax_voice.enrollment import threshold_test
+        from agents.hapax_daimonion.enrollment import threshold_test
 
         base = _random_unit_vector()
         embeddings = _similar_vectors(base, 10, noise_scale=0.1)
@@ -773,7 +773,7 @@ class TestThresholdTest:
         assert result["min_similarity_to_average"] > 0.60
 
     def test_returns_correct_keys(self):
-        from agents.hapax_voice.enrollment import threshold_test
+        from agents.hapax_daimonion.enrollment import threshold_test
 
         base = _random_unit_vector()
         embeddings = _similar_vectors(base, 5, noise_scale=0.1)
@@ -789,7 +789,7 @@ class TestThresholdTest:
 
 class TestStabilityReport:
     def test_report_written_to_json(self):
-        from agents.hapax_voice.enrollment import write_stability_report
+        from agents.hapax_daimonion.enrollment import write_stability_report
 
         base = _random_unit_vector()
         embeddings = _similar_vectors(base, 10, noise_scale=0.1)
@@ -812,14 +812,14 @@ class TestStabilityReport:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_voice/test_enrollment_validation.py -v 2>&1 | tail -20`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_daimonion/test_enrollment_validation.py -v 2>&1 | tail -20`
 
 Expected: FAIL — `compute_pairwise_similarity`, `detect_outliers`, `threshold_test`, `write_stability_report` don't exist yet.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add tests/hapax_voice/test_enrollment_validation.py
+git add tests/hapax_daimonion/test_enrollment_validation.py
 git commit -m "test(voice): add enrollment validation tests (red)"
 ```
 
@@ -828,11 +828,11 @@ git commit -m "test(voice): add enrollment validation tests (red)"
 ### Task 6: Add validation functions to enrollment.py
 
 **Files:**
-- Modify: `agents/hapax_voice/enrollment.py`
+- Modify: `agents/hapax_daimonion/enrollment.py`
 
 - [ ] **Step 1: Add imports**
 
-In `agents/hapax_voice/enrollment.py`, after the existing imports (after line 22 `import numpy as np`), add:
+In `agents/hapax_daimonion/enrollment.py`, after the existing imports (after line 22 `import numpy as np`), add:
 
 ```python
 import json
@@ -1022,20 +1022,20 @@ In the `main()` function, replace lines 210-229 (from `if not embeddings:` to th
 
 - [ ] **Step 4: Run tests**
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_voice/test_enrollment_validation.py -v`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_daimonion/test_enrollment_validation.py -v`
 
 Expected: All tests PASS.
 
 - [ ] **Step 5: Run ruff**
 
-Run: `cd ~/projects/hapax-council && uv run ruff check agents/hapax_voice/enrollment.py && uv run ruff format --check agents/hapax_voice/enrollment.py`
+Run: `cd ~/projects/hapax-council && uv run ruff check agents/hapax_daimonion/enrollment.py && uv run ruff format --check agents/hapax_daimonion/enrollment.py`
 
 Expected: Clean.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add agents/hapax_voice/enrollment.py
+git add agents/hapax_daimonion/enrollment.py
 git commit -m "feat(voice): add enrollment quality validation with pairwise similarity and outlier detection"
 ```
 
@@ -1044,11 +1044,11 @@ git commit -m "feat(voice): add enrollment quality validation with pairwise simi
 ### Task 7: Create TSE benchmark script
 
 **Files:**
-- Create: `agents/hapax_voice/tse_benchmark.py`
+- Create: `agents/hapax_daimonion/tse_benchmark.py`
 
 - [ ] **Step 1: Write benchmark script**
 
-Create `agents/hapax_voice/tse_benchmark.py`. The script should:
+Create `agents/hapax_daimonion/tse_benchmark.py`. The script should:
 
 1. Define dataclasses `BenchmarkResult` (model, device, frame_size_samples, latency_p50/p95/p99_ms, vram_delta_mb, error) and `BenchmarkReport` (results list, go_recommendation bool, recommended_model, recommended_device, notes list).
 
@@ -1068,7 +1068,7 @@ Create `agents/hapax_voice/tse_benchmark.py`. The script should:
    - Run all 3 benchmarks on cpu + optionally cuda
    - Find best separation model (p95 < 500ms) + best identification model
    - Combined p95 < 500ms = GO, else NO-GO
-   - Save report to `~/.local/share/hapax-voice/tse_benchmark_report.json`
+   - Save report to `~/.local/share/hapax-daimonion/tse_benchmark_report.json`
    - Print summary
 
 5. `if __name__ == "__main__": main()`
@@ -1077,20 +1077,20 @@ The full implementation is in the spec at `docs/superpowers/specs/2026-03-27-mul
 
 - [ ] **Step 2: Verify script is syntactically valid**
 
-Run: `cd ~/projects/hapax-council && uv run python -c "import agents.hapax_voice.tse_benchmark; print('OK')"`
+Run: `cd ~/projects/hapax-council && uv run python -c "import agents.hapax_daimonion.tse_benchmark; print('OK')"`
 
 Expected: `OK`
 
 - [ ] **Step 3: Run ruff**
 
-Run: `cd ~/projects/hapax-council && uv run ruff check agents/hapax_voice/tse_benchmark.py && uv run ruff format --check agents/hapax_voice/tse_benchmark.py`
+Run: `cd ~/projects/hapax-council && uv run ruff check agents/hapax_daimonion/tse_benchmark.py && uv run ruff format --check agents/hapax_daimonion/tse_benchmark.py`
 
 Expected: Clean.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add agents/hapax_voice/tse_benchmark.py
+git add agents/hapax_daimonion/tse_benchmark.py
 git commit -m "feat(voice): add TSE benchmark script (SepFormer + ConvTasNet + ECAPA-TDNN)"
 ```
 
@@ -1124,19 +1124,19 @@ git worktree list."
 
 - [ ] **Step 1: Run new tests**
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_voice/test_multi_mic.py tests/hapax_voice/test_enrollment_validation.py -v`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_daimonion/test_multi_mic.py tests/hapax_daimonion/test_enrollment_validation.py -v`
 
 Expected: All tests PASS.
 
 - [ ] **Step 2: Run ruff on all changed files**
 
-Run: `cd ~/projects/hapax-council && uv run ruff check agents/hapax_voice/multi_mic.py agents/hapax_voice/enrollment.py agents/hapax_voice/config.py agents/hapax_voice/tse_benchmark.py && uv run ruff format --check agents/hapax_voice/multi_mic.py agents/hapax_voice/enrollment.py agents/hapax_voice/config.py agents/hapax_voice/tse_benchmark.py`
+Run: `cd ~/projects/hapax-council && uv run ruff check agents/hapax_daimonion/multi_mic.py agents/hapax_daimonion/enrollment.py agents/hapax_daimonion/config.py agents/hapax_daimonion/tse_benchmark.py && uv run ruff format --check agents/hapax_daimonion/multi_mic.py agents/hapax_daimonion/enrollment.py agents/hapax_daimonion/config.py agents/hapax_daimonion/tse_benchmark.py`
 
 Expected: Clean.
 
 - [ ] **Step 3: Run pyright on changed files**
 
-Run: `cd ~/projects/hapax-council && uv run pyright agents/hapax_voice/multi_mic.py agents/hapax_voice/enrollment.py agents/hapax_voice/config.py`
+Run: `cd ~/projects/hapax-council && uv run pyright agents/hapax_daimonion/multi_mic.py agents/hapax_daimonion/enrollment.py agents/hapax_daimonion/config.py`
 
 Expected: No errors (warnings OK).
 
@@ -1158,7 +1158,7 @@ git push -u origin feat/multi-mic-pipeline
 gh pr create --title "feat(voice): multi-mic pipeline + enrollment validation + TSE benchmark" --body "$(cat <<'PREOF'
 ## Summary
 
-Queue item #013 — three-layer enhancement to the hapax-voice audio pipeline:
+Queue item #013 — three-layer enhancement to the hapax-daimonion audio pipeline:
 
 - **Layer 1:** Replace PyAudio noise reference capture with pw-record subprocesses. Captures from ALL available C920s + BRIO (was only first C920). Eliminates pactl default-source conflict. Multi-source noise estimates averaged before spectral subtraction.
 - **Layer 2:** Add enrollment quality validation — pairwise similarity matrix, outlier detection, threshold testing, stability report saved as JSON.
@@ -1167,9 +1167,9 @@ Queue item #013 — three-layer enhancement to the hapax-voice audio pipeline:
 
 ## Test plan
 
-- [ ] `uv run pytest tests/hapax_voice/test_multi_mic.py tests/hapax_voice/test_enrollment_validation.py -v`
-- [ ] Restart hapax-voice daemon, verify logs show all C920s + BRIO captured
-- [ ] Run `uv run python -m agents.hapax_voice.tse_benchmark` and review report
+- [ ] `uv run pytest tests/hapax_daimonion/test_multi_mic.py tests/hapax_daimonion/test_enrollment_validation.py -v`
+- [ ] Restart hapax-daimonion daemon, verify logs show all C920s + BRIO captured
+- [ ] Run `uv run python -m agents.hapax_daimonion.tse_benchmark` and review report
 - [ ] Run enrollment interactively when operator is available
 PREOF
 )"

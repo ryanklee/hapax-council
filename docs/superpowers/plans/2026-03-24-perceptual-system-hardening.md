@@ -19,7 +19,7 @@
 ### Task 1: Fix `trend()` catastrophic cancellation (C3)
 
 **Files:**
-- Modify: `agents/hapax_voice/perception_ring.py:81-92`
+- Modify: `agents/hapax_daimonion/perception_ring.py:81-92`
 - Test: `tests/test_perception_ring.py` (existing file, add tests)
 
 - [ ] **Step 1: Write failing tests**
@@ -64,7 +64,7 @@ Expected: `_rising` and `_falling` fail with incorrect slopes.
 
 - [ ] **Step 3: Fix trend() — center timestamps**
 
-In `agents/hapax_voice/perception_ring.py`, replace lines 81-92:
+In `agents/hapax_daimonion/perception_ring.py`, replace lines 81-92:
 
 ```python
         # Simple linear regression (slope) with centered timestamps
@@ -96,19 +96,19 @@ Expected: All pass.
 ### Task 2: Fix `Event[T].emit()` subscriber snapshot (H5)
 
 **Files:**
-- Modify: `agents/hapax_voice/primitives.py:127`
-- Test: `tests/hapax_voice/test_primitives.py` (create)
+- Modify: `agents/hapax_daimonion/primitives.py:127`
+- Test: `tests/hapax_daimonion/test_primitives.py` (create)
 
 - [ ] **Step 1: Create test file**
 
-Check where voice tests live: `ls tests/hapax_voice/ 2>/dev/null || mkdir -p tests/hapax_voice`
+Check where voice tests live: `ls tests/hapax_daimonion/ 2>/dev/null || mkdir -p tests/hapax_daimonion`
 
-Create `tests/hapax_voice/test_primitives.py`:
+Create `tests/hapax_daimonion/test_primitives.py`:
 
 ```python
-"""Tests for hapax_voice.primitives — Behavior, Event, Stamped."""
+"""Tests for hapax_daimonion.primitives — Behavior, Event, Stamped."""
 
-from agents.hapax_voice.primitives import Event
+from agents.hapax_daimonion.primitives import Event
 
 
 class TestEventEmit:
@@ -131,16 +131,16 @@ class TestEventEmit:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run pytest tests/hapax_voice/test_primitives.py -v`
+Run: `uv run pytest tests/hapax_daimonion/test_primitives.py -v`
 Expected: FAIL.
 
 - [ ] **Step 3: Fix emit()**
 
-In `agents/hapax_voice/primitives.py`, line 127, change `for cb in self._subscribers:` to `for cb in list(self._subscribers):`.
+In `agents/hapax_daimonion/primitives.py`, line 127, change `for cb in self._subscribers:` to `for cb in list(self._subscribers):`.
 
 - [ ] **Step 4: Run test**
 
-Run: `uv run pytest tests/hapax_voice/test_primitives.py -v`
+Run: `uv run pytest tests/hapax_daimonion/test_primitives.py -v`
 Expected: PASS.
 
 ---
@@ -148,17 +148,17 @@ Expected: PASS.
 ### Task 3: Simplify IGNORE branch (H7) + fix effort hold counter (M5)
 
 **Files:**
-- Modify: `agents/hapax_voice/grounding_ledger.py:170-180,274-275`
-- Test: `tests/hapax_voice/test_grounding_ledger.py` (create)
+- Modify: `agents/hapax_daimonion/grounding_ledger.py:170-180,274-275`
+- Test: `tests/hapax_daimonion/test_grounding_ledger.py` (create)
 
 - [ ] **Step 1: Write failing tests**
 
-Create `tests/hapax_voice/test_grounding_ledger.py`:
+Create `tests/hapax_daimonion/test_grounding_ledger.py`:
 
 ```python
 """Tests for grounding ledger — H7 (IGNORE) and M5 (effort hold)."""
 
-from agents.hapax_voice.grounding_ledger import GroundingLedger
+from agents.hapax_daimonion.grounding_ledger import GroundingLedger
 
 
 class TestIgnoreBranch:
@@ -201,12 +201,12 @@ class TestEffortHoldCounter:
 
 - [ ] **Step 2: Run tests to verify failures**
 
-Run: `uv run pytest tests/hapax_voice/test_grounding_ledger.py -v`
+Run: `uv run pytest tests/hapax_daimonion/test_grounding_ledger.py -v`
 Expected: `test_same_rank_preserves_hold_counter` fails.
 
 - [ ] **Step 3: Fix IGNORE branch**
 
-In `agents/hapax_voice/grounding_ledger.py`, replace lines 170-180:
+In `agents/hapax_daimonion/grounding_ledger.py`, replace lines 170-180:
 
 ```python
         # IGNORE: grounding depends on concern overlap only
@@ -220,7 +220,7 @@ In `agents/hapax_voice/grounding_ledger.py`, replace lines 170-180:
 
 - [ ] **Step 4: Fix effort hold counter**
 
-In `agents/hapax_voice/grounding_ledger.py`, replace lines 274-275 (`else: self._effort_hold_turns = 0`) with:
+In `agents/hapax_daimonion/grounding_ledger.py`, replace lines 274-275 (`else: self._effort_hold_turns = 0`) with:
 
 ```python
         else:
@@ -230,7 +230,7 @@ In `agents/hapax_voice/grounding_ledger.py`, replace lines 274-275 (`else: self.
 
 - [ ] **Step 5: Run tests**
 
-Run: `uv run pytest tests/hapax_voice/test_grounding_ledger.py -v`
+Run: `uv run pytest tests/hapax_daimonion/test_grounding_ledger.py -v`
 Expected: All pass.
 
 ---
@@ -238,7 +238,7 @@ Expected: All pass.
 ### Task 4: Type-safe behavior value access (N3)
 
 **Files:**
-- Modify: `agents/hapax_voice/perception.py:270-273` and all `_bval` callers
+- Modify: `agents/hapax_daimonion/perception.py:270-273` and all `_bval` callers
 
 - [ ] **Step 1: Replace `_bval` with typed accessors**
 
@@ -246,7 +246,7 @@ Replace lines 270-273 with four methods: `_fval`, `_sval`, `_boolval`, `_optval`
 
 - [ ] **Step 2: Update all callers**
 
-Use `grep -n '_bval' agents/hapax_voice/perception.py` to find all sites. Replace each with the appropriate typed accessor:
+Use `grep -n '_bval' agents/hapax_daimonion/perception.py` to find all sites. Replace each with the appropriate typed accessor:
 - `bool(self._bval(...))` → `self._boolval(...)`
 - `str(self._bval(...))` → `self._sval(...)`
 - `int(self._bval(...))` → `int(self._fval(...))`
@@ -254,16 +254,16 @@ Use `grep -n '_bval' agents/hapax_voice/perception.py` to find all sites. Replac
 
 - [ ] **Step 3: Run ruff + tests**
 
-Run: `uv run ruff check agents/hapax_voice/perception.py && uv run pytest tests/ -q --tb=short -x`
+Run: `uv run ruff check agents/hapax_daimonion/perception.py && uv run pytest tests/ -q --tb=short -x`
 Expected: Clean.
 
 - [ ] **Step 4: Commit Batch 1**
 
 ```bash
-git add agents/hapax_voice/perception_ring.py agents/hapax_voice/primitives.py \
-  agents/hapax_voice/grounding_ledger.py agents/hapax_voice/perception.py \
-  tests/test_perception_ring.py tests/hapax_voice/test_primitives.py \
-  tests/hapax_voice/test_grounding_ledger.py
+git add agents/hapax_daimonion/perception_ring.py agents/hapax_daimonion/primitives.py \
+  agents/hapax_daimonion/grounding_ledger.py agents/hapax_daimonion/perception.py \
+  tests/test_perception_ring.py tests/hapax_daimonion/test_primitives.py \
+  tests/hapax_daimonion/test_grounding_ledger.py
 git commit -m "fix: batch 1 — pure function fixes (C3, H5, H7, M5, N3)"
 ```
 
@@ -274,7 +274,7 @@ git commit -m "fix: batch 1 — pure function fixes (C3, H5, H7, M5, N3)"
 ### Task 5: Safe casts + fallback write + deque + circadian (H1, H4, N1)
 
 **Files:**
-- Modify: `agents/hapax_voice/_perception_state_writer.py:32,302-306,366-370`
+- Modify: `agents/hapax_daimonion/_perception_state_writer.py:32,302-306,366-370`
 
 - [ ] **Step 1: Add `_safe_int` and `_safe_float` helpers** after imports.
 - [ ] **Step 2: Replace `int()`/`float()` casts** at lines 302, 304, 305, 366, 368 with safe versions.
@@ -286,7 +286,7 @@ git commit -m "fix: batch 1 — pure function fixes (C3, H5, H7, M5, N3)"
 ### Task 6: Fix `replace_backend` availability check (H2)
 
 **Files:**
-- Modify: `agents/hapax_voice/perception.py:300-313`
+- Modify: `agents/hapax_daimonion/perception.py:300-313`
 
 - [ ] **Step 1: Check availability before stopping old backend** (see spec 3.8).
 - [ ] **Step 2: Run tests.**
@@ -313,7 +313,7 @@ git commit -m "fix: batch 1 — pure function fixes (C3, H5, H7, M5, N3)"
 - [ ] **Step 4: Commit Batch 2**
 
 ```bash
-git add agents/hapax_voice/_perception_state_writer.py agents/hapax_voice/perception.py \
+git add agents/hapax_daimonion/_perception_state_writer.py agents/hapax_daimonion/perception.py \
   agents/visual_layer_aggregator.py shared/stimmung.py tests/test_stimmung.py
 git commit -m "fix: batch 2 — safety and robustness (H1, H2, H4, C2, N1, N2)"
 ```
@@ -411,7 +411,7 @@ git commit -m "fix: batch 5 — separate stance thresholds per dimension class (
 ### Task 13: Snapshot isolation for phenomenal context render (M3)
 
 **Files:**
-- Modify: `agents/hapax_voice/phenomenal_context.py:50-102,348-350`
+- Modify: `agents/hapax_daimonion/phenomenal_context.py:50-102,348-350`
 
 - [ ] **Step 1: Remove module-level cache globals** (lines 348-350).
 - [ ] **Step 2: Add `_read_json(path)` helper.**
@@ -422,7 +422,7 @@ git commit -m "fix: batch 5 — separate stance thresholds per dimension class (
 - [ ] **Step 6: Commit Batch 6**
 
 ```bash
-git add agents/hapax_voice/phenomenal_context.py
+git add agents/hapax_daimonion/phenomenal_context.py
 git commit -m "fix: batch 6 — snapshot isolation for phenomenal context (M3)"
 ```
 

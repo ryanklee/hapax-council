@@ -95,7 +95,7 @@ The following design emerged from collaborative brainstorming. It is preserved a
 - MC mode activates on MIDI Start or manual trigger
 - When inactive, all new components idle (zero resource cost)
 - MC mode and conversation mode mutually exclusive at governor level
-- All new components under `agents/hapax_voice/`
+- All new components under `agents/hapax_daimonion/`
 
 ## The Architectural Question
 

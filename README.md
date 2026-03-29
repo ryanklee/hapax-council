@@ -27,7 +27,7 @@ This project implements grounding mechanics external to the LLM: a discourse uni
 - Cycle 1 (pilot): Complete. 37 sessions, BF=3.66 (inconclusive). Word overlap metric replaced by embedding-based turn-pair coherence.
 - Cycle 2: Implementation complete (Batches 1-4, 76 tests). Pre-registration and OSF registration pending.
 
-See [`research/`](research/) for the research compendium and [`agents/hapax_voice/proofs/`](agents/hapax_voice/proofs/) for theoretical foundations.
+See [`research/`](research/) for the research compendium and [`agents/hapax_daimonion/proofs/`](agents/hapax_daimonion/proofs/) for theoretical foundations.
 
 ## Ecosystem
 
@@ -141,8 +141,8 @@ All services managed by systemd user units (no process-compose in production). S
 
 ```
 hapax-council/
-├── agents/           45+ agents including hapax_voice
-│   └── hapax_voice/  Voice daemon + grounding system + proofs/
+├── agents/           45+ agents including hapax_daimonion
+│   └── hapax_daimonion/  Voice daemon + grounding system + proofs/
 ├── research/         Research compendium (protocols, data, analysis, results)
 ├── lab-journal/      Quarto lab journal (GitHub Pages)
 ├── shared/           83 modules (governance, consent, perception, config)

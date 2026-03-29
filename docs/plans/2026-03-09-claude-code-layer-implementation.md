@@ -53,13 +53,13 @@ Invoke: `cd ~/projects/hapax-council && uv run python -m agents.<name> [flags]`
 | obsidian_sync | No | `--full-sync`, `--auto`, `--stats` |
 | chrome_sync | No | `--full-sync`, `--auto`, `--stats` |
 | audio_processor | No | `--process`, `--stats`, `--reprocess FILE` |
-| hapax_voice | No | `--check`, `--config PATH` (daemon — runs as always-on service) |
+| hapax_daimonion | No | `--check`, `--config PATH` (daemon — runs as always-on service) |
 
 Shared modules: `shared/google_auth.py` (OAuth2 token management for all Google agents), `shared/calendar_context.py` (calendar-aware context for briefing/prep agents).
 ```
 
 Note the changes:
-- Added 8 agents: `research`, `code_review`, `activity_analyzer`, `introspect`, `query`, `ingest`, `health_monitor` (renamed from `system_check`), `hapax_voice`
+- Added 8 agents: `research`, `code_review`, `activity_analyzer`, `introspect`, `query`, `ingest`, `health_monitor` (renamed from `system_check`), `hapax_daimonion`
 - Removed `system_check` (renamed to `health_monitor` long ago)
 - Fixed shared module paths: `shared/` not `agents/shared/`
 
@@ -94,7 +94,7 @@ Replace the timer table with the current actual timers (from `systemctl --user l
 | audio-recorder | Always on | Continuous mic recording (ffmpeg) |
 | audio-processor | Every 30min | Audio segmentation + transcription + RAG |
 | audio-archiver | Daily 03:00 | rclone move raw audio to Google Drive |
-| hapax-voice | Always on | Voice interaction daemon (wake word, presence, TTS/STT) |
+| hapax-daimonion | Always on | Voice interaction daemon (wake word, presence, TTS/STT) |
 | bt-keepalive | Always on | Silent stream to iLoud BT monitors (prevents auto-standby) |
 
 ### Cycle Modes

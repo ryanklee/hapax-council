@@ -261,7 +261,7 @@ No single model exists. Composite signal:
 - PANNs stays in voice daemon (CPU, interrupt gating). CLAP runs in ingestion pipeline (GPU, embeddings). No model conflict.
 - Ingestion pipeline registers as a `PerceptionBackend` via voice daemon's perception engine.
 - Audio sources coexist in PipeWire — multiple readers on same source natively supported.
-- **VRAM lock at `~/.cache/hapax-voice/vram.lock` must be respected** for all GPU model loading.
+- **VRAM lock at `~/.cache/hapax-daimonion/vram.lock` must be respected** for all GPU model loading.
 - Voice daemon's `_normalize_color()` (gray-world for orange lighting) shared with HSEmotion preprocessing.
 
 ### 2. Audio Processor Extension

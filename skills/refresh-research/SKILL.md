@@ -8,7 +8,7 @@ Load the current research state and context documents.
 Step 1 — Read the research state file:
 
 ```bash
-cat ~/projects/hapax-council/agents/hapax_voice/proofs/RESEARCH-STATE.md
+cat ~/projects/hapax-council/agents/hapax_daimonion/proofs/RESEARCH-STATE.md
 ```
 
 Step 2 — Read the research index:
@@ -17,7 +17,7 @@ Step 2 — Read the research index:
 cat ~/projects/hapax-council/research/RESEARCH-INDEX.md
 ```
 
-Step 3 — Based on the state file, identify which tier-2 documents are marked as "active" or "in-progress" and selectively read those (typically under `agents/hapax_voice/proofs/` and `research/`).
+Step 3 — Based on the state file, identify which tier-2 documents are marked as "active" or "in-progress" and selectively read those (typically under `agents/hapax_daimonion/proofs/` and `research/`).
 
 Step 4 — Summarize: current research position, active hypotheses, next steps, and open questions.
 

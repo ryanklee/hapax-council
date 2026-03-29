@@ -49,11 +49,11 @@ Hapax transitions from a collection of independently-triggered systems to a unif
 | # | Deliverable | Design Space | Files | Lines | Depends On |
 |---|------------|-------------|-------|-------|------------|
 | 1.1 | DMN writes impingements.jsonl | DS2 | agents/dmn/__main__.py | ~10 | 0.3, 0.5 |
-| 1.2 | Voice daemon impingement consumer loop | DS2 | agents/hapax_voice/__main__.py | ~40 | 1.1 |
-| 1.3 | Voice daemon instantiates + registers SpeechProductionCapability | DS1 | agents/hapax_voice/__main__.py | ~10 | 0.7 |
-| 1.4 | Cognitive loop polls speech capability | DS1 | agents/hapax_voice/cognitive_loop.py | ~15 | 1.3 |
-| 1.5 | Impingement-to-speech bridge in conversation pipeline | DS1 | agents/hapax_voice/conversation_pipeline.py | ~30 | 1.4 |
-| 1.6 | Voice→DMN anti-correlation flag file | DS5 | agents/hapax_voice/__main__.py, agents/dmn/__main__.py | ~15 | 0.1 |
+| 1.2 | Voice daemon impingement consumer loop | DS2 | agents/hapax_daimonion/__main__.py | ~40 | 1.1 |
+| 1.3 | Voice daemon instantiates + registers SpeechProductionCapability | DS1 | agents/hapax_daimonion/__main__.py | ~10 | 0.7 |
+| 1.4 | Cognitive loop polls speech capability | DS1 | agents/hapax_daimonion/cognitive_loop.py | ~15 | 1.3 |
+| 1.5 | Impingement-to-speech bridge in conversation pipeline | DS1 | agents/hapax_daimonion/conversation_pipeline.py | ~30 | 1.4 |
+| 1.6 | Voice→DMN anti-correlation flag file | DS5 | agents/hapax_daimonion/__main__.py, agents/dmn/__main__.py | ~15 | 0.1 |
 | 1.7 | Fortress reads DMN impingements.jsonl (replace self-generated) | DS2 | agents/fortress/__main__.py | ~20 | 1.1 |
 | 1.8 | Tests for Phase 1 | — | tests/ | ~100 | all above |
 
@@ -91,13 +91,13 @@ Hapax transitions from a collection of independently-triggered systems to a unif
 
 | # | Deliverable | Design Space | Files | Lines | Depends On |
 |---|------------|-------------|-------|-------|------------|
-| 3.1 | PerceptionEngine impingement drain | DS6 | agents/hapax_voice/perception.py | ~20 | 0.3 |
-| 3.2 | Trivial backends emit impingements (5): presence, phone, midi, input, pipewire | DS6 | agents/hapax_voice/backends/*.py | ~80 | 3.1 |
-| 3.3 | Moderate backends emit impingements (6): watch, speech_emotion, attention, health, studio_ingestion, local_llm | DS6 | agents/hapax_voice/backends/*.py | ~240 | 3.1 |
+| 3.1 | PerceptionEngine impingement drain | DS6 | agents/hapax_daimonion/perception.py | ~20 | 0.3 |
+| 3.2 | Trivial backends emit impingements (5): presence, phone, midi, input, pipewire | DS6 | agents/hapax_daimonion/backends/*.py | ~80 | 3.1 |
+| 3.3 | Moderate backends emit impingements (6): watch, speech_emotion, attention, health, studio_ingestion, local_llm | DS6 | agents/hapax_daimonion/backends/*.py | ~240 | 3.1 |
 | 3.4 | ShaderGraphCapability | DS7 | agents/effect_graph/capability.py (NEW) | ~150 | 0.4 |
 | 3.5 | Stimmung→shader modulation bindings | DS7 | agents/effect_graph/ or compositor | ~30 | 3.4 |
 | 3.6 | Register ShaderGraphCapability in compositor | DS7 | agents/studio_compositor.py | ~10 | 3.4 |
-| 3.7 | Perception impingements → JSONL transport | DS6 | agents/hapax_voice/perception.py | ~15 | 3.1, 1.1 |
+| 3.7 | Perception impingements → JSONL transport | DS6 | agents/hapax_daimonion/perception.py | ~15 | 3.1, 1.1 |
 | 3.8 | Tests for Phase 3 | — | tests/ | ~150 | all above |
 
 **Milestone test:** Operator stress rises (watch HR spike + speech_emotion detects frustration) → perception backends emit impingements → DMN absolute threshold fires → cascade broadcasts → ShaderGraphCapability activates with visual_calm (warm, slow, dim) → SpeechProductionCapability activates with verbal check-in → both expression modalities fire simultaneously from the same impingement.
@@ -117,7 +117,7 @@ Hapax transitions from a collection of independently-triggered systems to a unif
 | 4.3 | Thompson Sampling on capability B_i | DS1 | shared/capability_registry.py | ~60 | 1.5 |
 | 4.4 | Correction→activation feedback (dismissal/engagement signals) | DS1 | shared/correction_memory.py | ~80 | 4.3 |
 | 4.5 | Affordance landscape pre-computation in DMN | — | agents/dmn/pulse.py | ~40 | 0.4 |
-| 4.6 | Hard perception backends (vision, devices, hyprland) | DS6 | agents/hapax_voice/backends/*.py | ~200 | 3.1 |
+| 4.6 | Hard perception backends (vision, devices, hyprland) | DS6 | agents/hapax_daimonion/backends/*.py | ~200 | 3.1 |
 | 4.7 | GPU semaphore extension (if VRAM watchdog hits 85%+) | DS5 | shared/gpu_semaphore.py | ~50 | conditional |
 | 4.8 | Systemd service unit for DMN daemon | — | systemd/units/ | ~20 | 0.1 |
 | 4.9 | Tests for Phase 4 | — | tests/ | ~200 | all above |
@@ -136,7 +136,7 @@ Hapax transitions from a collection of independently-triggered systems to a unif
 |---|------------|-------|------------|
 | 5.1 | DF fortress A/B test harness (10 DMN-enriched vs 10 baseline) | agents/fortress/, scripts/ | Phase 1+2 |
 | 5.2 | Metrics: time-to-gap-detection, deliberation action rate, false positive rate | agents/fortress/metrics.py | 5.1 |
-| 5.3 | Voice spontaneous speech appropriateness metric (50 session comparison) | agents/hapax_voice/ | Phase 1+3 |
+| 5.3 | Voice spontaneous speech appropriateness metric (50 session comparison) | agents/hapax_daimonion/ | Phase 1+3 |
 | 5.4 | Visual expression correlation with operator state (stimmung→shader→operator feedback) | agents/effect_graph/ | Phase 3 |
 | 5.5 | Analysis document: impingement cascade vs baseline, per-phase gains | docs/research/ | 5.1-5.4 |
 

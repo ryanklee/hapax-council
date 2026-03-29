@@ -126,7 +126,7 @@ ConsentRegistry (`shared/consent.py`) is fully implemented:
 - `purge_subject(person_id)` — revokes all contracts, retains records for audit
 - `load(contracts_dir)` — reads YAML from `axioms/contracts/`
 
-SpeakerIdentifier (`hapax_voice/speaker_id.py`) already has consent-aware methods: `identify_audio()` and `enroll()` both accept an optional `consent_registry` parameter and will block biometric processing if no active contract exists. But ConsentRegistry is never instantiated in the voice daemon, and `axioms/contracts/` contains only `.gitkeep`.
+SpeakerIdentifier (`hapax_daimonion/speaker_id.py`) already has consent-aware methods: `identify_audio()` and `enroll()` both accept an optional `consent_registry` parameter and will block biometric processing if no active contract exists. But ConsentRegistry is never instantiated in the voice daemon, and `axioms/contracts/` contains only `.gitkeep`.
 
 Nine implications define the axiom's scope: T0 blocks on persistence without consent (it-consent-001, it-consent-002, it-revoke-001), T1 reviews on inspection mechanisms and scope enumeration, T2 advisories on transient environmental perception and audit trails.
 
@@ -309,8 +309,8 @@ The fix is wiring, not redesign:
 
 **Instantiate ResourceArbiter in `__main__.py`:**
 ```python
-from agents.hapax_voice.arbiter import ResourceArbiter
-from agents.hapax_voice.resource_config import DEFAULT_PRIORITIES
+from agents.hapax_daimonion.arbiter import ResourceArbiter
+from agents.hapax_daimonion.resource_config import DEFAULT_PRIORITIES
 
 self.arbiter = ResourceArbiter(priorities=DEFAULT_PRIORITIES)
 ```
@@ -471,7 +471,7 @@ exceptions:
   - id: exc-cb-gemini-live
     axiom_id: corporate_boundary
     implication_id: cb-llm-001
-    component: agents/hapax_voice/gemini_live.py
+    component: agents/hapax_daimonion/gemini_live.py
     reason: "Gemini Live requires native WebSocket audio streaming. LiteLLM has no WebSocket relay transport. Routing through proxy would add ~500ms latency to an audio path with 200ms budget."
     compensating_control: "LiteLLM audit callback (Layer 1) monitors API key usage. Gemini Live session metadata logged to Langfuse via OTel span."
     approved_by: operator

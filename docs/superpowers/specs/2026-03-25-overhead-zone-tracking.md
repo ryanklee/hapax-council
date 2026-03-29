@@ -51,7 +51,7 @@ def point_in_zone(x: int, y: int) -> str:
 
 ## Component 2: Overhead Hand Detection
 
-**File:** `agents/hapax_voice/backends/vision.py`
+**File:** `agents/hapax_daimonion/backends/vision.py`
 
 ### Problem
 
@@ -125,7 +125,7 @@ behaviors["overhead_hand_zones"] = self._b_hand_zones
 
 ## Component 3: Cross-Modal Fusion
 
-**File:** `agents/hapax_voice/backends/vision.py`
+**File:** `agents/hapax_daimonion/backends/vision.py`
 
 ### Where the Fusion Happens
 
@@ -187,7 +187,7 @@ if "mixer" in hand_zones and desk_activity == "tapping":
 
 ## Component 4: Perception State Export
 
-**File:** `agents/hapax_voice/_perception_state_writer.py`
+**File:** `agents/hapax_daimonion/_perception_state_writer.py`
 
 Add to state dict:
 
@@ -210,11 +210,11 @@ overhead_hand_zones: str = ""
 | Action | Path | Scope |
 |--------|------|-------|
 | Edit | `shared/cameras.py` | Add InstrumentZone, OVERHEAD_ZONES, point_in_zone() |
-| Edit | `agents/hapax_voice/backends/vision.py` | Overhead hand zone path, _run_overhead_hand_zones(), set_desk_context(), fusion rules, num_hands=2, new behavior |
-| Edit | `agents/hapax_voice/_perception_state_writer.py` | Export overhead_hand_zones |
+| Edit | `agents/hapax_daimonion/backends/vision.py` | Overhead hand zone path, _run_overhead_hand_zones(), set_desk_context(), fusion rules, num_hands=2, new behavior |
+| Edit | `agents/hapax_daimonion/_perception_state_writer.py` | Export overhead_hand_zones |
 | Edit | `agents/studio_compositor.py` | Add overhead_hand_zones to OverlayData |
 | Create | `tests/test_cameras_zones.py` | InstrumentZone + point_in_zone unit tests |
-| Create | `tests/hapax_voice/test_overhead_zones.py` | Fusion rules + behavior tests |
+| Create | `tests/hapax_daimonion/test_overhead_zones.py` | Fusion rules + behavior tests |
 
 ## Testing
 
