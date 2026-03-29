@@ -701,11 +701,11 @@ class ApperceptionStore:
 
         try:
             client = get_qdrant()
-            results = client.search(
+            results = client.query_points(
                 collection_name=self.COLLECTION_NAME,
-                query_vector=vector,
+                query=vector,
                 limit=limit,
-            )
+            ).points
             return [r.payload for r in results if r.payload]
         except Exception:
             return []
