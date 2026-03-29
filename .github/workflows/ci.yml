@@ -62,13 +62,8 @@ jobs:
         run: |
           # Module-level Agent() creation opens sockets to local services
           # that don't exist in CI, causing pytest to hang indefinitely after
-          # all tests complete. Write a conftest that force-exits the process.
-          cat > tests/conftest.py << 'PYEOF'
-          import os
-          def pytest_sessionfinish(session, exitstatus):
-              """Force-exit after tests complete — prevents hang from open sockets."""
-              os._exit(exitstatus)
-          PYEOF
+          # all tests complete. Force-exit via conftest sessionfinish hook.
+          printf 'import os\ndef pytest_sessionfinish(session, exitstatus):\n    os._exit(exitstatus)\n' > tests/conftest.py
           uv run pytest tests/ -q \
             --ignore=tests/hapax_voice --ignore=tests/contract \
             -m "not llm" -p no:cacheprovider
