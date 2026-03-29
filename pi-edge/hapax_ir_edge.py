@@ -69,35 +69,56 @@ class IrEdgeDaemon:
         self._running = True
         log.info("Starting IR edge daemon: role=%s, target=%s", self._role, self._workstation_url)
 
-        from picamera2 import Picamera2
-
-        picam2 = Picamera2()
-        config = picam2.create_video_configuration(
-            main={"size": (1280, 720)},
-            lores={"size": DEFAULT_CAPTURE_SIZE, "format": "YUV420"},
-            buffer_count=4,
-        )
-        picam2.configure(config)
-        picam2.start()
-        log.info("Camera started at %s", DEFAULT_CAPTURE_SIZE)
-
         loop = asyncio.new_event_loop()
         try:
-            loop.run_until_complete(self._main_loop(picam2))
+            loop.run_until_complete(self._main_loop())
         finally:
-            picam2.stop()
             loop.run_until_complete(self._client.aclose())
             loop.close()
 
-    async def _main_loop(self, picam2) -> None:  # noqa: ANN001
+    def _capture_frame(self) -> np.ndarray:
+        """Capture a single greyscale frame via rpicam-still."""
+        import subprocess
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=True) as f:
+            path = f.name
+
+        subprocess.run(
+            [
+                "rpicam-still",
+                "-o",
+                path,
+                "--immediate",
+                "--width",
+                str(DEFAULT_CAPTURE_SIZE[0]),
+                "--height",
+                str(DEFAULT_CAPTURE_SIZE[1]),
+                "--nopreview",
+                "-n",
+            ],
+            capture_output=True,
+            timeout=10,
+        )
+        import os
+
+        if not os.path.exists(path):
+            return np.zeros(DEFAULT_CAPTURE_SIZE[::-1], dtype=np.uint8)
+        frame = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+        os.unlink(path)
+        if frame is None:
+            return np.zeros(DEFAULT_CAPTURE_SIZE[::-1], dtype=np.uint8)
+        return frame
+
+    async def _main_loop(self) -> None:
         """Main inference + POST loop."""
         last_post = 0.0
+        log.info("Camera capture via rpicam-still at %s", DEFAULT_CAPTURE_SIZE)
 
         while self._running:
             t0 = time.monotonic()
 
-            yuv = picam2.capture_array("lores")
-            grey = yuv[: DEFAULT_CAPTURE_SIZE[1], :]
+            grey = await asyncio.get_event_loop().run_in_executor(None, self._capture_frame)
 
             motion_delta = self._compute_motion(grey)
 
