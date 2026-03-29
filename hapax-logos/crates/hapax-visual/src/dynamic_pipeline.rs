@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use notify::{Event, EventKind, RecommendedWatcher, Watcher};
 use serde::Deserialize;
+use wgpu::util::DeviceExt;
 
 use crate::output::ShmOutput;
 use crate::state::StateReader;
@@ -95,6 +96,7 @@ pub struct DynamicPipeline {
     input_bind_group_layouts: HashMap<usize, wgpu::BindGroupLayout>,
     blit_pipeline: wgpu::RenderPipeline,
     blit_bind_group_layout: wgpu::BindGroupLayout,
+    params_bind_group: wgpu::BindGroup,
     #[allow(dead_code)]
     surface_format: wgpu::TextureFormat,
     width: u32,
@@ -207,6 +209,34 @@ impl DynamicPipeline {
             .watch(&plan_dir, notify::RecursiveMode::NonRecursive)
             .ok();
 
+        // Dummy per-node params UBO (group 2) — 256 bytes of zeros
+        let params_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("per-node params"),
+            contents: &[0u8; 256],
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+        let params_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("per-node params layout"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
+        let params_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("per-node params bg"),
+            layout: &params_bgl,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: params_buffer.as_entire_binding(),
+            }],
+        });
+
         let mut pipeline = Self {
             passes: Vec::new(),
             textures: HashMap::new(),
@@ -220,6 +250,7 @@ impl DynamicPipeline {
             input_bind_group_layouts: HashMap::new(),
             blit_pipeline,
             blit_bind_group_layout,
+            params_bind_group,
             surface_format,
             width,
             height,
@@ -358,12 +389,34 @@ impl DynamicPipeline {
 
                 let input_bgl = Self::get_or_create_input_layout(device, input_count, &mut input_layouts);
 
-                // Use auto-derived layout from shader to match transpiled bindings exactly.
-                // The shader declares its own bind groups (0=uniforms, 1=textures, 2=params).
+                // Explicit layout: group 0 = uniforms, group 1 = textures, group 2 = per-node params UBO
+                let params_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("per-node params"),
+                    entries: &[wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    }],
+                });
+                let pipeline_layout =
+                    device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                        label: Some(&format!("{} layout", plan_pass.node_id)),
+                        bind_group_layouts: &[
+                            &self.uniform_buffer.bind_group_layout,
+                            &input_bgl,
+                            &params_bgl,
+                        ],
+                        push_constant_ranges: &[],
+                    });
                 let render_pipeline =
                     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                         label: Some(&plan_pass.node_id),
-                        layout: None,
+                        layout: Some(&pipeline_layout),
                         vertex: wgpu::VertexState {
                             module: &self.vertex_module,
                             entry_point: Some("vs_main"),
@@ -390,24 +443,12 @@ impl DynamicPipeline {
                         cache: None,
                     });
 
-                // Get auto-derived bind group layouts and create matching bind groups
-                let derived_uniform_layout = render_pipeline.get_bind_group_layout(0);
-                let uniform_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some(&format!("{} uniforms bg", plan_pass.node_id)),
-                    layout: &derived_uniform_layout,
-                    entries: &[wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: self.uniform_buffer.buffer.as_entire_binding(),
-                    }],
-                });
-                let derived_input_layout = render_pipeline.get_bind_group_layout(1);
-
                 new_passes.push(DynamicPass {
                     node_id: plan_pass.node_id.clone(),
                     render_pipeline: Some(render_pipeline),
                     compute_pipeline: None,
-                    uniform_bind_group: Some(uniform_bg),
-                    input_bind_group_layout: Some(derived_input_layout),
+                    uniform_bind_group: None,
+                    input_bind_group_layout: None,
                     inputs: plan_pass.inputs.clone(),
                     output: plan_pass.output.clone(),
                     steps_per_frame: plan_pass.steps_per_frame,
@@ -483,12 +524,7 @@ impl DynamicPipeline {
         // Execute each pass
         for pass in &self.passes {
             if let Some(ref render_pipeline) = pass.render_pipeline {
-                // Resolve input texture views using per-pipeline derived layout
-                let input_bind_group = if let Some(ref derived_layout) = pass.input_bind_group_layout {
-                    self.create_input_bind_group_with_layout(device, &pass.inputs, derived_layout)
-                } else {
-                    self.create_input_bind_group(device, &pass.inputs)
-                };
+                let input_bind_group = self.create_input_bind_group(device, &pass.inputs);
 
                 // Resolve output texture view
                 let output_view = match self.textures.get(&pass.output) {
@@ -511,13 +547,9 @@ impl DynamicPipeline {
                 });
 
                 rpass.set_pipeline(render_pipeline);
-                // Use per-pipeline uniform bind group (derived from shader layout)
-                if let Some(ref ubg) = pass.uniform_bind_group {
-                    rpass.set_bind_group(0, ubg, &[]);
-                } else {
-                    rpass.set_bind_group(0, &self.uniform_buffer.bind_group, &[]);
-                }
+                rpass.set_bind_group(0, &self.uniform_buffer.bind_group, &[]);
                 rpass.set_bind_group(1, &input_bind_group, &[]);
+                rpass.set_bind_group(2, &self.params_bind_group, &[]);
                 rpass.draw(0..3, 0..1);
             } else if let Some(ref compute_pipeline) = pass.compute_pipeline {
                 let input_bind_group = self.create_input_bind_group(device, &pass.inputs);
