@@ -300,14 +300,12 @@ def test_dmn_extinction_risk():
 
 
 def test_tpn_active_signal_on_phase_transition():
-    """Cognitive loop signals DMN when TPN transitions active↔idle."""
-    from unittest.mock import MagicMock
+    """Cognitive loop writes TPN signal when transitioning to active/idle phases."""
+    from unittest.mock import MagicMock, patch
 
     from agents.hapax_daimonion.cognitive_loop import CognitiveLoop, TurnPhase
 
-    mock_daemon = MagicMock()
     loop = MagicMock()
-    loop._daemon = mock_daemon
     loop._mutual_silence_start = 0.0
     loop._wind_down_sent = False
     loop._last_operator_speaking_at = 0.0
@@ -317,26 +315,24 @@ def test_tpn_active_signal_on_phase_transition():
 
     handler = CognitiveLoop._on_phase_transition
 
-    # MUTUAL_SILENCE → OPERATOR_SPEAKING should signal active
-    handler(loop, TurnPhase.MUTUAL_SILENCE, TurnPhase.OPERATOR_SPEAKING)
-    mock_daemon._signal_tpn_active.assert_called_once_with(True)
+    with patch("agents.hapax_daimonion.cognitive_loop.write_tpn_active") as mock_write:
+        # MUTUAL_SILENCE → TRANSITION should signal active
+        handler(loop, TurnPhase.MUTUAL_SILENCE, TurnPhase.TRANSITION)
+        mock_write.assert_called_once_with(True)
 
-    mock_daemon.reset_mock()
+    with patch("agents.hapax_daimonion.cognitive_loop.write_tpn_active") as mock_write:
+        # HAPAX_SPEAKING → MUTUAL_SILENCE should signal idle
+        handler(loop, TurnPhase.HAPAX_SPEAKING, TurnPhase.MUTUAL_SILENCE)
+        mock_write.assert_called_once_with(False)
 
-    # HAPAX_SPEAKING → MUTUAL_SILENCE should signal idle
-    handler(loop, TurnPhase.HAPAX_SPEAKING, TurnPhase.MUTUAL_SILENCE)
-    mock_daemon._signal_tpn_active.assert_called_once_with(False)
 
-
-def test_tpn_signal_not_called_within_active_phases():
-    """No signal when transitioning between active phases."""
-    from unittest.mock import MagicMock
+def test_tpn_signal_not_called_active_to_active():
+    """TPN stays active when transitioning between active phases."""
+    from unittest.mock import MagicMock, patch
 
     from agents.hapax_daimonion.cognitive_loop import CognitiveLoop, TurnPhase
 
-    mock_daemon = MagicMock()
     loop = MagicMock()
-    loop._daemon = mock_daemon
     loop._mutual_silence_start = 0.0
     loop._wind_down_sent = False
     loop._last_operator_speaking_at = 0.0
@@ -344,18 +340,19 @@ def test_tpn_signal_not_called_within_active_phases():
     loop._response_start_at = 0.0
     loop._model = None
 
-    CognitiveLoop._on_phase_transition(loop, TurnPhase.OPERATOR_SPEAKING, TurnPhase.TRANSITION)
-    mock_daemon._signal_tpn_active.assert_not_called()
+    with patch("agents.hapax_daimonion.cognitive_loop.write_tpn_active") as mock_write:
+        # TRANSITION → HAPAX_SPEAKING: both active, signal stays True
+        CognitiveLoop._on_phase_transition(loop, TurnPhase.TRANSITION, TurnPhase.HAPAX_SPEAKING)
+        mock_write.assert_called_once_with(True)
 
 
-def test_tpn_signal_graceful_without_daemon():
-    """Phase transition doesn't crash when _daemon is not wired."""
-    from unittest.mock import MagicMock
+def test_tpn_signal_idle_phases():
+    """TPN signals idle for non-processing phases."""
+    from unittest.mock import MagicMock, patch
 
     from agents.hapax_daimonion.cognitive_loop import CognitiveLoop, TurnPhase
 
     loop = MagicMock()
-    loop._daemon = None
     loop._mutual_silence_start = 0.0
     loop._wind_down_sent = False
     loop._last_operator_speaking_at = 0.0
@@ -363,7 +360,14 @@ def test_tpn_signal_graceful_without_daemon():
     loop._response_start_at = 0.0
     loop._model = None
 
-    CognitiveLoop._on_phase_transition(loop, TurnPhase.MUTUAL_SILENCE, TurnPhase.OPERATOR_SPEAKING)
+    for to_phase in (
+        TurnPhase.MUTUAL_SILENCE,
+        TurnPhase.OPERATOR_SPEAKING,
+        TurnPhase.OPERATOR_PAUSING,
+    ):
+        with patch("agents.hapax_daimonion.cognitive_loop.write_tpn_active") as mock_write:
+            CognitiveLoop._on_phase_transition(loop, TurnPhase.TRANSITION, to_phase)
+            mock_write.assert_called_once_with(False)
 
 
 # ── Speech capability recruitment ────────────────────────────────────────────
