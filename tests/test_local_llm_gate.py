@@ -11,7 +11,7 @@ from agents.hapax_daimonion.backends.local_llm import LocalLLMBackend
 class TestLocalLLMBackend:
     def test_model_is_qwen3(self):
         backend = LocalLLMBackend()
-        assert backend._model == "qwen3:4b"
+        assert backend._model == "qwen3.5:4b"
 
     def test_parse_valid_response(self):
         result = LocalLLMBackend._parse_response(

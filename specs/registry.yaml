@@ -905,7 +905,7 @@ systems:
     name: Latency Contracts
     heartbeat: "per-classification (10-12s slow tick)"
     description: >
-      Local LLM (qwen3:4b) classifies activity/flow from perception
+      Local LLM (qwen3.5:4b) classifies activity/flow from perception
       signals. When confident, skips the 2-5s Gemini Flash cloud call.
       Self-tunes confidence threshold from disagreement history.
 
