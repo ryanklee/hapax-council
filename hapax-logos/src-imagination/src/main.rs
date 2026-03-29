@@ -16,6 +16,7 @@ use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::{Window, WindowId};
 
+use hapax_visual::content_textures::ContentTextureManager;
 use hapax_visual::dynamic_pipeline::DynamicPipeline;
 use hapax_visual::gpu::GpuContext;
 use hapax_visual::state::StateReader;
@@ -36,6 +37,7 @@ struct ImaginationApp {
     gpu: Option<GpuContext>,
 
     dynamic_pipeline: Option<DynamicPipeline>,
+    content_textures: Option<ContentTextureManager>,
     state_reader: StateReader,
 
     start_time: Instant,
@@ -53,6 +55,7 @@ impl ImaginationApp {
             window_state: WindowState::load(),
             gpu: None,
             dynamic_pipeline: None,
+            content_textures: None,
             state_reader: StateReader::new(),
             start_time: Instant::now(),
             last_frame: Instant::now(),
@@ -183,6 +186,11 @@ impl ImaginationApp {
 
         self.state_reader.poll(dt);
 
+        if let Some(ct) = &mut self.content_textures {
+            ct.poll(&gpu.queue);
+            ct.tick_fades(dt);
+        }
+
         let output = match gpu.surface.get_current_texture() {
             Ok(t) => t,
             Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => return,
@@ -197,6 +205,7 @@ impl ImaginationApp {
             .create_view(&wgpu::TextureViewDescriptor::default());
 
         if let Some(pipeline) = &mut self.dynamic_pipeline {
+            let opacities = self.content_textures.as_ref().map(|ct| ct.slot_opacities()).unwrap_or([0.0; 4]);
             pipeline.render(
                 &gpu.device,
                 &gpu.queue,
@@ -205,6 +214,8 @@ impl ImaginationApp {
                 &self.state_reader,
                 dt,
                 time,
+                opacities,
+                self.content_textures.as_ref(),
             );
         }
 
@@ -284,10 +295,12 @@ impl ApplicationHandler for ImaginationApp {
         let h = size.height.max(1);
 
         let dynamic_pipeline = DynamicPipeline::new(&gpu.device, &gpu.queue, w, h, gpu.format);
+        let content_textures = ContentTextureManager::new(&gpu.device, &gpu.queue);
 
         self.window = Some(window.clone());
         self.gpu = Some(gpu);
         self.dynamic_pipeline = Some(dynamic_pipeline);
+        self.content_textures = Some(content_textures);
 
         log::info!("Visual surface initialized ({}x{})", w, h);
         window.request_redraw();

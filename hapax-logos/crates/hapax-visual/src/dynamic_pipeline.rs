@@ -12,6 +12,7 @@ use notify::{Event, EventKind, RecommendedWatcher, Watcher};
 use serde::Deserialize;
 use wgpu::util::DeviceExt;
 
+use crate::content_textures::ContentTextureManager;
 use crate::output::ShmOutput;
 use crate::state::StateReader;
 use crate::uniform_buffer::UniformBuffer;
@@ -512,12 +513,16 @@ impl DynamicPipeline {
         state_reader: &StateReader,
         dt: f32,
         time: f32,
+        content_slot_opacities: [f32; 4],
+        content_textures: Option<&ContentTextureManager>,
     ) {
         self.try_reload(device);
 
         // Build uniform data from state
         let mut uniform_data =
             UniformBuffer::from_state(state_reader, time, dt, self.width, self.height);
+
+        uniform_data.slot_opacities = content_slot_opacities;
 
         // Apply uniforms.json overrides
         if let Ok(data) = std::fs::read_to_string(UNIFORMS_JSON) {
@@ -563,7 +568,7 @@ impl DynamicPipeline {
         // Execute each pass
         for pass in &self.passes {
             if let Some(ref render_pipeline) = pass.render_pipeline {
-                let input_bind_group = self.create_input_bind_group(device, &pass.inputs);
+                let input_bind_group = self.create_input_bind_group(device, &pass.inputs, content_textures);
 
                 // Resolve output texture view
                 let output_view = match self.textures.get(&pass.output) {
@@ -593,7 +598,7 @@ impl DynamicPipeline {
                 }
                 rpass.draw(0..3, 0..1);
             } else if let Some(ref compute_pipeline) = pass.compute_pipeline {
-                let input_bind_group = self.create_input_bind_group(device, &pass.inputs);
+                let input_bind_group = self.create_input_bind_group(device, &pass.inputs, content_textures);
                 let storage_bind_group =
                     self.create_storage_bind_group(device, &pass.output);
 
@@ -781,6 +786,7 @@ impl DynamicPipeline {
         &self,
         device: &wgpu::Device,
         inputs: &[String],
+        content_textures: Option<&ContentTextureManager>,
     ) -> wgpu::BindGroup {
         let input_count = inputs.len();
 
@@ -797,12 +803,21 @@ impl DynamicPipeline {
         let mut entries: Vec<wgpu::BindGroupEntry> = Vec::new();
 
         // Alternating texture/sampler pairs matching transpiler convention
-        let count = inputs.len().max(1);
+        let _count = inputs.len().max(1);
         for (i, name) in inputs.iter().enumerate() {
-            let view = self.textures.get(name)
-                .or_else(|| self.textures.get("final"))
-                .map(|t| &t.view)
-                .unwrap();
+            let view = if name.starts_with("content_slot_") {
+                let idx: usize = name.strip_prefix("content_slot_")
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0);
+                content_textures
+                    .map(|ct| ct.slot_view(idx))
+                    .unwrap_or_else(|| self.textures.get("final").map(|t| &t.view).unwrap())
+            } else {
+                self.textures.get(name)
+                    .or_else(|| self.textures.get("final"))
+                    .map(|t| &t.view)
+                    .unwrap()
+            };
             entries.push(wgpu::BindGroupEntry {
                 binding: (i * 2) as u32,
                 resource: wgpu::BindingResource::TextureView(view),
