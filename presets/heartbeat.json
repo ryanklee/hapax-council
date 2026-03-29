@@ -1,1 +1,72 @@
-{"name":"Heartbeat","description":"Breathing and drift","transition_ms":500,"nodes":{"breathing":{"type":"breathing","params":{"rate":1.0,"amplitude":0.02}},"drift":{"type":"drift","params":{"speed":0.3,"amplitude":8}},"bloom":{"type":"bloom","params":{"threshold":0.4,"radius":10,"alpha":0.25}},"out":{"type":"output","params":{}}},"edges":[["@live","breathing"],["breathing","drift"],["drift","bloom"],["bloom","out"]],"modulations":[],"layer_palettes":{}}
+{
+  "name": "Heartbeat",
+  "description": "Breathing and drift",
+  "transition_ms": 500,
+  "nodes": {
+    "breathing": {
+      "type": "breathing",
+      "params": {
+        "rate": 1.0,
+        "amplitude": 0.02
+      }
+    },
+    "drift": {
+      "type": "drift",
+      "params": {
+        "speed": 0.3,
+        "amplitude": 8
+      }
+    },
+    "bloom": {
+      "type": "bloom",
+      "params": {
+        "threshold": 0.4,
+        "radius": 10,
+        "alpha": 0.25
+      }
+    },
+    "out": {
+      "type": "output",
+      "params": {}
+    },
+    "content_layer": {
+      "type": "content_layer",
+      "params": {}
+    },
+    "postprocess": {
+      "type": "postprocess",
+      "params": {
+        "vignette_strength": 0.3,
+        "sediment_strength": 0.1
+      }
+    }
+  },
+  "edges": [
+    [
+      "@live",
+      "breathing"
+    ],
+    [
+      "breathing",
+      "drift"
+    ],
+    [
+      "drift",
+      "bloom"
+    ],
+    [
+      "bloom",
+      "content_layer"
+    ],
+    [
+      "content_layer",
+      "postprocess"
+    ],
+    [
+      "postprocess",
+      "out"
+    ]
+  ],
+  "modulations": [],
+  "layer_palettes": {}
+}

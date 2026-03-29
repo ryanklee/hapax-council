@@ -1,1 +1,59 @@
-{"name":"ASCII Art","description":"ASCII art","transition_ms":500,"nodes":{"ascii":{"type":"ascii","params":{"cell_size":8,"color_mode":1}},"scanlines":{"type":"scanlines","params":{"opacity":0.08}},"out":{"type":"output","params":{}}},"edges":[["@live","ascii"],["ascii","scanlines"],["scanlines","out"]],"modulations":[],"layer_palettes":{}}
+{
+  "name": "ASCII Art",
+  "description": "ASCII art",
+  "transition_ms": 500,
+  "nodes": {
+    "ascii": {
+      "type": "ascii",
+      "params": {
+        "cell_size": 8,
+        "color_mode": 1
+      }
+    },
+    "scanlines": {
+      "type": "scanlines",
+      "params": {
+        "opacity": 0.08
+      }
+    },
+    "out": {
+      "type": "output",
+      "params": {}
+    },
+    "content_layer": {
+      "type": "content_layer",
+      "params": {}
+    },
+    "postprocess": {
+      "type": "postprocess",
+      "params": {
+        "vignette_strength": 0.3,
+        "sediment_strength": 0.1
+      }
+    }
+  },
+  "edges": [
+    [
+      "@live",
+      "ascii"
+    ],
+    [
+      "ascii",
+      "scanlines"
+    ],
+    [
+      "scanlines",
+      "content_layer"
+    ],
+    [
+      "content_layer",
+      "postprocess"
+    ],
+    [
+      "postprocess",
+      "out"
+    ]
+  ],
+  "modulations": [],
+  "layer_palettes": {}
+}

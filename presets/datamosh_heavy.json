@@ -1,1 +1,73 @@
-{"name":"Datamosh Heavy","description":"Datamosh heavy","transition_ms":500,"nodes":{"glitch_block":{"type":"glitch_block","params":{"intensity":0.8,"rgb_split":0.7,"block_size":24}},"chroma":{"type":"chromatic_aberration","params":{"offset_x":8,"offset_y":4}},"trail":{"type":"trail","params":{"fade":0.015,"blend_mode":"difference","opacity":0.4}},"out":{"type":"output","params":{}}},"edges":[["@live","glitch_block"],["glitch_block","chroma"],["chroma","trail"],["trail","out"]],"modulations":[],"layer_palettes":{}}
+{
+  "name": "Datamosh Heavy",
+  "description": "Datamosh heavy",
+  "transition_ms": 500,
+  "nodes": {
+    "glitch_block": {
+      "type": "glitch_block",
+      "params": {
+        "intensity": 0.8,
+        "rgb_split": 0.7,
+        "block_size": 24
+      }
+    },
+    "chroma": {
+      "type": "chromatic_aberration",
+      "params": {
+        "offset_x": 8,
+        "offset_y": 4
+      }
+    },
+    "trail": {
+      "type": "trail",
+      "params": {
+        "fade": 0.015,
+        "blend_mode": "difference",
+        "opacity": 0.4
+      }
+    },
+    "out": {
+      "type": "output",
+      "params": {}
+    },
+    "content_layer": {
+      "type": "content_layer",
+      "params": {}
+    },
+    "postprocess": {
+      "type": "postprocess",
+      "params": {
+        "vignette_strength": 0.3,
+        "sediment_strength": 0.1
+      }
+    }
+  },
+  "edges": [
+    [
+      "@live",
+      "glitch_block"
+    ],
+    [
+      "glitch_block",
+      "chroma"
+    ],
+    [
+      "chroma",
+      "trail"
+    ],
+    [
+      "trail",
+      "content_layer"
+    ],
+    [
+      "content_layer",
+      "postprocess"
+    ],
+    [
+      "postprocess",
+      "out"
+    ]
+  ],
+  "modulations": [],
+  "layer_palettes": {}
+}

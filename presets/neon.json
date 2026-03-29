@@ -1,1 +1,82 @@
-{"name":"Neon","description":"Color cycling glow","transition_ms":500,"nodes":{"trail":{"type":"trail","params":{"fade":0.01,"blend_mode":"lighter","opacity":0.4}},"bloom":{"type":"bloom","params":{"threshold":0.3,"radius":14,"alpha":0.4}},"chroma":{"type":"chromatic_aberration","params":{"offset_x":4,"offset_y":2}},"out":{"type":"output","params":{}}},"edges":[["@live","trail"],["trail","bloom"],["bloom","chroma"],["chroma","out"]],"modulations":[{"node":"bloom","param":"alpha","source":"audio_beat","scale":0.3,"offset":0.3,"smoothing":0.7}],"layer_palettes":{}}
+{
+  "name": "Neon",
+  "description": "Color cycling glow",
+  "transition_ms": 500,
+  "nodes": {
+    "trail": {
+      "type": "trail",
+      "params": {
+        "fade": 0.01,
+        "blend_mode": "lighter",
+        "opacity": 0.4
+      }
+    },
+    "bloom": {
+      "type": "bloom",
+      "params": {
+        "threshold": 0.3,
+        "radius": 14,
+        "alpha": 0.4
+      }
+    },
+    "chroma": {
+      "type": "chromatic_aberration",
+      "params": {
+        "offset_x": 4,
+        "offset_y": 2
+      }
+    },
+    "out": {
+      "type": "output",
+      "params": {}
+    },
+    "content_layer": {
+      "type": "content_layer",
+      "params": {}
+    },
+    "postprocess": {
+      "type": "postprocess",
+      "params": {
+        "vignette_strength": 0.3,
+        "sediment_strength": 0.1
+      }
+    }
+  },
+  "edges": [
+    [
+      "@live",
+      "trail"
+    ],
+    [
+      "trail",
+      "bloom"
+    ],
+    [
+      "bloom",
+      "chroma"
+    ],
+    [
+      "chroma",
+      "content_layer"
+    ],
+    [
+      "content_layer",
+      "postprocess"
+    ],
+    [
+      "postprocess",
+      "out"
+    ]
+  ],
+  "modulations": [
+    {
+      "node": "bloom",
+      "param": "alpha",
+      "source": "audio_beat",
+      "scale": 0.3,
+      "offset": 0.3,
+      "smoothing": 0.7
+    }
+  ],
+  "layer_palettes": {}
+}

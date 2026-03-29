@@ -1,1 +1,70 @@
-{"name":"Glitch Blocks","description":"Glitch blocks","transition_ms":500,"nodes":{"glitch_block":{"type":"glitch_block","params":{"block_size":16,"intensity":0.5,"rgb_split":0.6}},"chroma":{"type":"chromatic_aberration","params":{"offset_x":6}},"stutter":{"type":"stutter","params":{"freeze_chance":0.2}},"out":{"type":"output","params":{}}},"edges":[["@live","glitch_block"],["glitch_block","chroma"],["chroma","stutter"],["stutter","out"]],"modulations":[],"layer_palettes":{}}
+{
+  "name": "Glitch Blocks",
+  "description": "Glitch blocks",
+  "transition_ms": 500,
+  "nodes": {
+    "glitch_block": {
+      "type": "glitch_block",
+      "params": {
+        "block_size": 16,
+        "intensity": 0.5,
+        "rgb_split": 0.6
+      }
+    },
+    "chroma": {
+      "type": "chromatic_aberration",
+      "params": {
+        "offset_x": 6
+      }
+    },
+    "stutter": {
+      "type": "stutter",
+      "params": {
+        "freeze_chance": 0.2
+      }
+    },
+    "out": {
+      "type": "output",
+      "params": {}
+    },
+    "content_layer": {
+      "type": "content_layer",
+      "params": {}
+    },
+    "postprocess": {
+      "type": "postprocess",
+      "params": {
+        "vignette_strength": 0.3,
+        "sediment_strength": 0.1
+      }
+    }
+  },
+  "edges": [
+    [
+      "@live",
+      "glitch_block"
+    ],
+    [
+      "glitch_block",
+      "chroma"
+    ],
+    [
+      "chroma",
+      "stutter"
+    ],
+    [
+      "stutter",
+      "content_layer"
+    ],
+    [
+      "content_layer",
+      "postprocess"
+    ],
+    [
+      "postprocess",
+      "out"
+    ]
+  ],
+  "modulations": [],
+  "layer_palettes": {}
+}
