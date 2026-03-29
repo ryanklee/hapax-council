@@ -400,7 +400,7 @@ def _build_usage_map() -> dict[str, str]:
 
             for model, count in sorted(model_counts.items(), key=lambda x: -x[1])[:5]:
                 if "ollama" in model.lower() or model in (
-                    "qwen3.5:27b",
+                    "qwen3:8b",
                     "qwen3:8b",
                     "nomic-embed",
                 ):
