@@ -137,6 +137,12 @@ pub fn get_visual_surface_snapshot() -> Result<Vec<u8>, String> {
 
 #[tauri::command]
 pub fn toggle_visual_window(visible: bool) -> bool {
-    super::bridge::set_window_visible(visible);
-    visible
+    let action = if visible { "show" } else { "hide" };
+    match super::client::window_command(action) {
+        Ok(_) => visible,
+        Err(e) => {
+            log::warn!("Failed to toggle imagination window: {}", e);
+            false
+        }
+    }
 }
