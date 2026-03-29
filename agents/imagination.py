@@ -8,6 +8,8 @@ High-salience fragments escalate into Impingements for capability recruitment.
 from __future__ import annotations
 
 import logging
+import math
+import random
 import time as time_mod
 import uuid
 from pathlib import Path
@@ -26,7 +28,6 @@ SHM_DIR = Path("/dev/shm/hapax-imagination")
 CURRENT_PATH = SHM_DIR / "current.json"
 STREAM_PATH = SHM_DIR / "stream.jsonl"
 STREAM_MAX_LINES = 50
-ESCALATION_THRESHOLD = 0.6
 
 
 # ---------------------------------------------------------------------------
@@ -208,11 +209,19 @@ def assemble_context(
 
 
 def maybe_escalate(fragment: ImaginationFragment) -> Impingement | None:
-    """Escalate high-salience fragments into impingements for capability recruitment."""
-    if fragment.salience < ESCALATION_THRESHOLD:
+    """Probabilistic escalation — sigmoid around 0.55, boosted by continuation."""
+    midpoint = 0.55
+    steepness = 8.0
+    probability = 1.0 / (1.0 + math.exp(-steepness * (fragment.salience - midpoint)))
+
+    if fragment.continuation:
+        probability = min(1.0, probability * 1.3)
+
+    if random.random() > probability:
         return None
 
     return Impingement(
+        id=fragment.id,
         timestamp=fragment.timestamp,
         source="imagination",
         type=ImpingementType.SALIENCE_INTEGRATION,
@@ -221,11 +230,9 @@ def maybe_escalate(fragment: ImaginationFragment) -> Impingement | None:
             "narrative": fragment.narrative,
             "content_references": [ref.model_dump() for ref in fragment.content_references],
             "continuation": fragment.continuation,
+            "material": fragment.material,
         },
-        context={
-            "dimensions": fragment.dimensions,
-        },
-        parent_id=fragment.parent_id,
+        context={"dimensions": fragment.dimensions},
     )
 
 
