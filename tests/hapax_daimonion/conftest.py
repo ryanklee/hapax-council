@@ -112,6 +112,8 @@ def _stub_hardware_modules():
         "torchaudio",
         "openwakeword",
         "openwakeword.model",
+        "googleapiclient",
+        "googleapiclient.discovery",
     ]:
         if mod_name not in sys.modules:
             sys.modules[mod_name] = MagicMock()
