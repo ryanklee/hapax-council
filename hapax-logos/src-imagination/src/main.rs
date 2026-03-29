@@ -211,7 +211,7 @@ impl ImaginationApp {
         let Some(voronoi) = &self.voronoi else { return };
         let Some(wave) = &mut self.wave else { return };
         let Some(physarum) = &self.physarum else { return };
-        let Some(feedback_tech) = &self.feedback else {
+        let Some(feedback_tech) = &mut self.feedback else {
             return;
         };
         let Some(compositor) = &self.compositor else {
@@ -247,6 +247,7 @@ impl ImaginationApp {
         physarum.update_params(&gpu.queue, &self.state_reader.smoothed, time);
         postprocess.update_uniforms(&gpu.queue, time);
         compositor.update_opacities(&gpu.queue, &self.state_reader.smoothed.layer_opacities);
+        feedback_tech.tick_trace(dt, &gpu.queue);
 
         wave.flush_events(&gpu.queue);
 
@@ -313,7 +314,9 @@ impl ImaginationApp {
                 content.current_fragment_id = new_id.clone();
                 content.is_continuation = is_continuation;
             }
-            content.tick_fades(dt);
+            if let Some(trace_info) = content.tick_fades(dt) {
+                feedback_tech.set_trace(trace_info);
+            }
             let dims: HashMap<String, f32> = self
                 .state_reader
                 .imagination

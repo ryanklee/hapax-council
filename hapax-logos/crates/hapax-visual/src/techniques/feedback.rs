@@ -8,8 +8,20 @@ use crate::gpu::GpuContext;
 struct FeedbackParams {
     decay: f32,
     hue_shift: f32,
+    trace_center_x: f32,
+    trace_center_y: f32,
+    trace_radius: f32,
+    trace_strength: f32,
     _pad0: f32,
     _pad1: f32,
+}
+
+/// Trace state from content layer — where content recently dwelt.
+#[derive(Debug, Clone, Copy)]
+pub struct TraceInfo {
+    pub center_x: f32,
+    pub center_y: f32,
+    pub radius: f32,
 }
 
 pub struct FeedbackTechnique {
@@ -24,6 +36,11 @@ pub struct FeedbackTechnique {
     bgl: wgpu::BindGroupLayout,
     width: u32,
     height: u32,
+    // Dwelling trace state — decays over ~4 seconds
+    trace_strength: f32,
+    trace_center_x: f32,
+    trace_center_y: f32,
+    trace_radius: f32,
 }
 
 impl FeedbackTechnique {
@@ -38,6 +55,10 @@ impl FeedbackTechnique {
             contents: bytemuck::bytes_of(&FeedbackParams {
                 decay: 0.97,
                 hue_shift: 0.5,
+                trace_center_x: 0.5,
+                trace_center_y: 0.5,
+                trace_radius: 0.0,
+                trace_strength: 0.0,
                 _pad0: 0.0,
                 _pad1: 0.0,
             }),
@@ -108,6 +129,10 @@ impl FeedbackTechnique {
             bgl,
             width,
             height,
+            trace_strength: 0.0,
+            trace_center_x: 0.5,
+            trace_center_y: 0.5,
+            trace_radius: 0.0,
         }
     }
 
@@ -134,6 +159,37 @@ impl FeedbackTechnique {
         let prev_v = prev.create_view(&Default::default());
         let out_v = out.create_view(&Default::default());
         (prev, prev_v, out, out_v)
+    }
+
+    /// Set a new dwelling trace when content fades out.
+    pub fn set_trace(&mut self, info: TraceInfo) {
+        self.trace_center_x = info.center_x;
+        self.trace_center_y = info.center_y;
+        self.trace_radius = info.radius;
+        self.trace_strength = 1.0;
+    }
+
+    /// Decay trace strength over time (~4 second fade).
+    pub fn tick_trace(&mut self, dt: f32, queue: &wgpu::Queue) {
+        if self.trace_strength > 0.001 {
+            // Exponential decay: ~4s time constant
+            self.trace_strength *= (-dt / 4.0_f32).exp();
+            if self.trace_strength < 0.001 {
+                self.trace_strength = 0.0;
+            }
+        }
+        // Write updated uniforms
+        let params = FeedbackParams {
+            decay: 0.97,
+            hue_shift: 0.5,
+            trace_center_x: self.trace_center_x,
+            trace_center_y: self.trace_center_y,
+            trace_radius: self.trace_radius,
+            trace_strength: self.trace_strength,
+            _pad0: 0.0,
+            _pad1: 0.0,
+        };
+        queue.write_buffer(&self.uniform_buf, 0, bytemuck::bytes_of(&params));
     }
 
     /// Process feedback from previous frame.

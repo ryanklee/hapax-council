@@ -3,6 +3,10 @@
 struct Params {
     decay: f32,        // multiplicative decay in L channel (default: 0.97)
     hue_shift: f32,    // degrees per frame (default: 0.5)
+    trace_center_x: f32,
+    trace_center_y: f32,
+    trace_radius: f32,
+    trace_strength: f32, // 0.0 = no trace, 1.0 = full dwelling afterimage
     _pad0: f32,
     _pad1: f32,
 }
@@ -83,8 +87,15 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let linear_color = textureLoad(prev_frame, pos, 0).rgb;
     var lab = linear_to_oklab(linear_color);
 
-    // Decay lightness
-    lab.x *= params.decay;
+    // Trace-aware decay: regions where content recently dwelt decay slower
+    let uv = vec2<f32>(f32(pos.x) / f32(dims.x), f32(pos.y) / f32(dims.y));
+    let trace_center = vec2<f32>(params.trace_center_x, params.trace_center_y);
+    let dist_to_trace = distance(uv, trace_center);
+    let trace_factor = smoothstep(params.trace_radius, 0.0, dist_to_trace) * params.trace_strength;
+    let effective_decay = mix(params.decay, min(params.decay * 1.03, 0.999), trace_factor);
+
+    // Decay lightness (slowed in trace regions)
+    lab.x *= effective_decay;
 
     // Hue shift in Oklab (rotate a,b plane)
     let h_rad = params.hue_shift * PI / 180.0;

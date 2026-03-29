@@ -6,6 +6,7 @@ use wgpu::util::DeviceExt;
 
 use crate::compositor::COMPOSITE_FORMAT;
 use crate::gpu::GpuContext;
+use crate::techniques::feedback::TraceInfo;
 
 const MAX_SLOTS: usize = 4;
 
@@ -313,12 +314,14 @@ impl ContentLayer {
         }
     }
 
-    /// Advance per-slot fade animations.
-    pub fn tick_fades(&mut self, dt: f32) {
-        for slot in &mut self.slots {
+    /// Advance per-slot fade animations. Returns trace info if a slot just deactivated.
+    pub fn tick_fades(&mut self, dt: f32) -> Option<TraceInfo> {
+        let mut trace = None;
+        for (i, slot) in self.slots.iter_mut().enumerate() {
             if !slot.active && slot.opacity <= 0.001 {
                 continue;
             }
+            let was_active = slot.active;
             let diff = slot.target_opacity - slot.opacity;
             let step = slot.fade_rate * dt;
             if diff.abs() < step {
@@ -330,8 +333,18 @@ impl ContentLayer {
             if slot.opacity <= 0.001 && slot.target_opacity <= 0.001 {
                 slot.active = false;
                 slot.opacity = 0.0;
+                // Slot just deactivated — emit trace at slot's UV center
+                if was_active {
+                    let slot_f = i as f32;
+                    trace = Some(TraceInfo {
+                        center_x: 0.3 + (slot_f % 2.0) * 0.4,
+                        center_y: 0.3 + (slot_f / 2.0).floor() * 0.4,
+                        radius: 0.25,
+                    });
+                }
             }
         }
+        trace
     }
 
     /// Write uniform buffer from dimensional state.
