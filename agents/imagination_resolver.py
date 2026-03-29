@@ -106,6 +106,10 @@ def resolve_references(
     """Resolve all slow content references in a fragment to JPEG files."""
     results: list[Path] = []
     for i, ref in enumerate(fragment.content_references):
+        if ref.kind not in SLOW_KINDS and ref.kind not in ("camera_frame", "file"):
+            # Unknown kind — treat as text fallback so content still renders
+            log.info("Unknown content kind %r — resolving as text", ref.kind)
+            ref = ContentReference(kind="text", content=ref.content or ref.kind, source=ref.source)
         if ref.kind not in SLOW_KINDS:
             continue
         path: Path | None = None
