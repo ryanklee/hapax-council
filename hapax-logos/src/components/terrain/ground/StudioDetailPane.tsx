@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Circle, Square, ChevronDown, ChevronRight } from "lucide-react";
-import { EFFECT_SOURCES, selectEffect } from "../../studio/effectSources";
+import { Circle, Square } from "lucide-react";
+import { selectEffect } from "../../studio/effectSources";
 import VisualLayerPanel from "../../studio/VisualLayerPanel";
 import {
   useStudio,
@@ -12,6 +12,8 @@ import {
 import type { ClassificationDetection } from "../../../api/types";
 import { useGroundStudio } from "../../../contexts/GroundStudioContext";
 import { useTerrainActions, useTerrainDisplay } from "../../../contexts/TerrainContext";
+import { useDetections } from "../../../contexts/ClassificationOverlayContext";
+import type { DetectionTier } from "../../studio/DetectionOverlay";
 import { api } from "../../../api/client";
 
 interface StudioDetailPaneProps {
@@ -32,12 +34,12 @@ export function StudioDetailPane({
   const { data: liveStatus } = useCompositorLive();
   const { data: diskInfo } = useStudioDisk();
   const recordingToggle = useRecordingToggle();
+  const { detectionLayerVisible, setDetectionLayerVisible, detectionTier, setDetectionTier } = useDetections();
   const compositor = studio?.compositor;
   const capture = studio?.capture;
   const isRecording = compositor?.recording_enabled ?? false;
   const cameraRoles = compositor ? Object.keys(compositor.cameras) : [];
   const recordingCams = compositor?.recording_cameras ?? {};
-  const [sourceExpanded, setSourceExpanded] = useState(false);
   const [recExpanded, setRecExpanded] = useState(false);
   const { setRegionDepth } = useTerrainActions();
   const { regionDepths } = useTerrainDisplay();
@@ -49,6 +51,26 @@ export function StudioDetailPane({
       .then((d) => setPresets(d.presets ?? []))
       .catch(() => {});
   }, []);
+
+  // Current layer mode
+  const isComposite = effectSourceId.startsWith("fx-") && !smoothMode;
+  const isLive = effectSourceId === "camera" && !smoothMode;
+  const isHls = smoothMode;
+
+  const activatePreset = (presetName: string) => {
+    setActivePresetCtx(presetName);
+    const fxSource = `fx-${presetName}`;
+    setSmoothMode(false);
+    setEffectSourceId(fxSource);
+    selectEffect(fxSource);
+    api.post(`/studio/presets/${presetName}/activate`).catch(() => {});
+  };
+
+  const activateLive = () => {
+    setSmoothMode(false);
+    setEffectSourceId("camera");
+    selectEffect("camera");
+  };
 
   const activateHls = () => {
     setSmoothMode(true);
@@ -75,14 +97,6 @@ export function StudioDetailPane({
     return () => clearInterval(timer);
   }, [isRecording]);
 
-  const activatePreset = (presetName: string) => {
-    setActivePresetCtx(presetName);
-    const fxSource = `fx-${presetName}`;
-    setEffectSourceId(fxSource);
-    selectEffect(fxSource);
-    api.post(`/studio/presets/${presetName}/activate`).catch(() => {});
-  };
-
   // Consent summary
   const consentLabel =
     compositor?.consent_phase === "consent_refused" ? "Refused"
@@ -95,7 +109,6 @@ export function StudioDetailPane({
     : compositor?.consent_phase === "guest_detected" ? "bg-yellow-500 animate-pulse"
     : "bg-green-500";
 
-  // Recording camera count
   const recCount = Object.values(recordingCams).filter(s => s === "active").length;
 
   return (
@@ -131,81 +144,95 @@ export function StudioDetailPane({
         </div>
       </Section>
 
-      {/* MODE */}
-      <Section title="Mode">
-        <div className="flex gap-1">
-          <button
-            onClick={() => { if (smoothMode) { setSmoothMode(false); } else { activateHls(); } }}
-            className={`flex-1 rounded px-2 py-1 text-[10px] font-medium transition-colors ${
-              smoothMode
-                ? "bg-green-900/50 text-green-300"
-                : "bg-zinc-800/50 text-zinc-500 hover:text-zinc-300"
-            }`}
-          >
-            HLS
-          </button>
-        </div>
-        <div className="mt-1.5 flex items-center gap-1.5">
-          <span className={`h-1.5 w-1.5 rounded-full ${streamInfo?.hls_enabled ? "bg-green-500" : "bg-red-500"}`} />
-          <span className="text-[10px] text-zinc-400">
-            HLS {streamInfo?.hls_enabled ? "available" : "offline"}
-          </span>
-        </div>
-      </Section>
+      {/* LAYERS — all view modes always visible */}
+      <Section title="Layers">
 
-      {/* PRESET -- backend-driven */}
-      <Section title="Preset">
-        <div className="grid grid-cols-6 gap-0.5">
-          {presets.map((p) => (
-            <button
-              key={p.name}
-              onClick={() => activatePreset(p.name)}
-              title={p.display_name}
-              className={`rounded px-1 py-1 text-left text-[9px] transition-colors ${
-                activePreset === p.name
-                  ? "bg-zinc-800 text-zinc-200"
-                  : "text-zinc-500 hover:bg-zinc-800/30"
-              }`}
-              style={{
-                borderLeft: `2px solid ${
-                  activePreset === p.name
-                    ? "var(--color-yellow-400)"
-                    : "transparent"
-                }`,
-              }}
-            >
-              {p.display_name.length > 6 ? p.display_name.slice(0, 6) : p.display_name}
-            </button>
-          ))}
-        </div>
-      </Section>
-
-      {/* SOURCE -- collapsible chip grid */}
-      <Section title="Source">
-        <button
-          onClick={() => setSourceExpanded(!sourceExpanded)}
-          className="flex w-full items-center gap-1.5 text-[10px] text-zinc-400 hover:text-zinc-300"
+        {/* COMPOSITE */}
+        <LayerRow
+          label="Composite"
+          active={isComposite}
+          onActivate={() => {
+            const preset = activePreset || presets[0]?.name;
+            if (preset) activatePreset(preset);
+          }}
         >
-          {sourceExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-          <span>{EFFECT_SOURCES.find(s => s.id === effectSourceId)?.label ?? "Camera"}</span>
-        </button>
-        {sourceExpanded && (
-          <div className="mt-1.5 grid grid-cols-4 gap-0.5">
-            {EFFECT_SOURCES.map((src) => (
+          <div className="mt-1 grid grid-cols-6 gap-0.5">
+            {presets.map((p) => (
               <button
-                key={src.id}
-                onClick={() => { setEffectSourceId(src.id); setSourceExpanded(false); }}
-                className={`rounded px-1.5 py-1 text-[9px] transition-colors ${
-                  effectSourceId === src.id
+                key={p.name}
+                onClick={() => activatePreset(p.name)}
+                title={p.display_name}
+                className={`rounded px-1 py-1 text-left text-[9px] transition-colors ${
+                  isComposite && activePreset === p.name
                     ? "bg-zinc-800 text-zinc-200"
-                    : "text-zinc-500 hover:bg-zinc-800/30"
+                    : "text-zinc-500 hover:bg-zinc-800/30 hover:text-zinc-400"
                 }`}
+                style={{
+                  borderLeft: `2px solid ${
+                    isComposite && activePreset === p.name
+                      ? "var(--color-yellow-400)"
+                      : "transparent"
+                  }`,
+                }}
               >
-                {src.label}
+                {p.display_name.length > 6 ? p.display_name.slice(0, 6) : p.display_name}
               </button>
             ))}
           </div>
-        )}
+        </LayerRow>
+
+        {/* LIVE */}
+        <LayerRow
+          label="Live"
+          active={isLive}
+          onActivate={activateLive}
+        >
+          <PaletteStrip
+            presets={presets}
+            activePreset={isLive ? activePreset : undefined}
+            onSelect={activatePreset}
+          />
+        </LayerRow>
+
+        {/* HLS */}
+        <LayerRow
+          label="HLS"
+          active={isHls}
+          onActivate={activateHls}
+          badge={
+            <span className={`h-1.5 w-1.5 rounded-full ${streamInfo?.hls_enabled ? "bg-green-500" : "bg-red-500"}`} />
+          }
+        >
+          <PaletteStrip
+            presets={presets}
+            activePreset={isHls ? activePreset : undefined}
+            onSelect={activatePreset}
+          />
+        </LayerRow>
+
+        {/* DETECTION */}
+        <LayerRow
+          label="Detection"
+          active={detectionLayerVisible}
+          onActivate={() => setDetectionLayerVisible(!detectionLayerVisible)}
+        >
+          <div className="mt-1 flex gap-1">
+            {([1, 2, 3] as DetectionTier[]).map((t) => (
+              <button
+                key={t}
+                onClick={() => setDetectionTier(t)}
+                className={`rounded px-2 py-0.5 text-[9px] transition-colors ${
+                  detectionTier === t
+                    ? "bg-zinc-700 text-zinc-200"
+                    : "text-zinc-600 hover:text-zinc-400"
+                }`}
+              >
+                T{t}
+              </button>
+            ))}
+          </div>
+        </LayerRow>
+
       </Section>
 
       {/* ENTITIES */}
@@ -246,7 +273,7 @@ export function StudioDetailPane({
         )}
       </Section>
 
-      {/* RECORDING -- compact with collapsible detail */}
+      {/* RECORDING */}
       <Section title="Recording">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
@@ -351,6 +378,8 @@ export function StudioDetailPane({
   );
 }
 
+// ── Sub-components ──────────────────────────────────────────────────────────
+
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="border-b border-zinc-700/40 px-3 py-2.5">
@@ -359,5 +388,68 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       </h3>
       {children}
     </section>
+  );
+}
+
+function LayerRow({
+  label,
+  active,
+  onActivate,
+  badge,
+  children,
+}: {
+  label: string;
+  active: boolean;
+  onActivate: () => void;
+  badge?: React.ReactNode;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="mb-2 last:mb-0">
+      <button
+        onClick={onActivate}
+        className={`flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left transition-colors ${
+          active
+            ? "bg-zinc-800/60 text-zinc-200"
+            : "text-zinc-500 hover:bg-zinc-800/30 hover:text-zinc-400"
+        }`}
+      >
+        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${active ? "bg-yellow-400" : "bg-zinc-700"}`} />
+        <span className="text-[10px] font-medium tracking-wide">{label}</span>
+        {badge}
+      </button>
+      {children}
+    </div>
+  );
+}
+
+/** Compact horizontal palette strip — clicking activates composite mode with that preset. */
+function PaletteStrip({
+  presets,
+  activePreset,
+  onSelect,
+}: {
+  presets: { name: string; display_name: string }[];
+  activePreset?: string;
+  onSelect: (name: string) => void;
+}) {
+  if (presets.length === 0) return null;
+  return (
+    <div className="mt-1 flex flex-wrap gap-0.5">
+      {presets.map((p) => (
+        <button
+          key={p.name}
+          onClick={() => onSelect(p.name)}
+          title={p.display_name}
+          className={`rounded px-1 py-px text-[8px] transition-colors ${
+            activePreset === p.name
+              ? "bg-zinc-700 text-zinc-300"
+              : "text-zinc-600 hover:bg-zinc-800/40 hover:text-zinc-500"
+          }`}
+        >
+          {p.display_name.length > 5 ? p.display_name.slice(0, 5) : p.display_name}
+        </button>
+      ))}
+    </div>
   );
 }

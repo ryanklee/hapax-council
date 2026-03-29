@@ -225,6 +225,10 @@ function HlsPlayer({ enabled = true }: { enabled?: boolean }) {
           video.style.opacity = "1";
         }
       });
+      // Fallback: reveal after 5s in case FRAG_BUFFERED never fires
+      const revealTimer = setTimeout(() => {
+        if (!destroyed && video.style.opacity === "0") video.style.opacity = "1";
+      }, 5000);
       hls.on(Hls.Events.ERROR, (_event: string, data: any) => {
         // bufferStalledError is non-fatal -- hls.js handles via internal nudge mechanism.
         // Calling recoverMediaError() here resets MediaSource and causes black-frame blink.
@@ -247,6 +251,7 @@ function HlsPlayer({ enabled = true }: { enabled?: boolean }) {
 
     return () => {
       destroyed = true;
+      clearTimeout(revealTimer);
       hlsRef.current?.destroy();
       hlsRef.current = null;
     };
@@ -260,7 +265,7 @@ function HlsPlayer({ enabled = true }: { enabled?: boolean }) {
       autoPlay
       muted
       playsInline
-      poster="/api/studio/stream/fx"
+      poster="http://localhost:8051/api/studio/stream/fx"
     />
   );
 }

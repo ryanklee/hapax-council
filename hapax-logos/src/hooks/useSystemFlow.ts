@@ -60,11 +60,11 @@ export function useSystemFlow() {
     let mounted = true;
     const poll = async () => {
       try {
-        const state = await invoke<SystemFlowState>("get_system_flow");
+        const state = await api.get<SystemFlowState>("/flow/state");
         if (mounted) setFlowState(state);
       } catch {
         try {
-          const state = await api.get<SystemFlowState>("/flow/state");
+          const state = await invoke<SystemFlowState>("get_system_flow");
           if (mounted) setFlowState(state);
         } catch {
           if (mounted && !flowState) setFlowState(staticTopology());
