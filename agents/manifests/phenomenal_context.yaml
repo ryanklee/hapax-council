@@ -1,0 +1,12 @@
+id: phenomenal_context
+name: Phenomenal Context
+category: synthesis
+purpose: Bind perceptual and cognitive dimensions into a unified phenomenal field.
+schedule:
+  type: daemon
+
+pipeline_role: integrator
+pipeline_layer: cognition
+pipeline_state:
+  path: ""
+  metrics: [bound, coherence, surprise, active_dimensions]

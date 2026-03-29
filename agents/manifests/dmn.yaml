@@ -1,0 +1,12 @@
+id: dmn
+name: Default Mode Network
+category: synthesis
+purpose: Always-on cognitive substrate generating background imagination content.
+schedule:
+  type: daemon
+
+pipeline_role: processor
+pipeline_layer: cognition
+pipeline_state:
+  path: "/dev/shm/hapax-imagination/current.json"
+  metrics: [id, salience, material]

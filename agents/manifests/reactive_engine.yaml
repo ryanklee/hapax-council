@@ -1,0 +1,12 @@
+id: reactive_engine
+name: Reactive Engine
+category: synthesis
+purpose: inotify-driven rule engine cascading filesystem events into agent actions.
+schedule:
+  type: daemon
+
+pipeline_role: actuator
+pipeline_layer: output
+pipeline_state:
+  path: ""
+  metrics: [events_processed, actions_executed, rules_evaluated]

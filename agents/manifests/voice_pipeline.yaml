@@ -1,0 +1,12 @@
+id: voice_pipeline
+name: Voice Pipeline
+category: interaction
+purpose: End-to-end voice interaction pipeline from ASR through TTS output.
+schedule:
+  type: daemon
+
+pipeline_role: actuator
+pipeline_layer: output
+pipeline_state:
+  path: ""
+  metrics: [state, routing_activation, turn_count]

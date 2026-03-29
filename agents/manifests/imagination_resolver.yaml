@@ -1,0 +1,12 @@
+id: imagination_resolver
+name: Imagination Resolver
+category: synthesis
+purpose: Resolve and schedule imagination fragments into active visual surface slots.
+schedule:
+  type: daemon
+
+pipeline_role: integrator
+pipeline_layer: cognition
+pipeline_state:
+  path: "/dev/shm/hapax-imagination/content/active/slots.json"
+  metrics: [fragment_id, slots]
