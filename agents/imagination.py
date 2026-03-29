@@ -53,6 +53,7 @@ class ImaginationFragment(BaseModel, frozen=True):
     salience: float = Field(ge=0.0, le=1.0)
     continuation: bool
     narrative: str
+    material: str = "water"  # water, fire, earth, air, void
     parent_id: str | None = None
 
 
@@ -248,6 +249,16 @@ Content sources you can reference:
 - text: any text you want to display
 - url: any image URL
 - file: any file path
+
+## Material Quality
+Each fragment has an elemental material that determines how it interacts
+with the visual field:
+- water: dissolving, flowing, reflective. For contemplative, fluid thoughts.
+- fire: consuming, vertical, rapid. For urgent, transformative insights.
+- earth: dense, persistent, resistant. For grounded, factual observations.
+- air: translucent, drifting, dispersing. For light, fleeting associations.
+- void: darkening, absorbing. For absence, loss, emptiness.
+Choose the material that matches the character of your thought.
 
 Produce one ImaginationFragment. Be specific in content_references —
 point to real things. Set dimensional coloring to match the emotional

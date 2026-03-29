@@ -96,6 +96,30 @@ class TestImaginationFragment:
         assert all(isinstance(k, str) for k in frag.dimensions)
         assert all(isinstance(v, float) for v in frag.dimensions.values())
 
+    def test_fragment_material_field(self) -> None:
+        frag = ImaginationFragment(
+            content_references=[],
+            dimensions={"intensity": 0.5},
+            salience=0.3,
+            continuation=False,
+            narrative="test",
+            material="fire",
+        )
+        assert frag.material == "fire"
+        data = frag.model_dump()
+        restored = ImaginationFragment.model_validate(data)
+        assert restored.material == "fire"
+
+    def test_fragment_material_defaults_to_water(self) -> None:
+        frag = ImaginationFragment(
+            content_references=[],
+            dimensions={},
+            salience=0.1,
+            continuation=False,
+            narrative="test",
+        )
+        assert frag.material == "water"
+
     def test_serialization_roundtrip(self) -> None:
         frag = _make_fragment()
         data = frag.model_dump_json()
