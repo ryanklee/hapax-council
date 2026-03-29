@@ -14,18 +14,13 @@ from .types import EffectGraph
 
 log = logging.getLogger(__name__)
 
-# Nodes that require compute dispatches instead of render passes.
-# These are temporal nodes that run multi-step simulation each frame.
-COMPUTE_NODES: set[str] = {
-    "fluid_sim",
-    "reaction_diffusion",
-}
+# NOTE: No WGSL compute shaders exist yet — all nodes were transpiled from GLSL
+# fragment shaders via naga. reaction_diffusion and fluid_sim are temporal render
+# passes, not compute dispatches. When true compute shaders are added, list them here.
+COMPUTE_NODES: set[str] = set()
 
 # Default steps per frame for compute nodes (can be overridden by params).
-DEFAULT_STEPS_PER_FRAME: dict[str, int] = {
-    "fluid_sim": 4,
-    "reaction_diffusion": 8,
-}
+DEFAULT_STEPS_PER_FRAME: dict[str, int] = {}
 
 DEFAULT_OUTPUT_DIR = Path("/dev/shm/hapax-imagination/pipeline/")
 DEFAULT_NODES_DIR = Path(__file__).resolve().parent.parent / "shaders" / "nodes"
@@ -90,7 +85,12 @@ def compile_to_wgsl_plan(graph: EffectGraph) -> dict[str, Any]:
 
         # content_layer needs 4 content texture slot inputs for the compositing shader
         if step.node_type == "content_layer":
-            inputs.extend(f"content_slot_{i}" for i in range(4))
+            inputs.extend(f"content_slot_{j}" for j in range(4))
+
+        # Temporal nodes need their previous output as an accumulation input
+        is_temporal = step.temporal
+        if is_temporal:
+            inputs.append(f"@accum_{step.node_id}")
 
         descriptor: dict[str, Any] = {
             "node_id": step.node_id,
@@ -101,6 +101,9 @@ def compile_to_wgsl_plan(graph: EffectGraph) -> dict[str, Any]:
             "uniforms": uniforms,
             "param_order": param_order,
         }
+
+        if is_temporal:
+            descriptor["temporal"] = True
 
         if pass_type == "compute":
             descriptor["steps_per_frame"] = DEFAULT_STEPS_PER_FRAME.get(step.node_type, 1)
