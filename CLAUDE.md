@@ -108,20 +108,27 @@ Destructive command detection strips quoted strings before matching to prevent f
 
 ## IR Perception (Pi NoIR Edge Fleet)
 
-3 Raspberry Pi 4s with Pi Camera Module 3 NoIR under 850nm IR flood illumination. Each runs `hapax-ir-edge` daemon: YOLOv8n TFLite person detection + NIR hand thresholding + screen detection. Captures via `rpicam-still`, POSTs structured JSON to council every ~3s.
+3 Raspberry Pi 4s with Pi Camera Module 3 NoIR under 850nm IR flood illumination. Each runs `hapax-ir-edge` daemon: fine-tuned YOLOv8n (ONNX Runtime) person detection + NIR hand thresholding + screen detection. Captures via `rpicam-still`, POSTs structured JSON to council every ~3s.
 
 **Pi fleet:**
-- **Pi-1** (hapax-pi1, 192.168.68.78) — desk, co-located with C920-desk
-- **Pi-2** (hapax-pi2, 192.168.68.52) — room, co-located with C920-room
-- **Pi-6** (hapax-pi6, 192.168.68.74) — overhead, co-located with C920-overhead (also runs sync agents)
+- **Pi-1** (hapax-pi1, 192.168.68.78) — ir-desk, co-located with C920-desk
+- **Pi-2** (hapax-pi2, 192.168.68.52) — ir-room, co-located with C920-room
+- **Pi-4** (hapax-pi4, 192.168.68.53) — sentinel (health monitor, watch backup)
+- **Pi-5** (hapax-pi5, 192.168.68.72) — rag-edge (document preprocessing)
+- **Pi-6** (hapax-pi6, 192.168.68.74) — sync-hub + ir-overhead, co-located with C920-overhead
 
-**Data flow:** Pi daemon → `POST /api/pi/{role}/ir` (`logos/api/routes/pi.py`) → `~/hapax-state/pi-noir/{role}.json` → `ir_presence` backend (FAST tier, 13 signals) → perception engine → perception-state.json.
+**IR data flow:** Pi daemon → `POST /api/pi/{role}/ir` (`logos/api/routes/pi.py`) → `~/hapax-state/pi-noir/{role}.json` → `ir_presence` backend (FAST tier, 13 signals) → perception engine → perception-state.json.
+
+**Health/observability:** All 5 Pis report heartbeats every 60s via `hapax-heartbeat.timer` → `POST /api/pi/{hostname}/heartbeat` → `~/hapax-state/edge/{hostname}.json`. Health monitor `check_pi_fleet()` validates freshness, service status, CPU temp, memory, disk. Failures feed into stimmung health dimension and ntfy alerts.
 
 **Key files:**
-- `pi-edge/` — Edge daemon code (deployed to each Pi at `~/hapax-edge/`)
+- `pi-edge/` — Edge daemon + heartbeat code (deployed to each Pi at `~/hapax-edge/`)
 - `shared/ir_models.py` — Shared Pydantic schema (IrDetectionReport)
 - `agents/hapax_voice/backends/ir_presence.py` — Perception backend (multi-Pi fusion)
 - `agents/hapax_voice/ir_signals.py` — State file reader
+- `agents/health_monitor.py` — `PI_FLEET` dict defines expected services per Pi
+
+**Inference:** ONNX Runtime preferred (130ms, preserves fine-tuned precision), TFLite fallback. Model: YOLOv8n fine-tuned on 30 NIR studio frames (`best.onnx`).
 
 **Fusion logic:** Person detection = any() across Pis. Gaze/biometrics prefer desk Pi (face-on). Hand activity prefers overhead Pi. Staleness cutoff: 15s. Presence engine signal weight: `ir_person_detected: (0.90, 0.10)`.
 
