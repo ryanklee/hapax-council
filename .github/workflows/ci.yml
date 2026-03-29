@@ -59,7 +59,22 @@ jobs:
           LITELLM_BASE_URL: "http://0.0.0.0:1"
           QDRANT_URL: "http://0.0.0.0:1"
           OLLAMA_HOST: "http://0.0.0.0:1"
-        run: uv run pytest tests/ -q --ignore=tests/hapax_voice --ignore=tests/contract -m "not llm" -p no:cacheprovider
+        run: |
+          # Module-level Agent() creation opens sockets to local services
+          # that don't exist in CI, causing pytest to hang indefinitely after
+          # all tests complete. Write a conftest that force-exits the process.
+          cat > tests/conftest.py << 'PYEOF'
+          import os
+          def pytest_sessionfinish(session, exitstatus):
+              """Force-exit after tests complete — prevents hang from open sockets."""
+              os._exit(exitstatus)
+          PYEOF
+          uv run pytest tests/ -q \
+            --ignore=tests/hapax_voice --ignore=tests/contract \
+            -m "not llm" -p no:cacheprovider
+          EXIT=$?
+          rm -f tests/conftest.py
+          exit $EXIT
 
   web-build:
     runs-on: ubuntu-latest
