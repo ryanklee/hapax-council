@@ -197,11 +197,23 @@ class TestMaybeEscalate:
         assert escalations < 15
 
     def test_escalate_continuation_boosts_probability(self) -> None:
-        base_frag = _make_fragment(salience=0.5, continuation=False)
-        cont_frag = _make_fragment(salience=0.5, continuation=True)
-        base_count = sum(1 for _ in range(200) if maybe_escalate(base_frag) is not None)
-        cont_count = sum(1 for _ in range(200) if maybe_escalate(cont_frag) is not None)
-        assert cont_count > base_count
+        """Continuation multiplies probability by 1.3 — verify with fixed RNG."""
+        import math
+        import unittest.mock
+
+        salience = 0.5
+        midpoint, steepness = 0.55, 8.0
+        base_prob = 1.0 / (1.0 + math.exp(-steepness * (salience - midpoint)))
+        cont_prob = min(1.0, base_prob * 1.3)
+        # Pick a random value between base and cont probability
+        # This value passes the continuation check but fails the base check
+        test_val = (base_prob + cont_prob) / 2
+        with unittest.mock.patch("agents.imagination.random") as mock_rng:
+            mock_rng.random.return_value = test_val
+            base_frag = _make_fragment(salience=0.5, continuation=False)
+            cont_frag = _make_fragment(salience=0.5, continuation=True)
+            assert maybe_escalate(base_frag) is None  # test_val > base_prob
+            assert maybe_escalate(cont_frag) is not None  # test_val < cont_prob
 
     def test_preserves_content_refs(self) -> None:
         refs = [
