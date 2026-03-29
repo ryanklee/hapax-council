@@ -1,1 +1,60 @@
-{"name":"Diff","description":"Motion detection","transition_ms":500,"nodes":{"threshold":{"type":"threshold","params":{"level":0.15,"softness":0.05}},"colorgrade":{"type":"colorgrade","params":{"contrast":2.0,"brightness":1.3}},"out":{"type":"output","params":{}}},"edges":[["@live","threshold"],["threshold","colorgrade"],["colorgrade","out"]],"modulations":[],"layer_palettes":{}}
+{
+  "name": "Diff",
+  "description": "Motion detection",
+  "transition_ms": 500,
+  "nodes": {
+    "threshold": {
+      "type": "threshold",
+      "params": {
+        "level": 0.15,
+        "softness": 0.05
+      }
+    },
+    "colorgrade": {
+      "type": "colorgrade",
+      "params": {
+        "contrast": 2.0,
+        "brightness": 1.3
+      }
+    },
+    "out": {
+      "type": "output",
+      "params": {}
+    },
+    "content_layer": {
+      "type": "content_layer",
+      "params": {}
+    },
+    "postprocess": {
+      "type": "postprocess",
+      "params": {
+        "vignette_strength": 0.3,
+        "sediment_strength": 0.1
+      }
+    }
+  },
+  "edges": [
+    [
+      "@live",
+      "threshold"
+    ],
+    [
+      "threshold",
+      "colorgrade"
+    ],
+    [
+      "colorgrade",
+      "content_layer"
+    ],
+    [
+      "content_layer",
+      "postprocess"
+    ],
+    [
+      "postprocess",
+      "out"
+    ]
+  ],
+  "modulations": [],
+  "layer_palettes": {}
+}

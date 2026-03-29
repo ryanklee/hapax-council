@@ -1,1 +1,71 @@
-{"name":"Thermal IR","description":"Thermal infrared","transition_ms":500,"nodes":{"color_map":{"type":"color_map","params":{"blend":1.0}},"edge":{"type":"edge_detect","params":{"threshold":0.15,"color_mode":2}},"bloom":{"type":"bloom","params":{"threshold":0.5,"radius":6,"alpha":0.2}},"out":{"type":"output","params":{}}},"edges":[["@live","color_map"],["color_map","edge"],["edge","bloom"],["bloom","out"]],"modulations":[],"layer_palettes":{}}
+{
+  "name": "Thermal IR",
+  "description": "Thermal infrared",
+  "transition_ms": 500,
+  "nodes": {
+    "color_map": {
+      "type": "color_map",
+      "params": {
+        "blend": 1.0
+      }
+    },
+    "edge": {
+      "type": "edge_detect",
+      "params": {
+        "threshold": 0.15,
+        "color_mode": 2
+      }
+    },
+    "bloom": {
+      "type": "bloom",
+      "params": {
+        "threshold": 0.5,
+        "radius": 6,
+        "alpha": 0.2
+      }
+    },
+    "out": {
+      "type": "output",
+      "params": {}
+    },
+    "content_layer": {
+      "type": "content_layer",
+      "params": {}
+    },
+    "postprocess": {
+      "type": "postprocess",
+      "params": {
+        "vignette_strength": 0.3,
+        "sediment_strength": 0.1
+      }
+    }
+  },
+  "edges": [
+    [
+      "@live",
+      "color_map"
+    ],
+    [
+      "color_map",
+      "edge"
+    ],
+    [
+      "edge",
+      "bloom"
+    ],
+    [
+      "bloom",
+      "content_layer"
+    ],
+    [
+      "content_layer",
+      "postprocess"
+    ],
+    [
+      "postprocess",
+      "out"
+    ]
+  ],
+  "modulations": [],
+  "layer_palettes": {}
+}

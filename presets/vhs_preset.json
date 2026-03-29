@@ -1,1 +1,99 @@
-{"name":"VHS","description":"Lo-fi tape","transition_ms":500,"nodes":{"vhs":{"type":"vhs","params":{"chroma_shift":4}},"trail":{"type":"trail","params":{"fade":0.04,"blend_mode":"lighter","opacity":0.25}},"scanlines":{"type":"scanlines","params":{"opacity":0.12}},"noise":{"type":"noise_overlay","params":{"intensity":0.06}},"vignette":{"type":"vignette","params":{"strength":0.4}},"out":{"type":"output","params":{}}},"edges":[["@live","vhs"],["vhs","trail"],["trail","scanlines"],["scanlines","noise"],["noise","vignette"],["vignette","out"]],"modulations":[{"node":"vhs","param":"chroma_shift","source":"audio_beat","scale":6,"offset":4,"smoothing":0.7}],"layer_palettes":{}}
+{
+  "name": "VHS",
+  "description": "Lo-fi tape",
+  "transition_ms": 500,
+  "nodes": {
+    "vhs": {
+      "type": "vhs",
+      "params": {
+        "chroma_shift": 4
+      }
+    },
+    "trail": {
+      "type": "trail",
+      "params": {
+        "fade": 0.04,
+        "blend_mode": "lighter",
+        "opacity": 0.25
+      }
+    },
+    "scanlines": {
+      "type": "scanlines",
+      "params": {
+        "opacity": 0.12
+      }
+    },
+    "noise": {
+      "type": "noise_overlay",
+      "params": {
+        "intensity": 0.06
+      }
+    },
+    "vignette": {
+      "type": "vignette",
+      "params": {
+        "strength": 0.4
+      }
+    },
+    "out": {
+      "type": "output",
+      "params": {}
+    },
+    "content_layer": {
+      "type": "content_layer",
+      "params": {}
+    },
+    "postprocess": {
+      "type": "postprocess",
+      "params": {
+        "vignette_strength": 0.3,
+        "sediment_strength": 0.1
+      }
+    }
+  },
+  "edges": [
+    [
+      "@live",
+      "vhs"
+    ],
+    [
+      "vhs",
+      "trail"
+    ],
+    [
+      "trail",
+      "scanlines"
+    ],
+    [
+      "scanlines",
+      "noise"
+    ],
+    [
+      "noise",
+      "vignette"
+    ],
+    [
+      "vignette",
+      "content_layer"
+    ],
+    [
+      "content_layer",
+      "postprocess"
+    ],
+    [
+      "postprocess",
+      "out"
+    ]
+  ],
+  "modulations": [
+    {
+      "node": "vhs",
+      "param": "chroma_shift",
+      "source": "audio_beat",
+      "scale": 6,
+      "offset": 4,
+      "smoothing": 0.7
+    }
+  ],
+  "layer_palettes": {}
+}

@@ -304,7 +304,7 @@ PRESETS_DIR = Path(__file__).parent.parent.parent / "presets"
 
 def test_ghost():
     g = EffectGraph(**json.loads((PRESETS_DIR / "ghost.json").read_text()))
-    assert g.name == "Ghost" and len(g.edges) == 3
+    assert g.name == "Ghost" and len(g.edges) == 5
 
 
 def test_trails():
