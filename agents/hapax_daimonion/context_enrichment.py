@@ -10,6 +10,10 @@ from __future__ import annotations
 import json
 import logging
 import time
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from shared.context import ContextAssembler
 
 log = logging.getLogger(__name__)
 
@@ -121,3 +125,69 @@ def render_dmn() -> str:
     except Exception:
         log.debug("render_dmn failed (non-fatal)", exc_info=True)
         return ""
+
+
+# ── Shared assembler integration ─────────────────────────────────────────
+
+_assembler: ContextAssembler | None = None
+
+
+def get_assembler() -> ContextAssembler:
+    """Return the shared ContextAssembler, creating it lazily if needed."""
+    global _assembler
+    if _assembler is None:
+        from shared.context import ContextAssembler
+
+        _assembler = ContextAssembler(
+            goals_fn=_collect_goals,
+            health_fn=_collect_health,
+            nudges_fn=_collect_nudges,
+        )
+    return _assembler
+
+
+def set_assembler(asm: ContextAssembler) -> None:
+    """Set the shared ContextAssembler (for dependency injection in daemon)."""
+    global _assembler
+    _assembler = asm
+
+
+def _collect_goals() -> list[dict]:
+    """Collect goals as dicts for EnrichmentContext."""
+    try:
+        from logos.data.goals import collect_goals
+
+        goals = collect_goals()
+        return [{"title": g.title, "status": g.status} for g in goals if g.status != "done"]
+    except Exception:
+        return []
+
+
+def _collect_health() -> dict:
+    """Collect health summary for EnrichmentContext."""
+    try:
+        from shared.config import PROFILES_DIR
+
+        health_file = PROFILES_DIR / "health-history.jsonl"
+        if not health_file.exists():
+            return {}
+        import json as _json
+
+        lines = health_file.read_text().strip().split("\n")
+        if not lines:
+            return {}
+        latest = _json.loads(lines[-1])
+        return latest
+    except Exception:
+        return {}
+
+
+def _collect_nudges() -> list[dict]:
+    """Collect nudges as dicts for EnrichmentContext."""
+    try:
+        from logos.data.nudges import collect_nudges
+
+        nudges = collect_nudges()
+        return [{"title": n.title, "priority_label": n.priority_label} for n in nudges[:3]]
+    except Exception:
+        return []

@@ -960,6 +960,25 @@ class VoiceDaemon:
         self._nudges_fn = render_nudges
         self._dmn_fn = render_dmn
 
+        # Shared context assembler
+        from agents.hapax_daimonion.context_enrichment import (
+            _collect_goals,
+            _collect_health,
+            _collect_nudges,
+            set_assembler,
+        )
+        from shared.context import ContextAssembler
+
+        self._context_assembler = ContextAssembler(
+            goals_fn=_collect_goals,
+            health_fn=_collect_health,
+            nudges_fn=_collect_nudges,
+            perception_fn=lambda: (
+                self.perception.latest if hasattr(self, "perception") and self.perception else {}
+            ),
+        )
+        set_assembler(self._context_assembler)
+
         # Imagination context injection
         from agents.imagination_context import format_imagination_context
 
