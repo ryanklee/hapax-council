@@ -142,6 +142,8 @@ from logos.api.routes.pi import router as pi_router
 from logos.api.routes.profile import router as profile_router
 from logos.api.routes.query import router as query_router
 from logos.api.routes.scout import router as scout_router
+from logos.api.routes.sprint import router as sprint_router
+from logos.api.routes.stimmung import router as stimmung_router
 from logos.api.routes.studio import router as studio_router
 from logos.api.routes.working_mode import router as working_mode_router
 
@@ -164,6 +166,8 @@ app.include_router(logos_router)
 app.include_router(flow_router)
 app.include_router(fortress_router)
 app.include_router(pi_router)
+app.include_router(sprint_router)
+app.include_router(stimmung_router)
 
 # Mount HLS segment directory for live stream serving
 # Override .ts MIME type: Starlette defaults to Qt Linguist (text/vnd.trolltech.linguist)

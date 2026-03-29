@@ -1,0 +1,267 @@
+/* ─── Hapax Plugin Styles ─────────────────────────────────────────────────── */
+/* Uses Obsidian CSS custom properties for theme compatibility */
+
+.hapax-panel {
+  padding: 8px;
+}
+
+/* ─── Sections ────────────────────────────────────────────────────────────── */
+
+.hapax-section {
+  margin-bottom: 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  overflow: hidden;
+}
+
+.hapax-section-header,
+.hapax-section > summary {
+  padding: 6px 10px;
+  background: var(--background-secondary);
+  cursor: pointer;
+  font-size: var(--font-ui-small);
+  font-weight: 600;
+  color: var(--text-muted);
+  list-style: none;
+  user-select: none;
+}
+
+.hapax-section > summary:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.hapax-section-body,
+.hapax-section > div {
+  padding: 8px 10px;
+}
+
+/* ─── Badges ─────────────────────────────────────────────────────────────── */
+
+.hapax-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: var(--font-ui-smaller);
+  font-weight: 500;
+  vertical-align: middle;
+}
+
+.hapax-badge-completed {
+  background: var(--color-green);
+  color: var(--text-on-accent);
+}
+
+.hapax-badge-in-progress {
+  background: var(--color-blue);
+  color: var(--text-on-accent);
+}
+
+.hapax-badge-pending {
+  background: var(--background-modifier-border);
+  color: var(--text-muted);
+}
+
+.hapax-badge-blocked {
+  background: var(--color-red);
+  color: var(--text-on-accent);
+}
+
+.hapax-badge-skipped {
+  background: var(--background-modifier-border);
+  color: var(--text-faint);
+}
+
+.hapax-badge-passed {
+  background: var(--color-green);
+  color: var(--text-on-accent);
+}
+
+.hapax-badge-failed {
+  background: var(--color-red);
+  color: var(--text-on-accent);
+}
+
+.hapax-badge-healthy {
+  background: var(--color-green);
+  color: var(--text-on-accent);
+}
+
+.hapax-badge-degraded {
+  background: var(--color-yellow);
+  color: var(--text-on-accent);
+}
+
+/* ─── Stimmung ───────────────────────────────────────────────────────────── */
+
+.hapax-stimmung-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+
+.hapax-stance-nominal   { background: var(--color-green); }
+.hapax-stance-cautious  { background: var(--color-yellow); }
+.hapax-stance-degraded  { background: var(--color-orange); }
+.hapax-stance-critical  { background: var(--color-red); }
+
+.hapax-stance-label {
+  font-size: var(--font-ui-small);
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+/* ─── Table ──────────────────────────────────────────────────────────────── */
+
+.hapax-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-ui-small);
+}
+
+.hapax-table td,
+.hapax-table th {
+  padding: 3px 6px;
+  text-align: left;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.hapax-table th {
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: var(--font-ui-smaller);
+}
+
+.hapax-table td:first-child {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.hapax-mono {
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+}
+
+/* ─── Actions ────────────────────────────────────────────────────────────── */
+
+.hapax-actions,
+.hapax-nudge-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.hapax-action {
+  padding: 3px 10px;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  cursor: pointer;
+}
+
+.hapax-action:hover {
+  background: var(--background-modifier-hover);
+}
+
+.hapax-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hapax-action-primary {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border-color: var(--interactive-accent);
+}
+
+.hapax-action-primary:hover {
+  background: var(--interactive-accent-hover);
+}
+
+/* ─── Nudges ─────────────────────────────────────────────────────────────── */
+
+.hapax-nudge-item {
+  padding: 8px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.hapax-nudge-item:last-child {
+  border-bottom: none;
+}
+
+.hapax-nudge-title {
+  font-weight: 600;
+  font-size: var(--font-ui-small);
+  margin-bottom: 4px;
+}
+
+.hapax-nudge-detail {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  margin-bottom: 6px;
+}
+
+/* ─── Burndown ───────────────────────────────────────────────────────────── */
+
+.hapax-burndown-bar {
+  height: 8px;
+  background: var(--background-modifier-border);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.hapax-burndown-fill {
+  height: 100%;
+  background: var(--interactive-accent);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+/* ─── Result summary ─────────────────────────────────────────────────────── */
+
+.hapax-result-summary {
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+  font-style: italic;
+  margin-top: 6px;
+}
+
+/* ─── Modal ──────────────────────────────────────────────────────────────── */
+
+.hapax-modal-label {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  margin-bottom: 6px;
+}
+
+.hapax-modal-textarea {
+  width: 100%;
+  font-size: var(--font-ui-small);
+}
+
+.hapax-modal-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  justify-content: flex-end;
+}
+
+/* ─── Status ─────────────────────────────────────────────────────────────── */
+
+.hapax-loading,
+.hapax-error {
+  padding: 12px;
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+}
+
+.hapax-error {
+  color: var(--color-red);
+}
