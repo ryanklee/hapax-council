@@ -9,10 +9,11 @@ SESSION_ID="$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)"
 COUNCIL_DIR="$HOME/projects/hapax-council"
 PID_DIR="$HOME/.cache/hapax/conductor"
 
-# Detect role from worktree
+# Detect role from worktree (robust: compare git toplevel, not CWD substring)
 ROLE="alpha"
-CWD="$(pwd)"
-if echo "$CWD" | grep -q "\-\-beta"; then
+TOPLEVEL="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+BETA_WORKTREE="$HOME/projects/hapax-council--beta"
+if [ "$TOPLEVEL" = "$BETA_WORKTREE" ]; then
     ROLE="beta"
 fi
 
