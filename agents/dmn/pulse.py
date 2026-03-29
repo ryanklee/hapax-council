@@ -39,7 +39,7 @@ CONSOLIDATION_TICK_S = 180.0  # 3 minutes
 
 # Ollama config
 OLLAMA_URL = "http://localhost:11434/api/generate"
-DMN_MODEL = "qwen3:4b"
+DMN_MODEL = "qwen3.5:4b"
 
 # Prompts — concrete framing enforcement (Watkins: concrete > abstract)
 SENSORY_SYSTEM = """You are a continuous situation monitor. Report WHAT is happening in one sentence.

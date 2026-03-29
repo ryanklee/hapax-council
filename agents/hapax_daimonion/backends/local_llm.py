@@ -1,6 +1,6 @@
 """Local LLM perception backend — fast activity/flow classification.
 
-WS5 Tier 2: uses a small local model (qwen3:4b via Ollama) for
+WS5 Tier 2: uses a small local model (qwen3.5:4b via Ollama) for
 perception classification. ~200-400ms on RTX 3090, ~2.5GB VRAM, coexists
 with everything else.
 
@@ -28,7 +28,7 @@ from agents.hapax_daimonion.primitives import Behavior
 
 log = logging.getLogger(__name__)
 
-_MODEL = "qwen3:4b"
+_MODEL = "qwen3.5:4b"
 _OLLAMA_TIMEOUT = 5.0  # seconds — hard cap for classification latency
 
 _SYSTEM_PROMPT = """\
@@ -54,7 +54,7 @@ the activity is almost certainly coding. If it shows a browser, it's browsing.
 class LocalLLMBackend:
     """PerceptionBackend that classifies activity/flow via local LLM.
 
-    Uses qwen3:4b via Ollama for fast (~200-400ms) structured classification.
+    Uses qwen3.5:4b via Ollama for fast (~200-400ms) structured classification.
     Falls back to no-op when Ollama is unavailable.
     """
 

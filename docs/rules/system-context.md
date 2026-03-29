@@ -90,7 +90,7 @@ For the 7 containerized sync agents, cycle mode is controlled by `CYCLE_MODE=dev
 | coding | qwen3:8b | Local code generation |
 
 Cloud models configured in LiteLLM: claude-sonnet-4, claude-opus-4, claude-haiku, gemini-pro (gemini-2.5-pro), gemini-flash (gemini-2.5-flash).
-Local models via Ollama: qwen3:8b, qwen3:4b, nomic-embed-text-v2-moe.
+Local models via Ollama: qwen3:8b, qwen3.5:4b, nomic-embed-text-v2-moe.
 LiteLLM fallback chains: claude-opus→[claude-sonnet, gemini-pro], claude-sonnet→[gemini-pro], claude-haiku→[gemini-flash], gemini-pro→[claude-sonnet], gemini-flash→[claude-haiku], fast→[claude-haiku].
 
 Embedding: nomic-embed-text (768d). Requires `search_query:` / `search_document:` prefixes.
