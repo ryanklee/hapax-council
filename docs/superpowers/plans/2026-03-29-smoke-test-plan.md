@@ -16,7 +16,7 @@ done
 
 ## Phase 1: Infrastructure (7 tests)
 
-- [ ] **1.1 API health** — `curl -s http://localhost:8051/api/data/health | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['status'], d['healthy'])"` → healthy/degraded, count > 0
+- [ ] **1.1 API health** — `curl -s http://localhost:8051/api/health | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['overall_status'], d['healthy'])"` → healthy/degraded, count > 0
 - [ ] **1.2 GPU** — `nvidia-smi --query-gpu=memory.used,memory.total --format=csv,noheader` → used < 80% of total
 - [ ] **1.3 Stimmung** — `python3 -c "import json; d=json.load(open('/dev/shm/hapax-stimmung/state.json')); print(d['overall_stance'])"` → nominal/cautious/degraded
 - [ ] **1.4 Docker** — `docker ps --format '{{.Names}}' | wc -l` → ≥ 10
@@ -44,7 +44,7 @@ done
 - [ ] **3.4 HLS available** — `curl -s http://localhost:8051/api/studio/stream/info | python3 -c "import json,sys; print(json.load(sys.stdin)['hls_enabled'])"` → true
 - [ ] **3.5 Active cameras** — `python3 -c "import json; d=json.load(open('$HOME/.cache/hapax-compositor/status.json')); print(f'active={d[\"active_cameras\"]}')"` → ≥ 2
 - [ ] **3.6 Presets** — `curl -s http://localhost:8051/api/studio/presets | python3 -c "import json,sys; print(len(json.load(sys.stdin)['presets']))"` → 28
-- [ ] **3.7 Recording toggle** — `curl -s -X POST http://localhost:8051/api/studio/recording/enable` → 200
+- [ ] **3.7 Recording toggle** — `curl -s http://localhost:8051/api/studio/consent | python3 -c "import json,sys; print(json.load(sys.stdin))"` → consent state (recording endpoint removed; use consent API)
 
 ## Phase 4: Logos Tauri App (12 tests)
 
