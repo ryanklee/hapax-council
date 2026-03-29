@@ -23,7 +23,7 @@ from pathlib import Path
 from agents.dmn.buffer import DMNBuffer
 from agents.dmn.pulse import DMNPulse
 from agents.imagination import CURRENT_PATH, ImaginationFragment, ImaginationLoop
-from agents.imagination_resolver import CONTENT_DIR, cleanup_content_dir, resolve_references
+from agents.imagination_resolver import CONTENT_DIR, resolve_references_staged
 
 log = logging.getLogger("dmn")
 
@@ -142,8 +142,7 @@ class DMNDaemon:
                     if frag_id and frag_id != last_fragment_id:
                         last_fragment_id = frag_id
                         frag = ImaginationFragment.model_validate(data)
-                        cleanup_content_dir()
-                        resolve_references(frag)
+                        resolve_references_staged(frag)
                         log.debug("Resolved content for fragment %s", frag_id)
             except Exception:
                 log.warning("Resolver tick failed", exc_info=True)

@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type")]
+#[serde(rename_all = "lowercase")]
 pub enum Command {
     Window { action: WindowAction },
     Render { action: RenderAction },
@@ -19,6 +20,7 @@ pub enum Command {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "action")]
+#[serde(rename_all = "snake_case")]
 pub enum WindowAction {
     Fullscreen,
     Maximized,
@@ -31,6 +33,7 @@ pub enum WindowAction {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "action")]
+#[serde(rename_all = "snake_case")]
 pub enum RenderAction {
     SetFps { fps: u32 },
     Pause,
@@ -92,7 +95,7 @@ mod tests {
 
     #[test]
     fn parse_fullscreen() {
-        let input = r#"{"type":"Window","action":{"action":"Fullscreen"}}"#;
+        let input = r#"{"type":"window","action":{"action":"fullscreen"}}"#;
         let cmd = parse_command(input).unwrap();
         assert_eq!(
             cmd,
@@ -104,7 +107,7 @@ mod tests {
 
     #[test]
     fn parse_windowed() {
-        let input = r#"{"type":"Window","action":{"action":"Windowed","x":100,"y":200,"w":800,"h":600}}"#;
+        let input = r#"{"type":"window","action":{"action":"windowed","x":100,"y":200,"w":800,"h":600}}"#;
         let cmd = parse_command(input).unwrap();
         assert_eq!(
             cmd,
@@ -121,14 +124,14 @@ mod tests {
 
     #[test]
     fn parse_status() {
-        let input = r#"{"type":"Status"}"#;
+        let input = r#"{"type":"status"}"#;
         let cmd = parse_command(input).unwrap();
         assert_eq!(cmd, Command::Status);
     }
 
     #[test]
     fn parse_render_pause() {
-        let input = r#"{"type":"Render","action":{"action":"Pause"}}"#;
+        let input = r#"{"type":"render","action":{"action":"pause"}}"#;
         let cmd = parse_command(input).unwrap();
         assert_eq!(
             cmd,
