@@ -1,19 +1,23 @@
-"""logos/api/routes/pi.py — Receiver for Pi NoIR edge detection reports."""
+"""logos/api/routes/pi.py — Receiver for Pi fleet: IR detections + heartbeats."""
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from agents.hapax_daimonion.ir_signals import IR_STATE_DIR
+from shared.config import HAPAX_HOME
 from shared.ir_models import IrDetectionReport
 
 log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/pi", tags=["pi-noir"])
+
+EDGE_STATE_DIR = HAPAX_HOME / "hapax-state" / "edge"
 
 _VALID_ROLES = {"desk", "room", "overhead"}
 _last_post_time: dict[str, float] = {}
@@ -47,6 +51,26 @@ async def receive_ir_detection(role: str, report: IrDetectionReport) -> JSONResp
         raise HTTPException(status_code=500, detail="State file write failed") from exc
 
     return JSONResponse({"status": "ok", "role": role})
+
+
+@router.post("/{hostname}/heartbeat")
+async def receive_heartbeat(hostname: str, request: Request) -> JSONResponse:
+    """Receive heartbeat from a Pi edge device."""
+    if not hostname.startswith("hapax-pi"):
+        raise HTTPException(status_code=422, detail="Invalid hostname")
+
+    body = await request.json()
+    EDGE_STATE_DIR.mkdir(parents=True, exist_ok=True)
+    state_file = EDGE_STATE_DIR / f"{hostname}.json"
+    tmp_file = state_file.with_suffix(".tmp")
+    try:
+        tmp_file.write_text(json.dumps(body))
+        tmp_file.rename(state_file)
+    except OSError as exc:
+        log.warning("Failed to write heartbeat for %s", hostname, exc_info=True)
+        raise HTTPException(status_code=500, detail="Write failed") from exc
+
+    return JSONResponse({"status": "ok"})
 
 
 @router.get("/status")
