@@ -209,11 +209,11 @@ def _resolve_qdrant(
 
         client = get_qdrant()
         vector = embed(ref.query or ref.source)
-        results = client.search(
+        results = client.query_points(
             collection_name=ref.source,
-            query_vector=vector,
+            query=vector,
             limit=1,
-        )
+        ).points
         if not results:
             log.debug("Qdrant query returned no results for %s", ref.source)
             return None

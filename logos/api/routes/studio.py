@@ -229,11 +229,11 @@ def _search_moments_sync(query: str, limit: int) -> list[dict]:
     try:
         text_embedding = embed_text(query)
         client = get_qdrant()
-        results = client.search(
+        results = client.query_points(
             collection_name=STUDIO_MOMENTS_COLLECTION,
-            query_vector=text_embedding.tolist(),
+            query=text_embedding.tolist(),
             limit=limit,
-        )
+        ).points
         return [
             {
                 "id": str(r.id),

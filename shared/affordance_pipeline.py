@@ -367,12 +367,12 @@ class AffordancePipeline:
             from shared.config import get_qdrant
 
             client = get_qdrant()
-            results = client.search(
+            results = client.query_points(
                 collection_name=COLLECTION_NAME,
-                query_vector=embedding,
+                query=embedding,
                 limit=top_k,
                 query_filter={"must": [{"key": "available", "match": {"value": True}}]},
-            )
+            ).points
         except Exception:
             log.debug("Qdrant retrieval failed", exc_info=True)
             return []
