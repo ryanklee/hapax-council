@@ -16,8 +16,9 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { AmbientShader } from "../components/hapax/AmbientShader";
 import { usePageVisible } from "../hooks/usePageVisible";
+import { api } from "../api/client";
 
-const API = "http://localhost:8051/api";
+const SNAPSHOT_BASE = "http://localhost:8051/api";
 const POLL_FAST_MS = 2000;
 const SNAPSHOT_MS = 200; // camera composite refresh
 const FRAGMENT_CYCLE_MS = 12000; // rotate floating text fragments
@@ -194,8 +195,7 @@ export function HapaxPage() {
         lastVlPoll = now;
         if (!vlPollInFlight) {
           vlPollInFlight = true;
-          fetch(`${API}/studio/visual-layer`)
-            .then((res) => (res.ok ? res.json() : null))
+          api.visualLayer()
             .then((data) => {
               if (data && running) setVlState(data);
             })
@@ -208,7 +208,7 @@ export function HapaxPage() {
       if (showVideoRef.current && now - lastSnapshot >= SNAPSHOT_MS) {
         lastSnapshot = now;
         const img = snapshotRef.current;
-        if (img) img.src = `${API}/studio/stream/snapshot?t=${Date.now()}`;
+        if (img) img.src = `${SNAPSHOT_BASE}/studio/stream/snapshot?t=${Date.now()}`;
       }
 
       // Clock (1s)
@@ -233,11 +233,7 @@ export function HapaxPage() {
   const submitCorrection = useCallback(async () => {
     if (!correctionInput.trim()) return;
     try {
-      await fetch(`${API}/studio/activity-correction`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ label: correctionInput.trim() }),
-      });
+      await api.post("/studio/activity-correction", { label: correctionInput.trim() });
     } catch { /* ignore */ }
     setShowCorrection(false);
     setCorrectionInput("");
@@ -386,7 +382,7 @@ export function HapaxPage() {
           }}
         >
           <img
-            src={`${API}/studio/stream/camera/${feed.role}?t=${time.getTime()}`}
+            src={`${SNAPSHOT_BASE}/studio/stream/camera/${feed.role}?t=${time.getTime()}`}
             alt=""
             className="w-full h-full object-cover"
           />
@@ -399,7 +395,7 @@ export function HapaxPage() {
           {["brio-operator", "c920-desk", "c920-room", "c920-overhead"].map(cam => (
             <div key={cam} className="relative">
               <img
-                src={`${API}/studio/stream/camera/${cam}?t=${time.getTime()}`}
+                src={`${SNAPSHOT_BASE}/studio/stream/camera/${cam}?t=${time.getTime()}`}
                 alt={cam}
                 className="w-56 rounded-lg border border-white/10"
                 style={{
@@ -579,7 +575,7 @@ export function HapaxPage() {
               )}
               {content.image_path && (
                 <img
-                  src={`${API}/studio/stream/camera/${content.image_path}?t=${time.getTime()}`}
+                  src={`${SNAPSHOT_BASE}/studio/stream/camera/${content.image_path}?t=${time.getTime()}`}
                   alt=""
                   className="w-full rounded-lg mt-2 opacity-80"
                 />
