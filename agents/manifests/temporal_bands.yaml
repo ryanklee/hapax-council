@@ -1,0 +1,12 @@
+id: temporal_bands
+name: Temporal Bands
+category: synthesis
+purpose: Maintain retention and protention bands for temporal context awareness.
+schedule:
+  type: daemon
+
+pipeline_role: integrator
+pipeline_layer: cognition
+pipeline_state:
+  path: "/dev/shm/hapax-temporal/bands.json"
+  metrics: [retention_count, protention_count, max_surprise, flow_state]

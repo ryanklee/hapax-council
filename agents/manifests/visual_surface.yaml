@@ -1,0 +1,12 @@
+id: visual_surface
+name: Visual Surface
+category: interaction
+purpose: Render dynamic shader graphs to JPEG frames for the Logos visual layer.
+schedule:
+  type: daemon
+
+pipeline_role: actuator
+pipeline_layer: output
+pipeline_state:
+  path: "/dev/shm/hapax-visual/frame.jpg"
+  metrics: [frame_age_s, pass_count]

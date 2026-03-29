@@ -1,0 +1,13 @@
+id: consent
+name: Consent Engine
+category: governance
+purpose: Enforce interpersonal transparency contracts across all data-touching pipelines.
+schedule:
+  type: daemon
+
+pipeline_role: integrator
+pipeline_layer: cognition
+pipeline_state:
+  path: ""
+  metrics: [phase, coverage_pct, active_contracts]
+gates: [voice_pipeline, compositor]

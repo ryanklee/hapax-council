@@ -18,6 +18,7 @@ import logging
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 import yaml
 from pydantic import BaseModel, Field
@@ -107,6 +108,14 @@ class ManualSection(BaseModel):
     order: int = 99
 
 
+class PipelineState(BaseModel):
+    """State file configuration for pipeline participation in System Anatomy."""
+
+    path: str = ""
+    metrics: list[str] = []
+    stale_threshold: float = 10.0
+
+
 class AgentManifest(BaseModel):
     """Complete agent manifest — the formalized personnel file."""
 
@@ -147,6 +156,12 @@ class AgentManifest(BaseModel):
     cli: CLISpec | None = None
     timer_display: TimerDisplay | None = None
     manual_section: ManualSection | None = None
+
+    # ── Pipeline (System Anatomy graph participation) ───────────────────
+    pipeline_role: Literal["sensor", "processor", "integrator", "actuator"] | None = None
+    pipeline_layer: Literal["perception", "cognition", "output"] | None = None
+    pipeline_state: PipelineState | None = None
+    gates: list[str] = Field(default_factory=list)
 
     @property
     def display_name(self) -> str:

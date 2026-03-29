@@ -1,0 +1,13 @@
+id: stimmung_sync
+name: Stimmung Sync
+category: observability
+purpose: Aggregate environmental and operator signals into a unified stance state.
+schedule:
+  type: daemon
+
+pipeline_role: processor
+pipeline_layer: perception
+pipeline_state:
+  path: "/dev/shm/hapax-stimmung/state.json"
+  metrics: [overall_stance, health, operator_energy]
+  stale_threshold: 120

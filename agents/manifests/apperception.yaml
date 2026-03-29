@@ -1,0 +1,12 @@
+id: apperception
+name: Apperception
+category: synthesis
+purpose: Synthesize self-referential awareness band from system-wide signals.
+schedule:
+  type: daemon
+
+pipeline_role: integrator
+pipeline_layer: cognition
+pipeline_state:
+  path: "/dev/shm/hapax-apperception/self-band.json"
+  metrics: [coherence, system_awareness, continuity]

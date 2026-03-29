@@ -1,0 +1,13 @@
+id: ir_perception
+name: IR Perception
+category: observability
+purpose: Fuse Pi NoIR edge detections into unified spatial presence signals.
+schedule:
+  type: daemon
+
+pipeline_role: sensor
+pipeline_layer: perception
+pipeline_state:
+  path: "~/hapax-state/pi-noir/desk.json"
+  metrics: [person_detected, hand_activity, gaze_direction]
+  stale_threshold: 15

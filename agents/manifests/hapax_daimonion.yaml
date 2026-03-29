@@ -69,3 +69,9 @@ narrative: |
   output (e.g., audio_output). Executors dispatch the winning commands to actual hardware
   (OBS WebSocket, audio output). The entire pipeline runs in real-time with sub-100ms
   latency targets. This is the largest subsystem in the codebase (71 Python modules).
+
+pipeline_role: processor
+pipeline_layer: perception
+pipeline_state:
+  path: "~/.cache/hapax-daimonion/perception-state.json"
+  metrics: [flow_score, presence_probability, heart_rate_bpm, aggregate_confidence]

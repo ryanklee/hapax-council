@@ -70,3 +70,9 @@ cli:
     - flag: "-v"
       description: "Verbose logging"
       flag_type: bool
+
+pipeline_role: actuator
+pipeline_layer: output
+pipeline_state:
+  path: "/dev/shm/hapax-compositor/visual-layer-state.json"
+  metrics: [display_state, signal_count, zone_opacities]
