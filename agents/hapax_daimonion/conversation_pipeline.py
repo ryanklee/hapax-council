@@ -1230,8 +1230,8 @@ class ConversationPipeline:
             # Tools disabled for voice pacing — tool execution + second LLM
             # round-trip adds 10-15s latency that destroys conversation flow.
             # The model answers from system prompt context instead.
-            # if self.tools:
-            #     kwargs["tools"] = self.tools
+            if self.tools:
+                kwargs["tools"] = self.tools
 
             kwargs["timeout"] = 15  # seconds — fail fast, don't block conversation
             _t_llm_start = time.monotonic()
@@ -1427,13 +1427,11 @@ class ConversationPipeline:
             # is under control.
             if tool_calls_data:
                 log.info(
-                    "Skipping %d tool call(s) for voice pacing: %s",
+                    "Executing %d tool call(s): %s",
                     len(tool_calls_data),
                     [tc["name"] for tc in tool_calls_data],
                 )
-                # Record as assistant message without executing tools
-                if full_text:
-                    self.messages.append({"role": "assistant", "content": full_text})
+                await self._handle_tool_calls(tool_calls_data, full_text)
 
         except TimeoutError:
             log.warning("LLM timeout — no response")
@@ -1492,13 +1490,16 @@ class ConversationPipeline:
             else:
                 try:
                     args = json.loads(tc["arguments"]) if tc["arguments"] else {}
-                    result = (
-                        await handler(args)
-                        if asyncio.iscoroutinefunction(handler)
-                        else handler(args)
-                    )
+                    _timeout = getattr(self, "_tool_timeout", 3.0)
+                    if asyncio.iscoroutinefunction(handler):
+                        result = await asyncio.wait_for(handler(args), timeout=_timeout)
+                    else:
+                        result = handler(args)
                     if not isinstance(result, str):
                         result = json.dumps(result)
+                except TimeoutError:
+                    result = json.dumps({"error": f"Tool {tc['name']} timed out"})
+                    log.warning("Tool %s timed out after %.1fs", tc["name"], _timeout)
                 except Exception as e:
                     result = json.dumps({"error": str(e)})
 
