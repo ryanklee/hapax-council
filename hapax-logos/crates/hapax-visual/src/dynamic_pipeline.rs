@@ -354,20 +354,12 @@ impl DynamicPipeline {
 
                 let input_bgl = Self::get_or_create_input_layout(device, input_count, &mut input_layouts);
 
-                let pipeline_layout =
-                    device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                        label: Some(&format!("{} layout", plan_pass.node_id)),
-                        bind_group_layouts: &[
-                            &self.uniform_buffer.bind_group_layout,
-                            &input_bgl,
-                        ],
-                        push_constant_ranges: &[],
-                    });
-
+                // Use auto-derived layout from shader to match transpiled bindings exactly.
+                // The shader declares its own bind groups (0=uniforms, 1=textures, 2=params).
                 let render_pipeline =
                     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                         label: Some(&plan_pass.node_id),
-                        layout: Some(&pipeline_layout),
+                        layout: None,
                         vertex: wgpu::VertexState {
                             module: &self.vertex_module,
                             entry_point: Some("vs_main"),
@@ -641,10 +633,12 @@ impl DynamicPipeline {
     fn create_input_layout(device: &wgpu::Device, input_count: usize) -> wgpu::BindGroupLayout {
         let mut entries: Vec<wgpu::BindGroupLayoutEntry> = Vec::new();
 
-        // One texture per input
-        for i in 0..input_count {
+        // Transpiled shaders use alternating texture/sampler pairs:
+        // binding 0 = texture, binding 1 = sampler, binding 2 = texture, binding 3 = sampler, ...
+        let count = input_count.max(1); // at least 1 texture (from @live/previous pass)
+        for i in 0..count {
             entries.push(wgpu::BindGroupLayoutEntry {
-                binding: i as u32,
+                binding: (i * 2) as u32,
                 visibility: wgpu::ShaderStages::FRAGMENT,
                 ty: wgpu::BindingType::Texture {
                     sample_type: wgpu::TextureSampleType::Float { filterable: true },
@@ -653,15 +647,13 @@ impl DynamicPipeline {
                 },
                 count: None,
             });
+            entries.push(wgpu::BindGroupLayoutEntry {
+                binding: (i * 2 + 1) as u32,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            });
         }
-
-        // Sampler at the end
-        entries.push(wgpu::BindGroupLayoutEntry {
-            binding: input_count as u32,
-            visibility: wgpu::ShaderStages::FRAGMENT,
-            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-            count: None,
-        });
 
         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("dynamic input bgl"),
@@ -704,21 +696,35 @@ impl DynamicPipeline {
 
         let mut entries: Vec<wgpu::BindGroupEntry> = Vec::new();
 
+        // Alternating texture/sampler pairs matching transpiler convention
+        let count = inputs.len().max(1);
         for (i, name) in inputs.iter().enumerate() {
             let view = self.textures.get(name)
                 .or_else(|| self.textures.get("final"))
                 .map(|t| &t.view)
                 .unwrap();
             entries.push(wgpu::BindGroupEntry {
-                binding: i as u32,
+                binding: (i * 2) as u32,
                 resource: wgpu::BindingResource::TextureView(view),
             });
+            entries.push(wgpu::BindGroupEntry {
+                binding: (i * 2 + 1) as u32,
+                resource: wgpu::BindingResource::Sampler(&self.sampler),
+            });
         }
-
-        entries.push(wgpu::BindGroupEntry {
-            binding: input_count as u32,
-            resource: wgpu::BindingResource::Sampler(&self.sampler),
-        });
+        // If no inputs, still provide a default texture+sampler (shaders expect at least one)
+        if inputs.is_empty() {
+            if let Some(tex) = self.textures.values().next() {
+                entries.push(wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&tex.view),
+                });
+                entries.push(wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                });
+            }
+        }
 
         device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("dynamic input bg"),
