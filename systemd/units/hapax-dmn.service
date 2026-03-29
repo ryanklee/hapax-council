@@ -9,6 +9,7 @@ ExecStart=/home/hapax/.local/bin/uv run python -m agents.dmn
 WorkingDirectory=/home/hapax/projects/hapax-council
 Restart=on-failure
 RestartSec=10
+EnvironmentFile=/run/user/1000/hapax-secrets.env
 Environment=PATH=/home/hapax/.local/bin:/usr/local/bin:/usr/bin
 MemoryMax=2G
 
