@@ -190,3 +190,142 @@ class TestShaderGraphConformance(unittest.TestCase):
 
         cap = ShaderGraphCapability()
         assert "visual" in cap.degrade().lower() or "unavailable" in cap.degrade().lower()
+
+
+class TestPerceptionBackendAdapter(unittest.TestCase):
+    def test_adapter_is_capability(self):
+        from unittest.mock import MagicMock
+
+        from shared.capability_adapters import PerceptionBackendAdapter
+
+        mock_backend = MagicMock()
+        mock_backend.name = "test_backend"
+        mock_backend.tier.value = "fast"
+        mock_backend.available.return_value = True
+
+        adapter = PerceptionBackendAdapter(mock_backend)
+        assert isinstance(adapter, Capability)
+        assert adapter.category == CapabilityCategory.PERCEPTION
+        assert adapter.resource_tier == ResourceTier.INSTANT
+        assert adapter.available(_make_ctx()) is True
+
+    def test_adapter_slow_tier(self):
+        from unittest.mock import MagicMock
+
+        from shared.capability_adapters import PerceptionBackendAdapter
+
+        mock_backend = MagicMock()
+        mock_backend.name = "slow_backend"
+        mock_backend.tier.value = "slow"
+        mock_backend.available.return_value = True
+
+        adapter = PerceptionBackendAdapter(mock_backend)
+        assert adapter.resource_tier == ResourceTier.LIGHT
+
+    def test_adapter_unavailable(self):
+        from unittest.mock import MagicMock
+
+        from shared.capability_adapters import PerceptionBackendAdapter
+
+        mock_backend = MagicMock()
+        mock_backend.name = "broken"
+        mock_backend.available.return_value = False
+
+        adapter = PerceptionBackendAdapter(mock_backend)
+        assert adapter.available(_make_ctx()) is False
+
+    def test_adapter_exposes_backend(self):
+        from unittest.mock import MagicMock
+
+        from shared.capability_adapters import PerceptionBackendAdapter
+
+        mock_backend = MagicMock()
+        mock_backend.name = "test"
+        adapter = PerceptionBackendAdapter(mock_backend)
+        assert adapter.backend is mock_backend
+
+
+class TestToolRegistryDelegation(unittest.TestCase):
+    def test_tool_visible_in_capability_registry(self):
+        from agents.hapax_daimonion.tool_capability import (
+            ToolCapability,
+            ToolCategory,
+            ToolRegistry,
+        )
+
+        cap_reg = CapabilityRegistry()
+        tool_reg = ToolRegistry(cap_reg)
+
+        async def noop(args):
+            return "ok"
+
+        tool = ToolCapability(
+            name="test_tool",
+            description="test",
+            schema={
+                "type": "function",
+                "function": {
+                    "name": "test_tool",
+                    "description": "",
+                    "parameters": {"type": "object", "properties": {}, "required": []},
+                },
+            },
+            handler=noop,
+            tool_category=ToolCategory.INFORMATION,
+            resource_tier=ResourceTier.INSTANT,
+        )
+        tool_reg.register(tool)
+
+        assert cap_reg.get("test_tool") is tool
+        assert tool_reg.get("test_tool") is tool
+        assert len(cap_reg.available(_make_ctx(), category=CapabilityCategory.TOOL)) == 1
+
+    def test_duplicate_skips_with_warning(self):
+        from agents.hapax_daimonion.tool_capability import (
+            ToolCapability,
+            ToolCategory,
+            ToolRegistry,
+        )
+
+        cap_reg = CapabilityRegistry()
+        tool_reg = ToolRegistry(cap_reg)
+
+        async def noop(args):
+            return "ok"
+
+        schema = {
+            "type": "function",
+            "function": {
+                "name": "dup",
+                "description": "",
+                "parameters": {"type": "object", "properties": {}, "required": []},
+            },
+        }
+        tool_reg.register(
+            ToolCapability(
+                name="dup",
+                description="",
+                schema=schema,
+                handler=noop,
+                tool_category=ToolCategory.INFORMATION,
+                resource_tier=ResourceTier.INSTANT,
+            )
+        )
+        tool_reg.register(
+            ToolCapability(
+                name="dup",
+                description="",
+                schema=schema,
+                handler=noop,
+                tool_category=ToolCategory.INFORMATION,
+                resource_tier=ResourceTier.INSTANT,
+            )
+        )
+        # Second register should skip, not crash
+        assert len(tool_reg.all_tools()) == 1
+
+    def test_default_registry_created(self):
+        from agents.hapax_daimonion.tool_capability import ToolRegistry
+
+        tool_reg = ToolRegistry()
+        assert tool_reg.capability_registry is not None
