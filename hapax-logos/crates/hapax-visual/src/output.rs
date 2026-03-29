@@ -136,7 +136,9 @@ impl ShmOutput {
         match rx.recv_timeout(std::time::Duration::from_millis(16)) {
             Ok(Ok(())) => {}
             _ => {
-                // Not ready in 16ms — skip this frame's SHM write
+                // Not ready in 16ms — unmap and skip this frame's SHM write.
+                // Without unmap, the buffer stays mapped and the next queue::submit panics.
+                self.staging_buffer.unmap();
                 return;
             }
         }
