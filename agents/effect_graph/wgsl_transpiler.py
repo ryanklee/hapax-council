@@ -210,7 +210,9 @@ def transpile_all_nodes(nodes_dir: Path, output_dir: Path | None = None) -> dict
         output_dir = nodes_dir
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    frag_files = sorted(nodes_dir.glob("*.frag"))
+    # Skip hand-authored WGSL files that diverge from their .frag source
+    SKIP_TRANSPILE = {"content_layer.frag"}
+    frag_files = sorted(f for f in nodes_dir.glob("*.frag") if f.name not in SKIP_TRANSPILE)
     results: dict = {
         "total": len(frag_files),
         "success": 0,

@@ -42,8 +42,9 @@ struct PlanPass {
     output: String,
     #[serde(default = "default_steps")]
     steps_per_frame: u32,
-    #[serde(default)]
-    compute: bool,
+    /// Pass type from Python: "render" or "compute"
+    #[serde(rename = "type", default)]
+    pass_type: String,
     #[serde(default)]
     uniforms: HashMap<String, f64>,
     #[serde(default)]
@@ -59,14 +60,9 @@ fn default_steps() -> u32 {
 }
 
 // --- Uniforms JSON override ---
-
-#[derive(Debug, Default, Deserialize)]
-struct UniformsOverride {
-    #[serde(default)]
-    custom: Vec<f32>,
-    #[serde(default)]
-    slot_opacities: Option<[f32; 4]>,
-}
+// The Python modulator writes a flat dict: {"node.param": val, "signal.key": val}
+// We parse as HashMap and route signal.* to shared uniforms, node.* to per-pass params.
+type UniformsOverride = HashMap<String, f64>;
 
 // --- Pipeline types ---
 
@@ -345,7 +341,7 @@ impl DynamicPipeline {
 
             let input_count = plan_pass.inputs.len();
 
-            if plan_pass.compute {
+            if plan_pass.pass_type == "compute" {
                 // Compute pass
                 let compute_source = format!("{}\n{}", SHARED_UNIFORMS_WGSL, fragment_source);
                 let compute_module =
@@ -524,16 +520,31 @@ impl DynamicPipeline {
 
         uniform_data.slot_opacities = content_slot_opacities;
 
-        // Apply uniforms.json overrides
+        // Apply uniforms.json signal overrides (flat dict from Python modulator)
+        // Format: {"signal.key": val, "node.param": val}
         if let Ok(data) = std::fs::read_to_string(UNIFORMS_JSON) {
             if let Ok(overrides) = serde_json::from_str::<UniformsOverride>(&data) {
-                if let Some(opacities) = overrides.slot_opacities {
-                    uniform_data.slot_opacities = opacities;
-                }
-                for (i, &val) in overrides.custom.iter().enumerate() {
-                    if i < 32 {
-                        uniform_data.custom[i / 4][i % 4] = val;
+                for (key, &val) in &overrides {
+                    if let Some(signal) = key.strip_prefix("signal.") {
+                        let v = val as f32;
+                        match signal {
+                            "color_warmth" => uniform_data.color_warmth = v,
+                            "speed" => uniform_data.speed = v,
+                            "turbulence" => uniform_data.turbulence = v,
+                            "brightness" => uniform_data.brightness = v,
+                            "intensity" => uniform_data.intensity = v,
+                            "tension" => uniform_data.tension = v,
+                            "depth" => uniform_data.depth = v,
+                            "coherence" => uniform_data.coherence = v,
+                            "spectral_color" => uniform_data.spectral_color = v,
+                            "temporal_distortion" => uniform_data.temporal_distortion = v,
+                            "degradation" => uniform_data.degradation = v,
+                            "pitch_displacement" => uniform_data.pitch_displacement = v,
+                            "formant_character" => uniform_data.formant_character = v,
+                            _ => {}
+                        }
                     }
+                    // node.param keys handled per-pass via params buffers at reload time
                 }
             }
         }
@@ -843,48 +854,6 @@ impl DynamicPipeline {
 
         device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("dynamic input bg"),
-            layout,
-            entries: &entries,
-        })
-    }
-
-    fn create_input_bind_group_with_layout(
-        &self,
-        device: &wgpu::Device,
-        inputs: &[String],
-        layout: &wgpu::BindGroupLayout,
-    ) -> wgpu::BindGroup {
-        let mut entries: Vec<wgpu::BindGroupEntry> = Vec::new();
-
-        for (i, name) in inputs.iter().enumerate() {
-            let view = self.textures.get(name)
-                .or_else(|| self.textures.get("final"))
-                .map(|t| &t.view)
-                .unwrap();
-            entries.push(wgpu::BindGroupEntry {
-                binding: (i * 2) as u32,
-                resource: wgpu::BindingResource::TextureView(view),
-            });
-            entries.push(wgpu::BindGroupEntry {
-                binding: (i * 2 + 1) as u32,
-                resource: wgpu::BindingResource::Sampler(&self.sampler),
-            });
-        }
-        if inputs.is_empty() {
-            if let Some(tex) = self.textures.values().next() {
-                entries.push(wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&tex.view),
-                });
-                entries.push(wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&self.sampler),
-                });
-            }
-        }
-
-        device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("dynamic input bg (derived)"),
             layout,
             entries: &entries,
         })
