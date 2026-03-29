@@ -106,6 +106,27 @@ PreToolUse hooks enforce branch discipline and safety at the tool-call level:
 
 Destructive command detection strips quoted strings before matching to prevent false positives from commit messages that discuss git commands.
 
+## IR Perception (Pi NoIR Edge Fleet)
+
+3 Raspberry Pi 4s with Pi Camera Module 3 NoIR under 850nm IR flood illumination. Each runs `hapax-ir-edge` daemon: YOLOv8n TFLite person detection + NIR hand thresholding + screen detection. Captures via `rpicam-still`, POSTs structured JSON to council every ~3s.
+
+**Pi fleet:**
+- **Pi-1** (hapax-pi1, 192.168.68.78) — desk, co-located with C920-desk
+- **Pi-2** (hapax-pi2, 192.168.68.52) — room, co-located with C920-room
+- **Pi-6** (hapax-pi6, 192.168.68.74) — overhead, co-located with C920-overhead (also runs sync agents)
+
+**Data flow:** Pi daemon → `POST /api/pi/{role}/ir` (`logos/api/routes/pi.py`) → `~/hapax-state/pi-noir/{role}.json` → `ir_presence` backend (FAST tier, 13 signals) → perception engine → perception-state.json.
+
+**Key files:**
+- `pi-edge/` — Edge daemon code (deployed to each Pi at `~/hapax-edge/`)
+- `shared/ir_models.py` — Shared Pydantic schema (IrDetectionReport)
+- `agents/hapax_voice/backends/ir_presence.py` — Perception backend (multi-Pi fusion)
+- `agents/hapax_voice/ir_signals.py` — State file reader
+
+**Fusion logic:** Person detection = any() across Pis. Gaze/biometrics prefer desk Pi (face-on). Hand activity prefers overhead Pi. Staleness cutoff: 15s. Presence engine signal weight: `ir_person_detected: (0.90, 0.10)`.
+
+**Face landmarks currently disabled** — fdlite incompatible with NumPy 2.x on Trixie (`np.math` removed). Degrades gracefully.
+
 ## Key Modules
 
 - **`shared/config.py`** — Model aliases, LiteLLM/Qdrant clients, embedding, `DATA_DIR`
