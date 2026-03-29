@@ -16,7 +16,7 @@
 |------|---------------|
 | `agents/dmn/buffer.py` | Add `recent_observations(n)` method |
 | `agents/dmn/__main__.py` | Launch imagination loop + resolver tasks, drain imagination impingements |
-| `agents/hapax_voice/__main__.py` | Wire imagination context fn + proactive gate |
+| `agents/hapax_daimonion/__main__.py` | Wire imagination context fn + proactive gate |
 | `tests/test_dmn_imagination_wiring.py` | DMN-side tests |
 | `tests/test_voice_imagination_wiring.py` | Voice-side tests |
 
@@ -315,7 +315,7 @@ git commit -m "feat(dmn): launch imagination loop + resolver tasks, drain imagin
 ### Task 3: Voice Daemon — Context Injection + Proactive Gate
 
 **Files:**
-- Modify: `agents/hapax_voice/__main__.py`
+- Modify: `agents/hapax_daimonion/__main__.py`
 - Create: `tests/test_voice_imagination_wiring.py`
 
 - [ ] **Step 1: Write the failing tests**
@@ -484,6 +484,6 @@ Expected: 87 passed
 - [ ] **Step 6: Commit**
 
 ```bash
-git add agents/hapax_voice/__main__.py agents/hapax_voice/conversation_pipeline.py tests/test_voice_imagination_wiring.py
+git add agents/hapax_daimonion/__main__.py agents/hapax_daimonion/conversation_pipeline.py tests/test_voice_imagination_wiring.py
 git commit -m "feat(voice): wire imagination context injection + proactive gate into voice daemon"
 ```

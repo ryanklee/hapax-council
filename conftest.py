@@ -1,5 +1,4 @@
 """Root conftest — prevent real notifications and GPU model loading during tests.
-
 This patches:
   1. I/O layer (urlopen, subprocess.run) inside shared.notify — prevents real
      ntfy or desktop notifications.
@@ -23,8 +22,8 @@ def _stub_gpu_modules():
     """Stub GPU/ML modules at import time to prevent VRAM allocation.
 
     This runs at collection time (before any test), so transitive imports
-    from agents.hapax_voice.* can't accidentally load real torch/model2vec.
-    The stubs in tests/hapax_voice/conftest.py are more detailed but only
+    from agents.hapax_daimonion.* can't accidentally load real torch/model2vec.
+    The stubs in tests/hapax_daimonion/conftest.py are more detailed but only
     apply when that directory is collected — this catches everything else.
     """
     for mod_name in [

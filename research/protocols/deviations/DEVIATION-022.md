@@ -6,7 +6,7 @@
 
 ## What Changed
 
-`agents/hapax_voice/proofs/RESEARCH-STATE.md`:
+`agents/hapax_daimonion/proofs/RESEARCH-STATE.md`:
 - Updated "Last updated" header to session 18
 - Added Session 18 entry documenting TTS engine swap (Kokoro+Piper → Voxtral API)
 - Includes impact assessment: "None. TTS is downstream of all grounding evaluation."

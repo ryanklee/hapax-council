@@ -6,7 +6,7 @@
 
 ## What Changed
 
-Rewritten: `agents/hapax_voice/proofs/CYCLE-2-PREREGISTRATION.md` — comprehensive update to reflect current research state.
+Rewritten: `agents/hapax_daimonion/proofs/CYCLE-2-PREREGISTRATION.md` — comprehensive update to reflect current research state.
 
 Changes:
 - Title and research question expanded from "thread injection" to "structured grounding package"

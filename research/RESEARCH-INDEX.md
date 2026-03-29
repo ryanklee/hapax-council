@@ -2,7 +2,7 @@
 
 Maps all research artifacts across the hapax workspace. Primary entry points:
 
-- **Research state**: `agents/hapax_voice/proofs/RESEARCH-STATE.md` (living document, updated after each session)
+- **Research state**: `agents/hapax_daimonion/proofs/RESEARCH-STATE.md` (living document, updated after each session)
 - **Theory traceability**: `research/THEORY-MAP.md` (Clark & Brennan constructs to code/test matrix)
 
 ---
@@ -13,27 +13,27 @@ SCED experiment: Clark & Brennan (1991) conversational grounding in production v
 
 | Artifact | Path | Topic |
 |----------|------|-------|
-| RESEARCH-STATE.md | `agents/hapax_voice/proofs/` | Living continuity document |
-| THEORETICAL-FOUNDATIONS.md | `agents/hapax_voice/proofs/` | Literature review: Clark, Traum, Brennan, SCED |
-| CYCLE-2-PREREGISTRATION.md | `agents/hapax_voice/proofs/` | Experiment design: ABA, BEST, HDI+ROPE |
-| CYCLE-1-PILOT-REPORT.md | `agents/hapax_voice/proofs/` | Pilot results: 37 sessions, BF=3.66 |
-| BASELINE-ANALYSIS.md | `agents/hapax_voice/proofs/` | 17 sessions, 8 patterns |
-| POSITION.md | `agents/hapax_voice/proofs/` | Positioning vs profile retrieval |
-| PACKAGE-ASSESSMENT.md | `agents/hapax_voice/proofs/` | Component analysis, 3+1 package |
-| REFINEMENT-RESEARCH.md | `agents/hapax_voice/proofs/` | 8 research streams for model design |
-| REFINEMENT-DECISION.md | `agents/hapax_voice/proofs/` | Refine before test decision |
-| WHY-NO-ONE-IMPLEMENTED-CLARK.md | `agents/hapax_voice/proofs/` | 35-year gap analysis |
-| ADDITIVE-VS-THRESHOLD.md | `agents/hapax_voice/proofs/` | Effect model selection |
-| BARGE-IN-REPAIR.md | `agents/hapax_voice/proofs/` | Repair sequence handling |
-| BAYESIAN-TOOL-SELECTION.md | `agents/hapax_voice/proofs/` | BEST vs beta-binomial decision |
-| PHASE-TRANSITION-A-TO-B.md | `agents/hapax_voice/proofs/` | A-to-B transition criteria |
-| SESSION-PROTOCOL.md | `agents/hapax_voice/proofs/` | Per-session procedures |
-| OBSERVABILITY.md | `agents/hapax_voice/proofs/` | Experiment observability design |
-| SYSTEM-CLEANUP-DECISION.md | `agents/hapax_voice/proofs/` | Strip to research essentials |
-| REPO-OPTIMIZATION-RESEARCH.md | `agents/hapax_voice/proofs/` | Repository optimization (140+ sources) |
-| WORKSTATION-OPTIMIZATION.md | `agents/hapax_voice/proofs/` | Workstation tuning for experiments |
-| CONTEXT-AS-COMPUTATION.md | `agents/hapax_voice/proofs/` | Mechanistic justification: mesa-optimization, entrainment heads, function vectors |
-| TOOL-CALLS.md | `agents/hapax_voice/proofs/` | Tool selection decisions |
+| RESEARCH-STATE.md | `agents/hapax_daimonion/proofs/` | Living continuity document |
+| THEORETICAL-FOUNDATIONS.md | `agents/hapax_daimonion/proofs/` | Literature review: Clark, Traum, Brennan, SCED |
+| CYCLE-2-PREREGISTRATION.md | `agents/hapax_daimonion/proofs/` | Experiment design: ABA, BEST, HDI+ROPE |
+| CYCLE-1-PILOT-REPORT.md | `agents/hapax_daimonion/proofs/` | Pilot results: 37 sessions, BF=3.66 |
+| BASELINE-ANALYSIS.md | `agents/hapax_daimonion/proofs/` | 17 sessions, 8 patterns |
+| POSITION.md | `agents/hapax_daimonion/proofs/` | Positioning vs profile retrieval |
+| PACKAGE-ASSESSMENT.md | `agents/hapax_daimonion/proofs/` | Component analysis, 3+1 package |
+| REFINEMENT-RESEARCH.md | `agents/hapax_daimonion/proofs/` | 8 research streams for model design |
+| REFINEMENT-DECISION.md | `agents/hapax_daimonion/proofs/` | Refine before test decision |
+| WHY-NO-ONE-IMPLEMENTED-CLARK.md | `agents/hapax_daimonion/proofs/` | 35-year gap analysis |
+| ADDITIVE-VS-THRESHOLD.md | `agents/hapax_daimonion/proofs/` | Effect model selection |
+| BARGE-IN-REPAIR.md | `agents/hapax_daimonion/proofs/` | Repair sequence handling |
+| BAYESIAN-TOOL-SELECTION.md | `agents/hapax_daimonion/proofs/` | BEST vs beta-binomial decision |
+| PHASE-TRANSITION-A-TO-B.md | `agents/hapax_daimonion/proofs/` | A-to-B transition criteria |
+| SESSION-PROTOCOL.md | `agents/hapax_daimonion/proofs/` | Per-session procedures |
+| OBSERVABILITY.md | `agents/hapax_daimonion/proofs/` | Experiment observability design |
+| SYSTEM-CLEANUP-DECISION.md | `agents/hapax_daimonion/proofs/` | Strip to research essentials |
+| REPO-OPTIMIZATION-RESEARCH.md | `agents/hapax_daimonion/proofs/` | Repository optimization (140+ sources) |
+| WORKSTATION-OPTIMIZATION.md | `agents/hapax_daimonion/proofs/` | Workstation tuning for experiments |
+| CONTEXT-AS-COMPUTATION.md | `agents/hapax_daimonion/proofs/` | Mechanistic justification: mesa-optimization, entrainment heads, function vectors |
+| TOOL-CALLS.md | `agents/hapax_daimonion/proofs/` | Tool selection decisions |
 | THEORY-MAP.md | `research/` | Theory to code/test traceability matrix |
 | README.md | `research/` | TIER/Psych-DS directory structure |
 
@@ -106,7 +106,7 @@ System-wide governance and compliance audits spanning multiple repos.
 |----------|------|------|---------|
 | experiment-phase.json | council | repo root | Current experiment phase |
 | experiment-freeze-manifest.txt | council | repo root | Frozen paths during experiments |
-| LAYER_STATUS.yaml | council | `agents/hapax_voice/` | Composition ladder status |
+| LAYER_STATUS.yaml | council | `agents/hapax_daimonion/` | Composition ladder status |
 | CITATION.cff | council | repo root | Software citation metadata |
 | CITATION.cff | constitution | repo root | Governance spec citation |
 | DEVIATION-*.md | council | `research/protocols/deviations/` | Frozen-path change records |

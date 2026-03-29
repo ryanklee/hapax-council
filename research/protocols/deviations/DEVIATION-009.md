@@ -6,7 +6,7 @@
 
 ## What Changed
 
-`agents/hapax_voice/proofs/RESEARCH-STATE.md` — added Session 14 entry documenting infrastructure-only work: ingestion pipeline audit, classification inspector, overlay compliance, design language §3.8 completion, signal surfacing.
+`agents/hapax_daimonion/proofs/RESEARCH-STATE.md` — added Session 14 entry documenting infrastructure-only work: ingestion pipeline audit, classification inspector, overlay compliance, design language §3.8 completion, signal surfacing.
 
 ## Why
 
@@ -28,7 +28,7 @@ Session 14 entry explicitly states "Infrastructure-only. No changes to experimen
 
 ## What Changed
 
-`agents/hapax_voice/proofs/RESEARCH-STATE.md`: Updated session 13 entry to include
+`agents/hapax_daimonion/proofs/RESEARCH-STATE.md`: Updated session 13 entry to include
 stale test repair work (PR #287). Added paragraph documenting 9 test files fixed.
 
 ## Why

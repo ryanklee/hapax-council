@@ -6,7 +6,7 @@
 
 ## What Changed
 
-`agents/hapax_voice/proofs/RESEARCH-STATE.md` — resolved merge conflict markers
+`agents/hapax_daimonion/proofs/RESEARCH-STATE.md` — resolved merge conflict markers
 left by `git stash pop`. No content was added or removed; the conflict was between
 an older version (session 9) and the current version (session 17). Resolution kept
 the current (upstream) content which was already on main via prior merged PRs.

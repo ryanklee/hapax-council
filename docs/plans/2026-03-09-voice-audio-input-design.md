@@ -1,6 +1,6 @@
 # Voice Audio Input Loop Design
 
-**Goal:** Wire continuous microphone audio into the hapax-voice daemon so wake word detection, VAD presence scoring, and Gemini Live streaming all function in real time.
+**Goal:** Wire continuous microphone audio into the hapax-daimonion daemon so wake word detection, VAD presence scoring, and Gemini Live streaming all function in real time.
 
 **Decision:** PyAudio stream on the PipeWire echo-cancelled virtual source (`echo_cancel_capture`), with an async distribution loop fanning frames to all consumers.
 
@@ -8,7 +8,7 @@
 
 ## Part A: Audio Input Module
 
-New module `agents/hapax_voice/audio_input.py`. Single class `AudioInputStream`.
+New module `agents/hapax_daimonion/audio_input.py`. Single class `AudioInputStream`.
 
 ### API Surface
 

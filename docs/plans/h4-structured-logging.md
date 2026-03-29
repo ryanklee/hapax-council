@@ -39,8 +39,8 @@
 
 - Both repos have `shared/langfuse_config.py` which creates an OTel `TracerProvider` with OTLP export to Langfuse
 - Both repos depend on `opentelemetry-api`, `opentelemetry-sdk`, `opentelemetry-exporter-otlp-proto-http`, and `opentelemetry-instrumentation-httpx`
-- hapax-voice has `event_log.py` -- a bespoke JSONL event writer that already injects `trace_id`/`span_id` from OTel context (the exact pattern we want to generalize to all logging)
-- hapax-voice has `tracing.py` -- a `VoiceTracer` class using the Langfuse SDK directly (separate from OTel)
+- hapax-daimonion has `event_log.py` -- a bespoke JSONL event writer that already injects `trace_id`/`span_id` from OTel context (the exact pattern we want to generalize to all logging)
+- hapax-daimonion has `tracing.py` -- a `VoiceTracer` class using the Langfuse SDK directly (separate from OTel)
 - All agents use `logging.basicConfig(format="%(asctime)s [%(levelname)s] %(message)s")` or similar -- no centralized log setup
 
 ---
@@ -104,7 +104,7 @@ Every log line will be a single JSON object on stdout:
 | `trace_id` | OTel injection | 32-char hex, from `otelTraceID` LogRecord attr |
 | `span_id` | OTel injection | 16-char hex, from `otelSpanID` LogRecord attr |
 | `service` | Config constant | `hapax-council` or `hapax-officium` |
-| `agent` | Env var / init | Agent name (e.g. `ingest`, `scout`, `hapax-voice`) |
+| `agent` | Env var / init | Agent name (e.g. `ingest`, `scout`, `hapax-daimonion`) |
 
 When no OTel span is active, `trace_id` and `span_id` will be absent (not empty strings or zeros).
 
@@ -308,7 +308,7 @@ Verification: run cockpit API, confirm JSON output on stdout, confirm `trace_id`
 | `agents/ingest.py:33` | `logging.basicConfig(level=INFO, format=...)` | `configure_logging(agent="ingest")` |
 | `agents/scout.py:608` | `logging.basicConfig(...)` | `configure_logging(agent="scout")` |
 | `agents/profiler.py:1648` | `logging.basicConfig(...)` | `configure_logging(agent="profiler")` |
-| `agents/hapax_voice/__main__.py:1009` | `logging.basicConfig(...)` | `configure_logging(agent="hapax-voice")` |
+| `agents/hapax_daimonion/__main__.py:1009` | `logging.basicConfig(...)` | `configure_logging(agent="hapax-daimonion")` |
 | `agents/obsidian_sync.py:630` | `logging.basicConfig(...)` | `configure_logging(agent="obsidian-sync")` |
 | `agents/chrome_sync.py:568` | `logging.basicConfig(...)` | `configure_logging(agent="chrome-sync")` |
 | `agents/gmail_sync.py:625` | `logging.basicConfig(...)` | `configure_logging(agent="gmail-sync")` |
@@ -351,18 +351,18 @@ Convert `print()` calls to proper `log.info()` / `log.debug()` as files are touc
 - `agents/profiler.py` (45 prints) -- high-traffic agent
 - `agents/meeting_lifecycle.py` (22 prints, officium) -- management-critical
 - `scripts/run_deliberations.py` (51 prints) -- governance auditing
-- `agents/hapax_voice/__main__.py` (1 print, but 56 total in hapax_voice)
+- `agents/hapax_daimonion/__main__.py` (1 print, but 56 total in hapax_daimonion)
 - `agents/management_profiler.py` (32 prints, officium)
 
 Do NOT attempt a mass `print()` -> `log.x()` conversion. Many prints are intentional CLI output (scripts), progress bars, or user-facing messages. Each must be evaluated individually.
 
 ---
 
-## 8. hapax-voice EventLog Integration
+## 8. hapax-daimonion EventLog Integration
 
-The existing `agents/hapax_voice/event_log.py` already writes structured JSONL with OTel trace injection. It should remain as a **separate** event stream (it serves a different purpose: domain events, not operational logs). However, the trace ID injection pattern it uses (lines 52-61) validates our approach.
+The existing `agents/hapax_daimonion/event_log.py` already writes structured JSONL with OTel trace injection. It should remain as a **separate** event stream (it serves a different purpose: domain events, not operational logs). However, the trace ID injection pattern it uses (lines 52-61) validates our approach.
 
-After Phase 2, hapax-voice will have **two** structured outputs:
+After Phase 2, hapax-daimonion will have **two** structured outputs:
 1. `event_log.py` JSONL files -- domain events (session start, wake word, TTS delivery)
 2. `shared/log_setup.py` JSON on stdout -- operational logs (errors, warnings, debug)
 
@@ -390,16 +390,16 @@ The `HAPAX_SERVICE` default should be set in each repo's `.env` or systemd unit 
 
 ```bash
 # All JSON logs from an agent
-journalctl --user -u hapax-voice --output cat | jq .
+journalctl --user -u hapax-daimonion --output cat | jq .
 
 # Filter by trace ID
-journalctl --user -u hapax-voice --output cat | jq 'select(.trace_id == "0af7651916cd43dd8448eb211c80319c")'
+journalctl --user -u hapax-daimonion --output cat | jq 'select(.trace_id == "0af7651916cd43dd8448eb211c80319c")'
 
 # Errors only
-journalctl --user -u hapax-voice --output cat | jq 'select(.level == "ERROR")'
+journalctl --user -u hapax-daimonion --output cat | jq 'select(.level == "ERROR")'
 
 # Cross-service: find all logs for a Langfuse trace
-for unit in hapax-voice scout ingest profiler; do
+for unit in hapax-daimonion scout ingest profiler; do
   journalctl --user -u "$unit" --output cat
 done | jq -s 'map(select(.trace_id == "TARGET")) | sort_by(.timestamp)'
 ```

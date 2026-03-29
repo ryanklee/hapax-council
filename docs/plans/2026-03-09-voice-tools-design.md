@@ -141,7 +141,7 @@ Captures images from available cameras and/or screen, sends to Gemini Flash for 
 - `cameras` (array of string, optional): Which sources to capture — `operator`, `hardware`, `screen` (default: all available)
 - `question` (string, optional): Specific question about the scene (default: general description)
 
-**Implementation:** Reuse existing `WebcamCapturer` and `ScreenCapturer` from hapax_voice modules. Capture frames, send to Gemini Flash vision model (`gemini-2.0-flash`) via LiteLLM with the question as prompt. Return the analysis text.
+**Implementation:** Reuse existing `WebcamCapturer` and `ScreenCapturer` from hapax_daimonion modules. Capture frames, send to Gemini Flash vision model (`gemini-2.0-flash`) via LiteLLM with the question as prompt. Return the analysis text.
 
 **Spontaneous vision triggers** (out-of-tool, daemon-level):
 - The daemon's existing `WorkspaceMonitor` already runs periodic workspace analysis. When it detects a significant context shift (new person, equipment state change, activity mode change), it can inject updated `screen_context_block()` into the LLM's system prompt for the active session. This is not a tool call — it's a system message update between turns.
@@ -240,7 +240,7 @@ When `guest_mode=True`, tools are **not registered**. The guest persona already 
 
 ---
 
-## New Module: `agents/hapax_voice/tools.py`
+## New Module: `agents/hapax_daimonion/tools.py`
 
 All tool schemas, handlers, and registration logic live in a single new module. Keeps `pipeline.py` clean.
 
@@ -263,8 +263,8 @@ def register_tool_handlers(llm: OpenAILLMService, config: VoiceConfig) -> None:
 | `httpx` | SMS Gateway REST calls | Yes |
 | `shared/google_auth.py` | OAuth token management | Yes |
 | `shared/config.py` | Qdrant client, embed() | Yes |
-| `agents/hapax_voice/webcam_capturer.py` | Camera capture | Yes |
-| `agents/hapax_voice/screen_capturer.py` | Screen capture | Yes |
+| `agents/hapax_daimonion/webcam_capturer.py` | Camera capture | Yes |
+| `agents/hapax_daimonion/screen_capturer.py` | Screen capture | Yes |
 
 No new dependencies required.
 

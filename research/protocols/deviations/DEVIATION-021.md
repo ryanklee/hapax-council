@@ -6,7 +6,7 @@
 
 ## What Changed
 
-`agents/hapax_voice/conversation_pipeline.py` — two comment-only changes:
+`agents/hapax_daimonion/conversation_pipeline.py` — two comment-only changes:
 - Line 1852: `"Kokoro synthesizes them as"` → `"they synthesize as Unicode names"`
 - Line 1952: `"# Kokoro output rate"` → `"# Voxtral output rate"`
 

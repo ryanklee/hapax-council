@@ -352,7 +352,7 @@ The `toLabeled` pattern is critical for composition: a sub-computation may raise
 
 ## 6. The Composition Ladder as Governance Infrastructure
 
-The hapax_voice type system (10 layers, L0-L9) is proven with 62 hypothesis property tests across algebraic categories: reflexivity, monotonicity, immutability, closure, bijection, convergence, conservation, determinism, idempotence, rate bounds, decomposition.
+The hapax_daimonion type system (10 layers, L0-L9) is proven with 62 hypothesis property tests across algebraic categories: reflexivity, monotonicity, immutability, closure, bijection, convergence, conservation, determinism, idempotence, rate bounds, decomposition.
 
 ### 6.1 Algebraic-Governance Correspondence
 

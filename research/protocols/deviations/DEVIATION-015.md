@@ -3,7 +3,7 @@ id: DEVIATION-015
 date: 2026-03-24
 phase: baseline
 paths:
-  - agents/hapax_voice/grounding_ledger.py
+  - agents/hapax_daimonion/grounding_ledger.py
 justification: |
   Two pure code-correctness fixes from the perceptual system hardening
   batch 1 review:

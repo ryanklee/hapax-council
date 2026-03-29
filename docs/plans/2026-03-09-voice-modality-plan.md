@@ -1,4 +1,4 @@
-# Hapax Voice Implementation Plan
+# Hapax Daimonion Implementation Plan
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
@@ -12,16 +12,16 @@
 
 **Codebase context:**
 - Project root: `~/projects/ai-agents/`
-- New module: `agents/hapax_voice/`
-- Tests: `tests/test_hapax_voice_*.py`
-- Systemd units: `systemd/units/hapax-voice.service`
-- Config: `~/.config/hapax-voice/config.yaml`
+- New module: `agents/hapax_daimonion/`
+- Tests: `tests/test_hapax_daimonion_*.py`
+- Systemd units: `systemd/units/hapax-daimonion.service`
+- Config: `~/.config/hapax-daimonion/config.yaml`
 - Shared utilities: `shared/config.py` (model aliases, Qdrant), `shared/notify.py` (ntfy dispatch)
 - Existing audio: `agents/audio_processor.py` (VAD, classification, diarization patterns)
 - Existing TTS: `agents/demo_pipeline/voice.py` (Chatterbox HTTP API)
 - Existing persona: `cockpit/voice.py` (greeting, operator_name)
 - Run tests: `cd ~/projects/ai-agents && uv run pytest tests/ -v`
-- Run single test: `uv run pytest tests/test_hapax_voice_config.py -v`
+- Run single test: `uv run pytest tests/test_hapax_daimonion_config.py -v`
 
 ---
 
@@ -29,10 +29,10 @@
 
 **Files:**
 - Modify: `~/projects/ai-agents/pyproject.toml`
-- Create: `~/projects/ai-agents/agents/hapax_voice/__init__.py`
-- Create: `~/projects/ai-agents/agents/hapax_voice/__main__.py`
-- Create: `~/projects/ai-agents/agents/hapax_voice/config.py`
-- Test: `~/projects/ai-agents/tests/test_hapax_voice_config.py`
+- Create: `~/projects/ai-agents/agents/hapax_daimonion/__init__.py`
+- Create: `~/projects/ai-agents/agents/hapax_daimonion/__main__.py`
+- Create: `~/projects/ai-agents/agents/hapax_daimonion/config.py`
+- Test: `~/projects/ai-agents/tests/test_hapax_daimonion_config.py`
 
 **Step 1: Add new dependencies to pyproject.toml**
 
@@ -51,12 +51,12 @@ Note: Parakeet (NVIDIA NeMo) is large — install separately via `uv pip install
 **Step 2: Create module directory and __init__.py**
 
 ```bash
-mkdir -p ~/projects/ai-agents/agents/hapax_voice
+mkdir -p ~/projects/ai-agents/agents/hapax_daimonion
 ```
 
 ```python
-# agents/hapax_voice/__init__.py
-"""Hapax Voice — persistent voice interaction daemon."""
+# agents/hapax_daimonion/__init__.py
+"""Hapax Daimonion — persistent voice interaction daemon."""
 ```
 
 **Step 3: Write the config module with test**
@@ -64,8 +64,8 @@ mkdir -p ~/projects/ai-agents/agents/hapax_voice
 Write test first:
 
 ```python
-# tests/test_hapax_voice_config.py
-"""Tests for hapax_voice configuration loading."""
+# tests/test_hapax_daimonion_config.py
+"""Tests for hapax_daimonion configuration loading."""
 import tempfile
 from pathlib import Path
 
@@ -73,12 +73,12 @@ import yaml
 
 
 def test_default_config_values():
-    from agents.hapax_voice.config import VoiceConfig
+    from agents.hapax_daimonion.config import VoiceConfig
 
     cfg = VoiceConfig()
     assert cfg.silence_timeout_s == 30
     assert cfg.wake_phrases == ["hapax", "hey hapax"]
-    assert cfg.hotkey_socket == "/run/user/1000/hapax-voice.sock"
+    assert cfg.hotkey_socket == "/run/user/1000/hapax-daimonion.sock"
     assert cfg.presence_window_minutes == 5
     assert cfg.presence_vad_threshold == 0.4
     assert cfg.context_gate_volume_threshold == 0.7
@@ -93,7 +93,7 @@ def test_default_config_values():
 
 
 def test_config_from_yaml():
-    from agents.hapax_voice.config import VoiceConfig, load_config
+    from agents.hapax_daimonion.config import VoiceConfig, load_config
 
     data = {"silence_timeout_s": 45, "presence_window_minutes": 10}
     with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
@@ -107,7 +107,7 @@ def test_config_from_yaml():
 
 
 def test_config_missing_file_returns_defaults():
-    from agents.hapax_voice.config import load_config
+    from agents.hapax_daimonion.config import load_config
 
     cfg = load_config(Path("/nonexistent/config.yaml"))
     assert cfg.silence_timeout_s == 30
@@ -115,14 +115,14 @@ def test_config_missing_file_returns_defaults():
 
 **Step 4: Run test to verify it fails**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_voice_config.py -v`
-Expected: FAIL — `ModuleNotFoundError: No module named 'agents.hapax_voice.config'`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_daimonion_config.py -v`
+Expected: FAIL — `ModuleNotFoundError: No module named 'agents.hapax_daimonion.config'`
 
 **Step 5: Implement config module**
 
 ```python
-# agents/hapax_voice/config.py
-"""Configuration for hapax-voice daemon."""
+# agents/hapax_daimonion/config.py
+"""Configuration for hapax-daimonion daemon."""
 from __future__ import annotations
 
 import logging
@@ -133,7 +133,7 @@ from pydantic import BaseModel
 
 log = logging.getLogger(__name__)
 
-DEFAULT_CONFIG_PATH = Path.home() / ".config" / "hapax-voice" / "config.yaml"
+DEFAULT_CONFIG_PATH = Path.home() / ".config" / "hapax-daimonion" / "config.yaml"
 
 
 class VoiceConfig(BaseModel):
@@ -142,7 +142,7 @@ class VoiceConfig(BaseModel):
     # Session
     silence_timeout_s: int = 30
     wake_phrases: list[str] = ["hapax", "hey hapax"]
-    hotkey_socket: str = "/run/user/1000/hapax-voice.sock"
+    hotkey_socket: str = "/run/user/1000/hapax-daimonion.sock"
 
     # Presence detection
     presence_window_minutes: int = 5
@@ -178,26 +178,26 @@ def load_config(path: Path | None = None) -> VoiceConfig:
 
 **Step 6: Run tests to verify they pass**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_voice_config.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_daimonion_config.py -v`
 Expected: 3 passed
 
 **Step 7: Create minimal __main__.py**
 
 ```python
-# agents/hapax_voice/__main__.py
-"""Entry point for hapax-voice daemon."""
+# agents/hapax_daimonion/__main__.py
+"""Entry point for hapax-daimonion daemon."""
 from __future__ import annotations
 
 import argparse
 import logging
 
-from agents.hapax_voice.config import load_config
+from agents.hapax_daimonion.config import load_config
 
-log = logging.getLogger("hapax_voice")
+log = logging.getLogger("hapax_daimonion")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Hapax Voice daemon")
+    parser = argparse.ArgumentParser(description="Hapax Daimonion daemon")
     parser.add_argument("--config", type=str, help="Path to config YAML")
     parser.add_argument("--check", action="store_true", help="Verify config and exit")
     args = parser.parse_args()
@@ -209,7 +209,7 @@ def main() -> None:
         print(cfg.model_dump_json(indent=2))
         return
 
-    log.info("Hapax Voice starting (config loaded)")
+    log.info("Hapax Daimonion starting (config loaded)")
     # Daemon loop will be added in later tasks
 
 
@@ -219,15 +219,15 @@ if __name__ == "__main__":
 
 **Step 8: Verify module runs**
 
-Run: `cd ~/projects/ai-agents && uv run python -m agents.hapax_voice --check`
+Run: `cd ~/projects/ai-agents && uv run python -m agents.hapax_daimonion --check`
 Expected: JSON config output printed
 
 **Step 9: Commit**
 
 ```bash
 cd ~/projects/ai-agents
-git add agents/hapax_voice/ tests/test_hapax_voice_config.py pyproject.toml
-git commit -m "feat(voice): add hapax_voice module skeleton and config"
+git add agents/hapax_daimonion/ tests/test_hapax_daimonion_config.py pyproject.toml
+git commit -m "feat(voice): add hapax_daimonion module skeleton and config"
 ```
 
 ---
@@ -246,7 +246,7 @@ mkdir -p ~/.config/pipewire/pipewire.conf.d
 
 ```
 # ~/.config/pipewire/pipewire.conf.d/60-echo-cancel.conf
-# Echo cancellation using WebRTC AEC for Hapax Voice
+# Echo cancellation using WebRTC AEC for Hapax Daimonion
 context.modules = [
     {
         name = libpipewire-module-echo-cancel
@@ -320,7 +320,7 @@ cd ~/projects/distro-work
 # Save a copy of the echo cancel config for reference
 cp ~/.config/pipewire/pipewire.conf.d/60-echo-cancel.conf ./pipewire-echo-cancel.conf
 git add pipewire-echo-cancel.conf
-git commit -m "feat(voice): PipeWire echo cancellation config for Hapax Voice"
+git commit -m "feat(voice): PipeWire echo cancellation config for Hapax Daimonion"
 ```
 
 ---
@@ -328,19 +328,19 @@ git commit -m "feat(voice): PipeWire echo cancellation config for Hapax Voice"
 ### Task 3: Session lifecycle and state machine
 
 **Files:**
-- Create: `~/projects/ai-agents/agents/hapax_voice/session.py`
-- Test: `~/projects/ai-agents/tests/test_hapax_voice_session.py`
+- Create: `~/projects/ai-agents/agents/hapax_daimonion/session.py`
+- Test: `~/projects/ai-agents/tests/test_hapax_daimonion_session.py`
 
 **Step 1: Write the failing test**
 
 ```python
-# tests/test_hapax_voice_session.py
+# tests/test_hapax_daimonion_session.py
 """Tests for voice session state machine."""
 import time
 
 
 def test_session_starts_idle():
-    from agents.hapax_voice.session import SessionManager
+    from agents.hapax_daimonion.session import SessionManager
 
     sm = SessionManager(silence_timeout_s=30)
     assert sm.state == "idle"
@@ -348,7 +348,7 @@ def test_session_starts_idle():
 
 
 def test_session_open_close():
-    from agents.hapax_voice.session import SessionManager
+    from agents.hapax_daimonion.session import SessionManager
 
     sm = SessionManager(silence_timeout_s=30)
     sm.open(trigger="wake_word")
@@ -362,7 +362,7 @@ def test_session_open_close():
 
 
 def test_session_tracks_speaker():
-    from agents.hapax_voice.session import SessionManager
+    from agents.hapax_daimonion.session import SessionManager
 
     sm = SessionManager(silence_timeout_s=30)
     sm.open(trigger="hotkey")
@@ -372,7 +372,7 @@ def test_session_tracks_speaker():
 
 
 def test_session_guest_mode():
-    from agents.hapax_voice.session import SessionManager
+    from agents.hapax_daimonion.session import SessionManager
 
     sm = SessionManager(silence_timeout_s=30)
     sm.open(trigger="wake_word")
@@ -381,7 +381,7 @@ def test_session_guest_mode():
 
 
 def test_session_silence_timeout():
-    from agents.hapax_voice.session import SessionManager
+    from agents.hapax_daimonion.session import SessionManager
 
     sm = SessionManager(silence_timeout_s=1)
     sm.open(trigger="hotkey")
@@ -391,7 +391,7 @@ def test_session_silence_timeout():
 
 
 def test_session_activity_resets_timeout():
-    from agents.hapax_voice.session import SessionManager
+    from agents.hapax_daimonion.session import SessionManager
 
     sm = SessionManager(silence_timeout_s=2)
     sm.open(trigger="hotkey")
@@ -402,7 +402,7 @@ def test_session_activity_resets_timeout():
 
 
 def test_open_while_active_is_noop():
-    from agents.hapax_voice.session import SessionManager
+    from agents.hapax_daimonion.session import SessionManager
 
     sm = SessionManager(silence_timeout_s=30)
     sm.open(trigger="wake_word")
@@ -411,7 +411,7 @@ def test_open_while_active_is_noop():
 
 
 def test_close_while_idle_is_noop():
-    from agents.hapax_voice.session import SessionManager
+    from agents.hapax_daimonion.session import SessionManager
 
     sm = SessionManager(silence_timeout_s=30)
     sm.close(reason="explicit")  # should not crash
@@ -420,14 +420,14 @@ def test_close_while_idle_is_noop():
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_voice_session.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_daimonion_session.py -v`
 Expected: FAIL — `ModuleNotFoundError`
 
 **Step 3: Implement session module**
 
 ```python
-# agents/hapax_voice/session.py
-"""Session lifecycle state machine for Hapax Voice."""
+# agents/hapax_daimonion/session.py
+"""Session lifecycle state machine for Hapax Daimonion."""
 from __future__ import annotations
 
 import logging
@@ -497,14 +497,14 @@ class VoiceSessionManager:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_voice_session.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_daimonion_session.py -v`
 Expected: 8 passed
 
 **Step 5: Commit**
 
 ```bash
 cd ~/projects/ai-agents
-git add agents/hapax_voice/session.py tests/test_hapax_voice_session.py
+git add agents/hapax_daimonion/session.py tests/test_hapax_daimonion_session.py
 git commit -m "feat(voice): session lifecycle state machine"
 ```
 
@@ -513,26 +513,26 @@ git commit -m "feat(voice): session lifecycle state machine"
 ### Task 4: Presence detector
 
 **Files:**
-- Create: `~/projects/ai-agents/agents/hapax_voice/presence.py`
-- Test: `~/projects/ai-agents/tests/test_hapax_voice_presence.py`
+- Create: `~/projects/ai-agents/agents/hapax_daimonion/presence.py`
+- Test: `~/projects/ai-agents/tests/test_hapax_daimonion_presence.py`
 
 **Step 1: Write the failing test**
 
 ```python
-# tests/test_hapax_voice_presence.py
+# tests/test_hapax_daimonion_presence.py
 """Tests for presence detection scoring."""
 import time
 
 
 def test_presence_starts_absent():
-    from agents.hapax_voice.presence import PresenceDetector
+    from agents.hapax_daimonion.presence import PresenceDetector
 
     pd = PresenceDetector(window_minutes=5, vad_threshold=0.4)
     assert pd.score == "likely_absent"
 
 
 def test_presence_updates_on_vad():
-    from agents.hapax_voice.presence import PresenceDetector
+    from agents.hapax_daimonion.presence import PresenceDetector
 
     pd = PresenceDetector(window_minutes=5, vad_threshold=0.4)
     # Simulate 10 VAD hits in quick succession
@@ -542,7 +542,7 @@ def test_presence_updates_on_vad():
 
 
 def test_presence_uncertain_with_few_events():
-    from agents.hapax_voice.presence import PresenceDetector
+    from agents.hapax_daimonion.presence import PresenceDetector
 
     pd = PresenceDetector(window_minutes=5, vad_threshold=0.4)
     pd.record_vad_event(confidence=0.5)
@@ -551,7 +551,7 @@ def test_presence_uncertain_with_few_events():
 
 
 def test_presence_decays_over_time():
-    from agents.hapax_voice.presence import PresenceDetector
+    from agents.hapax_daimonion.presence import PresenceDetector
 
     pd = PresenceDetector(window_minutes=0.01, vad_threshold=0.4)  # ~0.6s window
     for _ in range(10):
@@ -563,7 +563,7 @@ def test_presence_decays_over_time():
 
 
 def test_low_confidence_vad_ignored():
-    from agents.hapax_voice.presence import PresenceDetector
+    from agents.hapax_daimonion.presence import PresenceDetector
 
     pd = PresenceDetector(window_minutes=5, vad_threshold=0.4)
     for _ in range(20):
@@ -573,13 +573,13 @@ def test_low_confidence_vad_ignored():
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_voice_presence.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_daimonion_presence.py -v`
 Expected: FAIL
 
 **Step 3: Implement presence detector**
 
 ```python
-# agents/hapax_voice/presence.py
+# agents/hapax_daimonion/presence.py
 """Presence detection via audio VAD events."""
 from __future__ import annotations
 
@@ -635,14 +635,14 @@ class PresenceDetector:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_voice_presence.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_daimonion_presence.py -v`
 Expected: 5 passed
 
 **Step 5: Commit**
 
 ```bash
 cd ~/projects/ai-agents
-git add agents/hapax_voice/presence.py tests/test_hapax_voice_presence.py
+git add agents/hapax_daimonion/presence.py tests/test_hapax_daimonion_presence.py
 git commit -m "feat(voice): presence detector with sliding-window VAD scoring"
 ```
 
@@ -651,20 +651,20 @@ git commit -m "feat(voice): presence detector with sliding-window VAD scoring"
 ### Task 5: Context gate
 
 **Files:**
-- Create: `~/projects/ai-agents/agents/hapax_voice/context_gate.py`
-- Test: `~/projects/ai-agents/tests/test_hapax_voice_context_gate.py`
+- Create: `~/projects/ai-agents/agents/hapax_daimonion/context_gate.py`
+- Test: `~/projects/ai-agents/tests/test_hapax_daimonion_context_gate.py`
 
 **Step 1: Write the failing test**
 
 ```python
-# tests/test_hapax_voice_context_gate.py
+# tests/test_hapax_daimonion_context_gate.py
 """Tests for context gate — interrupt eligibility checks."""
 from unittest.mock import patch
 
 
 def test_gate_blocks_during_active_session():
-    from agents.hapax_voice.context_gate import ContextGate
-    from agents.hapax_voice.session import SessionManager
+    from agents.hapax_daimonion.context_gate import ContextGate
+    from agents.hapax_daimonion.session import SessionManager
 
     sm = SessionManager(silence_timeout_s=30)
     sm.open(trigger="wake_word")
@@ -675,8 +675,8 @@ def test_gate_blocks_during_active_session():
 
 
 def test_gate_allows_when_idle():
-    from agents.hapax_voice.context_gate import ContextGate
-    from agents.hapax_voice.session import SessionManager
+    from agents.hapax_daimonion.context_gate import ContextGate
+    from agents.hapax_daimonion.session import SessionManager
 
     sm = SessionManager(silence_timeout_s=30)
     gate = ContextGate(session=sm)
@@ -687,8 +687,8 @@ def test_gate_allows_when_idle():
 
 
 def test_gate_blocks_high_volume():
-    from agents.hapax_voice.context_gate import ContextGate
-    from agents.hapax_voice.session import SessionManager
+    from agents.hapax_daimonion.context_gate import ContextGate
+    from agents.hapax_daimonion.session import SessionManager
 
     sm = SessionManager(silence_timeout_s=30)
     gate = ContextGate(session=sm, volume_threshold=0.7)
@@ -700,8 +700,8 @@ def test_gate_blocks_high_volume():
 
 
 def test_gate_blocks_studio_active():
-    from agents.hapax_voice.context_gate import ContextGate
-    from agents.hapax_voice.session import SessionManager
+    from agents.hapax_daimonion.context_gate import ContextGate
+    from agents.hapax_daimonion.session import SessionManager
 
     sm = SessionManager(silence_timeout_s=30)
     gate = ContextGate(session=sm)
@@ -714,13 +714,13 @@ def test_gate_blocks_studio_active():
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_voice_context_gate.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_daimonion_context_gate.py -v`
 Expected: FAIL
 
 **Step 3: Implement context gate**
 
 ```python
-# agents/hapax_voice/context_gate.py
+# agents/hapax_daimonion/context_gate.py
 """Context gate — determines if this is a good moment to interrupt."""
 from __future__ import annotations
 
@@ -728,7 +728,7 @@ import logging
 import subprocess
 from dataclasses import dataclass
 
-from agents.hapax_voice.session import SessionManager
+from agents.hapax_daimonion.session import SessionManager
 
 log = logging.getLogger(__name__)
 
@@ -810,14 +810,14 @@ class ContextGate:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_voice_context_gate.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_daimonion_context_gate.py -v`
 Expected: 4 passed
 
 **Step 5: Commit**
 
 ```bash
 cd ~/projects/ai-agents
-git add agents/hapax_voice/context_gate.py tests/test_hapax_voice_context_gate.py
+git add agents/hapax_daimonion/context_gate.py tests/test_hapax_daimonion_context_gate.py
 git commit -m "feat(voice): context gate for interrupt eligibility"
 ```
 
@@ -826,19 +826,19 @@ git commit -m "feat(voice): context gate for interrupt eligibility"
 ### Task 6: Speaker identification
 
 **Files:**
-- Create: `~/projects/ai-agents/agents/hapax_voice/speaker_id.py`
-- Test: `~/projects/ai-agents/tests/test_hapax_voice_speaker_id.py`
+- Create: `~/projects/ai-agents/agents/hapax_daimonion/speaker_id.py`
+- Test: `~/projects/ai-agents/tests/test_hapax_daimonion_speaker_id.py`
 
 **Step 1: Write the failing test**
 
 ```python
-# tests/test_hapax_voice_speaker_id.py
+# tests/test_hapax_daimonion_speaker_id.py
 """Tests for speaker identification via pyannote embeddings."""
 import numpy as np
 
 
 def test_speaker_id_no_enrollment_returns_uncertain():
-    from agents.hapax_voice.speaker_id import SpeakerIdentifier
+    from agents.hapax_daimonion.speaker_id import SpeakerIdentifier
 
     si = SpeakerIdentifier(enrollment_path=None)
     result = si.identify(np.random.randn(256).astype(np.float32))
@@ -847,7 +847,7 @@ def test_speaker_id_no_enrollment_returns_uncertain():
 
 
 def test_speaker_id_high_similarity_returns_ryan():
-    from agents.hapax_voice.speaker_id import SpeakerIdentifier, SpeakerResult
+    from agents.hapax_daimonion.speaker_id import SpeakerIdentifier, SpeakerResult
 
     si = SpeakerIdentifier(enrollment_path=None)
     # Manually set enrollment embedding
@@ -863,7 +863,7 @@ def test_speaker_id_high_similarity_returns_ryan():
 
 
 def test_speaker_id_low_similarity_returns_not_ryan():
-    from agents.hapax_voice.speaker_id import SpeakerIdentifier
+    from agents.hapax_daimonion.speaker_id import SpeakerIdentifier
 
     si = SpeakerIdentifier(enrollment_path=None)
     embedding = np.random.randn(256).astype(np.float32)
@@ -882,7 +882,7 @@ def test_speaker_id_low_similarity_returns_not_ryan():
 
 
 def test_cosine_similarity():
-    from agents.hapax_voice.speaker_id import _cosine_similarity
+    from agents.hapax_daimonion.speaker_id import _cosine_similarity
 
     a = np.array([1.0, 0.0, 0.0])
     b = np.array([1.0, 0.0, 0.0])
@@ -894,13 +894,13 @@ def test_cosine_similarity():
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_voice_speaker_id.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_daimonion_speaker_id.py -v`
 Expected: FAIL
 
 **Step 3: Implement speaker identification**
 
 ```python
-# agents/hapax_voice/speaker_id.py
+# agents/hapax_daimonion/speaker_id.py
 """Speaker identification using pyannote embeddings."""
 from __future__ import annotations
 
@@ -963,14 +963,14 @@ class SpeakerIdentifier:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_voice_speaker_id.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_daimonion_speaker_id.py -v`
 Expected: 4 passed
 
 **Step 5: Commit**
 
 ```bash
 cd ~/projects/ai-agents
-git add agents/hapax_voice/speaker_id.py tests/test_hapax_voice_speaker_id.py
+git add agents/hapax_daimonion/speaker_id.py tests/test_hapax_daimonion_speaker_id.py
 git commit -m "feat(voice): speaker identification via embedding comparison"
 ```
 
@@ -979,18 +979,18 @@ git commit -m "feat(voice): speaker identification via embedding comparison"
 ### Task 7: Intent router
 
 **Files:**
-- Create: `~/projects/ai-agents/agents/hapax_voice/intent_router.py`
-- Test: `~/projects/ai-agents/tests/test_hapax_voice_intent.py`
+- Create: `~/projects/ai-agents/agents/hapax_daimonion/intent_router.py`
+- Test: `~/projects/ai-agents/tests/test_hapax_daimonion_intent.py`
 
 **Step 1: Write the failing test**
 
 ```python
-# tests/test_hapax_voice_intent.py
+# tests/test_hapax_daimonion_intent.py
 """Tests for intent routing — conversational vs system-directed."""
 
 
 def test_system_intent_briefing():
-    from agents.hapax_voice.intent_router import classify_intent
+    from agents.hapax_daimonion.intent_router import classify_intent
 
     result = classify_intent("what's my briefing")
     assert result.backend == "local"
@@ -998,49 +998,49 @@ def test_system_intent_briefing():
 
 
 def test_system_intent_calendar():
-    from agents.hapax_voice.intent_router import classify_intent
+    from agents.hapax_daimonion.intent_router import classify_intent
 
     result = classify_intent("pull up my calendar")
     assert result.backend == "local"
 
 
 def test_system_intent_system_status():
-    from agents.hapax_voice.intent_router import classify_intent
+    from agents.hapax_daimonion.intent_router import classify_intent
 
     result = classify_intent("how's the system doing")
     assert result.backend == "local"
 
 
 def test_conversational_intent():
-    from agents.hapax_voice.intent_router import classify_intent
+    from agents.hapax_daimonion.intent_router import classify_intent
 
     result = classify_intent("tell me about the history of jazz")
     assert result.backend == "gemini"
 
 
 def test_conversational_generic():
-    from agents.hapax_voice.intent_router import classify_intent
+    from agents.hapax_daimonion.intent_router import classify_intent
 
     result = classify_intent("what do you think about that")
     assert result.backend == "gemini"
 
 
 def test_system_intent_meeting_prep():
-    from agents.hapax_voice.intent_router import classify_intent
+    from agents.hapax_daimonion.intent_router import classify_intent
 
     result = classify_intent("give me the meeting prep for alex")
     assert result.backend == "local"
 
 
 def test_hapax_prefix_forces_local():
-    from agents.hapax_voice.intent_router import classify_intent
+    from agents.hapax_daimonion.intent_router import classify_intent
 
     result = classify_intent("hapax check my notifications")
     assert result.backend == "local"
 
 
 def test_guest_mode_always_gemini():
-    from agents.hapax_voice.intent_router import classify_intent
+    from agents.hapax_daimonion.intent_router import classify_intent
 
     result = classify_intent("what's my briefing", guest_mode=True)
     assert result.backend == "gemini"
@@ -1048,13 +1048,13 @@ def test_guest_mode_always_gemini():
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_voice_intent.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_daimonion_intent.py -v`
 Expected: FAIL
 
 **Step 3: Implement intent router**
 
 ```python
-# agents/hapax_voice/intent_router.py
+# agents/hapax_daimonion/intent_router.py
 """Intent routing — classify utterances as system-directed or conversational."""
 from __future__ import annotations
 
@@ -1134,14 +1134,14 @@ def classify_intent(text: str, guest_mode: bool = False) -> IntentResult:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_voice_intent.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_daimonion_intent.py -v`
 Expected: 8 passed
 
 **Step 5: Commit**
 
 ```bash
 cd ~/projects/ai-agents
-git add agents/hapax_voice/intent_router.py tests/test_hapax_voice_intent.py
+git add agents/hapax_daimonion/intent_router.py tests/test_hapax_daimonion_intent.py
 git commit -m "feat(voice): intent router for backend selection"
 ```
 
@@ -1150,19 +1150,19 @@ git commit -m "feat(voice): intent router for backend selection"
 ### Task 8: Notification queue with TTL
 
 **Files:**
-- Create: `~/projects/ai-agents/agents/hapax_voice/notification_queue.py`
-- Test: `~/projects/ai-agents/tests/test_hapax_voice_notifications.py`
+- Create: `~/projects/ai-agents/agents/hapax_daimonion/notification_queue.py`
+- Test: `~/projects/ai-agents/tests/test_hapax_daimonion_notifications.py`
 
 **Step 1: Write the failing test**
 
 ```python
-# tests/test_hapax_voice_notifications.py
+# tests/test_hapax_daimonion_notifications.py
 """Tests for notification queue with priority and TTL."""
 import time
 
 
 def test_enqueue_and_dequeue():
-    from agents.hapax_voice.notification_queue import NotificationQueue, VoiceNotification
+    from agents.hapax_daimonion.notification_queue import NotificationQueue, VoiceNotification
 
     q = NotificationQueue()
     n = VoiceNotification(title="Test", message="Hello", priority="normal", source="ntfy")
@@ -1175,7 +1175,7 @@ def test_enqueue_and_dequeue():
 
 
 def test_urgent_dequeues_first():
-    from agents.hapax_voice.notification_queue import NotificationQueue, VoiceNotification
+    from agents.hapax_daimonion.notification_queue import NotificationQueue, VoiceNotification
 
     q = NotificationQueue()
     q.enqueue(VoiceNotification(title="Low", message="x", priority="low", source="test"))
@@ -1186,7 +1186,7 @@ def test_urgent_dequeues_first():
 
 
 def test_ttl_expiry():
-    from agents.hapax_voice.notification_queue import NotificationQueue, VoiceNotification
+    from agents.hapax_daimonion.notification_queue import NotificationQueue, VoiceNotification
 
     q = NotificationQueue(ttls={"low": 0, "normal": 14400, "urgent": 1800})
     # Low priority with TTL 0 means deliver-or-discard
@@ -1197,7 +1197,7 @@ def test_ttl_expiry():
 
 
 def test_expired_items_pruned():
-    from agents.hapax_voice.notification_queue import NotificationQueue, VoiceNotification
+    from agents.hapax_daimonion.notification_queue import NotificationQueue, VoiceNotification
 
     q = NotificationQueue(ttls={"low": 0, "normal": 1, "urgent": 1800})
     q.enqueue(VoiceNotification(title="Normal", message="x", priority="normal", source="test"))
@@ -1207,7 +1207,7 @@ def test_expired_items_pruned():
 
 
 def test_requeue():
-    from agents.hapax_voice.notification_queue import NotificationQueue, VoiceNotification
+    from agents.hapax_daimonion.notification_queue import NotificationQueue, VoiceNotification
 
     q = NotificationQueue()
     n = VoiceNotification(title="Test", message="Hello", priority="normal", source="test")
@@ -1219,13 +1219,13 @@ def test_requeue():
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_voice_notifications.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_daimonion_notifications.py -v`
 Expected: FAIL
 
 **Step 3: Implement notification queue**
 
 ```python
-# agents/hapax_voice/notification_queue.py
+# agents/hapax_daimonion/notification_queue.py
 """Priority notification queue with TTL for proactive speech."""
 from __future__ import annotations
 
@@ -1292,14 +1292,14 @@ class NotificationQueue:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_voice_notifications.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_daimonion_notifications.py -v`
 Expected: 5 passed
 
 **Step 5: Commit**
 
 ```bash
 cd ~/projects/ai-agents
-git add agents/hapax_voice/notification_queue.py tests/test_hapax_voice_notifications.py
+git add agents/hapax_daimonion/notification_queue.py tests/test_hapax_daimonion_notifications.py
 git commit -m "feat(voice): notification queue with priority and TTL"
 ```
 
@@ -1308,18 +1308,18 @@ git commit -m "feat(voice): notification queue with priority and TTL"
 ### Task 9: Hapax persona and notification formatter
 
 **Files:**
-- Create: `~/projects/ai-agents/agents/hapax_voice/persona.py`
-- Test: `~/projects/ai-agents/tests/test_hapax_voice_persona.py`
+- Create: `~/projects/ai-agents/agents/hapax_daimonion/persona.py`
+- Test: `~/projects/ai-agents/tests/test_hapax_daimonion_persona.py`
 
 **Step 1: Write the failing test**
 
 ```python
-# tests/test_hapax_voice_persona.py
+# tests/test_hapax_daimonion_persona.py
 """Tests for Hapax persona — system prompts and notification formatting."""
 
 
 def test_system_prompt_contains_name():
-    from agents.hapax_voice.persona import system_prompt
+    from agents.hapax_daimonion.persona import system_prompt
 
     prompt = system_prompt()
     assert "Hapax" in prompt
@@ -1327,7 +1327,7 @@ def test_system_prompt_contains_name():
 
 
 def test_system_prompt_guest_mode():
-    from agents.hapax_voice.persona import system_prompt
+    from agents.hapax_daimonion.persona import system_prompt
 
     prompt = system_prompt(guest_mode=True)
     assert "Hapax" in prompt
@@ -1335,7 +1335,7 @@ def test_system_prompt_guest_mode():
 
 
 def test_greeting_uses_cockpit_voice():
-    from agents.hapax_voice.persona import voice_greeting
+    from agents.hapax_daimonion.persona import voice_greeting
 
     g = voice_greeting()
     assert isinstance(g, str)
@@ -1343,7 +1343,7 @@ def test_greeting_uses_cockpit_voice():
 
 
 def test_format_notification_for_speech():
-    from agents.hapax_voice.persona import format_notification
+    from agents.hapax_daimonion.persona import format_notification
 
     text = format_notification("Health Alert", "Qdrant unreachable on port 6333")
     assert isinstance(text, str)
@@ -1353,14 +1353,14 @@ def test_format_notification_for_speech():
 
 
 def test_session_end_with_queued():
-    from agents.hapax_voice.persona import session_end_message
+    from agents.hapax_daimonion.persona import session_end_message
 
     msg = session_end_message(queued_count=2)
     assert "2" in msg or "two" in msg.lower()
 
 
 def test_session_end_no_queued():
-    from agents.hapax_voice.persona import session_end_message
+    from agents.hapax_daimonion.persona import session_end_message
 
     msg = session_end_message(queued_count=0)
     assert msg  # should still say something
@@ -1368,13 +1368,13 @@ def test_session_end_no_queued():
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_voice_persona.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_daimonion_persona.py -v`
 Expected: FAIL
 
 **Step 3: Implement persona**
 
 ```python
-# agents/hapax_voice/persona.py
+# agents/hapax_daimonion/persona.py
 """Hapax persona — voice personality, system prompts, speech formatting."""
 from __future__ import annotations
 
@@ -1430,14 +1430,14 @@ def session_end_message(queued_count: int = 0) -> str:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_voice_persona.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_daimonion_persona.py -v`
 Expected: 6 passed
 
 **Step 5: Commit**
 
 ```bash
 cd ~/projects/ai-agents
-git add agents/hapax_voice/persona.py tests/test_hapax_voice_persona.py
+git add agents/hapax_daimonion/persona.py tests/test_hapax_daimonion_persona.py
 git commit -m "feat(voice): Hapax persona, system prompts, notification formatting"
 ```
 
@@ -1446,48 +1446,48 @@ git commit -m "feat(voice): Hapax persona, system prompts, notification formatti
 ### Task 10: TTS tier abstraction (Piper + Kokoro)
 
 **Files:**
-- Create: `~/projects/ai-agents/agents/hapax_voice/tts.py`
-- Test: `~/projects/ai-agents/tests/test_hapax_voice_tts.py`
+- Create: `~/projects/ai-agents/agents/hapax_daimonion/tts.py`
+- Test: `~/projects/ai-agents/tests/test_hapax_daimonion_tts.py`
 
 **Step 1: Write the failing test**
 
 ```python
-# tests/test_hapax_voice_tts.py
+# tests/test_hapax_daimonion_tts.py
 """Tests for TTS tier abstraction."""
 from unittest.mock import patch, MagicMock
 import numpy as np
 
 
 def test_tier_selection_chime():
-    from agents.hapax_voice.tts import select_tier
+    from agents.hapax_daimonion.tts import select_tier
 
     tier = select_tier("chime")
     assert tier == "piper"
 
 
 def test_tier_selection_confirmation():
-    from agents.hapax_voice.tts import select_tier
+    from agents.hapax_daimonion.tts import select_tier
 
     tier = select_tier("confirmation")
     assert tier == "piper"
 
 
 def test_tier_selection_conversation():
-    from agents.hapax_voice.tts import select_tier
+    from agents.hapax_daimonion.tts import select_tier
 
     tier = select_tier("conversation")
     assert tier == "kokoro"
 
 
 def test_tier_selection_notification():
-    from agents.hapax_voice.tts import select_tier
+    from agents.hapax_daimonion.tts import select_tier
 
     tier = select_tier("notification")
     assert tier == "kokoro"
 
 
 def test_tts_manager_init():
-    from agents.hapax_voice.tts import TTSManager
+    from agents.hapax_daimonion.tts import TTSManager
 
     mgr = TTSManager(kokoro_voice="af_heart")
     assert mgr.kokoro_voice == "af_heart"
@@ -1495,13 +1495,13 @@ def test_tts_manager_init():
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_voice_tts.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_daimonion_tts.py -v`
 Expected: FAIL
 
 **Step 3: Implement TTS abstraction**
 
 ```python
-# agents/hapax_voice/tts.py
+# agents/hapax_daimonion/tts.py
 """Tiered TTS — Piper (CPU/instant) and Kokoro (GPU/quality)."""
 from __future__ import annotations
 
@@ -1603,14 +1603,14 @@ class TTSManager:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_voice_tts.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_daimonion_tts.py -v`
 Expected: 5 passed
 
 **Step 5: Commit**
 
 ```bash
 cd ~/projects/ai-agents
-git add agents/hapax_voice/tts.py tests/test_hapax_voice_tts.py
+git add agents/hapax_daimonion/tts.py tests/test_hapax_daimonion_tts.py
 git commit -m "feat(voice): tiered TTS abstraction (Piper + Kokoro)"
 ```
 
@@ -1619,14 +1619,14 @@ git commit -m "feat(voice): tiered TTS abstraction (Piper + Kokoro)"
 ### Task 11: Hotkey activation via Unix socket
 
 **Files:**
-- Create: `~/projects/ai-agents/agents/hapax_voice/hotkey.py`
-- Create: `~/.local/bin/llm-hotkeys/hapax-voice-toggle.sh`
-- Test: `~/projects/ai-agents/tests/test_hapax_voice_hotkey.py`
+- Create: `~/projects/ai-agents/agents/hapax_daimonion/hotkey.py`
+- Create: `~/.local/bin/llm-hotkeys/hapax-daimonion-toggle.sh`
+- Test: `~/projects/ai-agents/tests/test_hapax_daimonion_hotkey.py`
 
 **Step 1: Write the failing test**
 
 ```python
-# tests/test_hapax_voice_hotkey.py
+# tests/test_hapax_daimonion_hotkey.py
 """Tests for hotkey socket server."""
 import asyncio
 import tempfile
@@ -1634,7 +1634,7 @@ from pathlib import Path
 
 
 async def test_socket_receives_toggle():
-    from agents.hapax_voice.hotkey import HotkeyServer
+    from agents.hapax_daimonion.hotkey import HotkeyServer
 
     sock_path = Path(tempfile.mktemp(suffix=".sock"))
     commands: list[str] = []
@@ -1660,7 +1660,7 @@ async def test_socket_receives_toggle():
 
 
 async def test_socket_ignores_invalid():
-    from agents.hapax_voice.hotkey import HotkeyServer
+    from agents.hapax_daimonion.hotkey import HotkeyServer
 
     sock_path = Path(tempfile.mktemp(suffix=".sock"))
     commands: list[str] = []
@@ -1686,13 +1686,13 @@ async def test_socket_ignores_invalid():
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_voice_hotkey.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_daimonion_hotkey.py -v`
 Expected: FAIL
 
 **Step 3: Implement hotkey server**
 
 ```python
-# agents/hapax_voice/hotkey.py
+# agents/hapax_daimonion/hotkey.py
 """Unix socket server for hotkey activation."""
 from __future__ import annotations
 
@@ -1754,28 +1754,28 @@ class HotkeyServer:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_voice_hotkey.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_daimonion_hotkey.py -v`
 Expected: 2 passed
 
 **Step 5: Create the hotkey shell script**
 
 ```bash
-# ~/.local/bin/llm-hotkeys/hapax-voice-toggle.sh
+# ~/.local/bin/llm-hotkeys/hapax-daimonion-toggle.sh
 #!/usr/bin/env bash
-# Toggle Hapax Voice session via Unix socket
+# Toggle Hapax Daimonion session via Unix socket
 # Bind to Super+Shift+V in COSMIC keyboard settings
-echo "toggle" | socat - UNIX-CONNECT:/run/user/$(id -u)/hapax-voice.sock
+echo "toggle" | socat - UNIX-CONNECT:/run/user/$(id -u)/hapax-daimonion.sock
 ```
 
 ```bash
-chmod +x ~/.local/bin/llm-hotkeys/hapax-voice-toggle.sh
+chmod +x ~/.local/bin/llm-hotkeys/hapax-daimonion-toggle.sh
 ```
 
 **Step 6: Commit**
 
 ```bash
 cd ~/projects/ai-agents
-git add agents/hapax_voice/hotkey.py tests/test_hapax_voice_hotkey.py
+git add agents/hapax_daimonion/hotkey.py tests/test_hapax_daimonion_hotkey.py
 git commit -m "feat(voice): hotkey activation via Unix socket"
 ```
 
@@ -1784,19 +1784,19 @@ git commit -m "feat(voice): hotkey activation via Unix socket"
 ### Task 12: ntfy listener for proactive notifications
 
 **Files:**
-- Create: `~/projects/ai-agents/agents/hapax_voice/ntfy_listener.py`
-- Test: `~/projects/ai-agents/tests/test_hapax_voice_ntfy.py`
+- Create: `~/projects/ai-agents/agents/hapax_daimonion/ntfy_listener.py`
+- Test: `~/projects/ai-agents/tests/test_hapax_daimonion_ntfy.py`
 
 **Step 1: Write the failing test**
 
 ```python
-# tests/test_hapax_voice_ntfy.py
+# tests/test_hapax_daimonion_ntfy.py
 """Tests for ntfy event listener."""
 import json
 
 
 def test_parse_ntfy_message():
-    from agents.hapax_voice.ntfy_listener import parse_ntfy_event
+    from agents.hapax_daimonion.ntfy_listener import parse_ntfy_event
 
     raw = json.dumps({
         "id": "abc123",
@@ -1815,21 +1815,21 @@ def test_parse_ntfy_message():
 
 
 def test_parse_ntfy_keepalive_ignored():
-    from agents.hapax_voice.ntfy_listener import parse_ntfy_event
+    from agents.hapax_daimonion.ntfy_listener import parse_ntfy_event
 
     raw = json.dumps({"event": "keepalive"})
     assert parse_ntfy_event(raw) is None
 
 
 def test_parse_ntfy_open_ignored():
-    from agents.hapax_voice.ntfy_listener import parse_ntfy_event
+    from agents.hapax_daimonion.ntfy_listener import parse_ntfy_event
 
     raw = json.dumps({"event": "open"})
     assert parse_ntfy_event(raw) is None
 
 
 def test_priority_mapping():
-    from agents.hapax_voice.ntfy_listener import _ntfy_priority_to_str
+    from agents.hapax_daimonion.ntfy_listener import _ntfy_priority_to_str
 
     assert _ntfy_priority_to_str(5) == "urgent"
     assert _ntfy_priority_to_str(4) == "high"
@@ -1840,13 +1840,13 @@ def test_priority_mapping():
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_voice_ntfy.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_daimonion_ntfy.py -v`
 Expected: FAIL
 
 **Step 3: Implement ntfy listener**
 
 ```python
-# agents/hapax_voice/ntfy_listener.py
+# agents/hapax_daimonion/ntfy_listener.py
 """Subscribe to ntfy topics and convert to VoiceNotifications."""
 from __future__ import annotations
 
@@ -1855,7 +1855,7 @@ import json
 import logging
 from urllib.request import urlopen, Request
 
-from agents.hapax_voice.notification_queue import VoiceNotification
+from agents.hapax_daimonion.notification_queue import VoiceNotification
 
 log = logging.getLogger(__name__)
 
@@ -1923,14 +1923,14 @@ async def subscribe_ntfy(
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_voice_ntfy.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_daimonion_ntfy.py -v`
 Expected: 4 passed
 
 **Step 5: Commit**
 
 ```bash
 cd ~/projects/ai-agents
-git add agents/hapax_voice/ntfy_listener.py tests/test_hapax_voice_ntfy.py
+git add agents/hapax_daimonion/ntfy_listener.py tests/test_hapax_daimonion_ntfy.py
 git commit -m "feat(voice): ntfy listener for proactive voice notifications"
 ```
 
@@ -1939,20 +1939,20 @@ git commit -m "feat(voice): ntfy listener for proactive voice notifications"
 ### Task 13: VRAM coordinator
 
 **Files:**
-- Create: `~/projects/ai-agents/agents/hapax_voice/vram.py`
-- Test: `~/projects/ai-agents/tests/test_hapax_voice_vram.py`
+- Create: `~/projects/ai-agents/agents/hapax_daimonion/vram.py`
+- Test: `~/projects/ai-agents/tests/test_hapax_daimonion_vram.py`
 
 **Step 1: Write the failing test**
 
 ```python
-# tests/test_hapax_voice_vram.py
+# tests/test_hapax_daimonion_vram.py
 """Tests for VRAM lockfile coordination."""
 import tempfile
 from pathlib import Path
 
 
 def test_acquire_lock():
-    from agents.hapax_voice.vram import VRAMLock
+    from agents.hapax_daimonion.vram import VRAMLock
 
     lock_path = Path(tempfile.mktemp(suffix=".lock"))
     lock = VRAMLock(lock_path)
@@ -1963,7 +1963,7 @@ def test_acquire_lock():
 
 
 def test_lock_is_exclusive():
-    from agents.hapax_voice.vram import VRAMLock
+    from agents.hapax_daimonion.vram import VRAMLock
 
     lock_path = Path(tempfile.mktemp(suffix=".lock"))
     lock1 = VRAMLock(lock_path)
@@ -1976,7 +1976,7 @@ def test_lock_is_exclusive():
 
 
 def test_lock_context_manager():
-    from agents.hapax_voice.vram import VRAMLock
+    from agents.hapax_daimonion.vram import VRAMLock
 
     lock_path = Path(tempfile.mktemp(suffix=".lock"))
     lock = VRAMLock(lock_path)
@@ -1986,7 +1986,7 @@ def test_lock_context_manager():
 
 
 def test_stale_lock_broken():
-    from agents.hapax_voice.vram import VRAMLock
+    from agents.hapax_daimonion.vram import VRAMLock
 
     lock_path = Path(tempfile.mktemp(suffix=".lock"))
     # Create a stale lock with a non-existent PID
@@ -1998,13 +1998,13 @@ def test_stale_lock_broken():
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_voice_vram.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_daimonion_vram.py -v`
 Expected: FAIL
 
 **Step 3: Implement VRAM lock**
 
 ```python
-# agents/hapax_voice/vram.py
+# agents/hapax_daimonion/vram.py
 """VRAM lockfile coordination between voice daemon and audio processor."""
 from __future__ import annotations
 
@@ -2014,7 +2014,7 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-DEFAULT_LOCK_PATH = Path.home() / ".cache" / "hapax-voice" / "vram.lock"
+DEFAULT_LOCK_PATH = Path.home() / ".cache" / "hapax-daimonion" / "vram.lock"
 
 
 class VRAMLock:
@@ -2061,14 +2061,14 @@ class VRAMLock:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_voice_vram.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_daimonion_vram.py -v`
 Expected: 4 passed
 
 **Step 5: Commit**
 
 ```bash
 cd ~/projects/ai-agents
-git add agents/hapax_voice/vram.py tests/test_hapax_voice_vram.py
+git add agents/hapax_daimonion/vram.py tests/test_hapax_daimonion_vram.py
 git commit -m "feat(voice): VRAM lockfile coordination with audio processor"
 ```
 
@@ -2077,15 +2077,15 @@ git commit -m "feat(voice): VRAM lockfile coordination with audio processor"
 ### Task 14: Systemd service and health monitor integration
 
 **Files:**
-- Create: `~/projects/ai-agents/systemd/units/hapax-voice.service`
-- Modify: `~/projects/ai-agents/agents/hapax_voice/__main__.py` (add daemon loop)
+- Create: `~/projects/ai-agents/systemd/units/hapax-daimonion.service`
+- Modify: `~/projects/ai-agents/agents/hapax_daimonion/__main__.py` (add daemon loop)
 
 **Step 1: Create the systemd service unit**
 
 ```ini
-# systemd/units/hapax-voice.service
+# systemd/units/hapax-daimonion.service
 [Unit]
-Description=Hapax Voice — persistent voice interaction daemon
+Description=Hapax Daimonion — persistent voice interaction daemon
 After=pipewire.service pipewire-pulse.service
 Wants=pipewire-pulse.service
 StartLimitBurst=5
@@ -2095,13 +2095,13 @@ OnFailure=notify-failure@%n.service
 [Service]
 Type=simple
 WorkingDirectory=/home/hapaxlegomenon/projects/ai-agents
-ExecStart=/home/hapaxlegomenon/.local/bin/uv run python -m agents.hapax_voice
+ExecStart=/home/hapaxlegomenon/.local/bin/uv run python -m agents.hapax_daimonion
 Restart=always
 RestartSec=10
 Environment=PATH=/home/hapaxlegomenon/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=HOME=/home/hapaxlegomenon
 MemoryMax=8G
-SyslogIdentifier=hapax-voice
+SyslogIdentifier=hapax-daimonion
 
 [Install]
 WantedBy=default.target
@@ -2110,8 +2110,8 @@ WantedBy=default.target
 **Step 2: Update __main__.py with daemon loop skeleton**
 
 ```python
-# agents/hapax_voice/__main__.py
-"""Entry point for hapax-voice daemon."""
+# agents/hapax_daimonion/__main__.py
+"""Entry point for hapax-daimonion daemon."""
 from __future__ import annotations
 
 import argparse
@@ -2119,14 +2119,14 @@ import asyncio
 import logging
 import signal
 
-from agents.hapax_voice.config import load_config
-from agents.hapax_voice.session import SessionManager
-from agents.hapax_voice.presence import PresenceDetector
-from agents.hapax_voice.context_gate import ContextGate
-from agents.hapax_voice.hotkey import HotkeyServer
-from agents.hapax_voice.notification_queue import NotificationQueue
+from agents.hapax_daimonion.config import load_config
+from agents.hapax_daimonion.session import SessionManager
+from agents.hapax_daimonion.presence import PresenceDetector
+from agents.hapax_daimonion.context_gate import ContextGate
+from agents.hapax_daimonion.hotkey import HotkeyServer
+from agents.hapax_daimonion.notification_queue import NotificationQueue
 
-log = logging.getLogger("hapax_voice")
+log = logging.getLogger("hapax_daimonion")
 
 
 class VoiceDaemon:
@@ -2170,7 +2170,7 @@ class VoiceDaemon:
 
     async def run(self) -> None:
         """Main daemon loop."""
-        log.info("Hapax Voice daemon starting")
+        log.info("Hapax Daimonion daemon starting")
 
         # Start hotkey listener
         await self.hotkey.start()
@@ -2193,14 +2193,14 @@ class VoiceDaemon:
                 await asyncio.sleep(1)
         finally:
             await self.hotkey.stop()
-            log.info("Hapax Voice daemon stopped")
+            log.info("Hapax Daimonion daemon stopped")
 
     def stop(self) -> None:
         self._running = False
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Hapax Voice daemon")
+    parser = argparse.ArgumentParser(description="Hapax Daimonion daemon")
     parser.add_argument("--config", type=str, help="Path to config YAML")
     parser.add_argument("--check", action="store_true", help="Verify config and exit")
     args = parser.parse_args()
@@ -2233,16 +2233,16 @@ if __name__ == "__main__":
 
 **Step 3: Test the daemon starts and responds to hotkey**
 
-Run: `cd ~/projects/ai-agents && timeout 5 uv run python -m agents.hapax_voice --check`
+Run: `cd ~/projects/ai-agents && timeout 5 uv run python -m agents.hapax_daimonion --check`
 Expected: JSON config printed
 
-Run: `cd ~/projects/ai-agents && timeout 3 uv run python -m agents.hapax_voice || true`
-Expected: "Hapax Voice daemon starting" in output, exits on timeout
+Run: `cd ~/projects/ai-agents && timeout 3 uv run python -m agents.hapax_daimonion || true`
+Expected: "Hapax Daimonion daemon starting" in output, exits on timeout
 
 **Step 4: Install the service**
 
 ```bash
-cp ~/projects/ai-agents/systemd/units/hapax-voice.service ~/.config/systemd/user/
+cp ~/projects/ai-agents/systemd/units/hapax-daimonion.service ~/.config/systemd/user/
 systemctl --user daemon-reload
 # Don't enable yet — will enable after audio pipeline integration
 ```
@@ -2251,7 +2251,7 @@ systemctl --user daemon-reload
 
 ```bash
 cd ~/projects/ai-agents
-git add systemd/units/hapax-voice.service agents/hapax_voice/__main__.py
+git add systemd/units/hapax-daimonion.service agents/hapax_daimonion/__main__.py
 git commit -m "feat(voice): daemon loop, systemd service, hotkey integration"
 ```
 
@@ -2260,21 +2260,21 @@ git commit -m "feat(voice): daemon loop, systemd service, hotkey integration"
 ### Task 15: OpenWakeWord custom model training and integration
 
 **Files:**
-- Create: `~/projects/ai-agents/agents/hapax_voice/wake_word.py`
+- Create: `~/projects/ai-agents/agents/hapax_daimonion/wake_word.py`
 - Create: `~/projects/ai-agents/scripts/train-hapax-wake-word.py`
-- Test: `~/projects/ai-agents/tests/test_hapax_voice_wake_word.py`
+- Test: `~/projects/ai-agents/tests/test_hapax_daimonion_wake_word.py`
 
 **Step 1: Write the failing test**
 
 ```python
-# tests/test_hapax_voice_wake_word.py
+# tests/test_hapax_daimonion_wake_word.py
 """Tests for wake word detection wrapper."""
 from unittest.mock import patch, MagicMock
 import numpy as np
 
 
 def test_wake_word_detector_init():
-    from agents.hapax_voice.wake_word import WakeWordDetector
+    from agents.hapax_daimonion.wake_word import WakeWordDetector
 
     # Should init without crashing even without model
     wd = WakeWordDetector(model_path=None, threshold=0.5)
@@ -2282,7 +2282,7 @@ def test_wake_word_detector_init():
 
 
 def test_wake_word_callback_fires():
-    from agents.hapax_voice.wake_word import WakeWordDetector
+    from agents.hapax_daimonion.wake_word import WakeWordDetector
 
     detected = []
     wd = WakeWordDetector(model_path=None, threshold=0.5)
@@ -2294,7 +2294,7 @@ def test_wake_word_callback_fires():
 
 
 def test_wake_word_below_threshold_ignored():
-    from agents.hapax_voice.wake_word import WakeWordDetector
+    from agents.hapax_daimonion.wake_word import WakeWordDetector
 
     detected = []
     wd = WakeWordDetector(model_path=None, threshold=0.5)
@@ -2306,13 +2306,13 @@ def test_wake_word_below_threshold_ignored():
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_voice_wake_word.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_daimonion_wake_word.py -v`
 Expected: FAIL
 
 **Step 3: Implement wake word wrapper**
 
 ```python
-# agents/hapax_voice/wake_word.py
+# agents/hapax_daimonion/wake_word.py
 """OpenWakeWord integration for 'Hapax' wake word detection."""
 from __future__ import annotations
 
@@ -2324,7 +2324,7 @@ import numpy as np
 
 log = logging.getLogger(__name__)
 
-DEFAULT_MODEL_PATH = Path.home() / ".local" / "share" / "hapax-voice" / "hapax_wake_word.onnx"
+DEFAULT_MODEL_PATH = Path.home() / ".local" / "share" / "hapax-daimonion" / "hapax_wake_word.onnx"
 
 
 class WakeWordDetector:
@@ -2380,7 +2380,7 @@ class WakeWordDetector:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_voice_wake_word.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_daimonion_wake_word.py -v`
 Expected: 3 passed
 
 **Step 5: Create wake word training script**
@@ -2397,7 +2397,7 @@ Usage:
 
 This generates synthetic training data using Piper TTS, then trains
 a custom ONNX model. The trained model is saved to:
-    ~/.local/share/hapax-voice/hapax_wake_word.onnx
+    ~/.local/share/hapax-daimonion/hapax_wake_word.onnx
 """
 from pathlib import Path
 import subprocess
@@ -2405,7 +2405,7 @@ import sys
 
 
 def main():
-    output_dir = Path.home() / ".local" / "share" / "hapax-voice"
+    output_dir = Path.home() / ".local" / "share" / "hapax-daimonion"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     print("Wake word training script placeholder.")
@@ -2427,7 +2427,7 @@ if __name__ == "__main__":
 
 ```bash
 cd ~/projects/ai-agents
-git add agents/hapax_voice/wake_word.py tests/test_hapax_voice_wake_word.py scripts/train-hapax-wake-word.py
+git add agents/hapax_daimonion/wake_word.py tests/test_hapax_daimonion_wake_word.py scripts/train-hapax-wake-word.py
 git commit -m "feat(voice): wake word detection wrapper + training script"
 ```
 
@@ -2436,21 +2436,21 @@ git commit -m "feat(voice): wake word detection wrapper + training script"
 ### Task 16: Pipecat audio pipeline with local cascade
 
 **Files:**
-- Create: `~/projects/ai-agents/agents/hapax_voice/pipeline.py`
-- Test: `~/projects/ai-agents/tests/test_hapax_voice_pipeline.py`
+- Create: `~/projects/ai-agents/agents/hapax_daimonion/pipeline.py`
+- Test: `~/projects/ai-agents/tests/test_hapax_daimonion_pipeline.py`
 
 This is the largest task — wiring Pipecat's `LocalAudioTransport` with STT, LLM, and TTS processors into a functioning voice pipeline.
 
 **Step 1: Write the failing test**
 
 ```python
-# tests/test_hapax_voice_pipeline.py
+# tests/test_hapax_daimonion_pipeline.py
 """Tests for Pipecat pipeline configuration."""
 from unittest.mock import patch, MagicMock, AsyncMock
 
 
 def test_pipeline_config_local():
-    from agents.hapax_voice.pipeline import PipelineConfig
+    from agents.hapax_daimonion.pipeline import PipelineConfig
 
     cfg = PipelineConfig(
         backend="local",
@@ -2463,7 +2463,7 @@ def test_pipeline_config_local():
 
 
 def test_pipeline_config_gemini():
-    from agents.hapax_voice.pipeline import PipelineConfig
+    from agents.hapax_daimonion.pipeline import PipelineConfig
 
     cfg = PipelineConfig(
         backend="gemini",
@@ -2473,12 +2473,12 @@ def test_pipeline_config_gemini():
 
 
 async def test_build_local_pipeline_returns_processors():
-    from agents.hapax_voice.pipeline import build_local_processors
+    from agents.hapax_daimonion.pipeline import build_local_processors
 
     # Mock heavy dependencies
-    with patch("agents.hapax_voice.pipeline._create_stt_processor") as mock_stt, \
-         patch("agents.hapax_voice.pipeline._create_llm_processor") as mock_llm, \
-         patch("agents.hapax_voice.pipeline._create_tts_processor") as mock_tts:
+    with patch("agents.hapax_daimonion.pipeline._create_stt_processor") as mock_stt, \
+         patch("agents.hapax_daimonion.pipeline._create_llm_processor") as mock_llm, \
+         patch("agents.hapax_daimonion.pipeline._create_tts_processor") as mock_tts:
         mock_stt.return_value = MagicMock()
         mock_llm.return_value = MagicMock()
         mock_tts.return_value = MagicMock()
@@ -2494,13 +2494,13 @@ async def test_build_local_pipeline_returns_processors():
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_voice_pipeline.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_daimonion_pipeline.py -v`
 Expected: FAIL
 
 **Step 3: Implement pipeline module**
 
 ```python
-# agents/hapax_voice/pipeline.py
+# agents/hapax_daimonion/pipeline.py
 """Pipecat pipeline configuration and construction."""
 from __future__ import annotations
 
@@ -2555,7 +2555,7 @@ def _create_llm_processor(model: str, system_prompt: str):
 def _create_tts_processor(voice: str):
     """Create TTS processor (Kokoro)."""
     log.info("Creating TTS processor: Kokoro (voice=%s)", voice)
-    from agents.hapax_voice.tts import TTSManager
+    from agents.hapax_daimonion.tts import TTSManager
     return TTSManager(kokoro_voice=voice)
 
 
@@ -2580,14 +2580,14 @@ def build_local_processors(
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_voice_pipeline.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_daimonion_pipeline.py -v`
 Expected: 3 passed
 
 **Step 5: Commit**
 
 ```bash
 cd ~/projects/ai-agents
-git add agents/hapax_voice/pipeline.py tests/test_hapax_voice_pipeline.py
+git add agents/hapax_daimonion/pipeline.py tests/test_hapax_daimonion_pipeline.py
 git commit -m "feat(voice): Pipecat pipeline config and processor construction"
 ```
 
@@ -2596,19 +2596,19 @@ git commit -m "feat(voice): Pipecat pipeline config and processor construction"
 ### Task 17: Gemini Live backend
 
 **Files:**
-- Create: `~/projects/ai-agents/agents/hapax_voice/gemini_live.py`
-- Test: `~/projects/ai-agents/tests/test_hapax_voice_gemini.py`
+- Create: `~/projects/ai-agents/agents/hapax_daimonion/gemini_live.py`
+- Test: `~/projects/ai-agents/tests/test_hapax_daimonion_gemini.py`
 
 **Step 1: Write the failing test**
 
 ```python
-# tests/test_hapax_voice_gemini.py
+# tests/test_hapax_daimonion_gemini.py
 """Tests for Gemini Live API client."""
 from unittest.mock import patch
 
 
 def test_gemini_config():
-    from agents.hapax_voice.gemini_live import GeminiLiveConfig
+    from agents.hapax_daimonion.gemini_live import GeminiLiveConfig
 
     cfg = GeminiLiveConfig(
         model="gemini-2.5-flash-preview-native-audio",
@@ -2618,7 +2618,7 @@ def test_gemini_config():
 
 
 def test_gemini_session_lifecycle():
-    from agents.hapax_voice.gemini_live import GeminiLiveSession
+    from agents.hapax_daimonion.gemini_live import GeminiLiveSession
 
     session = GeminiLiveSession(
         model="test-model",
@@ -2631,13 +2631,13 @@ def test_gemini_session_lifecycle():
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_voice_gemini.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_daimonion_gemini.py -v`
 Expected: FAIL
 
 **Step 3: Implement Gemini Live client**
 
 ```python
-# agents/hapax_voice/gemini_live.py
+# agents/hapax_daimonion/gemini_live.py
 """Gemini Live API client for speech-to-speech conversation."""
 from __future__ import annotations
 
@@ -2725,7 +2725,7 @@ class GeminiLiveSession:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_voice_gemini.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_daimonion_gemini.py -v`
 Expected: 2 passed
 
 **Step 5: Add google-genai dependency**
@@ -2739,7 +2739,7 @@ Add to pyproject.toml dependencies:
 
 ```bash
 cd ~/projects/ai-agents
-git add agents/hapax_voice/gemini_live.py tests/test_hapax_voice_gemini.py pyproject.toml
+git add agents/hapax_daimonion/gemini_live.py tests/test_hapax_daimonion_gemini.py pyproject.toml
 git commit -m "feat(voice): Gemini Live API client for S2S conversation"
 ```
 
@@ -2748,13 +2748,13 @@ git commit -m "feat(voice): Gemini Live API client for S2S conversation"
 ### Task 18: End-to-end daemon integration and smoke test
 
 **Files:**
-- Modify: `~/projects/ai-agents/agents/hapax_voice/__main__.py` (wire all subsystems)
-- Create: `~/projects/ai-agents/tests/test_hapax_voice_integration.py`
+- Modify: `~/projects/ai-agents/agents/hapax_daimonion/__main__.py` (wire all subsystems)
+- Create: `~/projects/ai-agents/tests/test_hapax_daimonion_integration.py`
 
 **Step 1: Write integration test**
 
 ```python
-# tests/test_hapax_voice_integration.py
+# tests/test_hapax_daimonion_integration.py
 """Integration tests for VoiceDaemon — verifies subsystem wiring."""
 import asyncio
 from unittest.mock import patch, MagicMock
@@ -2762,7 +2762,7 @@ from pathlib import Path
 
 
 async def test_daemon_starts_and_stops():
-    from agents.hapax_voice.__main__ import VoiceDaemon
+    from agents.hapax_daimonion.__main__ import VoiceDaemon
 
     daemon = VoiceDaemon()
     # Run for 0.5s then stop
@@ -2776,7 +2776,7 @@ async def test_daemon_starts_and_stops():
 
 
 async def test_daemon_hotkey_toggle():
-    from agents.hapax_voice.__main__ import VoiceDaemon
+    from agents.hapax_daimonion.__main__ import VoiceDaemon
 
     daemon = VoiceDaemon()
     await daemon._handle_hotkey("toggle")
@@ -2786,7 +2786,7 @@ async def test_daemon_hotkey_toggle():
 
 
 def test_daemon_subsystem_init():
-    from agents.hapax_voice.__main__ import VoiceDaemon
+    from agents.hapax_daimonion.__main__ import VoiceDaemon
 
     daemon = VoiceDaemon()
     assert daemon.session is not None
@@ -2797,10 +2797,10 @@ def test_daemon_subsystem_init():
 
 
 async def test_daemon_session_timeout():
-    from agents.hapax_voice.__main__ import VoiceDaemon
-    from agents.hapax_voice.config import VoiceConfig
+    from agents.hapax_daimonion.__main__ import VoiceDaemon
+    from agents.hapax_daimonion.config import VoiceConfig
 
-    with patch("agents.hapax_voice.__main__.load_config") as mock_cfg:
+    with patch("agents.hapax_daimonion.__main__.load_config") as mock_cfg:
         mock_cfg.return_value = VoiceConfig(silence_timeout_s=1)
         daemon = VoiceDaemon()
 
@@ -2817,7 +2817,7 @@ async def test_daemon_session_timeout():
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_voice_integration.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_daimonion_integration.py -v`
 Expected: Depends on current __main__.py state
 
 **Step 3: Wire subsystems in __main__.py**
@@ -2837,20 +2837,20 @@ In the `run()` method, add after hotkey start:
         log.info("  Notifications: %d pending", self.notifications.pending_count)
 ```
 
-**Step 4: Run all hapax_voice tests**
+**Step 4: Run all hapax_daimonion tests**
 
-Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_voice_*.py -v`
+Run: `cd ~/projects/ai-agents && uv run pytest tests/test_hapax_daimonion_*.py -v`
 Expected: All tests pass
 
 **Step 5: Smoke test the daemon**
 
 ```bash
 cd ~/projects/ai-agents
-timeout 5 uv run python -m agents.hapax_voice 2>&1 || true
+timeout 5 uv run python -m agents.hapax_daimonion 2>&1 || true
 ```
 
 Expected output should show:
-- "Hapax Voice daemon starting"
+- "Hapax Daimonion daemon starting"
 - Subsystem initialization logs
 - Clean exit on timeout
 
@@ -2858,7 +2858,7 @@ Expected output should show:
 
 ```bash
 cd ~/projects/ai-agents
-git add tests/test_hapax_voice_integration.py agents/hapax_voice/__main__.py
+git add tests/test_hapax_daimonion_integration.py agents/hapax_daimonion/__main__.py
 git commit -m "feat(voice): end-to-end daemon integration and smoke tests"
 ```
 
@@ -2875,6 +2875,6 @@ These are explicitly deferred — do not implement now:
 5. **Audio ducking** — Configure PipeWire module-role-duck for Hapax TTS output
 6. **LLM notification reformatting** — Add Haiku call to format raw ntfy messages as natural speech
 7. **Calendar event integration** — Subscribe to gcalendar-sync events for proactive meeting reminders
-8. **Health monitor check group** — Add hapax-voice health checks to the health monitor agent
+8. **Health monitor check group** — Add hapax-daimonion health checks to the health monitor agent
 9. **First-week tuning** — Calibrate presence detection thresholds, wake word false positive rate
 10. **Kokoro voice selection** — Test available Kokoro voices and pick one tonally similar to Gemini

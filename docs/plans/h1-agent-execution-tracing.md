@@ -39,7 +39,7 @@
 | 24 | demo_eval | `agents/demo_eval.py` | `run_eval_loop()`, `main()` | None (orchestrator) | No | No | No |
 | 25 | watch_receiver | `agents/watch_receiver.py` | FastAPI `app` | None (HTTP server) | No | No | No |
 | 26 | audio_processor | `agents/audio_processor.py` | `main()` | None (FFmpeg pipeline) | No | No | No |
-| -- | hapax_voice | `agents/hapax_voice/` | `__main__.main()` | None (Gemini Live) | No (uses Langfuse SDK) | No | No |
+| -- | hapax_daimonion | `agents/hapax_daimonion/` | `__main__.main()` | None (Gemini Live) | No (uses Langfuse SDK) | No | No |
 | -- | knowledge/query | `agents/knowledge/query.py` | Dynamic `agent` | None | No | 8 (`@agent.tool`) |
 | -- | system_ops/query | `agents/system_ops/query.py` | Dynamic `agent` | None | No | 6 (`@agent.tool`) |
 | -- | dev_story | `agents/dev_story/` | `__main__.main()` | `agent` in `query.py` | No | 4 (`@agent.tool`) |
@@ -149,7 +149,7 @@ demo.html_player
 
 5. **Consistency.** One pattern across 41+ agents is easier to maintain than two.
 
-**Exception:** `hapax-voice` keeps its `VoiceTracer` Langfuse SDK pattern. It is a long-running daemon (not a batch agent), has unique session/presence semantics, and is already instrumented. Migrating it would add risk for no benefit.
+**Exception:** `hapax-daimonion` keeps its `VoiceTracer` Langfuse SDK pattern. It is a long-running daemon (not a batch agent), has unique session/presence semantics, and is already instrumented. Migrating it would add risk for no benefit.
 
 **Token tracking enhancement (future):** To get rich token counts in Langfuse, add a custom `SpanProcessor` that extracts `usage` from pydantic-ai's `result.usage()` and sets span attributes. This is an additive change that does not affect the per-agent instrumentation pattern.
 

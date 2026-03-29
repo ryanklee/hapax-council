@@ -26,7 +26,7 @@ curl -s http://localhost:5000/v1/model 2>/dev/null || echo "TabbyAPI not running
 ```
 
 ```bash
-systemctl --user status hapax-voice studio-compositor visual-layer-aggregator 2>/dev/null | grep -E '(●|Active|Memory|CPU)'
+systemctl --user status hapax-daimonion studio-compositor visual-layer-aggregator 2>/dev/null | grep -E '(●|Active|Memory|CPU)'
 ```
 
 ```bash

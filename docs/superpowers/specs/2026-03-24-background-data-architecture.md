@@ -221,8 +221,8 @@ The following components remain in the voice daemon (too domain-specific for ext
 
 | File | Change |
 |------|--------|
-| `agents/hapax_voice/conversation_pipeline.py` | Inject operator goals (STABLE) and pending nudges (VOLATILE) into context bands. |
-| `agents/hapax_voice/phenomenal_context.py` | Verify temporal bands read path for layers 3-5. |
+| `agents/hapax_daimonion/conversation_pipeline.py` | Inject operator goals (STABLE) and pending nudges (VOLATILE) into context bands. |
+| `agents/hapax_daimonion/phenomenal_context.py` | Verify temporal bands read path for layers 3-5. |
 | `agents/health_monitor.py` | Add voice interrupt emission on critical health status. |
 
 ### Phase 3

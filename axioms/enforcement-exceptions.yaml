@@ -10,7 +10,7 @@
 
 exceptions:
   - id: exception-gemini-live
-    component: agents/hapax_voice/gemini_live.py
+    component: agents/hapax_daimonion/gemini_live.py
     axiom_id: corporate_boundary
     implication_id: cb-llm-001
     reason: >

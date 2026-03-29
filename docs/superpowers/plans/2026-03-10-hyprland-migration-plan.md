@@ -305,15 +305,15 @@ Press Super+Shift+Escape. Expected: BBS-style login prompt on black.
 ### Task 11: Update Screen Capturer (cosmic-screenshot to grim)
 
 **Files:**
-- Modify: `agents/hapax_voice/screen_capturer.py`
-- Modify: `tests/hapax_voice/test_screen_capturer.py`
-- Modify: `tests/hapax_voice/conftest.py`
+- Modify: `agents/hapax_daimonion/screen_capturer.py`
+- Modify: `tests/hapax_daimonion/test_screen_capturer.py`
+- Modify: `tests/hapax_daimonion/conftest.py`
 
 - [ ] **Step 1: Write the failing test**
 
 Update test mocks: change `"cosmic-screenshot" in cmd[0]` to `"grim" in cmd[0]`. Update fake output generation to match grim behavior (grim takes output path as argument, writes PNG directly).
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_voice/test_screen_capturer.py -v`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_daimonion/test_screen_capturer.py -v`
 Expected: FAIL (screen_capturer.py still calls cosmic-screenshot)
 
 - [ ] **Step 2: Update screen_capturer.py**
@@ -322,7 +322,7 @@ Replace cosmic-screenshot subprocess call with grim. grim is simpler: `grim <out
 
 - [ ] **Step 3: Run tests to verify pass**
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_voice/test_screen_capturer.py -v`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_daimonion/test_screen_capturer.py -v`
 Expected: All PASS
 
 - [ ] **Step 4: Update conftest.py skip condition**
@@ -332,15 +332,15 @@ Change `_has_command("cosmic-screenshot")` to `_has_command("grim")`.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/screen_capturer.py tests/hapax_voice/test_screen_capturer.py tests/hapax_voice/conftest.py
+git add agents/hapax_daimonion/screen_capturer.py tests/hapax_daimonion/test_screen_capturer.py tests/hapax_daimonion/conftest.py
 git commit -m "fix: replace cosmic-screenshot with grim for Hyprland migration"
 ```
 
 ### Task 12: Update Activity Mode (cosmic-term to foot)
 
 **Files:**
-- Modify: `agents/hapax_voice/activity_mode.py`
-- Modify: `tests/hapax_voice/test_workspace_analyzer.py`
+- Modify: `agents/hapax_daimonion/activity_mode.py`
+- Modify: `tests/hapax_daimonion/test_workspace_analyzer.py`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -352,21 +352,21 @@ Change `_CODE_APPS` set: replace `"cosmic-term"` with `"foot"`.
 
 - [ ] **Step 3: Run tests to verify pass**
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_voice/test_workspace_analyzer.py -v`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_daimonion/test_workspace_analyzer.py -v`
 Expected: PASS
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add agents/hapax_voice/activity_mode.py tests/hapax_voice/test_workspace_analyzer.py
+git add agents/hapax_daimonion/activity_mode.py tests/hapax_daimonion/test_workspace_analyzer.py
 git commit -m "fix: replace cosmic-term with foot in activity mode detection"
 ```
 
 ### Task 13: Update LLM System Prompts
 
 **Files:**
-- Modify: `agents/hapax_voice/screen_analyzer.py`
-- Modify: `agents/hapax_voice/workspace_analyzer.py`
+- Modify: `agents/hapax_daimonion/screen_analyzer.py`
+- Modify: `agents/hapax_daimonion/workspace_analyzer.py`
 
 - [ ] **Step 1: Update screen_analyzer.py prompt**
 
@@ -378,13 +378,13 @@ Change `(Linux/COSMIC/Wayland)` to `(Linux/Hyprland/Wayland)` in system prompt.
 
 - [ ] **Step 3: Run full voice daemon test suite**
 
-Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_voice/ -v`
+Run: `cd ~/projects/hapax-council && uv run pytest tests/hapax_daimonion/ -v`
 Expected: All PASS
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add agents/hapax_voice/screen_analyzer.py agents/hapax_voice/workspace_analyzer.py
+git add agents/hapax_daimonion/screen_analyzer.py agents/hapax_daimonion/workspace_analyzer.py
 git commit -m "fix: update voice daemon LLM prompts from COSMIC to Hyprland"
 ```
 
@@ -470,7 +470,7 @@ Expected: Runs, outputs status.
 - [ ] **Step 4: Verify voice daemon check**
 
 ```bash
-cd ~/projects/hapax-council && uv run python -m agents.hapax_voice --check
+cd ~/projects/hapax-council && uv run python -m agents.hapax_daimonion --check
 ```
 
 Expected: Config validation passes, no COSMIC references.

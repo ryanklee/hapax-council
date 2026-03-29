@@ -180,7 +180,7 @@ New route module: `logos/api/routes/pi.py`
 
 ## Component 3: `ir_presence` Voice Daemon Backend
 
-New file: `agents/hapax_voice/backends/ir_presence.py`
+New file: `agents/hapax_daimonion/backends/ir_presence.py`
 
 FAST tier — reads state files from `~/hapax-state/pi-noir/`, never blocks.
 

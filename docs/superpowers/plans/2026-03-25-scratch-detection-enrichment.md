@@ -16,9 +16,9 @@
 
 | Action | Path | Responsibility |
 |--------|------|---------------|
-| Edit | `agents/hapax_voice/backends/contact_mic.py` | Add autocorrelation, energy buffer, "scratching" classification |
-| Edit | `tests/hapax_voice/test_contact_mic_backend.py` | Update existing tests + add scratch detection tests |
-| Edit | `agents/hapax_voice/_perception_state_writer.py` | Export desk_* behaviors + add desk_activity flow modifier |
+| Edit | `agents/hapax_daimonion/backends/contact_mic.py` | Add autocorrelation, energy buffer, "scratching" classification |
+| Edit | `tests/hapax_daimonion/test_contact_mic_backend.py` | Update existing tests + add scratch detection tests |
+| Edit | `agents/hapax_daimonion/_perception_state_writer.py` | Export desk_* behaviors + add desk_activity flow modifier |
 | Edit | `agents/studio_compositor.py` | Add desk_activity to OverlayData model |
 | Create | `tests/test_scratch_pipeline.py` | Tests for perception export, OverlayData, flow modifier |
 | Config | `~/.config/hapax-compositor/profiles.yaml` | Add scratching-focus camera profile |
@@ -28,17 +28,17 @@
 ## Task 1: Scratch Detection DSP
 
 **Files:**
-- Modify: `agents/hapax_voice/backends/contact_mic.py`
-- Modify: `tests/hapax_voice/test_contact_mic_backend.py`
+- Modify: `agents/hapax_daimonion/backends/contact_mic.py`
+- Modify: `tests/hapax_daimonion/test_contact_mic_backend.py`
 
 - [ ] **Step 1: Write failing tests for autocorrelation + scratch classification**
 
-Append to `tests/hapax_voice/test_contact_mic_backend.py`:
+Append to `tests/hapax_daimonion/test_contact_mic_backend.py`:
 
 ```python
 class TestEnvelopeAutocorrelation:
     def test_oscillating_envelope_high_peak(self):
-        from agents.hapax_voice.backends.contact_mic import _compute_envelope_autocorrelation
+        from agents.hapax_daimonion.backends.contact_mic import _compute_envelope_autocorrelation
         from collections import deque
         import math
 
@@ -50,7 +50,7 @@ class TestEnvelopeAutocorrelation:
         assert peak > 0.4  # strong periodic signal
 
     def test_flat_envelope_low_peak(self):
-        from agents.hapax_voice.backends.contact_mic import _compute_envelope_autocorrelation
+        from agents.hapax_daimonion.backends.contact_mic import _compute_envelope_autocorrelation
         from collections import deque
 
         buf = deque(maxlen=60)
@@ -60,7 +60,7 @@ class TestEnvelopeAutocorrelation:
         assert peak < 0.2
 
     def test_impulsive_envelope_low_peak(self):
-        from agents.hapax_voice.backends.contact_mic import _compute_envelope_autocorrelation
+        from agents.hapax_daimonion.backends.contact_mic import _compute_envelope_autocorrelation
         from collections import deque
 
         # Simulate typing: sparse impulses
@@ -72,7 +72,7 @@ class TestEnvelopeAutocorrelation:
         assert peak < 0.4
 
     def test_short_buffer_returns_zero(self):
-        from agents.hapax_voice.backends.contact_mic import _compute_envelope_autocorrelation
+        from agents.hapax_daimonion.backends.contact_mic import _compute_envelope_autocorrelation
         from collections import deque
 
         buf = deque(maxlen=60)
@@ -82,27 +82,27 @@ class TestEnvelopeAutocorrelation:
 
 class TestScratchClassification:
     def test_scratching_high_autocorr(self):
-        from agents.hapax_voice.backends.contact_mic import _classify_activity
+        from agents.hapax_daimonion.backends.contact_mic import _classify_activity
         assert _classify_activity(
             energy=0.1, onset_rate=0.0, centroid=200.0, autocorr_peak=0.5
         ) == "scratching"
 
     def test_no_scratch_low_autocorr(self):
-        from agents.hapax_voice.backends.contact_mic import _classify_activity
+        from agents.hapax_daimonion.backends.contact_mic import _classify_activity
         # Same energy but no autocorrelation → falls through to other categories
         assert _classify_activity(
             energy=0.1, onset_rate=2.0, centroid=200.0, autocorr_peak=0.1
         ) == "tapping"
 
     def test_scratch_before_drumming(self):
-        from agents.hapax_voice.backends.contact_mic import _classify_activity
+        from agents.hapax_daimonion.backends.contact_mic import _classify_activity
         # High energy + low centroid would be drumming, but autocorr makes it scratching
         assert _classify_activity(
             energy=0.5, onset_rate=0.0, centroid=500.0, autocorr_peak=0.5
         ) == "scratching"
 
     def test_idle_not_affected(self):
-        from agents.hapax_voice.backends.contact_mic import _classify_activity
+        from agents.hapax_daimonion.backends.contact_mic import _classify_activity
         # Below idle threshold, autocorr doesn't matter
         assert _classify_activity(
             energy=0.001, onset_rate=0.0, centroid=0.0, autocorr_peak=0.6
@@ -128,12 +128,12 @@ class TestClassifyActivity:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /home/hapax/projects/hapax-council--beta && uv run pytest tests/hapax_voice/test_contact_mic_backend.py -v 2>&1 | tail -10`
+Run: `cd /home/hapax/projects/hapax-council--beta && uv run pytest tests/hapax_daimonion/test_contact_mic_backend.py -v 2>&1 | tail -10`
 Expected: ImportError for `_compute_envelope_autocorrelation`, TypeError for extra `autocorr_peak` param
 
 - [ ] **Step 3: Add constants and autocorrelation function**
 
-In `agents/hapax_voice/backends/contact_mic.py`, after the existing DSP constants, add:
+In `agents/hapax_daimonion/backends/contact_mic.py`, after the existing DSP constants, add:
 
 ```python
 _SCRATCH_AUTOCORR_THRESHOLD = 0.4
@@ -222,17 +222,17 @@ Update the `_classify_activity` call to pass `autocorr_peak`:
 
 - [ ] **Step 6: Run tests**
 
-Run: `cd /home/hapax/projects/hapax-council--beta && uv run pytest tests/hapax_voice/test_contact_mic_backend.py -v`
+Run: `cd /home/hapax/projects/hapax-council--beta && uv run pytest tests/hapax_daimonion/test_contact_mic_backend.py -v`
 Expected: All pass (existing + new)
 
 - [ ] **Step 7: Lint**
 
-Run: `cd /home/hapax/projects/hapax-council--beta && uv run ruff check agents/hapax_voice/backends/contact_mic.py tests/hapax_voice/test_contact_mic_backend.py && uv run ruff format --check agents/hapax_voice/backends/contact_mic.py tests/hapax_voice/test_contact_mic_backend.py`
+Run: `cd /home/hapax/projects/hapax-council--beta && uv run ruff check agents/hapax_daimonion/backends/contact_mic.py tests/hapax_daimonion/test_contact_mic_backend.py && uv run ruff format --check agents/hapax_daimonion/backends/contact_mic.py tests/hapax_daimonion/test_contact_mic_backend.py`
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add agents/hapax_voice/backends/contact_mic.py tests/hapax_voice/test_contact_mic_backend.py
+git add agents/hapax_daimonion/backends/contact_mic.py tests/hapax_daimonion/test_contact_mic_backend.py
 git commit -m "feat(voice): vinyl scratch detection via envelope autocorrelation
 
 Adds _compute_envelope_autocorrelation() and 'scratching' classification
@@ -245,7 +245,7 @@ oscillation in amplitude envelope — unique to turntable back-and-forth."
 ## Task 2: Perception Pipeline Wiring
 
 **Files:**
-- Modify: `agents/hapax_voice/_perception_state_writer.py`
+- Modify: `agents/hapax_daimonion/_perception_state_writer.py`
 - Modify: `agents/studio_compositor.py`
 - Create: `tests/test_scratch_pipeline.py`
 
@@ -267,7 +267,7 @@ class TestPerceptionStateExport:
         import ast
         from pathlib import Path
 
-        writer_path = Path("agents/hapax_voice/_perception_state_writer.py")
+        writer_path = Path("agents/hapax_daimonion/_perception_state_writer.py")
         source = writer_path.read_text()
         assert '"desk_activity"' in source
 
@@ -275,7 +275,7 @@ class TestPerceptionStateExport:
         import ast
         from pathlib import Path
 
-        writer_path = Path("agents/hapax_voice/_perception_state_writer.py")
+        writer_path = Path("agents/hapax_daimonion/_perception_state_writer.py")
         source = writer_path.read_text()
         assert '"desk_energy"' in source
 
@@ -299,7 +299,7 @@ class TestFlowModifier:
         """Source check: perception state writer adds flow modifier for scratching."""
         from pathlib import Path
 
-        source = Path("agents/hapax_voice/_perception_state_writer.py").read_text()
+        source = Path("agents/hapax_daimonion/_perception_state_writer.py").read_text()
         assert "scratching" in source
         assert "drumming" in source
         assert "flow_modifier" in source
@@ -312,7 +312,7 @@ Expected: Failures — desk_activity not in writer source, not in OverlayData
 
 - [ ] **Step 3: Add desk_* exports to perception state writer**
 
-In `agents/hapax_voice/_perception_state_writer.py`, in the state dict (after line ~395, before `"voice_session"`), add:
+In `agents/hapax_daimonion/_perception_state_writer.py`, in the state dict (after line ~395, before `"voice_session"`), add:
 
 ```python
             # Contact mic (desk vibration sensing)
@@ -350,12 +350,12 @@ Expected: All pass
 
 - [ ] **Step 7: Lint**
 
-Run: `cd /home/hapax/projects/hapax-council--beta && uv run ruff check agents/hapax_voice/_perception_state_writer.py agents/studio_compositor.py tests/test_scratch_pipeline.py && uv run ruff format --check agents/hapax_voice/_perception_state_writer.py agents/studio_compositor.py tests/test_scratch_pipeline.py`
+Run: `cd /home/hapax/projects/hapax-council--beta && uv run ruff check agents/hapax_daimonion/_perception_state_writer.py agents/studio_compositor.py tests/test_scratch_pipeline.py && uv run ruff format --check agents/hapax_daimonion/_perception_state_writer.py agents/studio_compositor.py tests/test_scratch_pipeline.py`
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add agents/hapax_voice/_perception_state_writer.py agents/studio_compositor.py tests/test_scratch_pipeline.py
+git add agents/hapax_daimonion/_perception_state_writer.py agents/studio_compositor.py tests/test_scratch_pipeline.py
 git commit -m "feat(voice): wire desk_activity through perception pipeline
 
 Exports desk_* behaviors to perception-state.json, adds desk_activity
@@ -380,12 +380,12 @@ Check if `~/.config/hapax-compositor/profiles.yaml` exists and add the scratchin
 
 - [ ] **Step 2: Run all tests**
 
-Run: `cd /home/hapax/projects/hapax-council--beta && uv run pytest tests/hapax_voice/test_contact_mic_backend.py tests/test_scratch_pipeline.py -v`
+Run: `cd /home/hapax/projects/hapax-council--beta && uv run pytest tests/hapax_daimonion/test_contact_mic_backend.py tests/test_scratch_pipeline.py -v`
 Expected: All pass
 
 - [ ] **Step 3: Lint all changed files**
 
-Run: `cd /home/hapax/projects/hapax-council--beta && uv run ruff check agents/hapax_voice/backends/contact_mic.py agents/hapax_voice/_perception_state_writer.py agents/studio_compositor.py && uv run ruff format --check agents/hapax_voice/backends/contact_mic.py agents/hapax_voice/_perception_state_writer.py agents/studio_compositor.py`
+Run: `cd /home/hapax/projects/hapax-council--beta && uv run ruff check agents/hapax_daimonion/backends/contact_mic.py agents/hapax_daimonion/_perception_state_writer.py agents/studio_compositor.py && uv run ruff format --check agents/hapax_daimonion/backends/contact_mic.py agents/hapax_daimonion/_perception_state_writer.py agents/studio_compositor.py`
 
 - [ ] **Step 4: Push and update PR**
 

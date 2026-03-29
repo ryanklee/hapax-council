@@ -6,7 +6,7 @@
 
 ## What Changed
 
-Updated `agents/hapax_voice/proofs/RESEARCH-STATE.md` to reflect sessions 5-7:
+Updated `agents/hapax_daimonion/proofs/RESEARCH-STATE.md` to reflect sessions 5-7:
 - Session 5: CI/CD + PII hardening
 - Session 6: cockpit→logos rename
 - Session 7: RESEARCH/R&D working mode isolation infrastructure

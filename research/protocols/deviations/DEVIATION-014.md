@@ -3,7 +3,7 @@ id: DEVIATION-014
 date: 2026-03-25
 phase: baseline
 paths:
-  - agents/hapax_voice/conversation_pipeline.py
+  - agents/hapax_daimonion/conversation_pipeline.py
 justification: |
   Adding 3 new VOLATILE band sections (goals, health, nudges) to the
   per-turn system context. These are in the VOLATILE band, which is

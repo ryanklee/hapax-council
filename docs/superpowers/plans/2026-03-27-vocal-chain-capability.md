@@ -15,7 +15,7 @@
 ### Task 1: MidiOutput — thin mido wrapper
 
 **Files:**
-- Create: `agents/hapax_voice/midi_output.py`
+- Create: `agents/hapax_daimonion/midi_output.py`
 - Test: `tests/test_midi_output.py`
 
 - [ ] **Step 1: Write the failing tests**
@@ -29,7 +29,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agents.hapax_voice.midi_output import MidiOutput
+from agents.hapax_daimonion.midi_output import MidiOutput
 
 
 class TestMidiOutputInit:
@@ -45,7 +45,7 @@ class TestMidiOutputInit:
 class TestMidiOutputSendCC:
     def test_send_cc_opens_port_and_sends(self) -> None:
         mock_port = MagicMock()
-        with patch("agents.hapax_voice.midi_output.mido") as mock_mido:
+        with patch("agents.hapax_daimonion.midi_output.mido") as mock_mido:
             mock_mido.open_output.return_value = mock_port
             mock_msg = MagicMock()
             mock_mido.Message.return_value = mock_msg
@@ -61,7 +61,7 @@ class TestMidiOutputSendCC:
 
     def test_send_cc_reuses_port(self) -> None:
         mock_port = MagicMock()
-        with patch("agents.hapax_voice.midi_output.mido") as mock_mido:
+        with patch("agents.hapax_daimonion.midi_output.mido") as mock_mido:
             mock_mido.open_output.return_value = mock_port
             mock_mido.Message.return_value = MagicMock()
 
@@ -73,7 +73,7 @@ class TestMidiOutputSendCC:
 
     def test_send_cc_clamps_value(self) -> None:
         mock_port = MagicMock()
-        with patch("agents.hapax_voice.midi_output.mido") as mock_mido:
+        with patch("agents.hapax_daimonion.midi_output.mido") as mock_mido:
             mock_mido.open_output.return_value = mock_port
             mock_mido.Message.return_value = MagicMock()
 
@@ -86,7 +86,7 @@ class TestMidiOutputSendCC:
 
     def test_send_cc_clamps_negative(self) -> None:
         mock_port = MagicMock()
-        with patch("agents.hapax_voice.midi_output.mido") as mock_mido:
+        with patch("agents.hapax_daimonion.midi_output.mido") as mock_mido:
             mock_mido.open_output.return_value = mock_port
             mock_mido.Message.return_value = MagicMock()
 
@@ -100,7 +100,7 @@ class TestMidiOutputSendCC:
 
 class TestMidiOutputGracefulDegradation:
     def test_port_unavailable_logs_warning(self) -> None:
-        with patch("agents.hapax_voice.midi_output.mido") as mock_mido:
+        with patch("agents.hapax_daimonion.midi_output.mido") as mock_mido:
             mock_mido.open_output.side_effect = OSError("No MIDI devices")
 
             out = MidiOutput(port_name="Nonexistent")
@@ -109,7 +109,7 @@ class TestMidiOutputGracefulDegradation:
             assert out._port is None
 
     def test_send_after_failed_init_is_noop(self) -> None:
-        with patch("agents.hapax_voice.midi_output.mido") as mock_mido:
+        with patch("agents.hapax_daimonion.midi_output.mido") as mock_mido:
             mock_mido.open_output.side_effect = OSError("No MIDI")
 
             out = MidiOutput()
@@ -122,7 +122,7 @@ class TestMidiOutputGracefulDegradation:
 class TestMidiOutputClose:
     def test_close_closes_port(self) -> None:
         mock_port = MagicMock()
-        with patch("agents.hapax_voice.midi_output.mido") as mock_mido:
+        with patch("agents.hapax_daimonion.midi_output.mido") as mock_mido:
             mock_mido.open_output.return_value = mock_port
             mock_mido.Message.return_value = MagicMock()
 
@@ -137,7 +137,7 @@ class TestMidiOutputClose:
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `cd /home/hapax/projects/hapax-council && uv run pytest tests/test_midi_output.py -v`
-Expected: FAIL — `ModuleNotFoundError: No module named 'agents.hapax_voice.midi_output'`
+Expected: FAIL — `ModuleNotFoundError: No module named 'agents.hapax_daimonion.midi_output'`
 
 - [ ] **Step 3: Write MidiOutput implementation**
 
@@ -210,9 +210,9 @@ Expected: All PASS
 
 ```bash
 cd /home/hapax/projects/hapax-council
-uv run ruff check agents/hapax_voice/midi_output.py tests/test_midi_output.py
-uv run ruff format agents/hapax_voice/midi_output.py tests/test_midi_output.py
-git add agents/hapax_voice/midi_output.py tests/test_midi_output.py
+uv run ruff check agents/hapax_daimonion/midi_output.py tests/test_midi_output.py
+uv run ruff format agents/hapax_daimonion/midi_output.py tests/test_midi_output.py
+git add agents/hapax_daimonion/midi_output.py tests/test_midi_output.py
 git commit -m "feat(voice): add MidiOutput — thin mido wrapper for CC sending"
 ```
 
@@ -221,7 +221,7 @@ git commit -m "feat(voice): add MidiOutput — thin mido wrapper for CC sending"
 ### Task 2: VocalChainCapability — dimensions, CC mappings, hold-and-decay
 
 **Files:**
-- Create: `agents/hapax_voice/vocal_chain.py`
+- Create: `agents/hapax_daimonion/vocal_chain.py`
 - Test: `tests/test_vocal_chain.py`
 
 - [ ] **Step 1: Write the failing tests**
@@ -236,7 +236,7 @@ from unittest.mock import MagicMock, call
 
 import pytest
 
-from agents.hapax_voice.vocal_chain import (
+from agents.hapax_daimonion.vocal_chain import (
     DIMENSIONS,
     VOCAL_CHAIN_RECORDS,
     VocalChainCapability,
@@ -297,7 +297,7 @@ class TestCapabilityRecords:
 
     def test_records_have_daemon(self) -> None:
         for r in VOCAL_CHAIN_RECORDS:
-            assert r.daemon == "hapax_voice"
+            assert r.daemon == "hapax_daimonion"
 
     def test_records_not_gpu(self) -> None:
         for r in VOCAL_CHAIN_RECORDS:
@@ -675,7 +675,7 @@ VOCAL_CHAIN_RECORDS = [
     CapabilityRecord(
         name=dim.name,
         description=dim.description,
-        daemon="hapax_voice",
+        daemon="hapax_daimonion",
         operational=OperationalProperties(latency_class="fast"),
     )
     for dim in DIMENSIONS.values()
@@ -818,9 +818,9 @@ Expected: All PASS
 
 ```bash
 cd /home/hapax/projects/hapax-council
-uv run ruff check agents/hapax_voice/vocal_chain.py tests/test_vocal_chain.py
-uv run ruff format agents/hapax_voice/vocal_chain.py tests/test_vocal_chain.py
-git add agents/hapax_voice/vocal_chain.py tests/test_vocal_chain.py
+uv run ruff check agents/hapax_daimonion/vocal_chain.py tests/test_vocal_chain.py
+uv run ruff format agents/hapax_daimonion/vocal_chain.py tests/test_vocal_chain.py
+git add agents/hapax_daimonion/vocal_chain.py tests/test_vocal_chain.py
 git commit -m "feat(voice): add VocalChainCapability — 9 semantic MIDI dimensions"
 ```
 
@@ -829,12 +829,12 @@ git commit -m "feat(voice): add VocalChainCapability — 9 semantic MIDI dimensi
 ### Task 3: Config fields and voice daemon registration
 
 **Files:**
-- Modify: `agents/hapax_voice/config.py:192-194`
-- Modify: `agents/hapax_voice/__main__.py:958-983`
+- Modify: `agents/hapax_daimonion/config.py:192-194`
+- Modify: `agents/hapax_daimonion/__main__.py:958-983`
 
 - [ ] **Step 1: Add config fields**
 
-In `agents/hapax_voice/config.py`, after line 194 (`midi_beats_per_bar: int = 4`), add:
+In `agents/hapax_daimonion/config.py`, after line 194 (`midi_beats_per_bar: int = 4`), add:
 
 ```python
     # MIDI output (vocal chain)
@@ -845,12 +845,12 @@ In `agents/hapax_voice/config.py`, after line 194 (`midi_beats_per_bar: int = 4`
 
 - [ ] **Step 2: Register vocal chain in voice daemon**
 
-In `agents/hapax_voice/__main__.py`, after line 983 (`log.info("Pipeline dependencies precomputed...")`), add:
+In `agents/hapax_daimonion/__main__.py`, after line 983 (`log.info("Pipeline dependencies precomputed...")`), add:
 
 ```python
         # Vocal chain: MIDI affordances for speech modulation
-        from agents.hapax_voice.midi_output import MidiOutput
-        from agents.hapax_voice.vocal_chain import VOCAL_CHAIN_RECORDS, VocalChainCapability
+        from agents.hapax_daimonion.midi_output import MidiOutput
+        from agents.hapax_daimonion.vocal_chain import VOCAL_CHAIN_RECORDS, VocalChainCapability
 
         self._midi_output = MidiOutput(port_name=self.cfg.midi_output_port)
         self._vocal_chain = VocalChainCapability(
@@ -865,14 +865,14 @@ In `agents/hapax_voice/__main__.py`, after line 983 (`log.info("Pipeline depende
 
 - [ ] **Step 3: Run ruff check**
 
-Run: `cd /home/hapax/projects/hapax-council && uv run ruff check agents/hapax_voice/config.py agents/hapax_voice/__main__.py`
+Run: `cd /home/hapax/projects/hapax-council && uv run ruff check agents/hapax_daimonion/config.py agents/hapax_daimonion/__main__.py`
 Expected: Clean
 
 - [ ] **Step 4: Commit**
 
 ```bash
 cd /home/hapax/projects/hapax-council
-git add agents/hapax_voice/config.py agents/hapax_voice/__main__.py
+git add agents/hapax_daimonion/config.py agents/hapax_daimonion/__main__.py
 git commit -m "feat(voice): register vocal chain capability in daemon startup"
 ```
 
@@ -882,20 +882,20 @@ git commit -m "feat(voice): register vocal chain capability in daemon startup"
 
 - [ ] **Step 1: Run all TTS and vocal chain tests**
 
-Run: `cd /home/hapax/projects/hapax-council && uv run pytest tests/test_midi_output.py tests/test_vocal_chain.py tests/test_hapax_voice_tts.py tests/hapax_voice/test_tts_tier_cleanup.py -v`
+Run: `cd /home/hapax/projects/hapax-council && uv run pytest tests/test_midi_output.py tests/test_vocal_chain.py tests/test_hapax_daimonion_tts.py tests/hapax_daimonion/test_tts_tier_cleanup.py -v`
 Expected: All PASS
 
 - [ ] **Step 2: Run ruff on all changed files**
 
-Run: `cd /home/hapax/projects/hapax-council && uv run ruff check agents/hapax_voice/midi_output.py agents/hapax_voice/vocal_chain.py agents/hapax_voice/config.py && uv run ruff format --check agents/hapax_voice/midi_output.py agents/hapax_voice/vocal_chain.py agents/hapax_voice/config.py`
+Run: `cd /home/hapax/projects/hapax-council && uv run ruff check agents/hapax_daimonion/midi_output.py agents/hapax_daimonion/vocal_chain.py agents/hapax_daimonion/config.py && uv run ruff format --check agents/hapax_daimonion/midi_output.py agents/hapax_daimonion/vocal_chain.py agents/hapax_daimonion/config.py`
 Expected: Clean
 
 - [ ] **Step 3: Verify no import issues**
 
-Run: `cd /home/hapax/projects/hapax-council && uv run python -c "from agents.hapax_voice.vocal_chain import VocalChainCapability, VOCAL_CHAIN_RECORDS, DIMENSIONS; print(f'{len(DIMENSIONS)} dimensions, {len(VOCAL_CHAIN_RECORDS)} records')"`
+Run: `cd /home/hapax/projects/hapax-council && uv run python -c "from agents.hapax_daimonion.vocal_chain import VocalChainCapability, VOCAL_CHAIN_RECORDS, DIMENSIONS; print(f'{len(DIMENSIONS)} dimensions, {len(VOCAL_CHAIN_RECORDS)} records')"`
 Expected: `9 dimensions, 9 records`
 
 - [ ] **Step 4: Verify MidiOutput import**
 
-Run: `cd /home/hapax/projects/hapax-council && uv run python -c "from agents.hapax_voice.midi_output import MidiOutput; print('MidiOutput OK')"`
+Run: `cd /home/hapax/projects/hapax-council && uv run python -c "from agents.hapax_daimonion.midi_output import MidiOutput; print('MidiOutput OK')"`
 Expected: `MidiOutput OK`

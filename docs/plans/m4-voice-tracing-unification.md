@@ -2,13 +2,13 @@
 
 **Date:** 2026-03-12
 **Status:** GO (migrate to OTel)
-**Scope:** Replace `VoiceTracer` (Langfuse Python SDK) with standard OTel spans routed through `shared/langfuse_config.py`, aligning hapax-voice with the pattern used by all other council agents.
+**Scope:** Replace `VoiceTracer` (Langfuse Python SDK) with standard OTel spans routed through `shared/langfuse_config.py`, aligning hapax-daimonion with the pattern used by all other council agents.
 
 ---
 
 ## 1. VoiceTracer API Inventory
 
-Source: `agents/hapax_voice/tracing.py`
+Source: `agents/hapax_daimonion/tracing.py`
 
 | Method | Type | Purpose | Langfuse SDK calls |
 |--------|------|---------|-------------------|
@@ -26,7 +26,7 @@ Source: `agents/hapax_voice/tracing.py`
 2. **`trace.update(status_message=)`** — sets completion status on trace_analysis only.
 3. **`client.flush()`** — synchronous flush with thread-based timeout wrapper.
 4. **Session grouping** — `session_id` parameter groups traces into Langfuse sessions.
-5. **Tags** — `["hapax-voice"]` tag on every trace.
+5. **Tags** — `["hapax-daimonion"]` tag on every trace.
 6. **Metadata dict** — arbitrary key-value metadata (presence_score, images_sent, etc.).
 
 ### Langfuse SDK features NOT used
@@ -39,7 +39,7 @@ Source: `agents/hapax_voice/tracing.py`
 
 ## 2. Usage Analysis
 
-### Production usage (agents/hapax_voice/)
+### Production usage (agents/hapax_daimonion/)
 
 | Call site | File | Method | Status |
 |-----------|------|--------|--------|
@@ -66,7 +66,7 @@ Source: `agents/hapax_voice/tracing.py`
 |---------|-------------|-----------------|------|
 | Trace creation | `client.trace(name=...)` | `tracer.start_as_current_span(name)` | No gap |
 | Metadata dict | `metadata={...}` | `span.set_attribute(key, value)` per key | No gap — flattened keys |
-| Tags | `tags=["hapax-voice"]` | `span.set_attribute("tags", "hapax-voice")` | Langfuse OTel ingestion maps `tags` attribute |
+| Tags | `tags=["hapax-daimonion"]` | `span.set_attribute("tags", "hapax-daimonion")` | Langfuse OTel ingestion maps `tags` attribute |
 | Session ID | `session_id="..."` | `span.set_attribute("langfuse.session.id", session_id)` | No gap — Langfuse OTel supports this attribute |
 | Status message | `trace.update(status_message=)` | `span.set_status(StatusCode.OK)` + `span.set_attribute("status_message", ...)` | No gap |
 | Flush | `client.flush()` | `provider.force_flush(timeout_millis=)` | No gap — OTel SDK has built-in timeout |
@@ -77,7 +77,7 @@ Source: `agents/hapax_voice/tracing.py`
 
 1. **Unified pipeline.** All agents (demo, voice, future agents) use the same TracerProvider, exporter, and flush path. One config module, one dependency.
 2. **Automatic context propagation.** If `ScreenAnalyzer` or any downstream code is OTel-instrumented (e.g., via HTTPX auto-instrumentation from `langfuse_config.py`), LLM calls to LiteLLM will automatically become child spans of the workspace_analysis span.
-3. **No direct Langfuse SDK dependency.** Removes `langfuse` from hapax-voice's import chain. The `opentelemetry` SDK is already a dependency via `langfuse_config.py`.
+3. **No direct Langfuse SDK dependency.** Removes `langfuse` from hapax-daimonion's import chain. The `opentelemetry` SDK is already a dependency via `langfuse_config.py`.
 4. **Standard tooling.** Any OTel-compatible backend (Jaeger, Grafana Tempo, Datadog) can ingest these traces without code changes.
 
 ### What changes semantically
@@ -105,7 +105,7 @@ Replace the VoiceTracer injection with standard OTel tracer acquisition:
 # workspace_monitor.py — top of file
 from opentelemetry.trace import get_tracer
 
-tracer = get_tracer("hapax_voice.workspace_monitor")
+tracer = get_tracer("hapax_daimonion.workspace_monitor")
 ```
 
 Remove `set_tracer()` method and `self._tracer` attribute.
@@ -133,12 +133,12 @@ After:
 with tracer.start_as_current_span(
     "workspace_analysis",
     attributes={
-        "source_service": "hapax-voice",
+        "source_service": "hapax-daimonion",
         "presence_score": self._presence.score if self._presence else "unknown",
         "images_sent": images_sent,
         "activity_mode": "unknown",
         "langfuse.session.id": self._event_log._session_id if self._event_log else None,
-        "langfuse.tags": "hapax-voice",
+        "langfuse.tags": "hapax-daimonion",
     },
 ):
     analysis = await self._analyzer.analyze(...)
@@ -161,7 +161,7 @@ except ImportError:
 ### Step 4: Remove VoiceTracer instantiation and wiring
 
 In `__main__.py`:
-- Remove `from agents.hapax_voice.tracing import VoiceTracer`
+- Remove `from agents.hapax_daimonion.tracing import VoiceTracer`
 - Remove `self.tracer = VoiceTracer(enabled=...)`
 - Remove `self.workspace_monitor.set_tracer(self.tracer)`
 - Replace `self.tracer.flush()` in shutdown with:
@@ -186,10 +186,10 @@ Since these are unused in production, two options:
 with tracer.start_as_current_span(
     "voice_session",
     attributes={
-        "source_service": "hapax-voice",
+        "source_service": "hapax-daimonion",
         "trigger": trigger,
         "langfuse.session.id": session_id,
-        "langfuse.tags": "hapax-voice",
+        "langfuse.tags": "hapax-daimonion",
     },
 ):
     ...
@@ -197,8 +197,8 @@ with tracer.start_as_current_span(
 
 ### Step 6: Update or delete tracing.py
 
-- If Option A: delete `agents/hapax_voice/tracing.py` entirely.
-- If Option B: gut the file and replace with a thin module exporting `tracer = get_tracer("hapax_voice")` for shared use across voice submodules.
+- If Option A: delete `agents/hapax_daimonion/tracing.py` entirely.
+- If Option B: gut the file and replace with a thin module exporting `tracer = get_tracer("hapax_daimonion")` for shared use across voice submodules.
 
 ### Step 7: Update tests
 
@@ -228,7 +228,7 @@ If hapax-officium were to adopt the Langfuse Python SDK directly (instead of OTe
 
 ### Pre-migration
 
-- [ ] Confirm `shared/langfuse_config.py` is importable from hapax-voice's runtime (Python path includes `shared/`)
+- [ ] Confirm `shared/langfuse_config.py` is importable from hapax-daimonion's runtime (Python path includes `shared/`)
 - [ ] Confirm `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST` are set in the voice daemon's environment (systemd unit or .env)
 - [ ] Verify Langfuse OTel ingestion endpoint accepts spans at `{LANGFUSE_HOST}/api/public/otel/v1/traces`
 
@@ -238,8 +238,8 @@ If hapax-officium were to adopt the Langfuse Python SDK directly (instead of OTe
 - [ ] Session grouping works — spans with `langfuse.session.id` appear grouped in Langfuse session view
 - [ ] Tags appear — `langfuse.tags` attribute renders as a tag in Langfuse UI
 - [ ] HTTPX auto-instrumentation creates child spans for LiteLLM calls within workspace_analysis spans
-- [ ] No `langfuse` Python package import in any hapax-voice module (grep confirms removal)
-- [ ] `langfuse` can be removed from hapax-voice's dependency list (pyproject.toml / requirements)
+- [ ] No `langfuse` Python package import in any hapax-daimonion module (grep confirms removal)
+- [ ] `langfuse` can be removed from hapax-daimonion's dependency list (pyproject.toml / requirements)
 - [ ] All existing tests pass (rewritten for OTel)
 - [ ] Daemon starts and runs without tracing errors when Langfuse credentials are absent (no-op path)
 - [ ] Daemon shutdown completes flush within 5s timeout

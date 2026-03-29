@@ -6,7 +6,7 @@
 
 ## Overview
 
-Three-layer enhancement to the hapax-voice audio pipeline:
+Three-layer enhancement to the hapax-daimonion audio pipeline:
 
 1. Replace PyAudio-based noise reference capture with pw-record multi-source capture
 2. Add enrollment quality validation and stability metrics
@@ -82,7 +82,7 @@ Add a validation phase to `enrollment.py` after sample collection, before saving
 
 3. **Threshold test** — similarity between the final averaged embedding and each individual sample. If any sample falls below 0.60 (the accept threshold), warn that the threshold may produce false negatives at the distances/conditions represented by that sample.
 
-4. **Stability report** — printed to terminal and saved as `~/.local/share/hapax-voice/enrollment_report.json`:
+4. **Stability report** — printed to terminal and saved as `~/.local/share/hapax-daimonion/enrollment_report.json`:
 
 ```json
 {
@@ -116,7 +116,7 @@ The current pipeline uses spectral subtraction (noise reference) + post-hoc spea
 
 ### Design
 
-A standalone benchmark script `agents/hapax_voice/tse_benchmark.py` that evaluates TSE viability on the current hardware.
+A standalone benchmark script `agents/hapax_daimonion/tse_benchmark.py` that evaluates TSE viability on the current hardware.
 
 **Architecture note:** No pretrained target-speaker-extraction model exists that takes a speaker embedding as conditioning input and outputs only that speaker's voice. SpeechBrain's separation models are **blind source separation** — they split a mixture into N channels without knowing which channel is which. The practical approach is two-stage: (1) blind-separate with SepFormer/ConvTasNet, (2) identify the operator's channel via ECAPA-TDNN cosine similarity against the enrolled embedding.
 
@@ -129,7 +129,7 @@ A standalone benchmark script `agents/hapax_voice/tse_benchmark.py` that evaluat
 
 **Test inputs:**
 - Synthetic: operator voice (from enrollment samples) mixed with recorded C920 room noise at various SNRs
-- Real captures from `~/.local/share/hapax-voice/` if available
+- Real captures from `~/.local/share/hapax-daimonion/` if available
 
 **Two-stage pipeline benchmark:**
 
@@ -151,9 +151,9 @@ Latency measured over 100 runs, reporting p50/p95/p99. "Combined" means separati
 
 **VRAM safety:** Before loading any model on GPU, check `nvidia-smi` for available VRAM. If <4GB free, skip GPU benchmark and note in report. Never OOM existing workloads (Ollama, visual surface, studio compositor).
 
-**Report output:** `~/.local/share/hapax-voice/tse_benchmark_report.json` with per-model-combo, per-device results and a go/no-go recommendation.
+**Report output:** `~/.local/share/hapax-daimonion/tse_benchmark_report.json` with per-model-combo, per-device results and a go/no-go recommendation.
 
-**If go:** Create `agents/hapax_voice/target_speaker.py` with:
+**If go:** Create `agents/hapax_daimonion/target_speaker.py` with:
 
 ```python
 class TargetSpeakerExtractor:
@@ -184,17 +184,17 @@ If TSE is viable, spectral subtraction and TSE can coexist (subtraction for broa
 
 | File | Change |
 |------|--------|
-| `agents/hapax_voice/multi_mic.py` | Replace PyAudio with pw-record, multi-source averaging |
-| `agents/hapax_voice/enrollment.py` | Add validation phase + stability report |
-| `agents/hapax_voice/config.py` | Add `noise_ref_room_patterns`, `noise_ref_structure_patterns` |
-| `agents/hapax_voice/__main__.py` | Pass new config fields to NoiseReference, wire TSE if viable |
+| `agents/hapax_daimonion/multi_mic.py` | Replace PyAudio with pw-record, multi-source averaging |
+| `agents/hapax_daimonion/enrollment.py` | Add validation phase + stability report |
+| `agents/hapax_daimonion/config.py` | Add `noise_ref_room_patterns`, `noise_ref_structure_patterns` |
+| `agents/hapax_daimonion/__main__.py` | Pass new config fields to NoiseReference, wire TSE if viable |
 
 ### Files created
 
 | File | Purpose |
 |------|---------|
-| `agents/hapax_voice/tse_benchmark.py` | Standalone benchmark script |
-| `agents/hapax_voice/target_speaker.py` | TSE class (only if benchmark says go) |
+| `agents/hapax_daimonion/tse_benchmark.py` | Standalone benchmark script |
+| `agents/hapax_daimonion/target_speaker.py` | TSE class (only if benchmark says go) |
 
 ### Files unchanged
 

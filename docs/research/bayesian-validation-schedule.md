@@ -32,7 +32,7 @@ Cycle 2 Phase A baseline collection active since 2026-03-21. These paths are FRO
 All measures on non-frozen code can proceed freely in R&D mode:
 - Stimmung (shared/stimmung.py, agents/visual_layer_aggregator.py)
 - DMN (agents/dmn/)
-- Salience router internals (agents/hapax_voice/salience/) — but NOT conversation_pipeline.py integration
+- Salience router internals (agents/hapax_daimonion/salience/) — but NOT conversation_pipeline.py integration
 - Visual/Reverie (hapax-logos/, crates/hapax-visual/)
 - Temporal bands (agents/temporal_*.py) — test harnesses only
 - Infrastructure (systemd, docker, monitoring)
@@ -124,7 +124,7 @@ All measures on non-frozen code can proceed freely in R&D mode:
 
 | Block | Hours | Measure | Detail |
 |-------|-------|---------|--------|
-| 0800-1200 | 4.0 | **4.3** | Voice integration wire-up. (1) Modify voice daemon to read `/dev/shm/hapax-dmn/buffer.txt` and include in phenomenal context (Layer 2, after stimmung). (2) Modify voice daemon to write TPN_ACTIVE flag when processing utterance. (3) Verify DMN anti-correlation: tick rate should double during voice. (4) Tests. NOTE: If voice daemon path is frozen, this requires DEVIATION-026. Check freeze manifest — voice daemon main loop (`agents/hapax_voice/`) has `conversation_pipeline.py` frozen but the daemon entry point and phenomenal context renderer may not be. |
+| 0800-1200 | 4.0 | **4.3** | Voice integration wire-up. (1) Modify voice daemon to read `/dev/shm/hapax-dmn/buffer.txt` and include in phenomenal context (Layer 2, after stimmung). (2) Modify voice daemon to write TPN_ACTIVE flag when processing utterance. (3) Verify DMN anti-correlation: tick rate should double during voice. (4) Tests. NOTE: If voice daemon path is frozen, this requires DEVIATION-026. Check freeze manifest — voice daemon main loop (`agents/hapax_daimonion/`) has `conversation_pipeline.py` frozen but the daemon entry point and phenomenal context renderer may not be. |
 | 1200-1300 | 1.0 | — | Break + voice session |
 | 1300-1700 | 4.0 | **7.3** | Salience component ablation. (1) Configure salience router with 3 weight profiles: concern_only, dialog_only, novelty_only. (2) Collect 20 turns per profile (if data from 7.2 sufficient, use Langfuse replay; otherwise collect live). (3) Compute context_anchor_success per profile. (4) Compare: which component predicts grounding best? |
 | 1700-2000 | 3.0 | **6.4** | Operator perception ground truth mechanism. Add lightweight prompt in voice daemon: when operator says "system feels [X]" or similar health-perception utterance, log perceived state alongside computed stimmung. Use keyword detection (already in utterance_features.py pattern). Start collecting ground truth passively. |
@@ -275,22 +275,22 @@ All output documents created by this schedule:
 
 | Measure | Primary File(s) | Frozen? |
 |---------|-----------------|---------|
-| 7.1 Log salience signals | agents/hapax_voice/conversation_pipeline.py:1161 | YES — deviation required |
+| 7.1 Log salience signals | agents/hapax_daimonion/conversation_pipeline.py:1161 | YES — deviation required |
 | 4.1 Contradiction scan | /dev/shm/hapax-dmn/impingements.jsonl (read-only analysis) | No |
-| 7.2 Claim 5 correlation | agents/hapax_voice/experiment_runner.py (read-only query) | YES — but read-only |
+| 7.2 Claim 5 correlation | agents/hapax_daimonion/experiment_runner.py (read-only query) | YES — but read-only |
 | 4.5 Ollama profiling | agents/dmn/ (measurement only) | No |
 | 6.3 Threshold-cross | shared/stimmung.py | No |
-| 6.2 Modulation telemetry | agents/hapax_voice/conversation_pipeline.py | YES — bundle with DEVIATION-025 |
+| 6.2 Modulation telemetry | agents/hapax_daimonion/conversation_pipeline.py | YES — bundle with DEVIATION-025 |
 | 6.5 Source health | agents/visual_layer_aggregator.py | No |
 | 4.2 Crisis benchmark | agents/dmn/, fortress game state | No |
 | 3.1 Temporal A/B | tests/research/ (new harness) | No |
 | 6.1 Perturbation | shared/stimmung.py, /dev/shm override | No |
-| 4.3 Voice integration | agents/hapax_voice/ daemon entry, phenomenal context | Check — may need deviation |
-| 7.3 Ablation | agents/hapax_voice/salience/ (weight config) | No (salience internals not frozen) |
-| 6.4 Perception ground truth | agents/hapax_voice/ utterance processing | Check freeze scope |
+| 4.3 Voice integration | agents/hapax_daimonion/ daemon entry, phenomenal context | Check — may need deviation |
+| 7.3 Ablation | agents/hapax_daimonion/salience/ (weight config) | No (salience internals not frozen) |
+| 6.4 Perception ground truth | agents/hapax_daimonion/ utterance processing | Check freeze scope |
 | 10.1-10.2 Amendments | hapax-logos/crates/hapax-visual/ (Rust/WGSL) | No |
 | 10.3 Interview | Operator protocol (no code) | No |
-| 8.2 Mode selector | New file (agents/hapax_voice/mode_selector.py) | No |
+| 8.2 Mode selector | New file (agents/hapax_daimonion/mode_selector.py) | No |
 | 3.2 Protention | tests/ (new validation harness) | No |
 | 3.3 Surprise | tests/ (new evaluation harness) | No |
 | 3.4 Decay function | agents/temporal_bands.py config | No |

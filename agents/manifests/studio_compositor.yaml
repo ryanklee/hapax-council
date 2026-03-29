@@ -3,13 +3,13 @@ name: Studio Compositor
 version: "1.0.0"
 category: interaction
 reports_to: operator
-peers: [hapax_voice, video_capture]
-depends_on: [hapax_voice]
+peers: [hapax_daimonion, video_capture]
+depends_on: [hapax_daimonion]
 
 purpose: Tile all studio camera feeds into a single 1080p composited output with real-time ML annotation overlays.
 inputs:
   - camera feeds (v4l2 devices)
-  - perception state (filesystem-as-bus from hapax_voice)
+  - perception state (filesystem-as-bus from hapax_daimonion)
 outputs:
   - composited video feed (/dev/video42, v4l2loopback)
   - status file (~/.cache/hapax-compositor/status.json)
@@ -47,7 +47,7 @@ narrative: |
   The Studio Compositor reads all studio camera feeds via GStreamer, tiles them
   into a single 1080p output using GPU-accelerated cudacompositor, and overlays
   real-time annotation data (flow state, consent badges, audio energy) sourced
-  from the hapax_voice perception engine via filesystem-as-bus. The composited
+  from the hapax_daimonion perception engine via filesystem-as-bus. The composited
   output appears as /dev/video42 (v4l2loopback), consumable by OBS, browsers,
   or the ingestion pipeline.
 

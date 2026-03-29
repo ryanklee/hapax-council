@@ -6,7 +6,7 @@
 
 ## What Changed
 
-`agents/hapax_voice/conversation_pipeline.py` lines 622-632: added imagination context injection block in `_update_system_context`, after the existing goals/health/nudges/DMN context loop and before phenomenal context.
+`agents/hapax_daimonion/conversation_pipeline.py` lines 622-632: added imagination context injection block in `_update_system_context`, after the existing goals/health/nudges/DMN context loop and before phenomenal context.
 
 ## Why
 

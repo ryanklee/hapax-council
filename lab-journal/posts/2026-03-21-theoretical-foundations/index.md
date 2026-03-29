@@ -5,4 +5,4 @@ categories: [theory]
 description: "Comprehensive review of Clark's grounding theory, Traum's computational model, counter-positions (Pickering & Garrod, Relevance Theory, CA), LLM memory architectures, SCED methodology, emergence/gestalt theory. 80+ citations."
 ---
 
-{{< include ../../../../agents/hapax_voice/proofs/THEORETICAL-FOUNDATIONS.md >}}
+{{< include ../../../../agents/hapax_daimonion/proofs/THEORETICAL-FOUNDATIONS.md >}}

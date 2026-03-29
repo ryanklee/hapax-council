@@ -1,7 +1,7 @@
 # Inside-Out Analysis: General Patterns Implicit in the Existing Perception Layer
 
 **Date:** 2026-03-11
-**Context:** Phase b) of the research plan. Analyze existing hapax_voice code to extract implicit general-purpose patterns, independently of the prior art survey.
+**Context:** Phase b) of the research plan. Analyze existing hapax_daimonion code to extract implicit general-purpose patterns, independently of the prior art survey.
 
 **Method:** Read the full implementation, name the patterns the code already uses, assess their generality, and identify where specialization has crept in that could be abstracted.
 

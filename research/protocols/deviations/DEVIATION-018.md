@@ -6,7 +6,7 @@
 
 ## What Changed
 
-`agents/hapax_voice/conversation_pipeline.py`:
+`agents/hapax_daimonion/conversation_pipeline.py`:
 - Added `self._dmn_fn: Callable[[], str] | None = None` field (line 341)
 - Added `("dmn", self._dmn_fn)` to enrichment callback loop (line 562)
 

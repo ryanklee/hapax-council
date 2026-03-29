@@ -20,7 +20,7 @@
 | Create | `presets/_default_modulations.json` | Default modulation template |
 | Create | `tests/effect_graph/test_visual_governance.py` | All governance unit tests |
 | Edit | `agents/effect_graph/types.py` | Add `PresetFamily` type |
-| Edit | `agents/hapax_voice/_perception_state_writer.py` | Export beat_position + bar_position |
+| Edit | `agents/hapax_daimonion/_perception_state_writer.py` | Export beat_position + bar_position |
 | Edit | `agents/studio_compositor.py:303` | Add desk_energy + stimmung fields to OverlayData |
 | Edit | `agents/studio_compositor.py:1928` | Expand signals dict |
 | Edit | `agents/studio_compositor.py:545` | Merge default modulations on preset load |
@@ -32,7 +32,7 @@
 The MIDI clock backend produces `beat_position` and `bar_position` as behaviors but they are NOT exported to perception-state.json. The compositor reads perception-state.json — not the behaviors dict — so these signals are invisible to it.
 
 **Files:**
-- Edit: `agents/hapax_voice/_perception_state_writer.py`
+- Edit: `agents/hapax_daimonion/_perception_state_writer.py`
 - Edit: `tests/test_scratch_pipeline.py` (or create new test)
 
 - [ ] **Step 1: Write failing test**
@@ -43,13 +43,13 @@ class TestMidiExport:
     def test_beat_position_in_state_dict(self):
         from pathlib import Path
         _PROJECT_ROOT = Path(__file__).resolve().parents[1]
-        source = (_PROJECT_ROOT / "agents/hapax_voice/_perception_state_writer.py").read_text()
+        source = (_PROJECT_ROOT / "agents/hapax_daimonion/_perception_state_writer.py").read_text()
         assert '"beat_position"' in source
 
     def test_bar_position_in_state_dict(self):
         from pathlib import Path
         _PROJECT_ROOT = Path(__file__).resolve().parents[1]
-        source = (_PROJECT_ROOT / "agents/hapax_voice/_perception_state_writer.py").read_text()
+        source = (_PROJECT_ROOT / "agents/hapax_daimonion/_perception_state_writer.py").read_text()
         assert '"bar_position"' in source
 ```
 
@@ -59,7 +59,7 @@ Run: `cd /home/hapax/projects/hapax-council && uv run pytest tests/test_scratch_
 
 - [ ] **Step 3: Add beat/bar exports to perception state writer**
 
-In `agents/hapax_voice/_perception_state_writer.py`, find the contact mic block (lines ~403-409). After `"desk_tap_gesture"`, add:
+In `agents/hapax_daimonion/_perception_state_writer.py`, find the contact mic block (lines ~403-409). After `"desk_tap_gesture"`, add:
 
 ```python
             # MIDI clock (beat/bar position for visual sync)
@@ -71,7 +71,7 @@ In `agents/hapax_voice/_perception_state_writer.py`, find the contact mic block 
 - [ ] **Step 5: Lint + commit**
 
 ```bash
-git add agents/hapax_voice/_perception_state_writer.py tests/test_scratch_pipeline.py
+git add agents/hapax_daimonion/_perception_state_writer.py tests/test_scratch_pipeline.py
 git commit -m "feat(voice): export beat_position + bar_position to perception state
 
 MIDI clock signals now available in perception-state.json for
@@ -839,7 +839,7 @@ cd /home/hapax/projects/hapax-council && uv run pytest tests/effect_graph/test_v
 - [ ] **Step 2: Lint all changed files**
 
 ```bash
-uv run ruff check agents/effect_graph/visual_governance.py agents/effect_graph/types.py agents/studio_compositor.py agents/hapax_voice/_perception_state_writer.py && uv run ruff format --check agents/effect_graph/visual_governance.py agents/effect_graph/types.py agents/studio_compositor.py agents/hapax_voice/_perception_state_writer.py
+uv run ruff check agents/effect_graph/visual_governance.py agents/effect_graph/types.py agents/studio_compositor.py agents/hapax_daimonion/_perception_state_writer.py && uv run ruff format --check agents/effect_graph/visual_governance.py agents/effect_graph/types.py agents/studio_compositor.py agents/hapax_daimonion/_perception_state_writer.py
 ```
 
 - [ ] **Step 3: Push and create PR**

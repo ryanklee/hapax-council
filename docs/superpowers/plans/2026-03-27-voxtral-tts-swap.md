@@ -53,11 +53,11 @@ git commit -m "deps: swap kokoro+piper-tts for mistralai SDK"
 ### Task 2: Rewrite `tts.py` — Voxtral backend, excise Piper
 
 **Files:**
-- Modify: `agents/hapax_voice/tts.py` (full rewrite)
+- Modify: `agents/hapax_daimonion/tts.py` (full rewrite)
 
 - [ ] **Step 1: Write the failing test — Voxtral synthesis**
 
-Add to `tests/test_hapax_voice_tts.py` (replacing Kokoro/Piper tests — done in Task 5):
+Add to `tests/test_hapax_daimonion_tts.py` (replacing Kokoro/Piper tests — done in Task 5):
 
 ```python
 def test_voxtral_synthesis_returns_pcm() -> None:
@@ -82,7 +82,7 @@ def test_voxtral_synthesis_returns_pcm() -> None:
     mock_stream.__exit__ = MagicMock(return_value=False)
     mock_client.audio.speech.complete.return_value = mock_stream
 
-    with patch("agents.hapax_voice.tts.Mistral", return_value=mock_client):
+    with patch("agents.hapax_daimonion.tts.Mistral", return_value=mock_client):
         mgr = TTSManager(voice_id="jessica")
         result = mgr.synthesize("hello", use_case="conversation")
 
@@ -92,12 +92,12 @@ def test_voxtral_synthesis_returns_pcm() -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /home/hapax/projects/hapax-council && uv run pytest tests/test_hapax_voice_tts.py::test_voxtral_synthesis_returns_pcm -v`
+Run: `cd /home/hapax/projects/hapax-council && uv run pytest tests/test_hapax_daimonion_tts.py::test_voxtral_synthesis_returns_pcm -v`
 Expected: FAIL — TTSManager doesn't accept `voice_id` yet.
 
 - [ ] **Step 3: Rewrite tts.py**
 
-Replace `agents/hapax_voice/tts.py` entirely:
+Replace `agents/hapax_daimonion/tts.py` entirely:
 
 ```python
 """Voxtral TTS — Mistral API streaming synthesis."""
@@ -214,13 +214,13 @@ class TTSManager:
 
 - [ ] **Step 4: Run tests**
 
-Run: `cd /home/hapax/projects/hapax-council && uv run pytest tests/test_hapax_voice_tts.py::test_voxtral_synthesis_returns_pcm -v`
+Run: `cd /home/hapax/projects/hapax-council && uv run pytest tests/test_hapax_daimonion_tts.py::test_voxtral_synthesis_returns_pcm -v`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/tts.py
+git add agents/hapax_daimonion/tts.py
 git commit -m "feat: replace Kokoro/Piper TTS with Voxtral streaming API"
 ```
 
@@ -229,13 +229,13 @@ git commit -m "feat: replace Kokoro/Piper TTS with Voxtral streaming API"
 ### Task 3: Update config and Pipecat wrapper
 
 **Files:**
-- Modify: `agents/hapax_voice/config.py:81`
-- Modify: `agents/hapax_voice/pipecat_tts.py` (full rewrite)
-- Modify: `agents/hapax_voice/pipeline.py:32-33,116-125`
+- Modify: `agents/hapax_daimonion/config.py:81`
+- Modify: `agents/hapax_daimonion/pipecat_tts.py` (full rewrite)
+- Modify: `agents/hapax_daimonion/pipeline.py:32-33,116-125`
 
 - [ ] **Step 1: Update config.py**
 
-In `agents/hapax_voice/config.py`, replace line 81:
+In `agents/hapax_daimonion/config.py`, replace line 81:
 
 ```python
     kokoro_voice: str = "af_heart"
@@ -250,7 +250,7 @@ with:
 
 - [ ] **Step 2: Rewrite pipecat_tts.py**
 
-Replace `agents/hapax_voice/pipecat_tts.py`:
+Replace `agents/hapax_daimonion/pipecat_tts.py`:
 
 ```python
 """Custom Pipecat TTS service wrapping the Voxtral TTSManager."""
@@ -269,7 +269,7 @@ from pipecat.frames.frames import (
 )
 from pipecat.services.tts_service import TTSService
 
-from agents.hapax_voice.tts import VOXTRAL_SAMPLE_RATE, TTSManager
+from agents.hapax_daimonion.tts import VOXTRAL_SAMPLE_RATE, TTSManager
 
 log = logging.getLogger(__name__)
 
@@ -334,11 +334,11 @@ class VoxtralTTSService(TTSService):
 
 - [ ] **Step 3: Update pipeline.py imports and _build_tts**
 
-In `agents/hapax_voice/pipeline.py`, replace lines 32-33:
+In `agents/hapax_daimonion/pipeline.py`, replace lines 32-33:
 
 ```python
-from agents.hapax_voice.pipecat_tts import VoxtralTTSService
-from agents.hapax_voice.tts import VOXTRAL_SAMPLE_RATE
+from agents.hapax_daimonion.pipecat_tts import VoxtralTTSService
+from agents.hapax_daimonion.tts import VOXTRAL_SAMPLE_RATE
 ```
 
 Replace `_build_tts` (lines 116-125):
@@ -359,7 +359,7 @@ def _build_tts(voice: str) -> VoxtralTTSService:
 - [ ] **Step 4: Commit**
 
 ```bash
-git add agents/hapax_voice/config.py agents/hapax_voice/pipecat_tts.py agents/hapax_voice/pipeline.py
+git add agents/hapax_daimonion/config.py agents/hapax_daimonion/pipecat_tts.py agents/hapax_daimonion/pipeline.py
 git commit -m "feat: update config, Pipecat wrapper, pipeline for Voxtral"
 ```
 
@@ -368,9 +368,9 @@ git commit -m "feat: update config, Pipecat wrapper, pipeline for Voxtral"
 ### Task 4: Update daemon callers
 
 **Files:**
-- Modify: `agents/hapax_voice/__main__.py:121,2187`
-- Modify: `agents/hapax_voice/conversation_pipeline.py:1852-1855`
-- Modify: `agents/hapax_voice/vocal_fx.py:30` (comment only — sample rate already 24000)
+- Modify: `agents/hapax_daimonion/__main__.py:121,2187`
+- Modify: `agents/hapax_daimonion/conversation_pipeline.py:1852-1855`
+- Modify: `agents/hapax_daimonion/vocal_fx.py:30` (comment only — sample rate already 24000)
 
 - [ ] **Step 1: Update __main__.py TTSManager instantiation**
 
@@ -405,7 +405,7 @@ Replace with:
 - [ ] **Step 3: Commit**
 
 ```bash
-git add agents/hapax_voice/__main__.py agents/hapax_voice/conversation_pipeline.py
+git add agents/hapax_daimonion/__main__.py agents/hapax_daimonion/conversation_pipeline.py
 git commit -m "feat: wire Voxtral into daemon and conversation pipeline"
 ```
 
@@ -542,15 +542,15 @@ git commit -m "feat: replace Kokoro with Voxtral in demo pipeline"
 ### Task 6: Rewrite all tests
 
 **Files:**
-- Modify: `tests/test_hapax_voice_tts.py` (rewrite)
-- Modify: `tests/test_hapax_voice_pipecat_tts.py` (update imports/names)
-- Modify: `tests/hapax_voice/test_tts_tier_cleanup.py` (update tier names)
-- Modify: `tests/test_hapax_voice_pipeline.py` (update imports/mocks)
+- Modify: `tests/test_hapax_daimonion_tts.py` (rewrite)
+- Modify: `tests/test_hapax_daimonion_pipecat_tts.py` (update imports/names)
+- Modify: `tests/hapax_daimonion/test_tts_tier_cleanup.py` (update tier names)
+- Modify: `tests/test_hapax_daimonion_pipeline.py` (update imports/mocks)
 
-- [ ] **Step 1: Rewrite test_hapax_voice_tts.py**
+- [ ] **Step 1: Rewrite test_hapax_daimonion_tts.py**
 
 ```python
-"""Tests for hapax_voice Voxtral TTS abstraction."""
+"""Tests for hapax_daimonion Voxtral TTS abstraction."""
 
 from __future__ import annotations
 
@@ -561,7 +561,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from agents.hapax_voice.tts import (
+from agents.hapax_daimonion.tts import (
     TTSManager,
     _audio_to_pcm_int16,
     _decode_pcm_f32_b64,
@@ -686,7 +686,7 @@ def test_voxtral_synthesis_returns_pcm() -> None:
     mock_stream.__exit__ = MagicMock(return_value=False)
     mock_client.audio.speech.complete.return_value = mock_stream
 
-    with patch("agents.hapax_voice.tts.Mistral", return_value=mock_client):
+    with patch("agents.hapax_daimonion.tts.Mistral", return_value=mock_client):
         with patch.dict("os.environ", {"MISTRAL_API_KEY": "test-key"}):
             mgr = TTSManager(voice_id="jessica")
             result = mgr.synthesize("hello", use_case="conversation")
@@ -704,7 +704,7 @@ def test_voxtral_empty_output() -> None:
     mock_stream.__exit__ = MagicMock(return_value=False)
     mock_client.audio.speech.complete.return_value = mock_stream
 
-    with patch("agents.hapax_voice.tts.Mistral", return_value=mock_client):
+    with patch("agents.hapax_daimonion.tts.Mistral", return_value=mock_client):
         with patch.dict("os.environ", {"MISTRAL_API_KEY": "test-key"}):
             mgr = TTSManager()
             result = mgr.synthesize("", use_case="conversation")
@@ -723,7 +723,7 @@ def test_voxtral_uses_ref_audio_when_set(tmp_path) -> None:
     mock_stream.__exit__ = MagicMock(return_value=False)
     mock_client.audio.speech.complete.return_value = mock_stream
 
-    with patch("agents.hapax_voice.tts.Mistral", return_value=mock_client):
+    with patch("agents.hapax_daimonion.tts.Mistral", return_value=mock_client):
         with patch.dict("os.environ", {"MISTRAL_API_KEY": "test-key"}):
             mgr = TTSManager(ref_audio_path=str(audio_file))
             mgr.synthesize("test")
@@ -748,7 +748,7 @@ def test_voxtral_client_loaded_once() -> None:
     mock_stream.__exit__ = MagicMock(return_value=False)
     mock_client.audio.speech.complete.return_value = mock_stream
 
-    with patch("agents.hapax_voice.tts.Mistral", return_value=mock_client) as MockMistral:
+    with patch("agents.hapax_daimonion.tts.Mistral", return_value=mock_client) as MockMistral:
         with patch.dict("os.environ", {"MISTRAL_API_KEY": "test-key"}):
             mgr = TTSManager()
             mgr.synthesize("a")
@@ -757,7 +757,7 @@ def test_voxtral_client_loaded_once() -> None:
     MockMistral.assert_called_once()
 ```
 
-- [ ] **Step 2: Update test_hapax_voice_pipecat_tts.py**
+- [ ] **Step 2: Update test_hapax_daimonion_pipecat_tts.py**
 
 Replace imports and class references. Change `KokoroTTSService` → `VoxtralTTSService`, `KOKORO_SAMPLE_RATE` → `VOXTRAL_SAMPLE_RATE`, `kokoro_voice` → `voice_id`:
 
@@ -771,8 +771,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pipecat.frames.frames import TTSAudioRawFrame, TTSStartedFrame, TTSStoppedFrame
 
-from agents.hapax_voice.pipecat_tts import VoxtralTTSService
-from agents.hapax_voice.tts import VOXTRAL_SAMPLE_RATE
+from agents.hapax_daimonion.pipecat_tts import VoxtralTTSService
+from agents.hapax_daimonion.tts import VOXTRAL_SAMPLE_RATE
 
 
 @pytest.fixture
@@ -784,7 +784,7 @@ def mock_tts_manager() -> MagicMock:
 
 class TestVoxtralTTSServiceInit:
     def test_default_sample_rate(self) -> None:
-        with patch("agents.hapax_voice.pipecat_tts.TTSManager"):
+        with patch("agents.hapax_daimonion.pipecat_tts.TTSManager"):
             svc = VoxtralTTSService()
         assert svc._init_sample_rate == VOXTRAL_SAMPLE_RATE
 
@@ -860,7 +860,7 @@ class TestVoxtralTTSServiceRunTTS:
 ```python
 """Tests for TTS tier map after Voxtral migration."""
 
-from agents.hapax_voice.tts import _TIER_MAP, select_tier
+from agents.hapax_daimonion.tts import _TIER_MAP, select_tier
 
 
 class TestTierMapCleanup:
@@ -883,16 +883,16 @@ class TestTierMapCleanup:
         assert select_tier("unknown_use_case") == "voxtral"
 ```
 
-- [ ] **Step 4: Update test_hapax_voice_pipeline.py**
+- [ ] **Step 4: Update test_hapax_daimonion_pipeline.py**
 
 Replace imports (lines 7-12):
 ```python
-from agents.hapax_voice.pipeline import (
+from agents.hapax_daimonion.pipeline import (
     INPUT_SAMPLE_RATE,
     _build_context,
     _build_transport,
 )
-from agents.hapax_voice.tts import VOXTRAL_SAMPLE_RATE
+from agents.hapax_daimonion.tts import VOXTRAL_SAMPLE_RATE
 ```
 
 Replace all `KOKORO_SAMPLE_RATE` references with `VOXTRAL_SAMPLE_RATE`.
@@ -903,7 +903,7 @@ Replace `KokoroTTSService` mock patch (line 196) with `VoxtralTTSService`.
 
 - [ ] **Step 5: Run all tests**
 
-Run: `cd /home/hapax/projects/hapax-council && uv run pytest tests/test_hapax_voice_tts.py tests/test_hapax_voice_pipecat_tts.py tests/hapax_voice/test_tts_tier_cleanup.py tests/test_hapax_voice_pipeline.py -v`
+Run: `cd /home/hapax/projects/hapax-council && uv run pytest tests/test_hapax_daimonion_tts.py tests/test_hapax_daimonion_pipecat_tts.py tests/hapax_daimonion/test_tts_tier_cleanup.py tests/test_hapax_daimonion_pipeline.py -v`
 Expected: All PASS
 
 - [ ] **Step 6: Commit**
@@ -942,12 +942,12 @@ git commit -m "chore: disable piper-tts in wake word training (removed dep)"
 ### Task 8: Delete Piper model file, run full test suite
 
 **Files:**
-- Delete: `~/.local/share/hapax-voice/piper-voice.onnx` (and `.onnx.json` if present)
+- Delete: `~/.local/share/hapax-daimonion/piper-voice.onnx` (and `.onnx.json` if present)
 
 - [ ] **Step 1: Remove Piper model files**
 
 ```bash
-rm -f ~/.local/share/hapax-voice/piper-voice.onnx ~/.local/share/hapax-voice/piper-voice.onnx.json
+rm -f ~/.local/share/hapax-daimonion/piper-voice.onnx ~/.local/share/hapax-daimonion/piper-voice.onnx.json
 ```
 
 - [ ] **Step 2: Run full test suite**

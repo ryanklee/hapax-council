@@ -48,7 +48,7 @@ def recent_observations(self, n: int = 5) -> list[str]:
 
 Returns `[obs.content for obs in self._observations[-n:]]`. The imagination loop calls this to build its context.
 
-## Voice Daemon Changes (`agents/hapax_voice/__main__.py`)
+## Voice Daemon Changes (`agents/hapax_daimonion/__main__.py`)
 
 ### Context Injection
 
@@ -105,7 +105,7 @@ In the existing TTS playback code (around `buffer.set_speaking(True/False)`), wr
 |------|--------|
 | `agents/dmn/__main__.py` | Launch imagination + resolver tasks, drain imagination impingements |
 | `agents/dmn/buffer.py` | Add `recent_observations(n)` method |
-| `agents/hapax_voice/__main__.py` | Wire imagination context fn, proactive gate in impingement consumer, tts_active flag |
+| `agents/hapax_daimonion/__main__.py` | Wire imagination context fn, proactive gate in impingement consumer, tts_active flag |
 | `tests/test_dmn_imagination_wiring.py` | Buffer observation extraction, imagination task creation |
 | `tests/test_voice_imagination_wiring.py` | Context injection format, proactive gate routing |
 

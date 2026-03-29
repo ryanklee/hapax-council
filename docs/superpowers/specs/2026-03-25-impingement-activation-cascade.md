@@ -159,7 +159,7 @@ Resolution triggers deactivation through three mechanisms:
 
 ## 5. Speech as a Tool
 
-Speech production (`hapax-voice` TTS) is a capability with the same interface as any other:
+Speech production (`hapax-daimonion` TTS) is a capability with the same interface as any other:
 
 ```python
 speech_production = Capability(

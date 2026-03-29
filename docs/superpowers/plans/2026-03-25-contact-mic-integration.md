@@ -18,17 +18,17 @@
 |--------|------|---------------|
 | Create | `~/.config/pipewire/pipewire.conf.d/10-contact-mic.conf` | PipeWire loopback: FR → mono virtual source |
 | Create | `~/.config/wireplumber/wireplumber.conf.d/50-studio24c.conf` | ALSA tuning + no-suspend for Studio 24c |
-| Create | `agents/hapax_voice/backends/contact_mic.py` | FAST-tier perception backend: RMS, onsets, activity, gestures |
-| Create | `tests/hapax_voice/test_contact_mic_backend.py` | Unit tests for all DSP + gesture logic |
+| Create | `agents/hapax_daimonion/backends/contact_mic.py` | FAST-tier perception backend: RMS, onsets, activity, gestures |
+| Create | `tests/hapax_daimonion/test_contact_mic_backend.py` | Unit tests for all DSP + gesture logic |
 | Create | `systemd/units/contact-mic-recorder.service` | Continuous FLAC recording service |
 | Create | `tests/test_audio_processor_contact_mic.py` | Unit tests for second directory + pattern param |
-| Edit | `agents/hapax_voice/config.py:73` | Add `contact_mic_source` field |
-| Edit | `agents/hapax_voice/__main__.py:2038` | Add `self._loop` assignment |
-| Edit | `agents/hapax_voice/__main__.py:635` | Register ContactMicBackend |
-| Edit | `agents/hapax_voice/__main__.py` (after backends) | Tap governance wiring |
-| Edit | `agents/hapax_voice/__main__.py:316-320` | Update NoiseReference constructor |
-| Edit | `agents/hapax_voice/multi_mic.py:45-50` | Add `structure_sources` parameter |
-| Edit | `tests/hapax_voice/test_multi_mic_structure.py` (create) | Unit tests for structure subtraction |
+| Edit | `agents/hapax_daimonion/config.py:73` | Add `contact_mic_source` field |
+| Edit | `agents/hapax_daimonion/__main__.py:2038` | Add `self._loop` assignment |
+| Edit | `agents/hapax_daimonion/__main__.py:635` | Register ContactMicBackend |
+| Edit | `agents/hapax_daimonion/__main__.py` (after backends) | Tap governance wiring |
+| Edit | `agents/hapax_daimonion/__main__.py:316-320` | Update NoiseReference constructor |
+| Edit | `agents/hapax_daimonion/multi_mic.py:45-50` | Add `structure_sources` parameter |
+| Edit | `tests/hapax_daimonion/test_multi_mic_structure.py` (create) | Unit tests for structure subtraction |
 | Edit | `agents/audio_processor.py:54,219,316,1571` | Add `CONTACT_MIC_RAW_DIR` constant, `source` field, `pattern` param, second dir scan |
 
 ---
@@ -106,12 +106,12 @@ Loopback extracts right channel (FR) from Studio 24c into named
 ## Task 2: ContactMicBackend — DSP Cache and Core Logic
 
 **Files:**
-- Create: `agents/hapax_voice/backends/contact_mic.py`
-- Create: `tests/hapax_voice/test_contact_mic_backend.py`
+- Create: `agents/hapax_daimonion/backends/contact_mic.py`
+- Create: `tests/hapax_daimonion/test_contact_mic_backend.py`
 
 - [ ] **Step 1: Write failing tests for the DSP cache**
 
-File: `tests/hapax_voice/test_contact_mic_backend.py`
+File: `tests/hapax_daimonion/test_contact_mic_backend.py`
 
 ```python
 """Tests for ContactMicBackend — desk activity perception from contact mic.
@@ -128,7 +128,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from agents.hapax_voice.backends.contact_mic import (
+from agents.hapax_daimonion.backends.contact_mic import (
     ContactMicBackend,
     _ContactMicCache,
     _classify_activity,
@@ -136,7 +136,7 @@ from agents.hapax_voice.backends.contact_mic import (
     _compute_spectral_centroid,
     _detect_onsets,
 )
-from agents.hapax_voice.primitives import Behavior
+from agents.hapax_daimonion.primitives import Behavior
 
 
 def _make_pcm_frame(freq_hz: float = 440.0, amplitude: float = 0.5, n_samples: int = 512) -> bytes:
@@ -261,25 +261,25 @@ class TestGestureDetection:
     """
 
     def test_no_gesture_single_onset(self):
-        from agents.hapax_voice.backends.contact_mic import _classify_gesture
+        from agents.hapax_daimonion.backends.contact_mic import _classify_gesture
 
         now = time.monotonic()
         assert _classify_gesture([now]) == "none"
 
     def test_double_tap(self):
-        from agents.hapax_voice.backends.contact_mic import _classify_gesture
+        from agents.hapax_daimonion.backends.contact_mic import _classify_gesture
 
         now = time.monotonic()
         assert _classify_gesture([now, now + 0.15]) == "double_tap"
 
     def test_triple_tap(self):
-        from agents.hapax_voice.backends.contact_mic import _classify_gesture
+        from agents.hapax_daimonion.backends.contact_mic import _classify_gesture
 
         now = time.monotonic()
         assert _classify_gesture([now, now + 0.12, now + 0.25]) == "triple_tap"
 
     def test_too_slow_is_no_gesture(self):
-        from agents.hapax_voice.backends.contact_mic import _classify_gesture
+        from agents.hapax_daimonion.backends.contact_mic import _classify_gesture
 
         now = time.monotonic()
         # 500ms between taps — too slow for double tap
@@ -288,26 +288,26 @@ class TestGestureDetection:
 
 class TestContactMicBackendProtocol:
     def test_name(self):
-        with patch("agents.hapax_voice.backends.contact_mic.pyaudio", None):
+        with patch("agents.hapax_daimonion.backends.contact_mic.pyaudio", None):
             backend = ContactMicBackend(source_name="Test Mic")
         assert backend.name == "contact_mic"
 
     def test_provides(self):
-        with patch("agents.hapax_voice.backends.contact_mic.pyaudio", None):
+        with patch("agents.hapax_daimonion.backends.contact_mic.pyaudio", None):
             backend = ContactMicBackend(source_name="Test Mic")
         assert backend.provides == frozenset({
             "desk_activity", "desk_energy", "desk_onset_rate", "desk_tap_gesture",
         })
 
     def test_tier_is_fast(self):
-        from agents.hapax_voice.perception import PerceptionTier
+        from agents.hapax_daimonion.perception import PerceptionTier
 
-        with patch("agents.hapax_voice.backends.contact_mic.pyaudio", None):
+        with patch("agents.hapax_daimonion.backends.contact_mic.pyaudio", None):
             backend = ContactMicBackend(source_name="Test Mic")
         assert backend.tier == PerceptionTier.FAST
 
     def test_contribute_updates_behaviors(self):
-        with patch("agents.hapax_voice.backends.contact_mic.pyaudio", None):
+        with patch("agents.hapax_daimonion.backends.contact_mic.pyaudio", None):
             backend = ContactMicBackend(source_name="Test Mic")
         behaviors: dict[str, Behavior] = {}
         backend.contribute(behaviors)
@@ -320,12 +320,12 @@ class TestContactMicBackendProtocol:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /home/hapax/projects/hapax-council && uv run pytest tests/hapax_voice/test_contact_mic_backend.py -v 2>&1 | head -30`
+Run: `cd /home/hapax/projects/hapax-council && uv run pytest tests/hapax_daimonion/test_contact_mic_backend.py -v 2>&1 | head -30`
 Expected: `ModuleNotFoundError` or `ImportError` — module doesn't exist yet
 
 - [ ] **Step 3: Write ContactMicBackend implementation**
 
-File: `agents/hapax_voice/backends/contact_mic.py`
+File: `agents/hapax_daimonion/backends/contact_mic.py`
 
 ```python
 """Contact microphone perception backend.
@@ -347,8 +347,8 @@ from collections import deque
 
 import numpy as np
 
-from agents.hapax_voice.perception import PerceptionTier
-from agents.hapax_voice.primitives import Behavior
+from agents.hapax_daimonion.perception import PerceptionTier
+from agents.hapax_daimonion.primitives import Behavior
 
 log = logging.getLogger(__name__)
 
@@ -683,18 +683,18 @@ class ContactMicBackend:
 
 - [ ] **Step 4: Run tests**
 
-Run: `cd /home/hapax/projects/hapax-council && uv run pytest tests/hapax_voice/test_contact_mic_backend.py -v`
+Run: `cd /home/hapax/projects/hapax-council && uv run pytest tests/hapax_daimonion/test_contact_mic_backend.py -v`
 Expected: All tests pass
 
 - [ ] **Step 5: Lint**
 
-Run: `cd /home/hapax/projects/hapax-council && uv run ruff check agents/hapax_voice/backends/contact_mic.py tests/hapax_voice/test_contact_mic_backend.py && uv run ruff format --check agents/hapax_voice/backends/contact_mic.py tests/hapax_voice/test_contact_mic_backend.py`
+Run: `cd /home/hapax/projects/hapax-council && uv run ruff check agents/hapax_daimonion/backends/contact_mic.py tests/hapax_daimonion/test_contact_mic_backend.py && uv run ruff format --check agents/hapax_daimonion/backends/contact_mic.py tests/hapax_daimonion/test_contact_mic_backend.py`
 Expected: No errors. Fix any issues.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add agents/hapax_voice/backends/contact_mic.py tests/hapax_voice/test_contact_mic_backend.py
+git add agents/hapax_daimonion/backends/contact_mic.py tests/hapax_daimonion/test_contact_mic_backend.py
 git commit -m "feat(voice): ContactMicBackend — desk activity perception from contact mic
 
 FAST-tier backend with RMS energy, onset detection, activity classification
@@ -707,12 +707,12 @@ All CPU DSP, no ML. Thread-safe cache pattern from StudioIngestionBackend."
 ## Task 3: Register Backend + Config
 
 **Files:**
-- Modify: `agents/hapax_voice/config.py:73`
-- Modify: `agents/hapax_voice/__main__.py:635` (after InputActivityBackend registration)
+- Modify: `agents/hapax_daimonion/config.py:73`
+- Modify: `agents/hapax_daimonion/__main__.py:635` (after InputActivityBackend registration)
 
 - [ ] **Step 1: Add config field**
 
-In `agents/hapax_voice/config.py`, after line 67 (after `audio_input_source` in the `# Audio hardware` section), add:
+In `agents/hapax_daimonion/config.py`, after line 67 (after `audio_input_source` in the `# Audio hardware` section), add:
 
 ```python
     # Contact microphone (desk vibration sensing via PipeWire)
@@ -721,12 +721,12 @@ In `agents/hapax_voice/config.py`, after line 67 (after `audio_input_source` in 
 
 - [ ] **Step 2: Register backend in __main__.py**
 
-In `agents/hapax_voice/__main__.py`, after the InputActivityBackend registration block (after line 635), add:
+In `agents/hapax_daimonion/__main__.py`, after the InputActivityBackend registration block (after line 635), add:
 
 ```python
         # Contact microphone backend (desk vibration via Cortado)
         try:
-            from agents.hapax_voice.backends.contact_mic import ContactMicBackend
+            from agents.hapax_daimonion.backends.contact_mic import ContactMicBackend
 
             self.perception.register_backend(
                 ContactMicBackend(source_name=self.cfg.contact_mic_source)
@@ -737,12 +737,12 @@ In `agents/hapax_voice/__main__.py`, after the InputActivityBackend registration
 
 - [ ] **Step 3: Lint**
 
-Run: `cd /home/hapax/projects/hapax-council && uv run ruff check agents/hapax_voice/config.py agents/hapax_voice/__main__.py && uv run ruff format --check agents/hapax_voice/config.py agents/hapax_voice/__main__.py`
+Run: `cd /home/hapax/projects/hapax-council && uv run ruff check agents/hapax_daimonion/config.py agents/hapax_daimonion/__main__.py && uv run ruff format --check agents/hapax_daimonion/config.py agents/hapax_daimonion/__main__.py`
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add agents/hapax_voice/config.py agents/hapax_voice/__main__.py
+git add agents/hapax_daimonion/config.py agents/hapax_daimonion/__main__.py
 git commit -m "feat(voice): register ContactMicBackend in perception engine
 
 Adds contact_mic_source config field and backend registration following
@@ -754,12 +754,12 @@ the standard try/except pattern. Degrades gracefully if mic unavailable."
 ## Task 4: Tap Gesture Dispatch (async wiring)
 
 **Files:**
-- Modify: `agents/hapax_voice/__main__.py:2038` (add `self._loop`)
-- Modify: `agents/hapax_voice/__main__.py` (tap governance after backend registration)
+- Modify: `agents/hapax_daimonion/__main__.py:2038` (add `self._loop`)
+- Modify: `agents/hapax_daimonion/__main__.py` (tap governance after backend registration)
 
 - [ ] **Step 1: Store event loop on daemon**
 
-In `agents/hapax_voice/__main__.py`, at the top of `_run_inner()` (line 2040, after the log.info call), add:
+In `agents/hapax_daimonion/__main__.py`, at the top of `_run_inner()` (line 2040, after the log.info call), add:
 
 ```python
         self._loop = asyncio.get_running_loop()
@@ -769,7 +769,7 @@ Also add `import asyncio` at the top of the file if not already present.
 
 - [ ] **Step 2: Add tap governance wiring**
 
-In `agents/hapax_voice/__main__.py`, add a new method after `_register_perception_backends()` (after line 697):
+In `agents/hapax_daimonion/__main__.py`, add a new method after `_register_perception_backends()` (after line 697):
 
 ```python
     def _setup_tap_governance(self) -> None:
@@ -809,12 +809,12 @@ Add `self._check_tap_gesture()` at line 1853, immediately after the perception t
 
 - [ ] **Step 4: Lint and verify**
 
-Run: `cd /home/hapax/projects/hapax-council && uv run ruff check agents/hapax_voice/__main__.py && uv run ruff format --check agents/hapax_voice/__main__.py`
+Run: `cd /home/hapax/projects/hapax-council && uv run ruff check agents/hapax_daimonion/__main__.py && uv run ruff format --check agents/hapax_daimonion/__main__.py`
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add agents/hapax_voice/__main__.py
+git add agents/hapax_daimonion/__main__.py
 git commit -m "feat(voice): tap gesture dispatch via contact mic
 
 Double-tap toggles voice session, triple-tap triggers ambient scan.
@@ -827,13 +827,13 @@ respecting governor veto and consent checks."
 ## Task 5: Structure-Borne Noise Reference
 
 **Files:**
-- Modify: `agents/hapax_voice/multi_mic.py:45-50`
-- Create: `tests/hapax_voice/test_multi_mic_structure.py`
-- Modify: `agents/hapax_voice/__main__.py:316-320`
+- Modify: `agents/hapax_daimonion/multi_mic.py:45-50`
+- Create: `tests/hapax_daimonion/test_multi_mic_structure.py`
+- Modify: `agents/hapax_daimonion/__main__.py:316-320`
 
 - [ ] **Step 1: Write failing tests**
 
-File: `tests/hapax_voice/test_multi_mic_structure.py`
+File: `tests/hapax_daimonion/test_multi_mic_structure.py`
 
 ```python
 """Tests for structure-borne noise reference extension to NoiseReference."""
@@ -843,7 +843,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from agents.hapax_voice.multi_mic import NoiseReference
+from agents.hapax_daimonion.multi_mic import NoiseReference
 
 
 def _make_pcm(freq_hz: float = 200.0, amplitude: float = 0.3, n_samples: int = 512) -> bytes:
@@ -893,12 +893,12 @@ class TestStructureSources:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /home/hapax/projects/hapax-council && uv run pytest tests/hapax_voice/test_multi_mic_structure.py -v 2>&1 | head -20`
+Run: `cd /home/hapax/projects/hapax-council && uv run pytest tests/hapax_daimonion/test_multi_mic_structure.py -v 2>&1 | head -20`
 Expected: Fail — `structure_sources` parameter not accepted
 
 - [ ] **Step 3: Extend NoiseReference**
 
-In `agents/hapax_voice/multi_mic.py`, modify `__init__` (line 45-50):
+In `agents/hapax_daimonion/multi_mic.py`, modify `__init__` (line 45-50):
 
 ```python
     def __init__(
@@ -1046,12 +1046,12 @@ Modify `_capture_loop` to accept an `is_structure` flag and update the correct e
 
 - [ ] **Step 4: Run tests**
 
-Run: `cd /home/hapax/projects/hapax-council && uv run pytest tests/hapax_voice/test_multi_mic_structure.py -v`
+Run: `cd /home/hapax/projects/hapax-council && uv run pytest tests/hapax_daimonion/test_multi_mic_structure.py -v`
 Expected: All pass
 
 - [ ] **Step 5: Update NoiseReference constructor call in __main__.py**
 
-In `agents/hapax_voice/__main__.py:316-320`, change:
+In `agents/hapax_daimonion/__main__.py:316-320`, change:
 
 ```python
         self._noise_reference = NoiseReference(
@@ -1076,12 +1076,12 @@ to:
 
 - [ ] **Step 6: Lint**
 
-Run: `cd /home/hapax/projects/hapax-council && uv run ruff check agents/hapax_voice/multi_mic.py agents/hapax_voice/__main__.py tests/hapax_voice/test_multi_mic_structure.py && uv run ruff format --check agents/hapax_voice/multi_mic.py agents/hapax_voice/__main__.py tests/hapax_voice/test_multi_mic_structure.py`
+Run: `cd /home/hapax/projects/hapax-council && uv run ruff check agents/hapax_daimonion/multi_mic.py agents/hapax_daimonion/__main__.py tests/hapax_daimonion/test_multi_mic_structure.py && uv run ruff format --check agents/hapax_daimonion/multi_mic.py agents/hapax_daimonion/__main__.py tests/hapax_daimonion/test_multi_mic_structure.py`
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add agents/hapax_voice/multi_mic.py agents/hapax_voice/__main__.py tests/hapax_voice/test_multi_mic_structure.py
+git add agents/hapax_daimonion/multi_mic.py agents/hapax_daimonion/__main__.py tests/hapax_daimonion/test_multi_mic_structure.py
 git commit -m "feat(voice): structure-borne noise reference via contact mic
 
 Extends NoiseReference with structure_sources parameter for Cortado contact
@@ -1334,16 +1334,16 @@ files in ~/audio-recording/contact-mic/."
 
 - [ ] **Step 1: Run full test suite**
 
-Run: `cd /home/hapax/projects/hapax-council && uv run pytest tests/hapax_voice/test_contact_mic_backend.py tests/hapax_voice/test_multi_mic_structure.py tests/test_audio_processor_contact_mic.py -v`
+Run: `cd /home/hapax/projects/hapax-council && uv run pytest tests/hapax_daimonion/test_contact_mic_backend.py tests/hapax_daimonion/test_multi_mic_structure.py tests/test_audio_processor_contact_mic.py -v`
 Expected: All pass
 
 - [ ] **Step 2: Run ruff across all changed files**
 
-Run: `cd /home/hapax/projects/hapax-council && uv run ruff check agents/hapax_voice/backends/contact_mic.py agents/hapax_voice/multi_mic.py agents/hapax_voice/__main__.py agents/hapax_voice/config.py agents/audio_processor.py && uv run ruff format --check agents/hapax_voice/backends/contact_mic.py agents/hapax_voice/multi_mic.py agents/hapax_voice/__main__.py agents/hapax_voice/config.py agents/audio_processor.py`
+Run: `cd /home/hapax/projects/hapax-council && uv run ruff check agents/hapax_daimonion/backends/contact_mic.py agents/hapax_daimonion/multi_mic.py agents/hapax_daimonion/__main__.py agents/hapax_daimonion/config.py agents/audio_processor.py && uv run ruff format --check agents/hapax_daimonion/backends/contact_mic.py agents/hapax_daimonion/multi_mic.py agents/hapax_daimonion/__main__.py agents/hapax_daimonion/config.py agents/audio_processor.py`
 
 - [ ] **Step 3: Run pyright type check**
 
-Run: `cd /home/hapax/projects/hapax-council && uv run pyright agents/hapax_voice/backends/contact_mic.py agents/hapax_voice/multi_mic.py`
+Run: `cd /home/hapax/projects/hapax-council && uv run pyright agents/hapax_daimonion/backends/contact_mic.py agents/hapax_daimonion/multi_mic.py`
 
 - [ ] **Step 4: Create PR**
 

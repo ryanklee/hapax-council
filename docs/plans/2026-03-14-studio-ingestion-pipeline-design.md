@@ -328,7 +328,7 @@ Five new rules:
 
 ### 5.4 VRAM Coordination
 
-All GPU models in the ingestion pipeline must acquire `VRAMLock` (`~/.cache/hapax-voice/vram.lock`):
+All GPU models in the ingestion pipeline must acquire `VRAMLock` (`~/.cache/hapax-daimonion/vram.lock`):
 - CLAP inference: acquire → infer → release (batch to minimize lock holds)
 - beat_this: acquire → process → release
 - Demucs: acquire → separate → release
@@ -671,7 +671,7 @@ Only coordination: **Ollama GPU contention.** Pipeline systemd services should s
 - [Beat tracking comparison (Frontiers 2025)](https://www.frontiersin.org/journals/computer-science/articles/10.3389/fcomp.2025.1595939/full)
 
 ### Hapax Source Files
-- Voice daemon: `agents/hapax_voice/perception.py`, `ambient_classifier.py`, `vram.py`
+- Voice daemon: `agents/hapax_daimonion/perception.py`, `ambient_classifier.py`, `vram.py`
 - Audio processor: `agents/audio_processor.py`
 - Reactive engine: `logos/engine/reactive_rules.py`, `executor.py`, `rules.py`
 - Consent: `shared/consent.py`, `axioms/constitutive-rules.yaml`

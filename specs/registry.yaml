@@ -207,7 +207,7 @@ systems:
         properties:
           - protention state saved every 300s in _api_poll_loop
           - protention state saved in close()
-          - state file at ~/.cache/hapax-voice/protention-state.json
+          - state file at ~/.cache/hapax-daimonion/protention-state.json
           - load() called in __init__
         verification: integration
 

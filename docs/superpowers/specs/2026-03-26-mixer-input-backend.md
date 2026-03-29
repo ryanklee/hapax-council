@@ -30,7 +30,7 @@ Both are mono PipeWire virtual sources available via `pactl set-default-source`.
 
 ## Component: MixerInputBackend
 
-**File:** `agents/hapax_voice/backends/mixer_input.py`
+**File:** `agents/hapax_daimonion/backends/mixer_input.py`
 
 ### Architecture
 
@@ -76,7 +76,7 @@ Added to `_register_perception_backends()` in `__main__.py`:
 
 ```python
 try:
-    from agents.hapax_voice.backends.mixer_input import MixerInputBackend
+    from agents.hapax_daimonion.backends.mixer_input import MixerInputBackend
     self.perception.register_backend(MixerInputBackend())
 except Exception:
     log.info("MixerInputBackend not available, skipping")
@@ -134,10 +134,10 @@ The existing `audio_rms`/`audio_beat` from airborne capture remain available but
 
 | Action | Path | Scope |
 |--------|------|-------|
-| Create | `agents/hapax_voice/backends/mixer_input.py` | Backend: capture, DSP, cache, behaviors |
-| Create | `tests/hapax_voice/test_mixer_input_backend.py` | Unit tests |
-| Edit | `agents/hapax_voice/__main__.py` | Register backend |
-| Edit | `agents/hapax_voice/_perception_state_writer.py` | Export 6 mixer_* fields |
+| Create | `agents/hapax_daimonion/backends/mixer_input.py` | Backend: capture, DSP, cache, behaviors |
+| Create | `tests/hapax_daimonion/test_mixer_input_backend.py` | Unit tests |
+| Edit | `agents/hapax_daimonion/__main__.py` | Register backend |
+| Edit | `agents/hapax_daimonion/_perception_state_writer.py` | Export 6 mixer_* fields |
 | Edit | `agents/studio_compositor.py` | OverlayData + signals dict |
 | Edit | `presets/_default_modulations.json` | Update sources: mixer_bass → bloom, etc. |
 

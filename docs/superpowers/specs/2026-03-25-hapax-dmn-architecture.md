@@ -179,7 +179,7 @@ The forcing function for the DMN is:
 | `agents/dmn/buffer.py` | Buffer management (accumulate, compress, format for U-curve) |
 | `agents/dmn/sensor.py` | Sensor reader (perception, stimmung, fortress state, watch) |
 | `shared/config.py` | DMN model config (Ollama model name, tick rates, buffer limits) |
-| `agents/hapax_voice/conversation_pipeline.py` | Inject DMN buffer into VOLATILE band |
+| `agents/hapax_daimonion/conversation_pipeline.py` | Inject DMN buffer into VOLATILE band |
 | `agents/fortress/deliberation.py` | Inject DMN buffer into deliberation prompt |
 
 ## 9. Scope Exclusions

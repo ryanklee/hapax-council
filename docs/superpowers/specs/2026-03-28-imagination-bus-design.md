@@ -174,7 +174,7 @@ train of thought or let it go. Don't force continuation.
 
 ## Integration Points
 
-- **Reads from:** DMN observation buffer (in-memory), `/dev/shm/hapax-stimmung/state.json`, `/dev/shm/hapax-voice/perception-state.json`, `/dev/shm/hapax-sensors/*.json`
+- **Reads from:** DMN observation buffer (in-memory), `/dev/shm/hapax-stimmung/state.json`, `/dev/shm/hapax-daimonion/perception-state.json`, `/dev/shm/hapax-sensors/*.json`
 - **Writes to:** `/dev/shm/hapax-imagination/current.json`, `/dev/shm/hapax-imagination/stream.jsonl`
 - **Escalates to:** `/dev/shm/hapax-dmn/impingements.jsonl`
 - **Launched by:** Voice daemon main loop (alongside DMN pulse)

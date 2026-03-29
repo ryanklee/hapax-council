@@ -14,8 +14,8 @@
 **Fix:** Add 3 fields to perception state dict. Re-enable `_check_model_disagreement()` to route activity disagreements as synthetic corrections.
 
 **Files:**
-- `agents/hapax_voice/_perception_state_writer.py` — add 3 fields to state dict
-- `agents/hapax_voice/workspace_monitor.py` — re-enable disagreement method, route to correction store
+- `agents/hapax_daimonion/_perception_state_writer.py` — add 3 fields to state dict
+- `agents/hapax_daimonion/workspace_monitor.py` — re-enable disagreement method, route to correction store
 
 ### Fix B: Enrich Episode Summary Text with Biometrics
 

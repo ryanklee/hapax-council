@@ -369,7 +369,7 @@ All blend modes are single-line WGSL/GLSL functions. The artistic work is tuning
 
 ### The System's Audio Data
 
-The existing `hapax_voice` system already produces:
+The existing `hapax_daimonion` system already produces:
 - Audio energy/volume levels (via AudioProcessor)
 - Spectral analysis is feasible from the existing audio pipeline
 
@@ -446,7 +446,7 @@ This is purely a data-flow problem, not a rendering problem. The render architec
 │                                                     │
 │  Uniform Sources:                                   │
 │    ├─ Visual layer state (JSON from /dev/shm)       │
-│    ├─ Audio energy (from hapax_voice agent)          │
+│    ├─ Audio energy (from hapax_daimonion agent)          │
 │    └─ Logos API parameters (HTTP/WebSocket)       │
 │                                                     │
 │  Output:                                            │

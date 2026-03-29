@@ -6,7 +6,7 @@
 
 ## What Changed
 
-`agents/hapax_voice/proofs/RESEARCH-STATE.md` — Expanded session 11 entry with data source audit results, frontend graceful loading, boot readiness fix, and git workflow consolidation.
+`agents/hapax_daimonion/proofs/RESEARCH-STATE.md` — Expanded session 11 entry with data source audit results, frontend graceful loading, boot readiness fix, and git workflow consolidation.
 
 ## Why
 

@@ -13,14 +13,14 @@
 | Source | Protocol | Receiver | Sink |
 |--------|----------|----------|------|
 | Pixel Watch 4 | HTTP POST `:8042` | `agents/watch_receiver.py` | `~/hapax-state/watch/*.json` |
-| PipeWire audio | PCM 16kHz callback | `agents/hapax_voice/audio_input.py` | In-memory → ConversationPipeline |
+| PipeWire audio | PCM 16kHz callback | `agents/hapax_daimonion/audio_input.py` | In-memory → ConversationPipeline |
 | 6 USB cameras | v4l2src GStreamer CUDA | `agents/studio_compositor.py` | `/dev/video42`, HLS, `~/video-recording/` |
 | Google Drive | OAuth 2.0 Changes API | `agents/gdrive_sync.py` | `~/documents/rag-sources/gdrive/` |
 | Gmail, Calendar, YouTube, Chrome | OAuth / local | Respective sync agents | `~/documents/rag-sources/{service}/` |
 | Obsidian vault | File sync | `agents/obsidian_sync.py` | `~/documents/rag-sources/obsidian/` |
 | Phone (KDE Connect) | Bluetooth | Perception backends | `perception-state.json` |
-| Screen capture | grim + ImageMagick | `agents/hapax_voice/screen_capturer.py` | Base64 in perception state |
-| Keyboard/mouse | evdev / Hyprland | `agents/hapax_voice/backends/input_activity.py` | `perception-state.json` |
+| Screen capture | grim + ImageMagick | `agents/hapax_daimonion/screen_capturer.py` | Base64 in perception state |
+| Keyboard/mouse | evdev / Hyprland | `agents/hapax_daimonion/backends/input_activity.py` | `perception-state.json` |
 | RAG source files | inotify | `agents/ingest.py` (Docling) | Qdrant `documents` |
 
 ### 1.2 Data Sinks
@@ -111,7 +111,7 @@
 
 #### M3: Perception state error silently swallowed
 
-**Location:** `agents/hapax_voice/_perception_state_writer.py:420-421`
+**Location:** `agents/hapax_daimonion/_perception_state_writer.py:420-421`
 **Problem:** `except OSError` catches disk-full, permission-denied, etc. and logs at DEBUG level only. Stale perception state goes undetected by all consumers.
 **Fix:** Promote to WARNING. Track consecutive failures. After 5 consecutive failures, emit ntfy alert.
 
@@ -170,7 +170,7 @@ The following were investigated and found to be **not issues**:
 ## 4. Implementation Batches
 
 ### Batch A: Data Integrity (H1, M1, M3)
-Atomicity, dead-letter queue, error visibility. All in `agents/ingest.py` and `agents/hapax_voice/_perception_state_writer.py`.
+Atomicity, dead-letter queue, error visibility. All in `agents/ingest.py` and `agents/hapax_daimonion/_perception_state_writer.py`.
 
 ### Batch B: Collection Hygiene (H2, M2)
 Remove orphan collections from all references. Add dimension validation to health monitor.
@@ -187,7 +187,7 @@ Pin hapax-sdlc to same commit in both projects.
 
 ### Batch A
 - `hapax-council/agents/ingest.py` (dedup tracker atomic write, dead-letter queue)
-- `hapax-council/agents/hapax_voice/_perception_state_writer.py` (error escalation)
+- `hapax-council/agents/hapax_daimonion/_perception_state_writer.py` (error escalation)
 - `hapax-council/shared/notify.py` (new alert paths)
 
 ### Batch B

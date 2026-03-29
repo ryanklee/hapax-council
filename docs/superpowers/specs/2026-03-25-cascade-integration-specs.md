@@ -18,7 +18,7 @@ Wire capability into cognitive loop with impingement consumption.
 
 **Step 1: Instantiate capability in voice daemon** (`__main__.py` ~line 300)
 ```python
-from agents.hapax_voice.capability import SpeechProductionCapability
+from agents.hapax_daimonion.capability import SpeechProductionCapability
 self._speech_capability = SpeechProductionCapability()
 self._cognitive_loop._speech_capability = self._speech_capability
 ```
@@ -47,9 +47,9 @@ async def _generate_and_speak_from_impingement(self, imp: Impingement) -> None:
 **Step 4: Turn phase management** — spontaneous speech only during `MUTUAL_SILENCE`. Never interrupt operator or ongoing speech.
 
 ### Files Changed
-- `agents/hapax_voice/__main__.py` — instantiate + register capability (~10 lines)
-- `agents/hapax_voice/cognitive_loop.py` — add polling after line 183 (~15 lines)
-- `agents/hapax_voice/conversation_pipeline.py` — add `_generate_and_speak_from_impingement` (~30 lines)
+- `agents/hapax_daimonion/__main__.py` — instantiate + register capability (~10 lines)
+- `agents/hapax_daimonion/cognitive_loop.py` — add polling after line 183 (~15 lines)
+- `agents/hapax_daimonion/conversation_pipeline.py` — add `_generate_and_speak_from_impingement` (~30 lines)
 
 ### Tests
 - Capability polling returns None when no pending impingements
@@ -102,7 +102,7 @@ async def _impingement_consumer_loop(self):
 ### Files Changed
 - `agents/dmn/__main__.py` — write impingements.jsonl (~10 lines)
 - `agents/fortress/__main__.py` — read from JSONL instead of self-generating (~20 lines)
-- `agents/hapax_voice/__main__.py` — background consumer loop (~40 lines)
+- `agents/hapax_daimonion/__main__.py` — background consumer loop (~40 lines)
 
 ---
 
@@ -231,7 +231,7 @@ self._pulse.set_tpn_active(active)
 **Effect:** DMN slows from 5s→10s sensory, 30s→60s evaluative during voice conversation. Reduces Ollama inference frequency by 50%.
 
 ### Files Changed
-- `agents/hapax_voice/__main__.py` — write flag on conversation start/end (~10 lines)
+- `agents/hapax_daimonion/__main__.py` — write flag on conversation start/end (~10 lines)
 - `agents/dmn/__main__.py` — read flag each tick (~5 lines)
 
 ### GPU Semaphore Extension (deferred)
@@ -304,7 +304,7 @@ Each backend tracks previous state and emits Impingements at its `contribute()` 
 Add `_pending_impingements` list to PerceptionEngine. Each backend's `contribute()` appends impingements when state changes. After each tick, drain and write to `/dev/shm/hapax-dmn/impingements.jsonl` (same transport as cross-daemon routing).
 
 ### Files Changed
-- `agents/hapax_voice/perception.py` — add impingement drain (~20 lines)
+- `agents/hapax_daimonion/perception.py` — add impingement drain (~20 lines)
 - 5 trivial backends — ~10-20 lines each
 - 6 moderate backends — ~30-60 lines each
 

@@ -6,7 +6,7 @@
 
 ## What Changed
 
-`agents/hapax_voice/proofs/RESEARCH-STATE.md`: Added session 13 entry documenting
+`agents/hapax_daimonion/proofs/RESEARCH-STATE.md`: Added session 13 entry documenting
 boundary contract enforcement infrastructure work. Added 5 rows to research
 infrastructure table.
 

@@ -41,16 +41,16 @@ The original Phase 3 deliverables (perception backends, shader graph) move to Ph
 
 | # | Deliverable | Files | Lines | Depends On |
 |---|------------|-------|-------|------------|
-| R1.1 | Write function-free descriptions for SpeechProductionCapability | agents/hapax_voice/capability.py | ~10 | R0.1 |
+| R1.1 | Write function-free descriptions for SpeechProductionCapability | agents/hapax_daimonion/capability.py | ~10 | R0.1 |
 | R1.2 | Write function-free descriptions for FortressGovernanceCapability | agents/fortress/capability.py | ~10 | R0.1 |
 | R1.3 | Auto-generate descriptions for 13 RuleCapabilities | logos/engine/rule_capability.py | ~20 | R0.1 |
 | R1.4 | Index all capability descriptions in Qdrant at daemon startup | shared/affordance_pipeline.py | ~40 | R0.3, R1.1-R1.3 |
-| R1.5 | Voice daemon: replace direct can_resolve() with pipeline.select() | agents/hapax_voice/__main__.py | ~30 | R0.4, R1.1 |
+| R1.5 | Voice daemon: replace direct can_resolve() with pipeline.select() | agents/hapax_daimonion/__main__.py | ~30 | R0.4, R1.1 |
 | R1.6 | Fortress daemon: replace broadcast() with pipeline.select() | agents/fortress/__main__.py | ~30 | R0.4, R1.2 |
 | R1.7 | Engine: replace discarded broadcast() with pipeline.select() | logos/engine/__init__.py | ~20 | R0.4, R1.3 |
 | R1.8 | Add embedding computation to converter.convert() | logos/engine/converter.py | ~15 | R0.2 |
 | R1.9 | Add embedding computation to emit_sensor_impingement() | shared/sensor_protocol.py | ~15 | R0.2 |
-| R1.10 | Register interrupt tokens for safety-critical paths | agents/hapax_voice/__main__.py, agents/fortress/__main__.py | ~10 | R0.6 |
+| R1.10 | Register interrupt tokens for safety-critical paths | agents/hapax_daimonion/__main__.py, agents/fortress/__main__.py | ~10 | R0.6 |
 | R1.11 | Deprecate per-daemon CapabilityRegistry instances (keep as fallback) | agents/*/__ main__.py | ~20 | R1.5-R1.7 |
 | R1.12 | Update tests (replace exact assertions with similarity thresholds) | tests/test_impingement.py, tests/test_engine_cascade.py, tests/test_sensor_protocol.py | ~60 | R1.5-R1.9 |
 | R1.13 | Tests for Phase R1 | tests/test_affordance_migration.py (NEW) | ~200 | all above |
@@ -86,13 +86,13 @@ The original Phase 3 deliverables (perception backends, shader graph) move to Ph
 
 | # | Deliverable | Files | Lines | Depends On |
 |---|------------|-------|-------|------------|
-| R3.1 | PerceptionEngine impingement drain | agents/hapax_voice/perception.py | ~20 | R0.2 |
-| R3.2 | Trivial backends emit impingements (5) | agents/hapax_voice/backends/*.py | ~80 | R3.1 |
-| R3.3 | Moderate backends emit impingements (6) | agents/hapax_voice/backends/*.py | ~240 | R3.1 |
+| R3.1 | PerceptionEngine impingement drain | agents/hapax_daimonion/perception.py | ~20 | R0.2 |
+| R3.2 | Trivial backends emit impingements (5) | agents/hapax_daimonion/backends/*.py | ~80 | R3.1 |
+| R3.3 | Moderate backends emit impingements (6) | agents/hapax_daimonion/backends/*.py | ~240 | R3.1 |
 | R3.4 | ShaderGraphCapability with function-free description | agents/effect_graph/capability.py (NEW) | ~150 | R0.1 |
 | R3.5 | Stimmung→shader modulation bindings | agents/effect_graph/ | ~30 | R3.4 |
 | R3.6 | Register ShaderGraphCapability in affordance pipeline | agents/studio_compositor.py | ~15 | R3.4 |
-| R3.7 | Perception impingements → JSONL transport | agents/hapax_voice/perception.py | ~15 | R3.1 |
+| R3.7 | Perception impingements → JSONL transport | agents/hapax_daimonion/perception.py | ~15 | R3.1 |
 | R3.8 | Tests for Phase R3 | tests/ | ~150 | all above |
 
 **Milestone test:** Same as original Phase 3 milestone, but routed through AffordancePipeline. Both ShaderGraph and Speech are retrieved as candidates for the same stress impingement. Both activate simultaneously (multi-winner competition, since they don't conflict on resources). Visual calming + verbal check-in fire together from a single impingement.
@@ -109,7 +109,7 @@ The original Phase 3 deliverables (perception backends, shader graph) move to Ph
 |---|------------|-------|-------|------------|
 | R4.1 | Sensor Tier 2: gmail, gdrive, watch_receiver | agents/*.py | ~100 | R0.2 |
 | R4.2 | Sensor Tier 3: git, youtube, obsidian, langfuse, claude_code, weather | agents/*.py | ~120 | R0.2 |
-| R4.3 | Hard perception backends (vision, devices, hyprland) | agents/hapax_voice/backends/*.py | ~200 | R3.1 |
+| R4.3 | Hard perception backends (vision, devices, hyprland) | agents/hapax_daimonion/backends/*.py | ~200 | R3.1 |
 | R4.4 | GPU semaphore extension (if VRAM watchdog hits 85%+) | shared/gpu_semaphore.py | ~50 | conditional |
 | R4.5 | Systemd service unit for DMN daemon | systemd/units/ | ~20 | R0.1 |
 | R4.6 | Remove deprecated CapabilityRegistry fallback code | shared/capability_registry.py, agents/*/__main__.py | ~-200 | R2.6 passing |
@@ -127,7 +127,7 @@ The original Phase 3 deliverables (perception backends, shader graph) move to Ph
 |---|------------|-------|------------|
 | R5.1 | DF fortress A/B test harness (10 pipeline-enriched vs 10 baseline) | agents/fortress/, scripts/ | R1+R3 |
 | R5.2 | Metrics: time-to-gap-detection, novel capability recruitment rate | agents/fortress/metrics.py | R5.1 |
-| R5.3 | Voice spontaneous speech appropriateness (50 session comparison) | agents/hapax_voice/ | R2 |
+| R5.3 | Voice spontaneous speech appropriateness (50 session comparison) | agents/hapax_daimonion/ | R2 |
 | R5.4 | Novel association discovery rate (capabilities recruited for unprogrammed needs) | shared/affordance_pipeline.py | R2 |
 | R5.5 | Visual expression correlation with operator state | agents/effect_graph/ | R3 |
 | R5.6 | Analysis document | docs/research/ | R5.1-R5.5 |

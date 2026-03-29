@@ -6,7 +6,7 @@
 
 ## What Changed
 
-Updated `agents/hapax_voice/proofs/RESEARCH-STATE.md` to reflect session 8:
+Updated `agents/hapax_daimonion/proofs/RESEARCH-STATE.md` to reflect session 8:
 - Session 8: systemd layer overhaul (PR #264)
 
 Added session 8 entry to the "Session 5–7 Infrastructure Changes" section,

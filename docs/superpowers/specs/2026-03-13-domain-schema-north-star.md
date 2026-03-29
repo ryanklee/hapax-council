@@ -1,4 +1,4 @@
-# Domain Schema North Star — Hapax Voice
+# Domain Schema North Star — Hapax Daimonion
 
 **Date**: 2026-03-13
 **Branch**: `feat/multi-role-composition`
@@ -38,7 +38,7 @@ FreshnessGuard.check(ctx: FusedContext, now: float) → FreshnessResult
   → compose_mc_governance emits None via Event[Schedule | None]
 ```
 
-Source: `agents/hapax_voice/mc_governance.py:226-230` `[impl]`
+Source: `agents/hapax_daimonion/mc_governance.py:226-230` `[impl]`
 
 ---
 
@@ -158,7 +158,7 @@ All `Executor` handles. Each executor maps action names to physical actuation.
 | `AudioExecutor` | `audio_output` | `{"vocal_throw", "ad_lib"}` | `__main__.py:279` | `[impl]` |
 | `OBSExecutor` | `obs_scene` | `{"wide_ambient", "gear_closeup", "face_cam", "rapid_cut"}` | `__main__.py:314` | `[impl]` |
 
-Executor protocol: `agents/hapax_voice/executor.py:23-46` `[impl]`
+Executor protocol: `agents/hapax_daimonion/executor.py:23-46` `[impl]`
 
 ```
 Executor.name → str
@@ -188,7 +188,7 @@ Event[float]
   → Schedule(command, domain="beat", target_time, wall_time)
 ```
 
-Source: `agents/hapax_voice/mc_governance.py:199-272` `[impl]`
+Source: `agents/hapax_daimonion/mc_governance.py:199-272` `[impl]`
 
 **VetoChain** (4 vetoes, deny-wins, order-independent):
 
@@ -222,7 +222,7 @@ Event[float]
             min_watermark, governance_result, selected_by)
 ```
 
-Source: `agents/hapax_voice/obs_governance.py:245-312` `[impl]`
+Source: `agents/hapax_daimonion/obs_governance.py:245-312` `[impl]`
 
 **VetoChain** (4 vetoes, deny-wins, order-independent):
 
@@ -255,7 +255,7 @@ SuppressionField.set_target(level: float, now: float) → None
     where threshold_eff = base + suppression × (1.0 - base)
 ```
 
-Source: `agents/hapax_voice/suppression.py:14-101` `[impl]`
+Source: `agents/hapax_daimonion/suppression.py:14-101` `[impl]`
 
 **Resource contention**: When multiple governance chains claim the same physical resource, the ResourceArbiter resolves by static priority.
 
@@ -266,7 +266,7 @@ ResourceClaim(resource, chain, priority, command, hold_until, max_hold_s, create
   → ExecutorRegistry.dispatch(winner.command, schedule) → bool
 ```
 
-Source: `agents/hapax_voice/arbiter.py:17-125` `[impl]`
+Source: `agents/hapax_daimonion/arbiter.py:17-125` `[impl]`
 
 Priority map (`resource_config.py:20-29`):
 
@@ -294,7 +294,7 @@ ExecutorRegistry.dispatch(command) → bool
   → OBS FallbackChain reads last_mc_fire via _mc_fired_recently(ctx)
 ```
 
-Source: `agents/hapax_voice/feedback.py:18-48`, `executor.py:127-154` `[impl]`
+Source: `agents/hapax_daimonion/feedback.py:18-48`, `executor.py:127-154` `[impl]`
 
 ---
 
@@ -349,7 +349,7 @@ Each `PerceptionBackend` populates a subset of the Behavior registry. Registrati
 | Face identity resolver | `operator_identity` | FAST | per-frame | `[spec]` |
 | Spatial backend | `spatial_frame` | EVENT | sensor-driven | `[spec]` |
 
-PerceptionBackend protocol: `agents/hapax_voice/perception.py:34-71` `[impl]`
+PerceptionBackend protocol: `agents/hapax_daimonion/perception.py:34-71` `[impl]`
 
 ```
 PerceptionBackend.name → str
@@ -505,49 +505,49 @@ Types exercised: `ConsentRegistry`, `ConsentContract` `[impl]`, face identity re
 
 | Type | Module | Definition |
 |------|--------|------------|
-| `ActuationEvent` | `agents/hapax_voice/actuation_event.py:15` | Immutable record of a completed actuation with latency tracking |
-| `Behavior[T]` | `agents/hapax_voice/primitives.py:26` | Continuously-available value with monotonic watermark |
-| `BackendType` | `agents/hapax_voice/wiring.py:29` | Enum of known backend types for source instantiation |
-| `CadenceGroup` | `agents/hapax_voice/cadence.py:22` | Group of backends polled at a shared interval, emits tick Event |
-| `Candidate[C, T]` | `agents/hapax_voice/governance.py:129` | Candidate action with eligibility predicate and optional nested VetoChain |
-| `Command` | `agents/hapax_voice/commands.py:19` | Inspectable, governable, immutable action description |
-| `CompoundGoals` | `agents/hapax_voice/compound_goals.py:16` | Sequences multi-step operational workflows via daemon reference |
+| `ActuationEvent` | `agents/hapax_daimonion/actuation_event.py:15` | Immutable record of a completed actuation with latency tracking |
+| `Behavior[T]` | `agents/hapax_daimonion/primitives.py:26` | Continuously-available value with monotonic watermark |
+| `BackendType` | `agents/hapax_daimonion/wiring.py:29` | Enum of known backend types for source instantiation |
+| `CadenceGroup` | `agents/hapax_daimonion/cadence.py:22` | Group of backends polled at a shared interval, emits tick Event |
+| `Candidate[C, T]` | `agents/hapax_daimonion/governance.py:129` | Candidate action with eligibility predicate and optional nested VetoChain |
+| `Command` | `agents/hapax_daimonion/commands.py:19` | Inspectable, governable, immutable action description |
+| `CompoundGoals` | `agents/hapax_daimonion/compound_goals.py:16` | Sequences multi-step operational workflows via daemon reference |
 | `ConsentContract` | `shared/consent.py:24` | Bilateral consent agreement between operator and subject |
 | `ConsentRegistry` | `shared/consent.py:45` | Runtime registry of consent contracts with enforcement boundary |
-| `ConversationState` | `agents/hapax_voice/chain_state.py:24` | Enum: IDLE, LISTENING, SPEAKING, PROCESSING |
-| `EnvironmentState` | `agents/hapax_voice/perception.py:122` | Immutable snapshot of fused audio-visual environment |
-| `Event[T]` | `agents/hapax_voice/primitives.py:59` | Discrete occurrence with pub/sub signaling |
-| `Executor` | `agents/hapax_voice/executor.py:23` | Protocol for actuators that handle Commands |
-| `ExecutorRegistry` | `agents/hapax_voice/executor.py:98` | Maps action names to Executors, emits ActuationEvent on dispatch |
-| `FallbackChain[C, T]` | `agents/hapax_voice/governance.py:143` | Priority-ordered action selection, first eligible candidate wins |
-| `FreshnessGuard` | `agents/hapax_voice/governance.py:190` | Rejects decisions made on stale perception data |
-| `FreshnessRequirement` | `agents/hapax_voice/governance.py:174` | Minimum freshness required for a specific signal |
-| `FreshnessResult` | `agents/hapax_voice/governance.py:182` | Outcome of a FreshnessGuard check |
-| `FusedContext` | `agents/hapax_voice/governance.py:21` | Combinator output: trigger event fused with current Behavior values |
-| `GatedResult[T]` | `agents/hapax_voice/governance.py:47` | Value wrapped with its VetoResult |
-| `GovernanceBinding` | `agents/hapax_voice/wiring.py:51` | Maps bare governance behavior names to source-qualified Behaviors |
-| `GovernanceChainState` | `agents/hapax_voice/chain_state.py:15` | Enum: IDLE, ACTIVE, SUPPRESSED, FIRING |
-| `MCAction` | `agents/hapax_voice/mc_governance.py:28` | Enum: VOCAL_THROW, AD_LIB, SILENCE |
-| `MCConfig` | `agents/hapax_voice/mc_governance.py:37` | Tunable thresholds for MC governance constraints |
-| `MusicalPosition` | `agents/hapax_voice/musical_position.py:17` | Hierarchical musical time decomposition (beat, bar, phrase, section) |
-| `OBSConfig` | `agents/hapax_voice/obs_governance.py:49` | Tunable thresholds for OBS governance constraints |
-| `OBSScene` | `agents/hapax_voice/obs_governance.py:31` | Enum: WIDE_AMBIENT, GEAR_CLOSEUP, FACE_CAM, RAPID_CUT, HOLD |
-| `OBSTransition` | `agents/hapax_voice/obs_governance.py:41` | Enum: CUT, DISSOLVE, FADE |
-| `PerceptionBackend` | `agents/hapax_voice/perception.py:34` | Protocol for pluggable perception backends |
-| `PerceptionEngine` | `agents/hapax_voice/perception.py:165` | Fuses sensor signals into EnvironmentState snapshots |
-| `PerceptionTier` | `agents/hapax_voice/perception.py:25` | Enum: FAST, SLOW, EVENT |
-| `ResourceArbiter` | `agents/hapax_voice/arbiter.py:33` | Priority-based resource contention resolver |
-| `ResourceClaim` | `agents/hapax_voice/arbiter.py:17` | Immutable claim on a physical resource by a governance chain |
-| `Schedule` | `agents/hapax_voice/commands.py:40` | Command bound to a specific time in a specific domain |
-| `ScheduleQueue` | `agents/hapax_voice/executor.py:49` | Priority queue drained by wall-clock time |
-| `Selected[T]` | `agents/hapax_voice/governance.py:122` | Output of a FallbackChain selection |
-| `SourceSpec` | `agents/hapax_voice/wiring.py:38` | Declaration of a physical source and its backend type |
+| `ConversationState` | `agents/hapax_daimonion/chain_state.py:24` | Enum: IDLE, LISTENING, SPEAKING, PROCESSING |
+| `EnvironmentState` | `agents/hapax_daimonion/perception.py:122` | Immutable snapshot of fused audio-visual environment |
+| `Event[T]` | `agents/hapax_daimonion/primitives.py:59` | Discrete occurrence with pub/sub signaling |
+| `Executor` | `agents/hapax_daimonion/executor.py:23` | Protocol for actuators that handle Commands |
+| `ExecutorRegistry` | `agents/hapax_daimonion/executor.py:98` | Maps action names to Executors, emits ActuationEvent on dispatch |
+| `FallbackChain[C, T]` | `agents/hapax_daimonion/governance.py:143` | Priority-ordered action selection, first eligible candidate wins |
+| `FreshnessGuard` | `agents/hapax_daimonion/governance.py:190` | Rejects decisions made on stale perception data |
+| `FreshnessRequirement` | `agents/hapax_daimonion/governance.py:174` | Minimum freshness required for a specific signal |
+| `FreshnessResult` | `agents/hapax_daimonion/governance.py:182` | Outcome of a FreshnessGuard check |
+| `FusedContext` | `agents/hapax_daimonion/governance.py:21` | Combinator output: trigger event fused with current Behavior values |
+| `GatedResult[T]` | `agents/hapax_daimonion/governance.py:47` | Value wrapped with its VetoResult |
+| `GovernanceBinding` | `agents/hapax_daimonion/wiring.py:51` | Maps bare governance behavior names to source-qualified Behaviors |
+| `GovernanceChainState` | `agents/hapax_daimonion/chain_state.py:15` | Enum: IDLE, ACTIVE, SUPPRESSED, FIRING |
+| `MCAction` | `agents/hapax_daimonion/mc_governance.py:28` | Enum: VOCAL_THROW, AD_LIB, SILENCE |
+| `MCConfig` | `agents/hapax_daimonion/mc_governance.py:37` | Tunable thresholds for MC governance constraints |
+| `MusicalPosition` | `agents/hapax_daimonion/musical_position.py:17` | Hierarchical musical time decomposition (beat, bar, phrase, section) |
+| `OBSConfig` | `agents/hapax_daimonion/obs_governance.py:49` | Tunable thresholds for OBS governance constraints |
+| `OBSScene` | `agents/hapax_daimonion/obs_governance.py:31` | Enum: WIDE_AMBIENT, GEAR_CLOSEUP, FACE_CAM, RAPID_CUT, HOLD |
+| `OBSTransition` | `agents/hapax_daimonion/obs_governance.py:41` | Enum: CUT, DISSOLVE, FADE |
+| `PerceptionBackend` | `agents/hapax_daimonion/perception.py:34` | Protocol for pluggable perception backends |
+| `PerceptionEngine` | `agents/hapax_daimonion/perception.py:165` | Fuses sensor signals into EnvironmentState snapshots |
+| `PerceptionTier` | `agents/hapax_daimonion/perception.py:25` | Enum: FAST, SLOW, EVENT |
+| `ResourceArbiter` | `agents/hapax_daimonion/arbiter.py:33` | Priority-based resource contention resolver |
+| `ResourceClaim` | `agents/hapax_daimonion/arbiter.py:17` | Immutable claim on a physical resource by a governance chain |
+| `Schedule` | `agents/hapax_daimonion/commands.py:40` | Command bound to a specific time in a specific domain |
+| `ScheduleQueue` | `agents/hapax_daimonion/executor.py:49` | Priority queue drained by wall-clock time |
+| `Selected[T]` | `agents/hapax_daimonion/governance.py:122` | Output of a FallbackChain selection |
+| `SourceSpec` | `agents/hapax_daimonion/wiring.py:38` | Declaration of a physical source and its backend type |
 | `SpatialFrame` | — | `[spec]` Hierarchical spatial decomposition analogous to MusicalPosition |
-| `Stamped[T]` | `agents/hapax_voice/primitives.py:18` | Immutable snapshot of a value with its freshness watermark |
-| `SuppressionField` | `agents/hapax_voice/suppression.py:14` | Smooth-ramping suppression signal with attack/release envelope |
-| `TimelineMapping` | `agents/hapax_voice/timeline.py:23` | Bijective affine map between wall-clock and an alternate time domain |
-| `TransportState` | `agents/hapax_voice/timeline.py:15` | Enum: PLAYING, STOPPED |
-| `Veto[C]` | `agents/hapax_voice/governance.py:58` | Single governance constraint with predicate |
-| `VetoChain[C]` | `agents/hapax_voice/governance.py:68` | Order-independent deny-wins constraint composition |
-| `VetoResult` | `agents/hapax_voice/governance.py:37` | Outcome of a VetoChain evaluation |
-| `WiringConfig` | `agents/hapax_voice/wiring.py:65` | Complete wiring specification for multi-source perception |
+| `Stamped[T]` | `agents/hapax_daimonion/primitives.py:18` | Immutable snapshot of a value with its freshness watermark |
+| `SuppressionField` | `agents/hapax_daimonion/suppression.py:14` | Smooth-ramping suppression signal with attack/release envelope |
+| `TimelineMapping` | `agents/hapax_daimonion/timeline.py:23` | Bijective affine map between wall-clock and an alternate time domain |
+| `TransportState` | `agents/hapax_daimonion/timeline.py:15` | Enum: PLAYING, STOPPED |
+| `Veto[C]` | `agents/hapax_daimonion/governance.py:58` | Single governance constraint with predicate |
+| `VetoChain[C]` | `agents/hapax_daimonion/governance.py:68` | Order-independent deny-wins constraint composition |
+| `VetoResult` | `agents/hapax_daimonion/governance.py:37` | Outcome of a VetoChain evaluation |
+| `WiringConfig` | `agents/hapax_daimonion/wiring.py:65` | Complete wiring specification for multi-source perception |

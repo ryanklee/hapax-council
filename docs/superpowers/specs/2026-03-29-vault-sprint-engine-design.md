@@ -89,7 +89,7 @@ wsjf_score: 2.40
 eisenhower: Q1
 gate: null               # gate ID if this measure is downstream of a gate
 output_files:            # files that indicate completion (glob patterns)
-  - "agents/hapax_voice/conversation_pipeline.py"
+  - "agents/hapax_daimonion/conversation_pipeline.py"
 output_docs:             # research docs this measure produces
   - null
 deviation: null          # deviation ID if frozen-path change needed
@@ -329,26 +329,26 @@ The hook matches committed/written files to measures. Complete mapping:
 
 | Measure | Output Files (globs) | Output Docs |
 |---------|---------------------|-------------|
-| 7.1 | `agents/hapax_voice/conversation_pipeline.py` | -- |
+| 7.1 | `agents/hapax_daimonion/conversation_pipeline.py` | -- |
 | 4.1 | -- | `docs/research/dmn-impingement-analysis.md` |
 | 7.2 | -- | (Langfuse query -- detected via experiment_runner output) |
 | 4.5 | -- | (embedded in dmn-impingement-analysis.md) |
 | 6.3 | `shared/stimmung.py` | -- |
-| 6.2 | `agents/hapax_voice/conversation_pipeline.py`, `shared/stimmung.py` | -- |
+| 6.2 | `agents/hapax_daimonion/conversation_pipeline.py`, `shared/stimmung.py` | -- |
 | 6.5 | `agents/visual_layer_aggregator.py` | -- |
 | 4.2 | -- | `docs/research/dmn-crisis-benchmark.md` |
 | 3.1 | `tests/research/test_temporal_contrast.py` | -- |
 | 6.1 | -- | `docs/research/stimmung-perturbation-results.md` |
-| 4.3 | `agents/hapax_voice/*.py` (voice daemon DMN integration) | -- |
+| 4.3 | `agents/hapax_daimonion/*.py` (voice daemon DMN integration) | -- |
 | 7.3 | -- | (Langfuse query result) |
-| 6.4 | `agents/hapax_voice/*.py` (perception ground truth) | -- |
+| 6.4 | `agents/hapax_daimonion/*.py` (perception ground truth) | -- |
 | 10.1 | `hapax-logos/crates/hapax-visual/**/*.wgsl` | -- |
 | 10.2 | `hapax-logos/crates/hapax-visual/**/*.wgsl` | -- |
 | 10.3 | -- | `docs/research/reverie-amendment-comparison.md` |
-| 10.4 | `agents/hapax_voice/*.py` (soft escalation) | -- |
+| 10.4 | `agents/hapax_daimonion/*.py` (soft escalation) | -- |
 | 10.5 | -- | `docs/research/reverie-amendment-comparison.md` |
 | 8.1 | -- | `docs/research/bayesian-tools-signal-audit.md` |
-| 8.2 | `agents/hapax_voice/mode_selector.py` | -- |
+| 8.2 | `agents/hapax_daimonion/mode_selector.py` | -- |
 | 8.3 | -- | (Langfuse query result) |
 | 3.2 | `tests/test_protention_validation.py` | -- |
 | 3.3 | `tests/research/*surprise*` | -- |

@@ -6,7 +6,7 @@
 
 ## What Changed
 
-`agents/hapax_voice/conversation_pipeline.py`:
+`agents/hapax_daimonion/conversation_pipeline.py`:
 - Added `_desk_activity: str = "idle"` field (line 356)
 - Passed `desk_activity=self._desk_activity` to `salience_router.route()` call
 
