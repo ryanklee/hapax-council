@@ -86,6 +86,7 @@ def _infer_cross_modal_activity(
     audio_genre: str,
     audio_energy: float,
     desk_activity: str = "",
+    ir_hand_activity: str = "",
 ) -> tuple[str, float]:
     """Infer activity from cross-camera + audio evidence.
 
@@ -116,6 +117,14 @@ def _infer_cross_modal_activity(
         return ("coding", 0.90)
     if "mixer" in hand_zones and desk_activity == "tapping":
         return ("mixing", 0.85)
+
+    # IR hand activity as supplementary signal (works when RGB overhead fails)
+    if ir_hand_activity == "tapping" and desk_activity in ("drumming", "tapping"):
+        return ("playing_pads", 0.85)
+    if ir_hand_activity == "sliding" and desk_activity == "scratching":
+        return ("scratching", 0.85)
+    if ir_hand_activity == "tapping" and audio_activity == "production":
+        return ("producing", 0.80)
 
     op = per_camera_behaviors.get("operator", {})
 
@@ -195,6 +204,7 @@ class _VisionCache:
 
         # Desk activity injected externally for overhead zone fusion
         self._desk_activity: str = ""
+        self._ir_hand_activity: str = ""
 
         # Enrichment ring buffers — majority-vote temporal smoothing
         self._gaze_ring: deque[str] = deque(maxlen=5)
@@ -223,10 +233,11 @@ class _VisionCache:
             self._audio_genre = genre
             self._audio_energy = energy
 
-    def set_desk_context(self, *, desk_activity: str) -> None:
-        """Inject desk activity for cross-modal fusion."""
+    def set_desk_context(self, *, desk_activity: str, ir_hand_activity: str = "") -> None:
+        """Inject desk + IR hand activity for cross-modal fusion."""
         with self._lock:
             self._desk_activity = desk_activity
+            self._ir_hand_activity = ir_hand_activity
 
     def _fused_read(self) -> dict:
         """Fuse per-camera behaviors using consensus voting and camera specialization.
@@ -312,6 +323,7 @@ class _VisionCache:
             self._audio_genre,
             self._audio_energy,
             desk_activity=self._desk_activity,
+            ir_hand_activity=self._ir_hand_activity,
         )
 
         return {
@@ -678,9 +690,10 @@ class VisionBackend:
             activity=audio_activity, genre=audio_genre, energy=audio_energy
         )
 
-        # Inject desk activity for overhead zone fusion
+        # Inject desk + IR activity for overhead zone fusion
         desk_activity = str(behaviors.get("desk_activity", Behavior("")).value)
-        self._cache.set_desk_context(desk_activity=desk_activity)
+        ir_hand = str(behaviors.get("ir_hand_activity", Behavior("")).value)
+        self._cache.set_desk_context(desk_activity=desk_activity, ir_hand_activity=ir_hand)
 
         # Adaptive overhead priority: 2x overhead slots when desk is active
         desk_is_active = desk_activity not in ("", "idle")

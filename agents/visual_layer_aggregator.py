@@ -1324,6 +1324,12 @@ class VisualLayerAggregator:
         now = time.monotonic()
         perception_age = now - self._ts_perception if self._ts_perception else 60.0
         confidence = self._last_perception_data.get("aggregate_confidence", 1.0)
+        # IR detection provides a confidence floor: if IR sees a person or hands,
+        # perception is working even when RGB cameras degrade under mood lighting
+        ir_detected = self._last_perception_data.get("ir_person_detected", False)
+        ir_hands = self._last_perception_data.get("ir_hand_activity", "idle")
+        if ir_detected or ir_hands not in ("idle", ""):
+            confidence = max(float(confidence), 0.7)
         self._stimmung_collector.update_perception(
             freshness_s=perception_age, confidence=float(confidence)
         )

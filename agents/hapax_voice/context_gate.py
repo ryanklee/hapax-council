@@ -99,6 +99,8 @@ class ContextGate:
         self._veto_chain.add(Veto("system_health", predicate=self._allow_system_health))
         # Watch activity veto: blocks on exercise/sleep
         self._veto_chain.add(Veto("watch_activity", predicate=self._allow_watch_activity))
+        # IR drowsiness veto: blocks when operator is drowsy/asleep (PERCLOS-based)
+        self._veto_chain.add(Veto("ir_drowsiness", predicate=self._allow_ir_drowsiness))
 
     def set_activity_mode(self, mode: str) -> None:
         self._activity_mode = mode
@@ -224,6 +226,20 @@ class ContextGate:
             return True  # fail-open
         if b.value in ("exercise", "sleep"):
             self._denial_reasons["watch_activity"] = f"Operator activity: {b.value}"
+            return False
+        return True
+
+    def _allow_ir_drowsiness(self, _: None) -> bool:
+        """Block when IR detects operator is drowsy (PERCLOS > 0.6)."""
+        b = self._behaviors.get("ir_drowsiness_score")
+        if b is None:
+            return True  # fail-open
+        try:
+            score = float(b.value)
+        except (ValueError, TypeError):
+            return True
+        if score > 0.6:
+            self._denial_reasons["ir_drowsiness"] = f"Operator drowsy (PERCLOS={score:.2f})"
             return False
         return True
 

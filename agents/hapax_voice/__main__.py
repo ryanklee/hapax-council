@@ -2124,6 +2124,16 @@ class VoiceDaemon:
                         _pe is not None and _pe.state == "PRESENT" and _pe.posterior >= 0.8
                     )
                     _effective_guest_count = 0 if _presence_suppresses_guest else state.guest_count
+
+                    # IR person count as supplementary signal for consent:
+                    # if IR sees more people than RGB, use the higher count
+                    # (IR works in dark/colored lighting where RGB misses faces)
+                    _ir_count_b = self.perception.behaviors.get("ir_person_count")
+                    if _ir_count_b is not None and not _presence_suppresses_guest:
+                        _ir_count = int(_ir_count_b.value or 0)
+                        if _ir_count > 1:
+                            _effective_guest_count = max(_effective_guest_count, _ir_count - 1)
+
                     self.consent_tracker.tick(
                         face_count=state.face_count,
                         speaker_is_operator=speaker_is_op,
