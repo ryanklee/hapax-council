@@ -46,7 +46,7 @@ export function AgentRunProvider({ children }: { children: React.ReactNode }) {
     (name: string, flags: string[]) => {
       setAgentName(name);
       setStartedAt(Date.now());
-      sse.start(`/api/agents/${name}/run`, { flags });
+      sse.start(`/agents/${name}/run`, { flags });
     },
     [sse],
   );

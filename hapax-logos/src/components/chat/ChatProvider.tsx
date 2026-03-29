@@ -240,7 +240,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
       dispatch({ type: "STREAM_START" });
 
-      startStream(`/api/chat/sessions/${state.sessionId}/send`, {
+      startStream(`/chat/sessions/${state.sessionId}/send`, {
         method: "POST",
         body: { message: text },
         onEvent: (event) => {
@@ -356,7 +356,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     dispatch({ type: "SET_MODE", mode: "interview" });
     dispatch({ type: "STREAM_START" });
 
-    startStream(`/api/chat/sessions/${state.sessionId}/interview`, {
+    startStream(`/chat/sessions/${state.sessionId}/interview`, {
       method: "POST",
       onEvent: (event) => {
         try {

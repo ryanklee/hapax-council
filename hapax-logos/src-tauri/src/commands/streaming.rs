@@ -13,7 +13,7 @@ use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::{oneshot, Mutex};
 
-const LOGOS_BASE: &str = "http://127.0.0.1:8051";
+const LOGOS_BASE: &str = "http://127.0.0.1:8051/api";
 
 /// Global stream ID counter.
 static NEXT_STREAM_ID: AtomicU64 = AtomicU64::new(1);
@@ -98,7 +98,7 @@ pub async fn cancel_stream_and_server(app: AppHandle, stream_id: u64) -> Result<
     cancel_stream(app.clone(), stream_id).await?;
 
     // Tell FastAPI to cancel the server-side run
-    let url = format!("{}/api/agents/runs/current", LOGOS_BASE);
+    let url = format!("{}/agents/runs/current", LOGOS_BASE);
     let client = app.state::<super::proxy::HttpClient>();
     let _ = client.0.delete(&url).send().await;
 
