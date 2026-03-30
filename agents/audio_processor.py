@@ -40,7 +40,7 @@ except ImportError:
     torchaudio = None  # type: ignore
 
 try:
-    from shared import langfuse_config  # noqa: F401
+    from agents import _langfuse_config  # noqa: F401
 except ImportError:
     pass
 from opentelemetry import trace
@@ -1283,8 +1283,8 @@ def _process_file(
                 }
                 if non_operator:
                     try:
+                        from agents._consent_gate import ConsentGatedWriter
                         from agents._governance import ConsentLabel, Labeled
-                        from shared.governance.consent_gate import ConsentGatedWriter
 
                         _consent_gate_available = True
                     except ImportError:
@@ -1314,7 +1314,7 @@ def _process_file(
                             )
                             # Notify operator about curtailed content
                             try:
-                                from shared.governance.guest_detection import (
+                                from agents._guest_detection import (
                                     check_guest_consent,
                                     notify_guest_detected,
                                 )
@@ -1410,8 +1410,8 @@ def _clap_enrich(
     Gracefully degrades — logs warning and returns on any failure.
     """
     try:
+        from agents._clap import classify_zero_shot, embed_audio
         from agents._config import STUDIO_MOMENTS_COLLECTION, ensure_studio_moments_collection
-        from shared.clap import classify_zero_shot, embed_audio
     except ImportError:
         log.debug("CLAP not available, skipping enrichment")
         return

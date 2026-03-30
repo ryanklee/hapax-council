@@ -19,7 +19,7 @@ from urllib.parse import unquote
 from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 
-from shared.governance.revocation_wiring import get_revocation_propagator
+from logos._revocation_wiring import get_revocation_propagator
 
 _log = logging.getLogger(__name__)
 
@@ -78,7 +78,7 @@ async def consent_channels(
     incapabilities: str = "",
 ) -> dict:
     """Available consent channels for a guest, friction-sorted."""
-    from shared.governance.consent_channels import GuestContext, build_channel_menu
+    from logos._consent_channels import GuestContext, build_channel_menu
 
     incap_set = frozenset(i.strip() for i in incapabilities.split(",") if i.strip())
     guest = GuestContext(

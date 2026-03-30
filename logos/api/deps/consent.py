@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import logging
 
+from logos._consent_reader import ConsentGatedReader
 from logos._governance import ConsentRegistry, load_contracts
-from shared.governance.consent_reader import ConsentGatedReader
 
 _log = logging.getLogger(__name__)
 
