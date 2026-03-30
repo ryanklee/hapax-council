@@ -20,9 +20,11 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import sys
 from collections import Counter
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from pydantic import BaseModel, Field
 
@@ -36,7 +38,7 @@ from opentelemetry import trace
 
 _tracer = trace.get_tracer(__name__)
 
-from shared.config import PROFILES_DIR
+PROFILES_DIR: Path = Path(__file__).resolve().parent.parent / "profiles"
 
 log = logging.getLogger("agents.activity_analyzer")
 
@@ -753,9 +755,29 @@ async def _generate_activity_report_impl(hours: int = 24) -> ActivityReport:
 async def synthesize_report(report: ActivityReport) -> str:
     """Generate a natural language summary of the activity report."""
     from pydantic_ai import Agent
+    from pydantic_ai.models.openai import OpenAIChatModel
+    from pydantic_ai.providers.litellm import LiteLLMProvider
 
-    from shared.config import get_model
     from shared.operator import get_system_prompt_fragment
+
+    _litellm_base = os.environ.get(
+        "LITELLM_API_BASE", os.environ.get("LITELLM_BASE_URL", "http://localhost:4000")
+    )
+    _litellm_key = os.environ.get("LITELLM_API_KEY", "")
+    _models = {
+        "fast": "gemini-flash",
+        "balanced": "claude-sonnet",
+        "long-context": "gemini-flash",
+        "reasoning": "qwen3:8b",
+        "coding": "qwen3:8b",
+        "local-fast": "qwen3:8b",
+    }
+
+    def get_model(alias_or_id: str = "balanced") -> OpenAIChatModel:
+        model_id = _models.get(alias_or_id, alias_or_id)
+        return OpenAIChatModel(
+            model_id, provider=LiteLLMProvider(api_base=_litellm_base, api_key=_litellm_key)
+        )
 
     agent = Agent(
         get_model("fast"),

@@ -21,6 +21,7 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -29,8 +30,36 @@ from typing import Literal
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 
-from shared.config import get_model
 from shared.operator import get_system_prompt_fragment
+
+# ── Vendored from shared/config.py ──────────────────────────────────────────
+_LITELLM_BASE: str = os.environ.get(
+    "LITELLM_API_BASE", os.environ.get("LITELLM_BASE_URL", "http://localhost:4000")
+)
+_LITELLM_KEY: str = os.environ.get("LITELLM_API_KEY", "")
+_MODELS: dict[str, str] = {
+    "fast": "gemini-flash",
+    "balanced": "claude-sonnet",
+    "long-context": "gemini-flash",
+    "reasoning": "qwen3:8b",
+    "coding": "qwen3:8b",
+    "local-fast": "qwen3:8b",
+}
+
+
+def get_model(alias_or_id: str = "balanced"):
+    """Create a LiteLLM-backed chat model (vendored from shared.config)."""
+    from pydantic_ai.models.openai import OpenAIChatModel
+    from pydantic_ai.providers.litellm import LiteLLMProvider
+
+    model_id = _MODELS.get(alias_or_id, alias_or_id)
+    return OpenAIChatModel(
+        model_id,
+        provider=LiteLLMProvider(api_base=_LITELLM_BASE, api_key=_LITELLM_KEY),
+    )
+
+
+# ── End vendored ────────────────────────────────────────────────────────────
 
 # Import Langfuse OTel config (side-effect: configures exporter)
 try:
@@ -342,7 +371,7 @@ def group_facts_by_dimension(facts: list[ProfileFact]) -> dict[str, list[Profile
 
 # ── Pipeline ─────────────────────────────────────────────────────────────────
 
-from shared.config import PROFILES_DIR
+PROFILES_DIR: Path = Path(__file__).resolve().parent.parent / "profiles"
 
 DEFAULT_EXTRACTION_CONCURRENCY = 8
 
@@ -1147,7 +1176,7 @@ async def generate_digest(profile: UserProfile) -> dict:
     confidence per dimension for summarization. Returns the digest dict
     and saves it to profiles/operator-digest.json.
     """
-    from shared.config import get_model as _get_model
+    _get_model = get_model  # use module-level vendored get_model
 
     grouped = group_facts_by_dimension([f for dim in profile.dimensions for f in dim.facts])
 

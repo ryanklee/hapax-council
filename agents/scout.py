@@ -37,8 +37,36 @@ import yaml
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 
-from shared.config import get_model
 from shared.operator import get_system_prompt_fragment
+
+# ── Vendored from shared/config.py ──────────────────────────────────────────
+_LITELLM_BASE: str = os.environ.get(
+    "LITELLM_API_BASE", os.environ.get("LITELLM_BASE_URL", "http://localhost:4000")
+)
+_LITELLM_KEY: str = os.environ.get("LITELLM_API_KEY", "")
+_MODELS: dict[str, str] = {
+    "fast": "gemini-flash",
+    "balanced": "claude-sonnet",
+    "long-context": "gemini-flash",
+    "reasoning": "qwen3:8b",
+    "coding": "qwen3:8b",
+    "local-fast": "qwen3:8b",
+}
+
+
+def get_model(alias_or_id: str = "balanced"):
+    """Create a LiteLLM-backed chat model (vendored from shared.config)."""
+    from pydantic_ai.models.openai import OpenAIChatModel
+    from pydantic_ai.providers.litellm import LiteLLMProvider
+
+    model_id = _MODELS.get(alias_or_id, alias_or_id)
+    return OpenAIChatModel(
+        model_id,
+        provider=LiteLLMProvider(api_base=_LITELLM_BASE, api_key=_LITELLM_KEY),
+    )
+
+
+# ── End vendored ────────────────────────────────────────────────────────────
 
 # Import Langfuse OTel config (side-effect: configures exporter)
 try:
@@ -52,7 +80,7 @@ _tracer = trace.get_tracer(__name__)
 
 log = logging.getLogger("scout")
 
-from shared.config import PROFILES_DIR
+PROFILES_DIR: Path = Path(__file__).resolve().parent.parent / "profiles"
 
 REGISTRY_FILE = PROFILES_DIR / "component-registry.yaml"
 REPORT_JSON = PROFILES_DIR / "scout-report.json"

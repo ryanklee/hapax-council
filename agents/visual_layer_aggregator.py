@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import time
 from datetime import datetime
 from pathlib import Path
@@ -118,7 +119,8 @@ from shared.cameras import (
 from shared.cameras import (
     resolution as cam_resolution,
 )
-from shared.config import LOGOS_API_URL as LOGOS_BASE
+
+LOGOS_BASE: str = os.environ.get("COCKPIT_BASE_URL", "http://localhost:8051/api")
 
 # ── Experimental camera filters for ambient injection ────────────────────────
 

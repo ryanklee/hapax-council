@@ -25,7 +25,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from shared.config import HAPAX_HOME
+HAPAX_HOME: Path = Path(os.environ.get("HAPAX_HOME", str(Path.home())))
 
 log = logging.getLogger(__name__)
 

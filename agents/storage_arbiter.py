@@ -15,13 +15,16 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 
 import yaml
 from pydantic import BaseModel, Field
 
-from shared.config import AUDIO_ARCHIVE_DIR, PROFILES_DIR
+_HAPAX_HOME: Path = Path(os.environ.get("HAPAX_HOME", str(Path.home())))
+AUDIO_ARCHIVE_DIR: Path = _HAPAX_HOME / "audio-recording" / "archive"
+PROFILES_DIR: Path = Path(__file__).resolve().parent.parent / "profiles"
 
 log = logging.getLogger(__name__)
 

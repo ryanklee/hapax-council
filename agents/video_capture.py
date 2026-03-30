@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import signal
 import subprocess
 import sys
@@ -27,7 +28,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from shared.config import HAPAX_HOME
+HAPAX_HOME: Path = Path(os.environ.get("HAPAX_HOME", str(Path.home())))
 
 log = logging.getLogger(__name__)
 
