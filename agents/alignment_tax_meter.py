@@ -16,7 +16,7 @@ import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from shared.config import PROFILES_DIR
+from agents._config import PROFILES_DIR
 
 log = logging.getLogger(__name__)
 

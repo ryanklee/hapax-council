@@ -29,7 +29,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from shared.config import PROFILES_DIR, get_qdrant
+from agents._config import PROFILES_DIR, get_qdrant
 
 log = logging.getLogger("agents.knowledge_maint")
 
@@ -46,7 +46,7 @@ _tracer = trace.get_tracer(__name__)
 
 # ── Schemas ──────────────────────────────────────────────────────────────────
 
-from shared.config import EXPECTED_EMBED_DIMENSIONS as EXPECTED_DIMENSIONS
+from agents._config import EXPECTED_EMBED_DIMENSIONS as EXPECTED_DIMENSIONS
 
 COLLECTIONS = ["documents", "profile-facts"]
 DEFAULT_SCORE_THRESHOLD = 0.98
@@ -460,8 +460,8 @@ async def add_summary(report: MaintenanceReport) -> MaintenanceReport:
     """Add a human-readable summary via LLM."""
     from pydantic_ai import Agent
 
+    from agents._config import get_model
     from agents._operator import get_system_prompt_fragment
-    from shared.config import get_model
 
     agent = Agent(
         get_model("fast"),

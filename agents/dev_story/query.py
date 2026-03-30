@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 from pydantic_ai import Agent
 
-from shared.config import get_model
+from agents._config import get_model
 
 log = logging.getLogger(__name__)
 

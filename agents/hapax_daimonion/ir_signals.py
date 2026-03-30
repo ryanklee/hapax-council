@@ -11,7 +11,7 @@ import logging
 import time
 from pathlib import Path
 
-from shared.config import HAPAX_HOME
+from agents._config import HAPAX_HOME
 
 log = logging.getLogger(__name__)
 

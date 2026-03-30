@@ -192,7 +192,7 @@ def record_relationship_facts(
     try:
         from qdrant_client.models import PointStruct
 
-        from shared.config import embed_batch, get_qdrant
+        from agents._config import embed_batch, get_qdrant
 
         collection = "profile-facts"
 

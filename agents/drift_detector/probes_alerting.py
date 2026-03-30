@@ -27,7 +27,7 @@ def _check_systemd_timer_coverage() -> tuple[bool, str]:
         return False, "could not query systemd timers"
 
     try:
-        from shared.config import load_expected_timers
+        from agents._config import load_expected_timers
 
         expected = load_expected_timers()
         if timer_count >= len(expected):

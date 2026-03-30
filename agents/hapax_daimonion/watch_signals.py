@@ -13,7 +13,7 @@ import threading
 import time
 from pathlib import Path
 
-from shared.config import HAPAX_HOME
+from agents._config import HAPAX_HOME
 
 WATCH_STATE_DIR: Path = HAPAX_HOME / "hapax-state" / "watch"
 

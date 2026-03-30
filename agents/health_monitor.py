@@ -114,7 +114,7 @@ AI_AGENTS_DIR: Path = HAPAX_COUNCIL_DIR  # legacy alias
 PROFILES_DIR: Path = Path(__file__).resolve().parent.parent / "profiles"
 SYSTEMD_USER_DIR: Path = Path.home() / ".config" / "systemd" / "user"
 
-from shared.config import load_expected_timers  # depends on shared.agent_registry
+from agents._config import load_expected_timers  # depends on shared.agent_registry
 
 WATCH_STATE_DIR: Path = HAPAX_HOME / "hapax-state" / "watch"
 EDGE_STATE_DIR: Path = HAPAX_HOME / "hapax-state" / "edge"

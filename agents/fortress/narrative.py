@@ -10,9 +10,9 @@ import json
 import logging
 import time
 
+from agents._config import PROFILES_DIR
 from agents.fortress.episodes import FortressEpisode
 from agents.fortress.schema import FastFortressState
-from shared.config import PROFILES_DIR
 
 log = logging.getLogger(__name__)
 

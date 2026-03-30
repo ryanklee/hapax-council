@@ -19,7 +19,7 @@ from statistics import mean
 
 from pydantic import BaseModel, Field
 
-from shared.config import PROFILES_DIR
+from agents._config import PROFILES_DIR
 
 try:
     from shared import langfuse_config  # noqa: F401

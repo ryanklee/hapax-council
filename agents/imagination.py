@@ -342,7 +342,7 @@ class ImaginationLoop:
         if self._agent is None:
             from pydantic_ai import Agent
 
-            from shared.config import get_model
+            from agents._config import get_model
 
             self._agent = Agent(
                 get_model("reasoning"),

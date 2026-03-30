@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 
-from shared.config import CLAUDE_CONFIG_DIR, PROFILES_DIR
+from agents._config import CLAUDE_CONFIG_DIR, PROFILES_DIR
 
 DB_PATH = str(PROFILES_DIR / "dev-story.db")
 CLAUDE_PROJECTS_DIR = CLAUDE_CONFIG_DIR / "projects"

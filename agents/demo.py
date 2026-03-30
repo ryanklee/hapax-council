@@ -22,6 +22,7 @@ except ImportError:
 
 tracer = get_tracer(__name__)
 
+from agents._config import PROFILES_DIR, get_model
 from agents.demo_models import (
     AudiencePersona,
     ContentSkeleton,
@@ -30,7 +31,6 @@ from agents.demo_models import (
     load_personas,
 )
 from agents.demo_pipeline.slides import render_slides
-from shared.config import PROFILES_DIR, get_model
 
 log = logging.getLogger(__name__)
 

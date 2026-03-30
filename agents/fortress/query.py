@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import logging
 
-from shared.config import PROFILES_DIR
+from agents._config import PROFILES_DIR
 
 log = logging.getLogger(__name__)
 

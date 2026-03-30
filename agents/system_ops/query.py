@@ -9,7 +9,7 @@ from pathlib import Path
 
 from pydantic_ai import Agent
 
-from shared.config import get_model
+from agents._config import get_model
 from shared.ops_db import get_table_schemas as _get_table_schemas
 from shared.ops_db import run_sql
 

@@ -6,8 +6,8 @@ import logging
 
 from pydantic_ai import Agent
 
+from agents._config import get_model
 from agents.demo_models import DemoQualityReport, DemoScript, QualityDimension
-from shared.config import get_model
 
 log = logging.getLogger(__name__)
 

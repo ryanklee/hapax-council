@@ -22,7 +22,7 @@ try:
 except ImportError:
     pass
 
-from shared.config import get_qdrant
+from agents._config import get_qdrant
 
 # ── Vendored from shared/governance/person_extract.py ─────────────────────────
 _EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")

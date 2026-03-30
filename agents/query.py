@@ -15,7 +15,7 @@ import urllib.request
 
 # Try shared.config first (main venv), fall back to standalone (ingest venv)
 try:
-    from shared.config import QDRANT_URL, embed
+    from agents._config import QDRANT_URL, embed
 except ImportError:
     QDRANT_URL = os.environ.get("QDRANT_URL", "http://localhost:6333")
 

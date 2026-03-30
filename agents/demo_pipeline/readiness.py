@@ -98,7 +98,7 @@ def check_readiness(
     try:
         import urllib.request
 
-        from shared.config import LOGOS_API_URL
+        from agents._config import LOGOS_API_URL
 
         urllib.request.urlopen(f"{LOGOS_API_URL}/health", timeout=5)
         progress("Logos API: OK")
@@ -155,7 +155,7 @@ def check_readiness(
 
         # Voice sample (only relevant for Chatterbox cloning)
         if chatterbox_ok:
-            from shared.config import PROFILES_DIR
+            from agents._config import PROFILES_DIR
 
             voice_sample = PROFILES_DIR / "voice-sample.wav"
             if not voice_sample.exists():

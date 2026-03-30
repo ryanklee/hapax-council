@@ -91,7 +91,7 @@ AUDIENCE_SOURCES: dict[str, list[str]] = {
 }
 
 # Path to hapaxromana CLAUDE.md (canonical system docs)
-from shared.config import HAPAXROMANA_DIR
+from agents._config import HAPAXROMANA_DIR
 
 _HAPAXROMANA_CLAUDE_MD = HAPAXROMANA_DIR / "CLAUDE.md"
 
@@ -99,7 +99,7 @@ _HAPAXROMANA_CLAUDE_MD = HAPAXROMANA_DIR / "CLAUDE.md"
 def _gather_component_registry() -> str:
     """Read component-registry.yaml and format component names + descriptions."""
     try:
-        from shared.config import PROFILES_DIR
+        from agents._config import PROFILES_DIR
 
         registry_path = PROFILES_DIR / "component-registry.yaml"
         if not registry_path.is_file():
@@ -219,7 +219,7 @@ def _gather_langfuse_metrics() -> str:
 def _gather_qdrant_stats() -> str:
     """List Qdrant collections with point counts."""
     try:
-        from shared.config import get_qdrant
+        from agents._config import get_qdrant
 
         client = get_qdrant()
         collections_response = client.get_collections()
@@ -259,7 +259,7 @@ def _gather_system_docs(summary: bool = False) -> str:
 def _gather_profile_facts(scope: str) -> str:
     """Search profile-facts Qdrant collection for facts relevant to scope."""
     try:
-        from shared.config import embed, get_qdrant
+        from agents._config import embed, get_qdrant
 
         client = get_qdrant()
         vector = embed(f"profile facts about {scope}", prefix="search_query")
@@ -321,7 +321,7 @@ def _gather_web_research(scope: str, audience: str) -> str:
 def _gather_component_registry_rich() -> str:
     """Read component-registry.yaml with full details: role, current, constraints, eval_notes."""
     try:
-        from shared.config import PROFILES_DIR
+        from agents._config import PROFILES_DIR
 
         registry_path = PROFILES_DIR / "component-registry.yaml"
         if not registry_path.is_file():
@@ -353,7 +353,7 @@ def _gather_component_registry_rich() -> str:
 def _gather_briefing_stats() -> str:
     """Read briefing.md and return operational stats section."""
     try:
-        from shared.config import PROFILES_DIR
+        from agents._config import PROFILES_DIR
 
         briefing_path = PROFILES_DIR / "briefing.md"
         if not briefing_path.is_file():
@@ -371,7 +371,7 @@ def _gather_briefing_stats() -> str:
 def _gather_profile_facts_rich(scope: str, audience: str = "") -> str:
     """Search profile-facts with audience-aware queries, dedup by (dimension, key), up to 30 facts."""
     try:
-        from shared.config import embed, get_qdrant
+        from agents._config import embed, get_qdrant
 
         client = get_qdrant()
         # Audience-aware queries — family audiences need personal context,
@@ -466,7 +466,7 @@ def _gather_operator_philosophy() -> str:
 def _gather_scout_summary() -> str:
     """Read scout-report.json and format component evaluation summaries."""
     try:
-        from shared.config import PROFILES_DIR
+        from agents._config import PROFILES_DIR
 
         scout_path = PROFILES_DIR / "scout-report.json"
         if not scout_path.is_file():
@@ -503,7 +503,7 @@ def _gather_architecture_rag(scope: str, limit: int = 10) -> str:
     try:
         from qdrant_client.models import FieldCondition, Filter, MatchText
 
-        from shared.config import embed, get_qdrant
+        from agents._config import embed, get_qdrant
 
         client = get_qdrant()
         queries = [
@@ -618,7 +618,7 @@ async def _gather_live_system_state() -> str:
 
         # Qdrant collection details
         try:
-            from shared.config import get_qdrant
+            from agents._config import get_qdrant
 
             client = get_qdrant()
             collections = client.get_collections().collections
@@ -640,7 +640,7 @@ async def _gather_live_system_state() -> str:
         try:
             import httpx
 
-            from shared.config import COCKPIT_API_URL
+            from agents._config import COCKPIT_API_URL
 
             base = COCKPIT_API_URL.rstrip("/")
             api = httpx.Client(timeout=5)

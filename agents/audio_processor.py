@@ -1404,8 +1404,8 @@ def _clap_enrich(
     Gracefully degrades — logs warning and returns on any failure.
     """
     try:
+        from agents._config import STUDIO_MOMENTS_COLLECTION, ensure_studio_moments_collection
         from shared.clap import classify_zero_shot, embed_audio
-        from shared.config import STUDIO_MOMENTS_COLLECTION, ensure_studio_moments_collection
     except ImportError:
         log.debug("CLAP not available, skipping enrichment")
         return
@@ -1432,7 +1432,7 @@ def _clap_enrich(
     try:
         from qdrant_client.models import PointStruct
 
-        from shared.config import get_qdrant
+        from agents._config import get_qdrant
 
         ensure_studio_moments_collection()
         client = get_qdrant()

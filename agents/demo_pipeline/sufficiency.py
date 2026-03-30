@@ -9,13 +9,13 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Literal
 
+from agents._config import PROFILES_DIR, get_qdrant
 from agents._operator import get_operator
 from agents.demo_models import AudienceDossier, AudiencePersona, load_audiences, load_personas
-from shared.config import PROFILES_DIR, get_qdrant
 
 log = logging.getLogger(__name__)
 
-from shared.config import HAPAXROMANA_DIR
+from agents._config import HAPAXROMANA_DIR
 
 _HAPAXROMANA_CLAUDE_MD = HAPAXROMANA_DIR / "CLAUDE.md"
 _KNOWN_ARCHETYPES = {"family", "team-member", "leadership", "technical-peer"}
@@ -358,7 +358,7 @@ def check_sufficiency(
     try:
         from qdrant_client.models import FieldCondition, Filter, MatchText
 
-        from shared.config import embed
+        from agents._config import embed
 
         arch_vector = embed("system architecture design", prefix="search_query")
         arch_filter = Filter(

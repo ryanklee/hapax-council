@@ -47,7 +47,7 @@ def render_goals() -> str:
 def render_health() -> str:
     """System health status. Only surfaces when non-healthy."""
     try:
-        from shared.config import PROFILES_DIR
+        from agents._config import PROFILES_DIR
 
         path = PROFILES_DIR / "health-history.jsonl"
         if not path.exists():
@@ -166,7 +166,7 @@ def _collect_goals() -> list[dict]:
 def _collect_health() -> dict:
     """Collect health summary for EnrichmentContext."""
     try:
-        from shared.config import PROFILES_DIR
+        from agents._config import PROFILES_DIR
 
         health_file = PROFILES_DIR / "health-history.jsonl"
         if not health_file.exists():

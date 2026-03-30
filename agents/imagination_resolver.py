@@ -205,7 +205,7 @@ def _resolve_qdrant(
 ) -> Path | None:
     """Query Qdrant for the top result and rasterize its text."""
     try:
-        from shared.config import embed, get_qdrant
+        from agents._config import embed, get_qdrant
 
         client = get_qdrant()
         vector = embed(ref.query or ref.source)

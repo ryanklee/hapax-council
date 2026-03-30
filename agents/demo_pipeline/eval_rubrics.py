@@ -10,8 +10,8 @@ from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 from pydantic_ai.messages import BinaryContent
 
+from agents._config import get_model
 from agents.demo_models import DemoEvalDimension
-from shared.config import get_model
 
 log = logging.getLogger(__name__)
 
