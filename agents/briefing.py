@@ -34,7 +34,7 @@ import os
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 
-from shared.operator import get_system_prompt_fragment
+from agents._operator import get_system_prompt_fragment
 
 _LITELLM_BASE: str = os.environ.get(
     "LITELLM_API_BASE",
@@ -491,7 +491,7 @@ async def _generate_briefing_impl(hours: int = 24) -> Briefing:
         data_source_section = "\n## Data Source Warnings\n" + "\n".join(ds_warnings) + "\n"
 
     # Build goals section with momentum tracking
-    from shared.operator import get_goals
+    from agents._operator import get_goals
 
     goals = get_goals()[:5]
     goals_section = ""

@@ -423,7 +423,7 @@ def _gather_profile_facts_rich(scope: str, audience: str = "") -> str:
 def _gather_operator_philosophy() -> str:
     """Load operator.json and format axioms, goals, and key design patterns."""
     try:
-        from shared.operator import get_operator
+        from agents._operator import get_operator
 
         data = get_operator()
         if not data:

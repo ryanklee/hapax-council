@@ -8,7 +8,7 @@ from datetime import datetime
 def operator_name() -> str:
     """Operator first name from profile, fallback 'Operator'."""
     try:
-        from shared.operator import get_operator
+        from logos._operator import get_operator
 
         op = get_operator().get("operator", {})
         return op.get("name", "Operator").split()[0]

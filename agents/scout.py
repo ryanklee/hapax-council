@@ -37,7 +37,7 @@ import yaml
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 
-from shared.operator import get_system_prompt_fragment
+from agents._operator import get_system_prompt_fragment
 
 # ── Vendored from shared/config.py ──────────────────────────────────────────
 _LITELLM_BASE: str = os.environ.get(

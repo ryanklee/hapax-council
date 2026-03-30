@@ -29,8 +29,8 @@ log = logging.getLogger(__name__)
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 
+from agents._operator import get_system_prompt_fragment
 from shared.config import PROFILES_DIR, get_model, get_qdrant
-from shared.operator import get_system_prompt_fragment
 
 # Import Langfuse OTel config (side-effect: configures exporter)
 try:

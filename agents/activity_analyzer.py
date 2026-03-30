@@ -758,7 +758,7 @@ async def synthesize_report(report: ActivityReport) -> str:
     from pydantic_ai.models.openai import OpenAIChatModel
     from pydantic_ai.providers.litellm import LiteLLMProvider
 
-    from shared.operator import get_system_prompt_fragment
+    from agents._operator import get_system_prompt_fragment
 
     _litellm_base = os.environ.get(
         "LITELLM_API_BASE", os.environ.get("LITELLM_BASE_URL", "http://localhost:4000")
@@ -921,7 +921,7 @@ def format_human(report: ActivityReport) -> str:
         lines.append("Service Events: None in window")
 
     # Active goals context with momentum
-    from shared.operator import get_goals
+    from agents._operator import get_goals
 
     goals = get_goals()[:3]
     if goals:

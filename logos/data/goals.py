@@ -1,6 +1,6 @@
 """Goal collector — reads operator goals and computes staleness.
 
-Deterministic, no LLM calls. Reads from operator.json via shared.operator.
+Deterministic, no LLM calls. Reads from operator.json via logos._operator.
 """
 
 from __future__ import annotations
@@ -70,7 +70,7 @@ def _is_stale(status: str, activity_h: float | None) -> bool:
 def collect_goals() -> GoalSnapshot:
     """Read operator.json goals and compute staleness. Deterministic."""
     try:
-        from shared.operator import _load_operator
+        from logos._operator import _load_operator
     except Exception:
         return GoalSnapshot()
 

@@ -19,8 +19,8 @@ log = logging.getLogger("code_review")
 
 from pydantic_ai import Agent
 
+from agents._operator import get_system_prompt_fragment
 from shared.config import get_model
-from shared.operator import get_system_prompt_fragment
 
 try:
     from shared import langfuse_config  # noqa: F401

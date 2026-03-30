@@ -20,7 +20,7 @@ from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter
 
 from logos._config import LLM_STACK_DIR as _LLM_STACK_DIR
 from logos._config import LOGOS_STATE_DIR, embed, get_model, get_qdrant
-from shared.operator import get_system_prompt_fragment
+from logos._operator import get_system_prompt_fragment
 
 log = logging.getLogger("logos.chat_agent")
 

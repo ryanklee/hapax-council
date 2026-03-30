@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
 
 from logos._config import get_model
-from shared.operator import get_goals, get_patterns, get_system_prompt_fragment
+from logos._operator import get_goals, get_patterns, get_system_prompt_fragment
 
 # Import Langfuse OTel config (side-effect: configures exporter)
 try:
@@ -201,7 +201,7 @@ def analyze_profile() -> ProfileAnalysis:
     neuro_stats = analysis.dimension_stats.get("neurocognitive_profile", {"count": 0})
     if neuro_stats.get("count", 0) < 5:
         try:
-            from shared.operator import get_neurocognitive_profile
+            from logos._operator import get_neurocognitive_profile
 
             neuro_data = get_neurocognitive_profile()
             total_findings = sum(len(v) for v in neuro_data.values()) if neuro_data else 0

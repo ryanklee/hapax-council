@@ -15,8 +15,8 @@ log = logging.getLogger("research")
 from pydantic_ai import Agent
 from qdrant_client import QdrantClient
 
+from agents._operator import get_goals, get_system_prompt_fragment
 from shared.config import EMBEDDING_MODEL, embed, get_model, get_qdrant
-from shared.operator import get_goals, get_system_prompt_fragment
 
 # Import Langfuse OTel config (side-effect: configures exporter)
 try:

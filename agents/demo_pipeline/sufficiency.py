@@ -9,9 +9,9 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Literal
 
+from agents._operator import get_operator
 from agents.demo_models import AudienceDossier, AudiencePersona, load_audiences, load_personas
 from shared.config import PROFILES_DIR, get_qdrant
-from shared.operator import get_operator
 
 log = logging.getLogger(__name__)
 
