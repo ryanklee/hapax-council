@@ -57,7 +57,7 @@ async fn fetch_cost(app: &AppHandle) -> Result<CostSnapshot, String> {
     // Get observations from last 7 days
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
+        .unwrap_or_default()
         .as_secs();
     let seven_days_ago = now - 7 * 86400;
     let from_time = format_iso(seven_days_ago);

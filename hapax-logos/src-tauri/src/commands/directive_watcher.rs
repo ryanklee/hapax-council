@@ -22,7 +22,10 @@ pub fn spawn_directive_watcher<R: Runtime>(app_handle: AppHandle<R>) {
         .name("directive-watcher".into())
         .spawn(move || {
             // Ensure directory exists
-            fs::create_dir_all("/dev/shm/hapax-logos").ok();
+            if let Err(e) = fs::create_dir_all("/dev/shm/hapax-logos") {
+                log::error!("Failed to create directive directory: {}", e);
+                return;
+            }
 
             let path = Path::new(DIRECTIVE_FILE);
             let mut last_pos: u64 = if path.exists() {
@@ -115,36 +118,41 @@ fn dispatch_directive<R: Runtime>(app: &AppHandle<R>, json_line: &str) {
 
     // Navigation
     if let Some(route) = directive.get("navigate").and_then(|v| v.as_str()) {
-        app.emit("hapax:navigate", route).ok();
+        if let Err(e) = app.emit("hapax:navigate", route) {
+            log::warn!("Failed to emit hapax:navigate: {}", e);
+        }
     }
 
     if let Some(panel) = directive.get("open_panel").and_then(|v| v.as_str()) {
-        app.emit(
+        if let Err(e) = app.emit(
             "hapax:toggle-panel",
             serde_json::json!({"panel": panel, "open": true}),
-        )
-        .ok();
+        ) {
+            log::warn!("Failed to emit hapax:toggle-panel (open): {}", e);
+        }
     }
 
     if let Some(panel) = directive.get("close_panel").and_then(|v| v.as_str()) {
-        app.emit(
+        if let Err(e) = app.emit(
             "hapax:toggle-panel",
             serde_json::json!({"panel": panel, "open": false}),
-        )
-        .ok();
+        ) {
+            log::warn!("Failed to emit hapax:toggle-panel (close): {}", e);
+        }
     }
 
     // Content
     if let Some(msg) = directive.get("toast").and_then(|v| v.as_str()) {
-        app.emit(
+        if let Err(e) = app.emit(
             "hapax:toast",
             serde_json::json!({
                 "message": msg,
                 "level": directive.get("toast_level").and_then(|v| v.as_str()).unwrap_or("info"),
                 "duration_ms": directive.get("toast_duration_ms").and_then(|v| v.as_u64()).unwrap_or(5000),
             }),
-        )
-        .ok();
+        ) {
+            log::warn!("Failed to emit hapax:toast: {}", e);
+        }
     }
 
     if let Some(title) = directive.get("modal_title").and_then(|v| v.as_str()) {
@@ -152,7 +160,7 @@ fn dispatch_directive<R: Runtime>(app: &AppHandle<R>, json_line: &str) {
             .get("modal_content")
             .and_then(|v| v.as_str())
             .unwrap_or("");
-        app.emit(
+        if let Err(e) = app.emit(
             "hapax:modal",
             serde_json::json!({
                 "title": title,
@@ -160,8 +168,9 @@ fn dispatch_directive<R: Runtime>(app: &AppHandle<R>, json_line: &str) {
                 "dismissable": true,
                 "action": "show",
             }),
-        )
-        .ok();
+        ) {
+            log::warn!("Failed to emit hapax:modal (show): {}", e);
+        }
     }
 
     if directive
@@ -169,7 +178,7 @@ fn dispatch_directive<R: Runtime>(app: &AppHandle<R>, json_line: &str) {
         .and_then(|v| v.as_bool())
         .unwrap_or(false)
     {
-        app.emit(
+        if let Err(e) = app.emit(
             "hapax:modal",
             serde_json::json!({
                 "title": "",
@@ -177,30 +186,33 @@ fn dispatch_directive<R: Runtime>(app: &AppHandle<R>, json_line: &str) {
                 "dismissable": true,
                 "action": "dismiss",
             }),
-        )
-        .ok();
+        ) {
+            log::warn!("Failed to emit hapax:modal (dismiss): {}", e);
+        }
     }
 
     if let Some(selector) = directive.get("highlight").and_then(|v| v.as_str()) {
-        app.emit(
+        if let Err(e) = app.emit(
             "hapax:highlight",
             serde_json::json!({
                 "selector": selector,
                 "duration_ms": directive.get("highlight_duration_ms").and_then(|v| v.as_u64()).unwrap_or(3000),
             }),
-        )
-        .ok();
+        ) {
+            log::warn!("Failed to emit hapax:highlight: {}", e);
+        }
     }
 
     if let Some(text) = directive.get("status").and_then(|v| v.as_str()) {
-        app.emit(
+        if let Err(e) = app.emit(
             "hapax:status",
             serde_json::json!({
                 "text": text,
                 "level": directive.get("status_level").and_then(|v| v.as_str()).unwrap_or("info"),
             }),
-        )
-        .ok();
+        ) {
+            log::warn!("Failed to emit hapax:status: {}", e);
+        }
     }
 
     // Window management
@@ -210,21 +222,31 @@ fn dispatch_directive<R: Runtime>(app: &AppHandle<R>, json_line: &str) {
         .unwrap_or(false)
     {
         if let Some(w) = app.get_webview_window("main") {
-            w.unminimize().ok();
-            w.show().ok();
-            w.set_focus().ok();
+            if let Err(e) = w.unminimize() {
+                log::warn!("Failed to unminimize window: {}", e);
+            }
+            if let Err(e) = w.show() {
+                log::warn!("Failed to show window: {}", e);
+            }
+            if let Err(e) = w.set_focus() {
+                log::warn!("Failed to set window focus: {}", e);
+            }
         }
     }
 
     if let Some(fs) = directive.get("fullscreen").and_then(|v| v.as_bool()) {
         if let Some(w) = app.get_webview_window("main") {
-            w.set_fullscreen(fs).ok();
+            if let Err(e) = w.set_fullscreen(fs) {
+                log::warn!("Failed to set fullscreen={}: {}", fs, e);
+            }
         }
     }
 
     if let Some(on_top) = directive.get("always_on_top").and_then(|v| v.as_bool()) {
         if let Some(w) = app.get_webview_window("main") {
-            w.set_always_on_top(on_top).ok();
+            if let Err(e) = w.set_always_on_top(on_top) {
+                log::warn!("Failed to set always_on_top={}: {}", on_top, e);
+            }
         }
     }
 
@@ -233,11 +255,12 @@ fn dispatch_directive<R: Runtime>(app: &AppHandle<R>, json_line: &str) {
     let wy = directive.get("window_y").and_then(|v| v.as_i64());
     if let (Some(x), Some(y)) = (wx, wy) {
         if let Some(w) = app.get_webview_window("main") {
-            w.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
+            if let Err(e) = w.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
                 x: x as i32,
                 y: y as i32,
-            }))
-            .ok();
+            })) {
+                log::warn!("Failed to set window position ({}, {}): {}", x, y, e);
+            }
         }
     }
 
@@ -245,11 +268,12 @@ fn dispatch_directive<R: Runtime>(app: &AppHandle<R>, json_line: &str) {
     let wh = directive.get("window_height").and_then(|v| v.as_u64());
     if let (Some(width), Some(height)) = (ww, wh) {
         if let Some(w) = app.get_webview_window("main") {
-            w.set_size(tauri::Size::Physical(tauri::PhysicalSize {
+            if let Err(e) = w.set_size(tauri::Size::Physical(tauri::PhysicalSize {
                 width: width as u32,
                 height: height as u32,
-            }))
-            .ok();
+            })) {
+                log::warn!("Failed to set window size ({}x{}): {}", width, height, e);
+            }
         }
     }
 
@@ -264,9 +288,14 @@ fn dispatch_directive<R: Runtime>(app: &AppHandle<R>, json_line: &str) {
             "source": "directive",
             "timestamp": now_epoch(),
         });
-        fs::create_dir_all("/dev/shm/hapax-visual").ok();
-        fs::write(path, payload.to_string()).ok();
-        app.emit("hapax:stance-override", stance).ok();
+        if let Err(e) = fs::create_dir_all("/dev/shm/hapax-visual") {
+            log::error!("Failed to create visual directory: {}", e);
+        } else if let Err(e) = fs::write(path, payload.to_string()) {
+            log::error!("Failed to write stance override to {}: {}", path, e);
+        }
+        if let Err(e) = app.emit("hapax:stance-override", stance) {
+            log::warn!("Failed to emit hapax:stance-override: {}", e);
+        }
     }
 
     if let Some(x) = directive.get("visual_ping_x").and_then(|v| v.as_f64()) {
@@ -288,12 +317,17 @@ fn dispatch_directive<R: Runtime>(app: &AppHandle<R>, json_line: &str) {
             "timestamp": now_epoch(),
         });
         use std::io::Write;
-        if let Ok(mut f) = fs::OpenOptions::new()
+        match fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(events_path)
         {
-            writeln!(f, "{}", event).ok();
+            Ok(mut f) => {
+                if let Err(e) = writeln!(f, "{}", event) {
+                    log::warn!("Failed to write visual ping event to {}: {}", events_path, e);
+                }
+            }
+            Err(e) => log::warn!("Failed to open visual events file {}: {}", events_path, e),
         }
     }
 }
@@ -345,9 +379,12 @@ fn dispatch_browser_directives<R: Runtime>(app: &AppHandle<R>, directive: &serde
                 Ok(result) => {
                     log::info!("Browser eval result: {}", result);
                     let response = serde_json::json!({"action": "eval", "result": result});
-                    fs::create_dir_all("/dev/shm/hapax-logos").ok();
-                    fs::write("/dev/shm/hapax-logos/browser-response.json", response.to_string())
-                        .ok();
+                    let resp_path = "/dev/shm/hapax-logos/browser-response.json";
+                    if let Err(e) = fs::create_dir_all("/dev/shm/hapax-logos") {
+                        log::error!("Failed to create logos directory: {}", e);
+                    } else if let Err(e) = fs::write(resp_path, response.to_string()) {
+                        log::error!("Failed to write browser eval response to {}: {}", resp_path, e);
+                    }
                 }
                 Err(e) => log::error!("Browser eval failed: {}", e),
             }
@@ -366,9 +403,14 @@ fn dispatch_browser_directives<R: Runtime>(app: &AppHandle<R>, directive: &serde
                     if let Ok(bytes) =
                         base64::Engine::decode(&base64::engine::general_purpose::STANDARD, &b64)
                     {
-                        fs::create_dir_all("/dev/shm/hapax-logos").ok();
-                        fs::write("/dev/shm/hapax-logos/browser-screenshot.png", bytes).ok();
-                        log::info!("Browser screenshot saved to shm");
+                        let shot_path = "/dev/shm/hapax-logos/browser-screenshot.png";
+                        if let Err(e) = fs::create_dir_all("/dev/shm/hapax-logos") {
+                            log::error!("Failed to create logos directory: {}", e);
+                        } else if let Err(e) = fs::write(shot_path, bytes) {
+                            log::error!("Failed to write browser screenshot to {}: {}", shot_path, e);
+                        } else {
+                            log::info!("Browser screenshot saved to shm");
+                        }
                     }
                 }
                 Err(e) => log::error!("Browser screenshot failed: {}", e),
@@ -392,12 +434,17 @@ fn dispatch_browser_directives<R: Runtime>(app: &AppHandle<R>, directive: &serde
                             let response: GetFullAxTreeReturns = cdp_response.result;
                             let tree =
                                 crate::browser::a11y::serialize_ax_nodes_pub(&response.nodes);
-                            fs::create_dir_all("/dev/shm/hapax-logos").ok();
-                            fs::write("/dev/shm/hapax-logos/browser-a11y.txt", &tree).ok();
-                            log::info!(
-                                "Browser A11y tree extracted ({} bytes)",
-                                tree.len()
-                            );
+                            let a11y_path = "/dev/shm/hapax-logos/browser-a11y.txt";
+                            if let Err(e) = fs::create_dir_all("/dev/shm/hapax-logos") {
+                                log::error!("Failed to create logos directory: {}", e);
+                            } else if let Err(e) = fs::write(a11y_path, &tree) {
+                                log::error!("Failed to write browser A11y tree to {}: {}", a11y_path, e);
+                            } else {
+                                log::info!(
+                                    "Browser A11y tree extracted ({} bytes)",
+                                    tree.len()
+                                );
+                            }
                         }
                         Err(e) => log::error!("A11y tree extraction failed: {}", e),
                     }

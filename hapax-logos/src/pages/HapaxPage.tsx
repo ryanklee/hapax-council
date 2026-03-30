@@ -16,48 +16,15 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { AmbientShader } from "../components/hapax/AmbientShader";
 import { usePageVisible } from "../hooks/usePageVisible";
+import { api } from "../api/client";
+import { LOGOS_API_URL } from "../config";
 
-const API = "http://localhost:8051/api";
+const SNAPSHOT_BASE = LOGOS_API_URL;
 const POLL_FAST_MS = 2000;
 const SNAPSHOT_MS = 200; // camera composite refresh
 const FRAGMENT_CYCLE_MS = 12000; // rotate floating text fragments
 
 // ── Types ────────────────────────────────────────────────────────────────
-
-interface SignalEntry {
-  category: string;
-  severity: number;
-  title: string;
-  detail: string;
-  source_id: string;
-}
-
-interface AmbientParams {
-  speed: number;
-  turbulence: number;
-  color_warmth: number;
-  brightness: number;
-}
-
-interface VoiceSession {
-  active: boolean;
-  state: string;
-  turn_count: number;
-  last_utterance: string;
-  last_response: string;
-  active_tool: string | null;
-  barge_in: boolean;
-  routing_tier: string;
-  routing_reason: string;
-  routing_activation: number;
-  // Experiment monitoring
-  context_anchor_success: number;
-  frustration_score: number;
-  frustration_rolling_avg: number;
-  acceptance_type: string;
-  spoken_words: number;
-  word_limit: number;
-}
 
 interface SupplementaryContent {
   content_type: string;
@@ -79,20 +46,14 @@ interface InjectedFeed {
   injected_at: number;
 }
 
-interface VisualLayerState {
-  available?: boolean;
-  display_state: string;
-  zone_opacities: Record<string, number>;
-  signals: Record<string, SignalEntry[]>;
-  ambient_params: AmbientParams;
-  voice_session: VoiceSession;
-  voice_content: SupplementaryContent[];
-  injected_feeds: InjectedFeed[];
-  ambient_text: string;
-  activity_label: string;
-  activity_detail: string;
-  timestamp: number;
-}
+// Use the API type directly — HapaxPage adds local extensions via optional fields
+type VisualLayerState = import("../api/types").VisualLayerState & {
+  voice_content?: SupplementaryContent[];
+  injected_feeds?: InjectedFeed[];
+  ambient_text?: string;
+  activity_label?: string;
+  activity_detail?: string;
+};
 
 // ── Fallback ambient fragments (used when no dynamic content available) ──
 
@@ -194,8 +155,7 @@ export function HapaxPage() {
         lastVlPoll = now;
         if (!vlPollInFlight) {
           vlPollInFlight = true;
-          fetch(`${API}/studio/visual-layer`)
-            .then((res) => (res.ok ? res.json() : null))
+          api.visualLayer()
             .then((data) => {
               if (data && running) setVlState(data);
             })
@@ -208,7 +168,7 @@ export function HapaxPage() {
       if (showVideoRef.current && now - lastSnapshot >= SNAPSHOT_MS) {
         lastSnapshot = now;
         const img = snapshotRef.current;
-        if (img) img.src = `${API}/studio/stream/snapshot?t=${Date.now()}`;
+        if (img) img.src = `${SNAPSHOT_BASE}/studio/stream/snapshot?t=${Date.now()}`;
       }
 
       // Clock (1s)
@@ -233,11 +193,7 @@ export function HapaxPage() {
   const submitCorrection = useCallback(async () => {
     if (!correctionInput.trim()) return;
     try {
-      await fetch(`${API}/studio/activity-correction`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ label: correctionInput.trim() }),
-      });
+      await api.post("/studio/activity-correction", { label: correctionInput.trim() });
     } catch { /* ignore */ }
     setShowCorrection(false);
     setCorrectionInput("");
@@ -386,7 +342,7 @@ export function HapaxPage() {
           }}
         >
           <img
-            src={`${API}/studio/stream/camera/${feed.role}?t=${time.getTime()}`}
+            src={`${SNAPSHOT_BASE}/studio/stream/camera/${feed.role}?t=${time.getTime()}`}
             alt=""
             className="w-full h-full object-cover"
           />
@@ -399,7 +355,7 @@ export function HapaxPage() {
           {["brio-operator", "c920-desk", "c920-room", "c920-overhead"].map(cam => (
             <div key={cam} className="relative">
               <img
-                src={`${API}/studio/stream/camera/${cam}?t=${time.getTime()}`}
+                src={`${SNAPSHOT_BASE}/studio/stream/camera/${cam}?t=${time.getTime()}`}
                 alt={cam}
                 className="w-56 rounded-lg border border-white/10"
                 style={{
@@ -579,7 +535,7 @@ export function HapaxPage() {
               )}
               {content.image_path && (
                 <img
-                  src={`${API}/studio/stream/camera/${content.image_path}?t=${time.getTime()}`}
+                  src={`${SNAPSHOT_BASE}/studio/stream/camera/${content.image_path}?t=${time.getTime()}`}
                   alt=""
                   className="w-full rounded-lg mt-2 opacity-80"
                 />
