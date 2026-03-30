@@ -110,7 +110,7 @@ def main() -> None:
         print("SUFFICIENCY PROBES (ex-delib-*)")
         print(f"{'=' * 60}")
 
-        from shared.sufficiency_probes import run_probes
+        from agents._sufficiency_probes import run_probes
 
         results = run_probes(axiom_id="executive_function")
         delib_results = [r for r in results if r.probe_id.startswith("probe-delib-")]

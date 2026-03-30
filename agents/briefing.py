@@ -322,7 +322,7 @@ def _collect_deliberation_health() -> str | None:
 
             # Run deliberation probes for governance status
             try:
-                from shared.sufficiency_probes import run_probes
+                from agents._sufficiency_probes import run_probes
 
                 probe_results = run_probes(axiom_id="executive_function")
                 delib_probes = [r for r in probe_results if r.probe_id.startswith("probe-delib-")]
@@ -353,7 +353,7 @@ def _collect_axiom_status() -> dict:
             "pending_precedents": 0,
         }
         try:
-            from shared.sufficiency_probes import run_probes
+            from agents._sufficiency_probes import run_probes
 
             probes = run_probes()
             result["probe_total"] = len(probes)

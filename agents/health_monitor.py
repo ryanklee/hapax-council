@@ -2830,7 +2830,7 @@ async def check_skill_syntax() -> list[CheckResult]:
     """Validate Claude Code skill definitions are syntactically valid."""
     t = time.monotonic()
     try:
-        from shared.sufficiency_probes import _check_skill_syntax
+        from agents._sufficiency_probes import _check_skill_syntax
 
         met, evidence = _check_skill_syntax()
         status = Status.HEALTHY if met else Status.DEGRADED

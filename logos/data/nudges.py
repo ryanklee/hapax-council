@@ -429,7 +429,7 @@ def _collect_scout_nudges(nudges: list[Nudge]) -> None:
 def _collect_sufficiency_nudges(nudges: list[Nudge]) -> None:
     """Run sufficiency probes and generate nudges for failures."""
     try:
-        from shared.sufficiency_probes import run_probes
+        from agents._sufficiency_probes import run_probes
 
         results = run_probes()
         failures = [r for r in results if not r.met]
