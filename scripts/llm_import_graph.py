@@ -196,6 +196,7 @@ def build_graph(source_dirs: list[str] | None = None) -> dict[str, ModuleInfo]:
     # Resolve transitive dependencies
     for module_name in modules:
         deps = _resolve_transitive(module_name, modules, set())
+        deps.discard(module_name)  # A module is not its own dependency
         modules[module_name].transitive_deps = sorted(deps)
         transitive_cost = modules[module_name].token_cost + sum(
             modules[dep].token_cost for dep in deps if dep in modules
@@ -289,15 +290,9 @@ def format_report(
     return "\n".join(lines) + "\n"
 
 
-def save_baseline(modules: dict[str, ModuleInfo], output: Path) -> None:
-    """Save a JSON baseline of module token costs.
-
-    Args:
-        modules: Module graph from build_graph().
-        output: Output file path.
-    """
-    output.parent.mkdir(parents=True, exist_ok=True)
-    data = {
+def _modules_to_dict(modules: dict[str, ModuleInfo]) -> dict[str, dict]:
+    """Convert module graph to JSON-serializable dict."""
+    return {
         name: {
             "path": info.path,
             "loc": info.loc,
@@ -307,6 +302,17 @@ def save_baseline(modules: dict[str, ModuleInfo], output: Path) -> None:
         }
         for name, info in sorted(modules.items())
     }
+
+
+def save_baseline(modules: dict[str, ModuleInfo], output: Path) -> None:
+    """Save a JSON baseline of module token costs.
+
+    Args:
+        modules: Module graph from build_graph().
+        output: Output file path.
+    """
+    output.parent.mkdir(parents=True, exist_ok=True)
+    data = _modules_to_dict(modules)
     output.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     print(f"Baseline saved to {output} ({len(data)} modules)")
 
@@ -340,17 +346,7 @@ def main() -> None:
         return
 
     if args.json:
-        data = {
-            name: {
-                "path": info.path,
-                "loc": info.loc,
-                "token_cost": info.token_cost,
-                "transitive_deps": info.transitive_deps,
-                "transitive_token_cost": info.transitive_token_cost,
-            }
-            for name, info in sorted(modules.items())
-        }
-        print(json.dumps(data, indent=2))
+        print(json.dumps(_modules_to_dict(modules), indent=2))
         return
 
     module_filter = args.module

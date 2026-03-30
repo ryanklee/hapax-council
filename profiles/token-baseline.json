@@ -299,7 +299,6 @@
     "loc": 496,
     "token_cost": 4960,
     "transitive_deps": [
-      "agents.context_restore",
       "agents.contradiction_detector",
       "agents.gcalendar_sync",
       "agents.hapax_daimonion.watch_signals",
@@ -383,7 +382,7 @@
       "shared.vault_utils",
       "shared.working_mode"
     ],
-    "transitive_token_cost": 221690
+    "transitive_token_cost": 216730
   },
   "agents.contradiction_detector": {
     "path": "agents/contradiction_detector.py",
@@ -391,7 +390,6 @@
     "token_cost": 1960,
     "transitive_deps": [
       "agents.context_restore",
-      "agents.contradiction_detector",
       "agents.gcalendar_sync",
       "agents.hapax_daimonion.watch_signals",
       "agents.health_monitor",
@@ -474,7 +472,7 @@
       "shared.vault_utils",
       "shared.working_mode"
     ],
-    "transitive_token_cost": 218690
+    "transitive_token_cost": 216730
   },
   "agents.deliberation_eval": {
     "path": "agents/deliberation_eval.py",
@@ -1193,7 +1191,6 @@
     "loc": 988,
     "token_cost": 9880,
     "transitive_deps": [
-      "agents.drift_detector",
       "agents.health_monitor",
       "agents.introspect",
       "shared.agent_registry",
@@ -1232,7 +1229,7 @@
       "shared.threshold_tuner",
       "shared.working_mode"
     ],
-    "transitive_token_cost": 120820
+    "transitive_token_cost": 110940
   },
   "agents.effect_graph": {
     "path": "agents/effect_graph/__init__.py",
@@ -4011,7 +4008,6 @@
     "transitive_deps": [
       "agents.hapax_daimonion.bridge_engine",
       "agents.hapax_daimonion.config",
-      "agents.hapax_daimonion.conversation_pipeline",
       "agents.hapax_daimonion.frustration_detector",
       "agents.hapax_daimonion.grounding_evaluator",
       "agents.hapax_daimonion.grounding_ledger",
@@ -4029,7 +4025,7 @@
       "shared.gpu_semaphore",
       "shared.telemetry"
     ],
-    "transitive_token_cost": 64780
+    "transitive_token_cost": 48870
   },
   "agents.hapax_daimonion.conversational_model": {
     "path": "agents/hapax_daimonion/conversational_model.py",
@@ -4567,7 +4563,6 @@
       "agents.hapax_daimonion.config",
       "agents.hapax_daimonion.conversation_pipeline",
       "agents.hapax_daimonion.frustration_detector",
-      "agents.hapax_daimonion.grounding_evaluator",
       "agents.hapax_daimonion.grounding_ledger",
       "agents.hapax_daimonion.model_router",
       "agents.hapax_daimonion.phenomenal_context",
@@ -4583,7 +4578,7 @@
       "shared.gpu_semaphore",
       "shared.telemetry"
     ],
-    "transitive_token_cost": 51570
+    "transitive_token_cost": 48870
   },
   "agents.hapax_daimonion.grounding_ledger": {
     "path": "agents/hapax_daimonion/grounding_ledger.py",
@@ -5926,7 +5921,6 @@
     "loc": 3295,
     "token_cost": 32950,
     "transitive_deps": [
-      "agents.health_monitor",
       "shared.agent_registry",
       "shared.axiom_precedents",
       "shared.axiom_registry",
@@ -5952,7 +5946,7 @@
       "shared.threshold_tuner",
       "shared.working_mode"
     ],
-    "transitive_token_cost": 108530
+    "transitive_token_cost": 75580
   },
   "agents.imagination": {
     "path": "agents/imagination.py",
@@ -7377,7 +7371,6 @@
       "agents.profiler",
       "agents.profiler_sources",
       "logos.accommodations",
-      "logos.api.cache",
       "logos.data.agents",
       "logos.data.briefing",
       "logos.data.cost",
@@ -7451,7 +7444,7 @@
       "shared.vault_utils",
       "shared.working_mode"
     ],
-    "transitive_token_cost": 218130
+    "transitive_token_cost": 216730
   },
   "logos.api.deps": {
     "path": "logos/api/deps/__init__.py",
@@ -8709,7 +8702,6 @@
       "logos.data.cost",
       "logos.data.decisions",
       "logos.data.drift",
-      "logos.data.emergence",
       "logos.data.goals",
       "logos.data.governance",
       "logos.data.gpu",
@@ -8777,7 +8769,7 @@
       "shared.vault_utils",
       "shared.working_mode"
     ],
-    "transitive_token_cost": 219520
+    "transitive_token_cost": 216730
   },
   "logos.data.goals": {
     "path": "logos/data/goals.py",
@@ -8818,7 +8810,6 @@
       "logos.data.drift",
       "logos.data.emergence",
       "logos.data.goals",
-      "logos.data.governance",
       "logos.data.gpu",
       "logos.data.health",
       "logos.data.infrastructure",
@@ -8884,7 +8875,7 @@
       "shared.vault_utils",
       "shared.working_mode"
     ],
-    "transitive_token_cost": 219910
+    "transitive_token_cost": 216730
   },
   "logos.data.gpu": {
     "path": "logos/data/gpu.py",
@@ -8968,7 +8959,6 @@
       "logos.data.gpu",
       "logos.data.health",
       "logos.data.infrastructure",
-      "logos.data.knowledge_sufficiency",
       "logos.data.nudges",
       "logos.data.readiness",
       "logos.data.scout",
@@ -9030,7 +9020,7 @@
       "shared.vault_utils",
       "shared.working_mode"
     ],
-    "transitive_token_cost": 219770
+    "transitive_token_cost": 216730
   },
   "logos.data.momentum": {
     "path": "logos/data/momentum.py",
@@ -9151,7 +9141,6 @@
       "logos.data.health",
       "logos.data.infrastructure",
       "logos.data.knowledge_sufficiency",
-      "logos.data.nudges",
       "logos.data.readiness",
       "logos.data.scout",
       "logos.data.studio",
@@ -9212,7 +9201,7 @@
       "shared.vault_utils",
       "shared.working_mode"
     ],
-    "transitive_token_cost": 223400
+    "transitive_token_cost": 216730
   },
   "logos.data.readiness": {
     "path": "logos/data/readiness.py",
@@ -9374,7 +9363,6 @@
       "logos.data.scout",
       "logos.data.studio",
       "logos.engine.models",
-      "logos.engine.reactive_rules",
       "logos.engine.rules",
       "logos.interview",
       "shared.agent_registry",
@@ -9430,7 +9418,7 @@
       "shared.vault_utils",
       "shared.working_mode"
     ],
-    "transitive_token_cost": 223700
+    "transitive_token_cost": 216730
   },
   "logos.engine.rule_capability": {
     "path": "logos/engine/rule_capability.py",
@@ -9556,7 +9544,6 @@
       "agents.dev_story.query",
       "agents.knowledge.query",
       "agents.system_ops.query",
-      "logos.query_dispatch",
       "shared.agent_registry",
       "shared.config",
       "shared.context_compression",
@@ -9567,7 +9554,7 @@
       "shared.ops_live",
       "shared.profile_store"
     ],
-    "transitive_token_cost": 24050
+    "transitive_token_cost": 22290
   },
   "logos.runner": {
     "path": "logos/runner.py",
@@ -9718,10 +9705,10 @@
   },
   "scripts.llm_import_graph": {
     "path": "scripts/llm_import_graph.py",
-    "loc": 284,
-    "token_cost": 2840,
+    "loc": 277,
+    "token_cost": 2770,
     "transitive_deps": [],
-    "transitive_token_cost": 2840
+    "transitive_token_cost": 2770
   },
   "scripts.migrate-shader-params": {
     "path": "scripts/migrate-shader-params.py",
@@ -10719,7 +10706,6 @@
       "shared.capacity",
       "shared.config",
       "shared.deliberation_metrics",
-      "shared.fix_capabilities",
       "shared.fix_capabilities.base",
       "shared.fix_capabilities.docker_cap",
       "shared.fix_capabilities.evaluator",
@@ -10738,7 +10724,7 @@
       "shared.threshold_tuner",
       "shared.working_mode"
     ],
-    "transitive_token_cost": 75910
+    "transitive_token_cost": 75580
   },
   "shared.fix_capabilities.base": {
     "path": "shared/fix_capabilities/base.py",
@@ -10761,7 +10747,6 @@
       "shared.deliberation_metrics",
       "shared.fix_capabilities",
       "shared.fix_capabilities.base",
-      "shared.fix_capabilities.docker_cap",
       "shared.fix_capabilities.evaluator",
       "shared.fix_capabilities.filesystem_cap",
       "shared.fix_capabilities.ollama_cap",
@@ -10778,7 +10763,7 @@
       "shared.threshold_tuner",
       "shared.working_mode"
     ],
-    "transitive_token_cost": 76460
+    "transitive_token_cost": 75580
   },
   "shared.fix_capabilities.evaluator": {
     "path": "shared/fix_capabilities/evaluator.py",
@@ -10795,7 +10780,6 @@
       "shared.fix_capabilities",
       "shared.fix_capabilities.base",
       "shared.fix_capabilities.docker_cap",
-      "shared.fix_capabilities.evaluator",
       "shared.fix_capabilities.filesystem_cap",
       "shared.fix_capabilities.ollama_cap",
       "shared.fix_capabilities.pipeline",
@@ -10811,7 +10795,7 @@
       "shared.threshold_tuner",
       "shared.working_mode"
     ],
-    "transitive_token_cost": 76450
+    "transitive_token_cost": 75580
   },
   "shared.fix_capabilities.filesystem_cap": {
     "path": "shared/fix_capabilities/filesystem_cap.py",
@@ -10829,7 +10813,6 @@
       "shared.fix_capabilities.base",
       "shared.fix_capabilities.docker_cap",
       "shared.fix_capabilities.evaluator",
-      "shared.fix_capabilities.filesystem_cap",
       "shared.fix_capabilities.ollama_cap",
       "shared.fix_capabilities.pipeline",
       "shared.fix_capabilities.profiles_cap",
@@ -10844,7 +10827,7 @@
       "shared.threshold_tuner",
       "shared.working_mode"
     ],
-    "transitive_token_cost": 76670
+    "transitive_token_cost": 75580
   },
   "shared.fix_capabilities.ollama_cap": {
     "path": "shared/fix_capabilities/ollama_cap.py",
@@ -10863,7 +10846,6 @@
       "shared.fix_capabilities.docker_cap",
       "shared.fix_capabilities.evaluator",
       "shared.fix_capabilities.filesystem_cap",
-      "shared.fix_capabilities.ollama_cap",
       "shared.fix_capabilities.pipeline",
       "shared.fix_capabilities.profiles_cap",
       "shared.fix_capabilities.queues_cap",
@@ -10877,7 +10859,7 @@
       "shared.threshold_tuner",
       "shared.working_mode"
     ],
-    "transitive_token_cost": 76580
+    "transitive_token_cost": 75580
   },
   "shared.fix_capabilities.pipeline": {
     "path": "shared/fix_capabilities/pipeline.py",
@@ -10897,7 +10879,6 @@
       "shared.fix_capabilities.evaluator",
       "shared.fix_capabilities.filesystem_cap",
       "shared.fix_capabilities.ollama_cap",
-      "shared.fix_capabilities.pipeline",
       "shared.fix_capabilities.profiles_cap",
       "shared.fix_capabilities.queues_cap",
       "shared.fix_capabilities.systemd_cap",
@@ -10910,7 +10891,7 @@
       "shared.threshold_tuner",
       "shared.working_mode"
     ],
-    "transitive_token_cost": 77680
+    "transitive_token_cost": 75580
   },
   "shared.fix_capabilities.profiles_cap": {
     "path": "shared/fix_capabilities/profiles_cap.py",
@@ -10931,7 +10912,6 @@
       "shared.fix_capabilities.filesystem_cap",
       "shared.fix_capabilities.ollama_cap",
       "shared.fix_capabilities.pipeline",
-      "shared.fix_capabilities.profiles_cap",
       "shared.fix_capabilities.queues_cap",
       "shared.fix_capabilities.systemd_cap",
       "shared.gpu_semaphore",
@@ -10943,7 +10923,7 @@
       "shared.threshold_tuner",
       "shared.working_mode"
     ],
-    "transitive_token_cost": 76240
+    "transitive_token_cost": 75580
   },
   "shared.fix_capabilities.queues_cap": {
     "path": "shared/fix_capabilities/queues_cap.py",
@@ -10965,7 +10945,6 @@
       "shared.fix_capabilities.ollama_cap",
       "shared.fix_capabilities.pipeline",
       "shared.fix_capabilities.profiles_cap",
-      "shared.fix_capabilities.queues_cap",
       "shared.fix_capabilities.systemd_cap",
       "shared.gpu_semaphore",
       "shared.langfuse_client",
@@ -10976,7 +10955,7 @@
       "shared.threshold_tuner",
       "shared.working_mode"
     ],
-    "transitive_token_cost": 76650
+    "transitive_token_cost": 75580
   },
   "shared.fix_capabilities.systemd_cap": {
     "path": "shared/fix_capabilities/systemd_cap.py",
@@ -10999,7 +10978,6 @@
       "shared.fix_capabilities.pipeline",
       "shared.fix_capabilities.profiles_cap",
       "shared.fix_capabilities.queues_cap",
-      "shared.fix_capabilities.systemd_cap",
       "shared.gpu_semaphore",
       "shared.langfuse_client",
       "shared.notify",
@@ -11009,7 +10987,7 @@
       "shared.threshold_tuner",
       "shared.working_mode"
     ],
-    "transitive_token_cost": 76870
+    "transitive_token_cost": 75580
   },
   "shared.flow_state": {
     "path": "shared/flow_state.py",
@@ -11833,7 +11811,6 @@
       "shared.notify",
       "shared.operator",
       "shared.profile_store",
-      "shared.registry_checks",
       "shared.service_graph",
       "shared.service_tiers",
       "shared.stimmung",
@@ -11841,7 +11818,7 @@
       "shared.threshold_tuner",
       "shared.working_mode"
     ],
-    "transitive_token_cost": 113370
+    "transitive_token_cost": 110940
   },
   "shared.sdlc_github": {
     "path": "shared/sdlc_github.py",
@@ -11963,11 +11940,10 @@
       "shared.notify",
       "shared.service_graph",
       "shared.service_tiers",
-      "shared.sufficiency_probes",
       "shared.threshold_tuner",
       "shared.working_mode"
     ],
-    "transitive_token_cost": 85160
+    "transitive_token_cost": 75580
   },
   "shared.takeout": {
     "path": "shared/takeout/__init__.py",
