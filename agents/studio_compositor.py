@@ -2045,24 +2045,29 @@ class StudioCompositor:
                 for (node_id, param), value in updates.items():
                     self._on_graph_params_changed(node_id, {param: value})
 
-        # --- Graph mode: push time/resolution to active slots that declare these uniforms ---
-        # Only push uniforms the shader actually declares — pushing undeclared uniforms
-        # via GstStructure corrupts the GL shader state and produces black frames.
+        # --- Graph mode: push time/resolution to active slots ---
+        # Merge time/resolution into each slot's base params so the full uniform set
+        # is pushed every tick. GStreamer glshader replaces ALL uniforms on each set.
         if self._fx_graph_mode and self._slot_pipeline:
             time_uniforms = {"time": t, "width": 1920.0, "height": 1080.0}
             for i, node_type in enumerate(self._slot_pipeline.slot_assignments):
                 if node_type is None:
                     continue
-                # Check which uniforms the node type actually declares
                 defn = (
                     self._slot_pipeline._registry.get(node_type)
                     if self._slot_pipeline._registry
                     else None
                 )
-                if defn and defn.params:
-                    declared = {k: v for k, v in time_uniforms.items() if k in defn.params}
-                    if declared:
-                        self._slot_pipeline._set_uniforms(i, declared)
+                if defn and defn.glsl_source:
+                    implicit = {
+                        k: v for k, v in time_uniforms.items() if f"u_{k}" in defn.glsl_source
+                    }
+                    if implicit:
+                        # Merge INTO base params so modulator updates also carry them
+                        self._slot_pipeline._slot_base_params[i].update(implicit)
+                        self._slot_pipeline._set_uniforms(
+                            i, self._slot_pipeline._slot_base_params[i]
+                        )
 
         return True  # keep timer running
 
