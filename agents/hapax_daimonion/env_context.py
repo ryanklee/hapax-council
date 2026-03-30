@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from shared.context_compression import to_toon
+from agents._context_compression import to_toon
 
 if TYPE_CHECKING:
     from agents.hapax_daimonion.ambient_classifier import AmbientResult

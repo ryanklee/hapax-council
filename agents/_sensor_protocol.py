@@ -14,7 +14,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
-from shared.impingement import Impingement, ImpingementType
+from agents._impingement import Impingement, ImpingementType
 
 log = logging.getLogger("sensor")
 
@@ -84,7 +84,7 @@ def emit_sensor_impingement(
 
     try:
         from agents._config import embed_safe
-        from shared.impingement import render_impingement_text
+        from agents._impingement import render_impingement_text
 
         text = render_impingement_text(imp)
         vec = embed_safe(text, prefix="search_query")

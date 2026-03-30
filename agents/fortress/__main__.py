@@ -82,7 +82,7 @@ class FortressDaemon:
         self._dmn_impingement_cursor = 0
 
         # Affordance pipeline: index fortress capability and register interrupt tokens
-        from shared.affordance import CapabilityRecord
+        from agents._affordance import CapabilityRecord
         from shared.affordance_pipeline import AffordancePipeline
 
         self._affordance_pipeline = AffordancePipeline()
@@ -244,7 +244,7 @@ class FortressDaemon:
 
     async def _impingement_consumer_loop(self) -> None:
         """Poll DMN impingements and route through affordance pipeline."""
-        from shared.impingement import Impingement
+        from agents._impingement import Impingement
 
         imp_path = Path("/dev/shm/hapax-dmn/impingements.jsonl")
 

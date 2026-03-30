@@ -270,7 +270,7 @@ def get_system_prompt_fragment(agent_name: str) -> str:
         if registry_axioms:
             lines.append("")
             try:
-                from shared.context_compression import to_toon
+                from agents._context_compression import to_toon
 
                 axiom_data = {
                     "axioms": [

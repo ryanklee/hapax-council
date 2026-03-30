@@ -211,9 +211,9 @@ class ReactiveEngine:
         self._start_time: float | None = None
 
         # Impingement cascade integration
+        from logos._affordance import CapabilityRecord
         from logos.engine.converter import convert as _convert
         from logos.engine.rule_capability import RuleCapability, generate_rule_description
-        from shared.affordance import CapabilityRecord
         from shared.affordance_pipeline import AffordancePipeline
 
         self._convert_event = _convert

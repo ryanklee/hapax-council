@@ -314,7 +314,7 @@ eval_agent = Agent(
 )
 
 # Register on-demand operator context tools
-from shared.context_tools import get_context_tools
+from agents._context_tools import get_context_tools
 
 for _tool_fn in get_context_tools():
     eval_agent.tool(_tool_fn)

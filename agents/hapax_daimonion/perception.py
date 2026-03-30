@@ -14,8 +14,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
+from agents._impingement import Impingement, ImpingementType
 from agents.hapax_daimonion.primitives import Behavior
-from shared.impingement import Impingement, ImpingementType
 
 if TYPE_CHECKING:
     from shared.hyprland import WindowInfo

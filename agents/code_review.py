@@ -64,7 +64,7 @@ For diffs, focus on the changed lines, not surrounding context."""
 
 def _make_agent(model_alias: str) -> Agent:
     a = Agent(get_model(model_alias), deps_type=ReviewDeps, system_prompt=SYSTEM_PROMPT)
-    from shared.context_tools import get_context_tools
+    from agents._context_tools import get_context_tools
 
     for _tool_fn in get_context_tools():
         a.tool(_tool_fn)

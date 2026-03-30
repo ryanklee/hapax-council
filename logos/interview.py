@@ -458,7 +458,7 @@ def create_interview_agent(model_alias: str = "balanced") -> Agent[InterviewDeps
     )
 
     # Register on-demand operator context tools
-    from shared.context_tools import get_context_tools
+    from logos._context_tools import get_context_tools
 
     for tool_fn in get_context_tools():
         agent.tool(tool_fn)

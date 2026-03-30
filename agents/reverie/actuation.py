@@ -18,9 +18,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from agents._impingement import Impingement
     from agents.effect_graph.capability import ShaderGraphCapability
     from agents.visual_chain import VisualChainCapability
-    from shared.impingement import Impingement
 
 log = logging.getLogger("reverie.actuation")
 

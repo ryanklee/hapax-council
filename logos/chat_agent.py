@@ -95,7 +95,7 @@ def create_chat_agent(model_alias: str = "balanced") -> Agent[ChatDeps, str]:
     )
 
     # Register on-demand operator context tools
-    from shared.context_tools import get_context_tools
+    from logos._context_tools import get_context_tools
 
     for tool_fn in get_context_tools():
         agent.tool(tool_fn)
@@ -1028,7 +1028,7 @@ class ChatSession:
         # Pre-compress old text with LLMLingua-2 before LLM summarization
         # This reduces token cost of the summary call itself
         try:
-            from shared.context_compression import _get_compressor
+            from logos._context_compression import _get_compressor
 
             compressor = _get_compressor()
             if compressor is not None:

@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import logging
 
-from shared.capability import CapabilityCategory, ResourceTier, SystemContext
-from shared.impingement import Impingement
+from agents._capability import CapabilityCategory, ResourceTier, SystemContext
+from agents._impingement import Impingement
 
 log = logging.getLogger("effect_graph.capability")
 

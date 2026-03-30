@@ -17,7 +17,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from shared.impingement import Impingement, ImpingementType
+from agents._impingement import Impingement, ImpingementType
 
 log = logging.getLogger(__name__)
 

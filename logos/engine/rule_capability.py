@@ -14,9 +14,9 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
+from logos._impingement import Impingement
 from logos.engine.models import Action, ChangeEvent
 from logos.engine.rules import Rule
-from shared.impingement import Impingement
 
 _log = logging.getLogger(__name__)
 

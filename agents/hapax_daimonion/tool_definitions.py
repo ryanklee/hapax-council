@@ -10,12 +10,12 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 
+from agents._capability import CapabilityRegistry, ResourceTier
 from agents.hapax_daimonion.tool_capability import (
     ToolCapability,
     ToolCategory,
     ToolRegistry,
 )
-from shared.capability import CapabilityRegistry, ResourceTier
 
 log = logging.getLogger(__name__)
 

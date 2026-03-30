@@ -12,8 +12,8 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-from shared.affordance import CapabilityRecord, OperationalProperties
-from shared.impingement import Impingement
+from agents._affordance import CapabilityRecord, OperationalProperties
+from agents._impingement import Impingement
 
 log = logging.getLogger(__name__)
 

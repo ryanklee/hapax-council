@@ -13,7 +13,7 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from shared.capability import (
+from agents._capability import (
     CapabilityCategory,
     CapabilityRegistry,
     ResourceTier,

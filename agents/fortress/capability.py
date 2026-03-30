@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 
-from shared.impingement import Impingement
+from agents._impingement import Impingement
 
 log = logging.getLogger("fortress.capability")
 

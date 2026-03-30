@@ -13,8 +13,8 @@ import time as time_mod
 from dataclasses import dataclass
 from pathlib import Path
 
-from shared.affordance import CapabilityRecord, OperationalProperties
-from shared.impingement import Impingement
+from agents._affordance import CapabilityRecord, OperationalProperties
+from agents._impingement import Impingement
 
 log = logging.getLogger(__name__)
 
