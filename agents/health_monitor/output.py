@@ -136,8 +136,12 @@ async def run_fixes(report: HealthReport, yes: bool = False) -> int:
 
 async def run_fixes_v2(report: HealthReport, mode: str = "apply") -> int:
     """Run LLM-evaluated fix pipeline."""
-    from shared.fix_capabilities import load_builtin_capabilities
-    from shared.fix_capabilities.pipeline import run_fix_pipeline
+    try:
+        from shared.fix_capabilities import load_builtin_capabilities
+        from shared.fix_capabilities.pipeline import run_fix_pipeline
+    except ImportError:
+        log.warning("shared.fix_capabilities not available; run_fixes_v2 is a no-op")
+        return 0
 
     load_builtin_capabilities()
     try:
