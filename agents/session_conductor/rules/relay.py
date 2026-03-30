@@ -6,7 +6,6 @@ import logging
 import re
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any
 
 import yaml
 
@@ -26,7 +25,7 @@ _EDIT_TOOLS = frozenset({"Edit", "Write", "MultiEdit", "NotebookEdit"})
 RELAY_SYNC_INTERVAL = timedelta(minutes=30)
 
 
-def detect_pr_event(output: str) -> dict[str, Any] | None:
+def detect_pr_event(output: str) -> dict[str, object] | None:
     """Detect PR create or merge events in tool output.
 
     Returns a dict with keys 'type' ('create' | 'merge') and 'pr_number', or None.
@@ -63,10 +62,10 @@ class RelayRule(RuleBase):
     def write_relay_status(
         self,
         event_type: str = "sync",
-        pr_event: dict[str, Any] | None = None,
+        pr_event: dict[str, object] | None = None,
     ) -> None:
         """Write the current relay status YAML for peer sessions to read."""
-        status: dict[str, Any] = {
+        status: dict[str, object] = {
             "session_id": self._state.session_id,
             "role": self.role,
             "timestamp": datetime.now().isoformat(),

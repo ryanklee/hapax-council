@@ -14,7 +14,6 @@ import logging
 import signal
 import time
 from pathlib import Path
-from typing import Any
 
 from agents.fortress.bridge import DFHackBridge
 from agents.fortress.chunks import ChunkCompressor
@@ -45,7 +44,7 @@ MAINTENANCE_INTERVAL = 30.0
 IDLE_POLL_INTERVAL = 5.0
 
 
-def _atomic_write(path: Path, data: dict[str, Any]) -> None:
+def _atomic_write(path: Path, data: dict[str, object]) -> None:
     """Write JSON atomically via tmp+rename."""
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
@@ -454,7 +453,7 @@ class FortressDaemon:
         _atomic_write(GOVERNANCE_FILE, governance)
 
         # Goals state
-        goals_data: list[dict[str, Any]] = []
+        goals_data: list[dict[str, object]] = []
         for goal in DEFAULT_GOALS:
             goal_state = self._goal_planner.tracker.goal_state(goal.id)
             subgoals = []

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any
 
 from agents.fortress.chains.creativity import CreativityChain
 from agents.fortress.chains.crisis import CrisisResponderChain
@@ -59,7 +58,7 @@ class FortressGovernor:
         self._last_tick_time = t
         return {name: field.tick(t) for name, field in self._fields.items()}
 
-    def governor_state(self) -> dict[str, Any]:
+    def governor_state(self) -> dict[str, object]:
         """Return serializable snapshot of governance state."""
         return {
             "suppression": {name: field.value for name, field in self._fields.items()},

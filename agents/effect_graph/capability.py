@@ -8,7 +8,6 @@ to express urgency, calm, flow state, or distress visually.
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from shared.capability import CapabilityCategory, ResourceTier, SystemContext
 from shared.impingement import Impingement
@@ -55,7 +54,7 @@ class ShaderGraphCapability:
     def activation_cost(self) -> float:
         return 0.2  # GPU but lightweight (parameter updates, not model inference)
 
-    def activate(self, impingement: Impingement, level: float) -> dict[str, Any]:
+    def activate(self, impingement: Impingement, level: float) -> dict[str, object]:
         """Queue a visual expression request."""
         self._activation_level = level
         self._pending.append(impingement)

@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import types
 from dataclasses import dataclass, field
-from typing import Any
 
 from agents.hapax_daimonion.governance import VetoResult
 from shared.governance.consent_label import ConsentLabel
@@ -32,7 +31,7 @@ class Command:
     """
 
     action: str
-    params: dict[str, Any] = field(default_factory=dict)
+    params: dict[str, object] = field(default_factory=dict)
     trigger_time: float = 0.0
     trigger_source: str = ""
     min_watermark: float = 0.0

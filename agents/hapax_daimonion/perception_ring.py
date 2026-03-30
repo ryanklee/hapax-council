@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import time
 from collections import deque
-from typing import Any
 
 
 class PerceptionRing:
@@ -23,9 +22,9 @@ class PerceptionRing:
     """
 
     def __init__(self, maxlen: int = 20) -> None:
-        self._buffer: deque[dict[str, Any]] = deque(maxlen=maxlen)
+        self._buffer: deque[dict[str, object]] = deque(maxlen=maxlen)
 
-    def push(self, snapshot: dict[str, Any]) -> None:
+    def push(self, snapshot: dict[str, object]) -> None:
         """Add a timestamped snapshot. Normalizes timestamp to 'ts' key."""
         if "ts" not in snapshot:
             # Accept "timestamp" (from perception state writer) or generate
@@ -33,11 +32,11 @@ class PerceptionRing:
             snapshot = {**snapshot, "ts": ts}
         self._buffer.append(snapshot)
 
-    def current(self) -> dict[str, Any] | None:
+    def current(self) -> dict[str, object] | None:
         """Most recent snapshot, or None if empty."""
         return self._buffer[-1] if self._buffer else None
 
-    def window(self, seconds: float) -> list[dict[str, Any]]:
+    def window(self, seconds: float) -> list[dict[str, object]]:
         """All snapshots within the last `seconds` from the most recent."""
         if not self._buffer:
             return []
@@ -100,6 +99,6 @@ class PerceptionRing:
         return len(self._buffer)
 
     @property
-    def snapshots(self) -> list[dict[str, Any]]:
+    def snapshots(self) -> list[dict[str, object]]:
         """All snapshots oldest-first (copy)."""
         return list(self._buffer)

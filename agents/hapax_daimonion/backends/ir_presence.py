@@ -15,7 +15,6 @@ from __future__ import annotations
 import logging
 import time
 from pathlib import Path
-from typing import Any
 
 from agents.hapax_daimonion.ir_signals import read_all_ir_reports
 from agents.hapax_daimonion.perception import PerceptionTier
@@ -93,7 +92,7 @@ class IrPresenceBackend:
         for key, behavior in self._behaviors.items():
             behaviors[key] = behavior
 
-    def _fuse(self, reports: dict[str, dict[str, Any]], now: float) -> None:
+    def _fuse(self, reports: dict[str, dict[str, object]], now: float) -> None:
         """Fuse all Pi reports into behavior values."""
         if not reports:
             self._behaviors["ir_person_detected"].update(False, now)
@@ -112,7 +111,7 @@ class IrPresenceBackend:
             return
 
         # --- Person detection: any() across Pis ---
-        all_persons: list[dict[str, Any]] = []
+        all_persons: list[dict[str, object]] = []
         for report in reports.values():
             all_persons.extend(report.get("persons", []))
         person_detected = len(all_persons) > 0
@@ -165,14 +164,14 @@ class IrPresenceBackend:
         self._behaviors["ir_blink_rate"].update(bio.get("blink_rate", 0.0), now)
 
     def _pick_best_person(
-        self, reports: dict[str, dict[str, Any]]
-    ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+        self, reports: dict[str, dict[str, object]]
+    ) -> tuple[dict[str, object] | None, dict[str, object] | None]:
         """Select the highest-confidence person across all Pis.
 
         Desk Pi gets a +0.1 confidence bonus. Returns (person_dict, report_dict).
         """
-        best: dict[str, Any] | None = None
-        best_report: dict[str, Any] | None = None
+        best: dict[str, object] | None = None
+        best_report: dict[str, object] | None = None
         best_conf = -1.0
 
         for role, report in reports.items():
@@ -186,7 +185,7 @@ class IrPresenceBackend:
 
         return best, best_report
 
-    def _pick_hand_activity(self, reports: dict[str, dict[str, Any]]) -> str:
+    def _pick_hand_activity(self, reports: dict[str, dict[str, object]]) -> str:
         """Pick hand activity, preferring overhead Pi."""
         # Prefer overhead
         if "overhead" in reports:

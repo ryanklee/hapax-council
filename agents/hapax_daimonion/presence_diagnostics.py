@@ -7,7 +7,10 @@ contributions. Exposes data for logos API `/api/presence` endpoint.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from agents.hapax_daimonion.presence_engine import PresenceEngine
 
 log = logging.getLogger(__name__)
 
@@ -43,7 +46,7 @@ def format_tick_log(
     return " | ".join(parts)
 
 
-def build_presence_snapshot(engine: Any) -> dict[str, Any]:
+def build_presence_snapshot(engine: PresenceEngine) -> dict[str, object]:
     """Build a JSON-serializable snapshot of the presence engine state.
 
     Used by logos API `/api/presence` endpoint.

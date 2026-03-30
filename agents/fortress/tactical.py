@@ -10,7 +10,6 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any
 
 from agents.fortress.commands import FortressCommand
 from agents.fortress.schema import FastFortressState, FullFortressState
@@ -36,7 +35,7 @@ def encode_tactical(
     cmd: FortressCommand,
     state: FastFortressState | FullFortressState,
     ctx: TacticalContext,
-) -> list[dict[str, Any]]:
+) -> list[dict[str, object]]:
     """Translate a symbolic governance command to concrete DFHack actions.
 
     Returns a list of dicts, each suitable for DFHackBridge.send_command().
@@ -59,9 +58,9 @@ def _encode_planner(
     op: str,
     state: FastFortressState | FullFortressState,
     ctx: TacticalContext,
-) -> list[dict[str, Any]]:
+) -> list[dict[str, object]]:
     """Encode planner operations into dig + build commands."""
-    actions: list[dict[str, Any]] = []
+    actions: list[dict[str, object]] = []
 
     if op in ("expand_workshops", "expand_bedrooms", "expand_stockpiles"):
         # Dig a room if not already done
@@ -119,9 +118,9 @@ def _encode_resource(
     op: str,
     state: FastFortressState | FullFortressState,
     ctx: TacticalContext,
-) -> list[dict[str, Any]]:
+) -> list[dict[str, object]]:
     """Encode resource operations into manager order imports."""
-    actions: list[dict[str, Any]] = []
+    actions: list[dict[str, object]] = []
 
     if op == "build_workshops":
         # Resource manager escalated: needs workshops before production is possible.
@@ -142,7 +141,7 @@ def _encode_crisis(
     op: str,
     state: FastFortressState | FullFortressState,
     ctx: TacticalContext,
-) -> list[dict[str, Any]]:
+) -> list[dict[str, object]]:
     """Encode crisis operations — deferred, log only for now."""
     log.info("Tactical: crisis operation '%s' (not yet implemented)", op)
     return []

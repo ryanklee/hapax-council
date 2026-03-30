@@ -10,7 +10,6 @@ import json
 import logging
 import time
 from pathlib import Path
-from typing import Any
 
 from shared.config import HAPAX_HOME
 
@@ -20,7 +19,7 @@ IR_STATE_DIR: Path = HAPAX_HOME / "hapax-state" / "pi-noir"
 IR_ROLES: tuple[str, ...] = ("desk", "room", "overhead")
 
 
-def read_ir_signal(path: Path, max_age_seconds: float = 15.0) -> dict[str, Any] | None:
+def read_ir_signal(path: Path, max_age_seconds: float = 15.0) -> dict[str, object] | None:
     """Read a Pi NoIR JSON state file, returning None if missing or stale."""
     if not path.exists():
         return None
@@ -35,13 +34,13 @@ def read_ir_signal(path: Path, max_age_seconds: float = 15.0) -> dict[str, Any] 
 
 def read_all_ir_reports(
     state_dir: Path | None = None, max_age_seconds: float = 15.0
-) -> dict[str, dict[str, Any]]:
+) -> dict[str, dict[str, object]]:
     """Read all Pi NoIR state files, keyed by role.
 
     Returns only fresh, valid reports. Missing or stale files are omitted.
     """
     d = state_dir or IR_STATE_DIR
-    reports: dict[str, dict[str, Any]] = {}
+    reports: dict[str, dict[str, object]] = {}
     for role in IR_ROLES:
         data = read_ir_signal(d / f"{role}.json", max_age_seconds=max_age_seconds)
         if data is not None:

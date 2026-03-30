@@ -12,7 +12,6 @@ import logging
 import time as time_mod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from shared.affordance import CapabilityRecord, OperationalProperties
 from shared.impingement import Impingement
@@ -259,7 +258,7 @@ class VisualChainCapability:
 
         return 0.0
 
-    def activate(self, impingement: Impingement, level: float) -> dict[str, Any]:
+    def activate(self, impingement: Impingement, level: float) -> dict[str, object]:
         """Activate visual chain — sets activation level for cascade tracking."""
         self._activation_level = level
         log.info(

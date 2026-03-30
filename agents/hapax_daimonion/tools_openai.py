@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 class _FakeParams:
     """Shim that mimics Pipecat's handler params interface."""
 
-    arguments: dict[str, Any]
+    arguments: dict[str, object]
     _result: str = ""
 
     async def result_callback(self, value: Any) -> None:

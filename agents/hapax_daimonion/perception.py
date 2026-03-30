@@ -353,6 +353,15 @@ class PerceptionEngine:
         backend.start()
         log.info("Registered perception backend: %s (provides: %s)", backend.name, backend.provides)
 
+    def stop(self) -> None:
+        """Stop all registered backends and release their subprocesses."""
+        for name, backend in self._backends.items():
+            try:
+                backend.stop()
+                log.info("Stopped perception backend: %s", name)
+            except Exception:
+                log.warning("Failed to stop backend %s", name, exc_info=True)
+
     def replace_backend(self, backend: PerceptionBackend) -> None:
         """Replace a backend by name. New backend must be available."""
         if not backend.available():

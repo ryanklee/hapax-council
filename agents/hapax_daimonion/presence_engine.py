@@ -82,7 +82,7 @@ class PresenceEngine:
         self._b_state: Behavior[str] = Behavior("UNCERTAIN")
 
         # Diagnostics ring buffer
-        self._history: deque[dict[str, Any]] = deque(maxlen=100)
+        self._history: deque[dict[str, object]] = deque(maxlen=100)
         self._event_log: Any | None = None
 
     def set_event_log(self, event_log: Any) -> None:
@@ -325,5 +325,5 @@ class PresenceEngine:
         return self._last_posterior
 
     @property
-    def history(self) -> list[dict[str, Any]]:
+    def history(self) -> list[dict[str, object]]:
         return list(self._history)

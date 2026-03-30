@@ -10,10 +10,14 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from logos.interview import InterviewState
 
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter
@@ -748,10 +752,10 @@ class ChatSession:
     last_turn_tokens: int = 0
     generating: bool = False
     mode: Literal["chat", "interview"] = "chat"
-    interview_state: Any = field(default=None, repr=False)  # InterviewState | None
+    interview_state: InterviewState | None = field(default=None, repr=False)
 
     _agent: Agent[ChatDeps, str] | None = field(default=None, repr=False)
-    _interview_agent: Any | None = field(default=None, repr=False)
+    _interview_agent: Agent | None = field(default=None, repr=False)
 
     @property
     def agent(self) -> Agent[ChatDeps, str]:
@@ -810,9 +814,9 @@ class ChatSession:
     async def start_interview(
         self,
         *,
-        on_text_delta: Any | None = None,
-        on_tool_call: Any | None = None,
-        on_plan_ready: Any | None = None,
+        on_text_delta: Callable[[str], None] | None = None,
+        on_tool_call: Callable[[str, str], None] | None = None,
+        on_plan_ready: Callable[[], None] | None = None,
     ) -> str:
         """Analyze profile, generate plan, switch to interview mode.
 
@@ -917,8 +921,8 @@ class ChatSession:
         self,
         prompt: str,
         *,
-        on_text_delta: Any | None = None,
-        on_tool_call: Any | None = None,
+        on_text_delta: Callable[[str], None] | None = None,
+        on_tool_call: Callable[[str, str], None] | None = None,
     ) -> str:
         """Send a message and stream the response.
 
@@ -1053,8 +1057,8 @@ class ChatSession:
         self,
         prompt: str,
         *,
-        on_text_delta: Any | None = None,
-        on_tool_call: Any | None = None,
+        on_text_delta: Callable[[str], None] | None = None,
+        on_tool_call: Callable[[str, str], None] | None = None,
     ) -> str:
         """Send a message through the interview agent.
 
@@ -1126,7 +1130,7 @@ class ChatSession:
     def save(self, path: Path) -> None:
         """Save session state to a JSON file."""
         path.parent.mkdir(parents=True, exist_ok=True)
-        data: dict[str, Any] = {
+        data: dict[str, object] = {
             "model_alias": self.model_alias,
             "conversation_summary": self.conversation_summary,
             "total_tokens": self.total_tokens,

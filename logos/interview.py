@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 
 _log = logging.getLogger(__name__)
 
@@ -109,12 +109,12 @@ class InterviewState(BaseModel):
 class ProfileAnalysis:
     """Results of deterministic profile gap analysis."""
 
-    sparse_dimensions: list[dict[str, Any]] = field(default_factory=list)
+    sparse_dimensions: list[dict[str, object]] = field(default_factory=list)
     missing_dimensions: list[str] = field(default_factory=list)
-    low_confidence_clusters: list[dict[str, Any]] = field(default_factory=list)
-    goal_gaps: list[dict[str, Any]] = field(default_factory=list)
+    low_confidence_clusters: list[dict[str, object]] = field(default_factory=list)
+    goal_gaps: list[dict[str, object]] = field(default_factory=list)
     total_facts: int = 0
-    dimension_stats: dict[str, dict[str, Any]] = field(default_factory=dict)
+    dimension_stats: dict[str, dict[str, object]] = field(default_factory=dict)
     neurocognitive_gap: bool = False
 
 

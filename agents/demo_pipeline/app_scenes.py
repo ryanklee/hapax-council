@@ -13,7 +13,6 @@ import shutil
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
 from urllib.parse import urlparse
 
 from agents.demo_models import DemoScript
@@ -197,9 +196,9 @@ def _slugify(text: str) -> str:
 
 def _infer_actions(
     scene_title: str, scene_narration: str, scene_url: str | None
-) -> list[dict[str, Any]]:
+) -> list[dict[str, object]]:
     """Infer terrain actions from scene content (title + narration + URL)."""
-    actions: list[dict[str, Any]] = []
+    actions: list[dict[str, object]] = []
 
     # Reset at start of scene
     actions.append({"at": 0.3, "calls": RESET_ACTIONS, "label": "reset"})
@@ -262,7 +261,7 @@ def convert_to_app_scenes(
             on_progress(msg)
         log.info(msg)
 
-    scenes: list[dict[str, Any]] = []
+    scenes: list[dict[str, object]] = []
 
     if script.intro_narration:
         scenes.append(

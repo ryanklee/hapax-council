@@ -15,7 +15,12 @@ import json
 import logging
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from agents.effect_graph.capability import ShaderGraphCapability
+    from agents.visual_chain import VisualChainCapability
+    from shared.impingement import Impingement
 
 log = logging.getLogger("reverie.actuation")
 
@@ -58,11 +63,11 @@ class ReverieActuationLoop:
         self._last_salience = 0.0
 
     @property
-    def shader_capability(self) -> Any:
+    def shader_capability(self) -> ShaderGraphCapability:
         return self._shader_cap
 
     @property
-    def visual_chain(self) -> Any:
+    def visual_chain(self) -> VisualChainCapability:
         return self._visual_chain
 
     async def tick(self) -> None:
@@ -127,7 +132,7 @@ class ReverieActuationLoop:
         # 9. Write merged uniforms
         self._write_uniforms(imagination, stimmung)
 
-    def _update_trace(self, imagination: dict[str, Any] | None, dt: float) -> None:
+    def _update_trace(self, imagination: dict[str, object] | None, dt: float) -> None:
         """Update trace state for dwelling/trace effect (Bachelard Amendment 2).
 
         When content salience drops (fading out), the trace activates at the
@@ -156,7 +161,7 @@ class ReverieActuationLoop:
 
         self._last_salience = current_salience
 
-    def _apply_shader_impingement(self, imp: Any) -> None:
+    def _apply_shader_impingement(self, imp: Impingement) -> None:
         """Translate a shader graph impingement into visual chain activations."""
         content = imp.content or {}
         strength = imp.strength
@@ -183,8 +188,8 @@ class ReverieActuationLoop:
 
     def _write_uniforms(
         self,
-        imagination: dict[str, Any] | None,
-        stimmung: dict[str, Any] | None,
+        imagination: dict[str, object] | None,
+        stimmung: dict[str, object] | None,
     ) -> None:
         """Compute and write merged uniforms to pipeline/uniforms.json."""
         material = "water"
@@ -199,7 +204,7 @@ class ReverieActuationLoop:
         chain_params = self._visual_chain.compute_param_deltas()
 
         # Build uniforms dict consumed by Rust DynamicPipeline
-        uniforms: dict[str, Any] = {
+        uniforms: dict[str, object] = {
             "custom": [material_val],
             "slot_opacities": [salience, 0.0, 0.0, 0.0],
         }

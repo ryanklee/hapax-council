@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import time
 from collections import deque
-from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -56,10 +55,10 @@ class MinuteBuffer:
 
     def __init__(self, maxlen: int = 30) -> None:
         self._summaries: deque[MinuteSummary] = deque(maxlen=maxlen)
-        self._current_minute: list[dict[str, Any]] = []
+        self._current_minute: list[dict[str, object]] = []
         self._minute_start: float = 0.0
 
-    def tick(self, snapshot: dict[str, Any]) -> MinuteSummary | None:
+    def tick(self, snapshot: dict[str, object]) -> MinuteSummary | None:
         """Feed a perception snapshot. Returns summary when a minute closes."""
         ts = snapshot.get("timestamp", snapshot.get("ts", time.time()))
 
@@ -302,7 +301,7 @@ class MultiScaleAggregator:
         self._minute_buffer = MinuteBuffer()
         self._session_buffer = SessionBuffer()
 
-    def tick(self, snapshot: dict[str, Any]) -> MinuteSummary | None:
+    def tick(self, snapshot: dict[str, object]) -> MinuteSummary | None:
         """Feed a perception snapshot through all scales.
 
         Returns the MinuteSummary when a minute boundary is crossed, None otherwise.

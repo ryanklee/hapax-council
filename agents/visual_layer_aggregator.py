@@ -20,7 +20,6 @@ import os
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 import httpx
 
@@ -565,7 +564,7 @@ def _map_scene_inventory(data: dict) -> list[ClassificationDetection]:
 
         # Person enrichments: for persons on any enrichment-capable camera, not suppressed
         # Prefer per-entity enrichments from inventory, fall back to global perception-state
-        enrichment_kwargs: dict[str, Any] = {}
+        enrichment_kwargs: dict[str, object] = {}
         if is_person and is_enrichment_cam and not consent_suppressed:
             for field_name in (
                 "gaze_direction",
@@ -603,7 +602,7 @@ def _map_scene_inventory(data: dict) -> list[ClassificationDetection]:
                     )
 
         # Temporal delta: compute from raw sightings with timestamps
-        temporal_kwargs: dict[str, Any] = {}
+        temporal_kwargs: dict[str, object] = {}
         raw_sightings = obj.get("raw_sightings", [])
         first_seen_ts = obj.get("first_seen", 0.0)
         last_seen_ts = obj.get("last_seen", 0.0)
@@ -853,7 +852,7 @@ class VisualLayerAggregator:
 
         # Adaptive cadence state (Phase 5)
         self._prev_display_state: str = "ambient"
-        self._last_perception_data: dict[str, Any] = {}
+        self._last_perception_data: dict[str, object] = {}
         self._ambient_fetch_done: bool = False
         self._epoch: int = 0
 
@@ -1835,7 +1834,7 @@ class VisualLayerAggregator:
             min(1.0, max(0.0, state.ambient_params.brightness + nudge.brightness_offset)), 3
         )
 
-    def _apply_biometric_modulation(self, params: Any) -> Any:
+    def _apply_biometric_modulation(self, params: AmbientParams) -> AmbientParams:
         """Modulate ambient params based on biometric state (Batch E).
 
         Modulate, don't comment. Changes visual texture so the operator's

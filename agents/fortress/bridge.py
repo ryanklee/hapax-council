@@ -11,7 +11,6 @@ import json
 import logging
 import time
 import uuid
-from typing import Any
 
 from agents.fortress.config import BridgeConfig
 from agents.fortress.schema import (
@@ -93,19 +92,19 @@ class DFHackBridge:
             log.warning("Failed to read fortress state: %s", exc)
             return self._last_state
 
-    def send_command(self, action: str, **params: Any) -> str:
+    def send_command(self, action: str, **params: object) -> str:
         """Write a command for DFHack to execute.
 
         Returns the command ID for result correlation.
         """
         cmd_id = uuid.uuid4().hex[:12]
-        command: dict[str, Any] = {"id": cmd_id, "action": action, **params}
+        command: dict[str, object] = {"id": cmd_id, "action": action, **params}
 
         commands_path = self._config.commands_path
         tmp_path = commands_path.with_suffix(".tmp")
 
         # Read existing commands (append semantics)
-        existing: list[dict[str, Any]] = []
+        existing: list[dict[str, object]] = []
         if commands_path.exists():
             try:
                 existing = json.loads(commands_path.read_text())
@@ -122,7 +121,7 @@ class DFHackBridge:
         log.debug("Sent command %s: %s", cmd_id, action)
         return cmd_id
 
-    def poll_results(self) -> dict[str, Any]:
+    def poll_results(self) -> dict[str, object]:
         """Read and clear pending command results.
 
         Returns dict keyed by command ID with result payloads.
@@ -133,7 +132,7 @@ class DFHackBridge:
 
         try:
             raw = results_path.read_text()
-            results: dict[str, Any] = json.loads(raw)
+            results: dict[str, object] = json.loads(raw)
             results_path.unlink(missing_ok=True)
             return results
         except (json.JSONDecodeError, OSError) as exc:

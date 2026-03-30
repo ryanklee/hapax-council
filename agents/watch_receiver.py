@@ -20,7 +20,6 @@ import time
 from collections import deque
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
@@ -122,7 +121,7 @@ class PhoneContextPayload(BaseModel):
 # ── Helpers ──────────────────────────────────────────────────────────────
 
 
-def _atomic_write(path: Path, data: dict[str, Any]) -> None:
+def _atomic_write(path: Path, data: dict[str, object]) -> None:
     """Write JSON atomically via tmp file + rename."""
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_path = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp", prefix=f".{path.stem}_")
@@ -161,7 +160,7 @@ def _prune_window(window: deque[tuple[float, float]], now: float) -> None:
         window.popleft()
 
 
-def _window_stats(window: deque[tuple[float, float]]) -> dict[str, Any]:
+def _window_stats(window: deque[tuple[float, float]]) -> dict[str, object]:
     """Compute min/max/mean/readings from a rolling window."""
     if not window:
         return {"min": 0, "max": 0, "mean": 0, "readings": 0}
@@ -257,7 +256,7 @@ def _handle_activity(reading: SensorReading, source: str = "pixel_watch_4") -> N
     )
 
 
-_HANDLERS: dict[str, Any] = {
+_HANDLERS: dict[str, object] = {
     "heart_rate": lambda r, now, src: _handle_heart_rate(r, now, src),
     "hrv": lambda r, now, src: _handle_hrv(r, now, src),
     "eda": lambda r, now, src: _handle_eda(r, src),
@@ -326,7 +325,7 @@ def create_app() -> FastAPI:
         return {"status": "ok", "readings_processed": str(len(payload.readings))}
 
     @_app.get("/watch/status")
-    async def watch_status() -> dict[str, Any]:
+    async def watch_status() -> dict[str, object]:
         conn_file = _get_watch_state_dir() / "connection.json"
         conn = {}
         if conn_file.exists():

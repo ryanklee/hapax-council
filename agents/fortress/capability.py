@@ -8,7 +8,6 @@ triggers immediate governance evaluation (bypassing the normal tick cycle).
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from shared.impingement import Impingement
 
@@ -83,7 +82,7 @@ class FortressGovernanceCapability:
 
         return 0.0
 
-    def activate(self, impingement: Impingement, level: float) -> dict[str, Any]:
+    def activate(self, impingement: Impingement, level: float) -> dict[str, object]:
         """Activate fortress governance in response to impingement.
 
         Returns a dict with the impingement details for the governance

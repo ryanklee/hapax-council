@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any
 
 from agents.session_conductor.topology import TopologyConfig
 
@@ -18,12 +17,12 @@ class HookEvent:
 
     event_type: str
     tool_name: str
-    tool_input: dict[str, Any]
+    tool_input: dict[str, object]
     session_id: str
     user_message: str | None = None
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> HookEvent:
+    def from_dict(cls, d: dict[str, object]) -> HookEvent:
         return cls(
             event_type=d.get("event_type", ""),
             tool_name=d.get("tool_name", ""),
@@ -39,10 +38,10 @@ class HookResponse:
 
     action: str  # "allow" | "block" | "rewrite"
     message: str | None = None
-    rewrite: dict[str, Any] | None = None
+    rewrite: dict[str, object] | None = None
 
-    def to_dict(self) -> dict[str, Any]:
-        result: dict[str, Any] = {"action": self.action}
+    def to_dict(self) -> dict[str, object]:
+        result: dict[str, object] = {"action": self.action}
         if self.message is not None:
             result["message"] = self.message
         if self.rewrite is not None:
@@ -86,7 +85,7 @@ class RuleRegistry:
 
     def process_pre_tool_use(self, event: HookEvent) -> HookResponse | None:
         """Block wins over rewrite; rewrites merge. Fail-open on rule exceptions."""
-        merged_rewrite: dict[str, Any] | None = None
+        merged_rewrite: dict[str, object] | None = None
         merged_message: str | None = None
         for rule in self._rules:
             try:

@@ -13,7 +13,6 @@ import threading
 from collections.abc import Awaitable, Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 from watchdog.events import (
     FileCreatedEvent,
@@ -136,10 +135,10 @@ class DirectoryWatcher:
         # Runtime
         self._queue: asyncio.Queue | None = None
         self._consumer_task: asyncio.Task | None = None
-        self._observer: Any = None
+        self._observer: Observer | PollingObserver | None = None
         self._handler: _EventHandler | None = None
 
-    def _create_observer(self) -> Any:
+    def _create_observer(self) -> Observer | PollingObserver:
         if os.environ.get("ENGINE_POLLING_OBSERVER") == "1":
             return PollingObserver()
         return Observer()

@@ -10,7 +10,6 @@ import json
 from dataclasses import asdict
 from datetime import UTC
 from pathlib import Path
-from typing import Any
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
@@ -25,7 +24,7 @@ def _dict_factory(fields: list[tuple]) -> dict:
     return {k: str(v) if isinstance(v, Path) else v for k, v in fields}
 
 
-def _to_dict(obj: Any) -> Any:
+def _to_dict(obj: object) -> object:
     """Convert a dataclass (or list of dataclasses) to a dict."""
     if obj is None:
         return None
@@ -38,12 +37,12 @@ def _to_dict(obj: Any) -> Any:
     return obj
 
 
-def _fast_response(data: Any) -> JSONResponse:
+def _fast_response(data: object) -> JSONResponse:
     """Return JSON response with X-Cache-Age from fast refresh cadence."""
     return JSONResponse(content=data, headers={"X-Cache-Age": str(cache.fast_cache_age())})
 
 
-def _slow_response(data: Any) -> JSONResponse:
+def _slow_response(data: object) -> JSONResponse:
     """Return JSON response with X-Cache-Age from slow refresh cadence."""
     return JSONResponse(content=data, headers={"X-Cache-Age": str(cache.slow_cache_age())})
 

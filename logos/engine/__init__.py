@@ -13,7 +13,6 @@ from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 from logos._config import AI_AGENTS_DIR, PROFILES_DIR, RAG_SOURCES_DIR
 from logos.engine.executor import PhasedExecutor
@@ -255,7 +254,7 @@ class ReactiveEngine:
         return self._registry
 
     @property
-    def status(self) -> dict[str, Any]:
+    def status(self) -> dict[str, object]:
         """Current engine status."""
         uptime = time.monotonic() - self._start_time if self._start_time else 0
         return {

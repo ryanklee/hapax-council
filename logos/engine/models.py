@@ -7,7 +7,6 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 # Service path patterns replicated from agents/ingest.py:403-415
 # to avoid importing heavy ingest dependencies.
@@ -63,7 +62,7 @@ class Action:
     """A unit of work produced by a rule."""
 
     name: str
-    handler: Callable[..., Awaitable[Any]]
+    handler: Callable[..., Awaitable[object]]
     args: dict = field(default_factory=dict)
     priority: int = 50
     phase: int = 0
@@ -75,7 +74,7 @@ class ActionPlan:
     """Accumulates actions from rule evaluation and tracks execution results."""
 
     actions: list[Action] = field(default_factory=list)
-    results: dict[str, Any] = field(default_factory=dict)
+    results: dict[str, object] = field(default_factory=dict)
     errors: dict[str, str] = field(default_factory=dict)
     skipped: set[str] = field(default_factory=set)
 
@@ -98,4 +97,4 @@ class DeliveryItem:
     message: str
     source_action: str
     timestamp: datetime = field(default_factory=datetime.now)
-    artifacts: dict[str, Any] = field(default_factory=dict)
+    artifacts: dict[str, object] = field(default_factory=dict)

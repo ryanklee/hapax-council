@@ -14,7 +14,6 @@ import io
 import math
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
 
 
 @dataclass(frozen=True)
@@ -33,9 +32,9 @@ class BlueprintTemplate:
     name: str
     category: str  # "residential", "industrial", "defense", "infrastructure", "agriculture"
     description: str
-    parameters: dict[str, Any] = field(default_factory=dict)
+    parameters: dict[str, object] = field(default_factory=dict)
 
-    def generate(self, **params: Any) -> list[BlueprintPhase]:
+    def generate(self, **params: object) -> list[BlueprintPhase]:
         """Override in subclasses or use registry functions."""
         raise NotImplementedError
 
@@ -49,7 +48,7 @@ class BlueprintRegistry:
     def register(self, name: str, category: str, fn: Callable[..., list[BlueprintPhase]]) -> None:
         self._templates[name] = (category, fn)
 
-    def generate(self, name: str, **params: Any) -> list[BlueprintPhase]:
+    def generate(self, name: str, **params: object) -> list[BlueprintPhase]:
         if name not in self._templates:
             raise ValueError(f"Unknown template: {name}")
         _, fn = self._templates[name]
@@ -587,7 +586,7 @@ def _register_defaults() -> None:
 _register_defaults()
 
 
-def generate_blueprint(template_name: str, **params: Any) -> str:
+def generate_blueprint(template_name: str, **params: object) -> str:
     """Generate a quickfort CSV string from a named template."""
     phases = _registry.generate(template_name, **params)
     return phases_to_csv(phases)

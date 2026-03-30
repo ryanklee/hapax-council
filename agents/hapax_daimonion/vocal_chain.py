@@ -258,7 +258,7 @@ class VocalChainCapability:
 
         return 0.0
 
-    def activate(self, impingement: Impingement, level: float) -> dict[str, Any]:
+    def activate(self, impingement: Impingement, level: float) -> dict[str, object]:
         """Activate vocal chain — sets activation level for cascade tracking."""
         self._activation_level = level
         log.info(

@@ -11,8 +11,6 @@ temporal thickness rather than flat snapshots.
 
 from __future__ import annotations
 
-from typing import Any
-
 from pydantic import BaseModel, Field
 
 from agents.hapax_daimonion.perception_ring import PerceptionRing
@@ -56,7 +54,7 @@ class TemporalBands(BaseModel, frozen=True):
     """Complete temporal structure: retention → impression → protention."""
 
     retention: list[RetentionEntry] = Field(default_factory=list)
-    impression: dict[str, Any] = Field(default_factory=dict)
+    impression: dict[str, object] = Field(default_factory=dict)
     protention: list[ProtentionEntry] = Field(default_factory=list)
     surprises: list[SurpriseField] = Field(default_factory=list)
 
@@ -202,7 +200,7 @@ class TemporalBandFormatter:
 
         return entries
 
-    def _build_impression(self, current: dict[str, Any]) -> dict[str, Any]:
+    def _build_impression(self, current: dict[str, object]) -> dict[str, object]:
         """Extract key fields from the current snapshot."""
         flow_score = current.get("flow_score", 0.0)
         if flow_score >= 0.6:
@@ -224,7 +222,7 @@ class TemporalBandFormatter:
         else:
             presence = ""
 
-        impression: dict[str, Any] = {
+        impression: dict[str, object] = {
             "flow_state": flow_state,
             "flow_score": round(flow_score, 2),
             "activity": current.get("production_activity", ""),
@@ -240,7 +238,7 @@ class TemporalBandFormatter:
         return impression
 
     def _compute_surprise(
-        self, current: dict[str, Any], last_protention: list[ProtentionEntry]
+        self, current: dict[str, object], last_protention: list[ProtentionEntry]
     ) -> list[SurpriseField]:
         """Compare current state against previous protention predictions.
 
@@ -485,7 +483,7 @@ class TemporalBandFormatter:
 
         return predictions
 
-    def _summarize_snapshot(self, snapshot: dict[str, Any], flow_state: str) -> str:
+    def _summarize_snapshot(self, snapshot: dict[str, object], flow_state: str) -> str:
         """One-line human-readable summary of a past snapshot."""
         parts: list[str] = []
 

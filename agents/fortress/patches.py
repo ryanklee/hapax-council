@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any
 
 from agents.fortress.schema import FullFortressState
 
@@ -29,7 +28,7 @@ class Patch:
     y1: int
     x2: int
     y2: int
-    contents: dict[str, Any] = field(default_factory=dict)
+    contents: dict[str, object] = field(default_factory=dict)
 
     @property
     def width(self) -> int:

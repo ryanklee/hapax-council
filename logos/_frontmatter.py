@@ -6,7 +6,6 @@ Copied from shared/frontmatter.py to dissolve the shared module dependency.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 import yaml
 
@@ -48,7 +47,7 @@ def parse_frontmatter(path_or_text: Path | str) -> tuple[dict, str]:
         return {}, text
 
 
-def extract_consent_label(frontmatter: dict[str, Any]) -> ConsentLabel | None:
+def extract_consent_label(frontmatter: dict[str, object]) -> ConsentLabel | None:
     """Extract a ConsentLabel from frontmatter metadata (DD-11)."""
     raw = frontmatter.get("consent_label")
     if raw is None:
@@ -73,7 +72,7 @@ def extract_consent_label(frontmatter: dict[str, Any]) -> ConsentLabel | None:
     return ConsentLabel(frozenset(policies))
 
 
-def extract_provenance(frontmatter: dict[str, Any]) -> frozenset[str]:
+def extract_provenance(frontmatter: dict[str, object]) -> frozenset[str]:
     """Extract why-provenance contract IDs from frontmatter (DD-20)."""
     raw = frontmatter.get("provenance", [])
     if isinstance(raw, list):

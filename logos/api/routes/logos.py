@@ -10,7 +10,6 @@ import json
 import logging
 import time
 from pathlib import Path
-from typing import Any
 
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
@@ -98,7 +97,7 @@ class UiDirective(BaseModel):
 
 
 @router.post("/directive")
-async def post_directive(directive: UiDirective) -> dict[str, Any]:
+async def post_directive(directive: UiDirective) -> dict[str, object]:
     """Accept a UI directive from an agent and write it to shm for the Tauri app."""
     DIRECTIVE_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -113,6 +112,6 @@ async def post_directive(directive: UiDirective) -> dict[str, Any]:
 
 
 @router.get("/directive/schema")
-async def get_directive_schema() -> dict[str, Any]:
+async def get_directive_schema() -> dict[str, object]:
     """Return the directive JSON schema for agent consumption."""
     return UiDirective.model_json_schema()
