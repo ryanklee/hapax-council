@@ -360,7 +360,7 @@ async def select_effect(req: EffectSelectRequest):
         # Read previous preset for trace context
         prev = ""
         try:
-            from shared.telemetry import trace_compositor_effect
+            from logos._telemetry import trace_compositor_effect
 
             prev_file = Path("/dev/shm/hapax-compositor/fx-current.txt")
             if prev_file.exists():

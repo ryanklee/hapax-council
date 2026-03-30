@@ -503,7 +503,7 @@ def _collect_precedent_nudges(nudges: list[Nudge]) -> None:
 def _collect_rag_quality_nudges(nudges: list[Nudge]) -> None:
     """G3: Surface knowledge gaps from RAG zero-result queries."""
     try:
-        from shared.langfuse_client import query_zero_result_spans
+        from logos._langfuse_client import query_zero_result_spans
 
         zero_results = query_zero_result_spans(hours=24)
         if not zero_results:

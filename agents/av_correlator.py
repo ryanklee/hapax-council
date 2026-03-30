@@ -50,7 +50,7 @@ CACHE_DIR = Path.home() / ".cache" / "av-correlator"
 STATE_FILE = CACHE_DIR / "state.json"
 CHANGES_LOG = CACHE_DIR / "changes.jsonl"
 
-from shared.cameras import CAMERA_ROLES
+from agents._cameras import CAMERA_ROLES
 
 # Audio segments are 15 minutes
 AUDIO_SEGMENT_DURATION = timedelta(minutes=15)

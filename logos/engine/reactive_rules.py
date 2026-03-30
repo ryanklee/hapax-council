@@ -20,10 +20,10 @@ import asyncio
 import logging
 import time
 
+from logos._telemetry import hapax_event
 from logos.engine.models import Action, ChangeEvent
 from logos.engine.rules import Rule
 from shared.governance.carrier import CarrierRegistry
-from shared.telemetry import hapax_event
 
 _log = logging.getLogger(__name__)
 

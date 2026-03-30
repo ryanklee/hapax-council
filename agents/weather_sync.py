@@ -155,7 +155,7 @@ def sync() -> bool:
         # Sensor protocol — write state + impingement
         import time
 
-        from shared.sensor_protocol import emit_sensor_impingement, write_sensor_state
+        from agents._sensor_protocol import emit_sensor_impingement, write_sensor_state
 
         current = data.get("current", {})
         write_sensor_state(

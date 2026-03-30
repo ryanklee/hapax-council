@@ -394,7 +394,7 @@ def _build_usage_map() -> dict[str, str]:
     """Build component-key → usage description map from Langfuse data."""
     with _tracer.start_as_current_span("scout.build_usage_map"):
         try:
-            from shared.langfuse_client import is_available, langfuse_get
+            from agents._langfuse_client import is_available, langfuse_get
         except ImportError:
             return {}
 

@@ -749,7 +749,7 @@ def _transcribe_segment(waveform: np.ndarray, sr: int, start: float, end: float)
     end_idx = int(end * sr)
     chunk = waveform[start_idx:end_idx]
 
-    from shared.tmp_wav import tmp_wav_path
+    from agents._tmp_wav import tmp_wav_path
 
     tmp_path = tmp_wav_path()
     try:
@@ -777,7 +777,7 @@ def _diarize_segment(waveform: np.ndarray, sr: int, start: float, end: float) ->
     end_idx = int(end * sr)
     chunk = waveform[start_idx:end_idx]
 
-    from shared.tmp_wav import tmp_wav_path
+    from agents._tmp_wav import tmp_wav_path
 
     tmp_path = tmp_wav_path()
     try:

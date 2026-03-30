@@ -308,7 +308,7 @@ def create_app() -> FastAPI:
                     "Unknown sensor type: %s from device %s", reading.type, payload.device_id
                 )
         # Sensor protocol — write state + impingement for biometrics
-        from shared.sensor_protocol import emit_sensor_impingement, write_sensor_state
+        from agents._sensor_protocol import emit_sensor_impingement, write_sensor_state
 
         sensor_types = [r.type for r in payload.readings]
         write_sensor_state(

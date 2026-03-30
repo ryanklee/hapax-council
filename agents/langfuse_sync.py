@@ -816,7 +816,7 @@ def run_full_sync() -> None:
     _write_profile_facts(state)
 
     # Sensor protocol — write state + impingement
-    from shared.sensor_protocol import emit_sensor_impingement, write_sensor_state
+    from agents._sensor_protocol import emit_sensor_impingement, write_sensor_state
 
     write_sensor_state(
         "langfuse",
@@ -854,7 +854,7 @@ def run_auto() -> None:
     _write_profile_facts(state)
 
     # Sensor protocol — write state + impingement on changes
-    from shared.sensor_protocol import emit_sensor_impingement, write_sensor_state
+    from agents._sensor_protocol import emit_sensor_impingement, write_sensor_state
 
     write_sensor_state(
         "langfuse",

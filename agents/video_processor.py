@@ -65,7 +65,7 @@ STATE_FILE = CACHE_DIR / "state.json"
 CHANGES_LOG = CACHE_DIR / "changes.jsonl"
 PERCEPTION_MINUTES_PATH = Path.home() / ".cache" / "hapax-daimonion" / "perception-minutes.jsonl"
 
-from shared.cameras import CAMERA_ROLES
+from agents._cameras import CAMERA_ROLES
 
 # Number of keyframes to extract per segment for temporal coverage
 NUM_KEYFRAMES = 5

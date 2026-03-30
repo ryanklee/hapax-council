@@ -122,7 +122,7 @@ def measure_token_cost_overhead(lookback_days: int = 14) -> dict:
     (axiom_gate, consent_check, etc.) or metadata flags.
     """
     try:
-        from shared.langfuse_client import langfuse_get
+        from agents._langfuse_client import langfuse_get
     except ImportError:
         return {"available": False, "reason": "langfuse_client not available"}
 

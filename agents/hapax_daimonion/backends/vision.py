@@ -860,7 +860,7 @@ class VisionBackend:
         """Detect hands in overhead frame and map centroids to instrument zones."""
         import mediapipe as mp
 
-        from shared.cameras import point_in_zone
+        from agents._cameras import point_in_zone
 
         if not getattr(self, "_gesture_recognizer", None):
             self._run_hand_gesture(frame)  # triggers lazy init
@@ -1827,7 +1827,7 @@ class VisionBackend:
 
                 # Route per-person enrichments to SceneInventory entities
                 # Any Brio-class camera can enrich persons (multi-perspective)
-                from shared.cameras import can_enrich_persons as _can_enrich
+                from agents._cameras import can_enrich_persons as _can_enrich
 
                 if _can_enrich(role) and hasattr(self, "_inventory"):
                     try:

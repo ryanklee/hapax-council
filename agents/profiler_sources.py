@@ -777,13 +777,13 @@ def read_decisions_log(path: Path) -> list[SourceChunk]:
 
 # ── Langfuse telemetry reader ────────────────────────────────────────────
 
-from shared.langfuse_client import (
+from agents._langfuse_client import (
     LANGFUSE_PK as _LANGFUSE_PK,
 )
-from shared.langfuse_client import (
+from agents._langfuse_client import (
     is_available as _check_langfuse_available,
 )
-from shared.langfuse_client import (
+from agents._langfuse_client import (
     langfuse_get as _langfuse_get,
 )
 

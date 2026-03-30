@@ -189,7 +189,7 @@ async def _gather_introspect(partial: bool = False) -> str:
 def _gather_langfuse_metrics() -> str:
     """Query Langfuse for model usage and cost metrics."""
     try:
-        from shared.langfuse_client import langfuse_get
+        from agents._langfuse_client import langfuse_get
 
         # Try daily metrics endpoint
         data = langfuse_get("/metrics/daily")

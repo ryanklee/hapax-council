@@ -179,8 +179,8 @@ class ActivityReport(BaseModel):
 
 # ── Langfuse collector ───────────────────────────────────────────────────────
 
-from shared.langfuse_client import LANGFUSE_PK
-from shared.langfuse_client import langfuse_get as _langfuse_api_raw
+from agents._langfuse_client import LANGFUSE_PK
+from agents._langfuse_client import langfuse_get as _langfuse_api_raw
 
 MAX_PAGES = 20  # Safety limit on Langfuse pagination
 

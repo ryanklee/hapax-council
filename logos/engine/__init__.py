@@ -15,14 +15,14 @@ from datetime import datetime
 from pathlib import Path
 
 from logos._config import AI_AGENTS_DIR, PROFILES_DIR, RAG_SOURCES_DIR
+from logos._telemetry import hapax_event, hapax_interaction
+from logos._working_mode import WorkingMode, get_working_mode
 from logos.engine.executor import PhasedExecutor
 from logos.engine.models import ActionPlan as ActionPlan
 from logos.engine.models import ChangeEvent
 from logos.engine.rules import RuleRegistry, evaluate_rules
 from logos.engine.watcher import DirectoryWatcher
 from shared.stimmung import Stance
-from shared.telemetry import hapax_event, hapax_interaction
-from shared.working_mode import WorkingMode, get_working_mode
 
 # ── Persistent Event Counters (WS2) ─────────────────────────────────────────
 
@@ -403,7 +403,7 @@ class ReactiveEngine:
             event.doc_type,
         )
 
-        from shared.telemetry import hapax_score, hapax_span, hapax_trace
+        from logos._telemetry import hapax_score, hapax_span, hapax_trace
 
         with hapax_trace(
             "engine",

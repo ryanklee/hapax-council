@@ -6,7 +6,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
-from shared.langfuse_client import LANGFUSE_PK, langfuse_get
+from logos._langfuse_client import LANGFUSE_PK, langfuse_get
 
 log = logging.getLogger("logos.data.cost")
 

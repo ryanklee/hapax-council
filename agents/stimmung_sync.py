@@ -100,7 +100,7 @@ def sync() -> bool:
         log.info("Stimmung transition: %s → %s", last_stance, current_stance)
 
     # Write atomic state to /dev/shm for DMN consumption
-    from shared.sensor_protocol import emit_sensor_impingement, write_sensor_state
+    from agents._sensor_protocol import emit_sensor_impingement, write_sensor_state
 
     write_sensor_state("stimmung", reading)
 

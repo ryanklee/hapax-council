@@ -13,7 +13,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from shared.working_mode import is_research
+from logos._working_mode import is_research
 
 
 def _probe_idle_threshold() -> int:

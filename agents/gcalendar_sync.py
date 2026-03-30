@@ -513,7 +513,7 @@ def _find_next_event(state: CalendarSyncState, now: datetime) -> dict | None:
 
 def _write_sensor_snapshot(state: CalendarSyncState) -> None:
     """Write calendar summary to /dev/shm for DMN consumption."""
-    from shared.sensor_protocol import write_sensor_state
+    from agents._sensor_protocol import write_sensor_state
 
     now = datetime.now(UTC)
     upcoming = sum(
@@ -591,7 +591,7 @@ def run_full_sync() -> None:
     _write_profile_facts(state)
     _write_sensor_snapshot(state)
 
-    from shared.sensor_protocol import emit_sensor_impingement
+    from agents._sensor_protocol import emit_sensor_impingement
 
     emit_sensor_impingement("gcalendar", "work_patterns", ["full_sync"], strength=0.3)
 
@@ -619,7 +619,7 @@ def run_auto() -> None:
     _write_sensor_snapshot(state)
 
     if changed_ids:
-        from shared.sensor_protocol import emit_sensor_impingement
+        from agents._sensor_protocol import emit_sensor_impingement
 
         emit_sensor_impingement("gcalendar", "work_patterns", ["event_changes"], strength=0.3)
         msg = f"Calendar: {len(changed_ids)} changes, {written} events in RAG"

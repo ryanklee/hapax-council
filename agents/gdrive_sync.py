@@ -847,7 +847,7 @@ def run_full_scan() -> None:
     _write_profile_facts(state)
 
     # Sensor protocol — write state + impingement
-    from shared.sensor_protocol import emit_sensor_impingement, write_sensor_state
+    from agents._sensor_protocol import emit_sensor_impingement, write_sensor_state
 
     write_sensor_state("gdrive", {"file_count": len(state.files), "last_sync": time.time()})
     emit_sensor_impingement("gdrive", "information_seeking", ["full_scan"])
@@ -888,7 +888,7 @@ def run_auto() -> None:
     _write_profile_facts(state)
 
     # Sensor protocol — write state + impingement on changes
-    from shared.sensor_protocol import emit_sensor_impingement, write_sensor_state
+    from agents._sensor_protocol import emit_sensor_impingement, write_sensor_state
 
     write_sensor_state("gdrive", {"file_count": len(state.files), "last_sync": time.time()})
     if synced:

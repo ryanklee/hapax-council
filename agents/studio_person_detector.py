@@ -15,7 +15,7 @@ import sys
 import time
 from pathlib import Path
 
-from shared.cameras import CAMERA_ROLES
+from agents._cameras import CAMERA_ROLES
 
 log = logging.getLogger(__name__)
 

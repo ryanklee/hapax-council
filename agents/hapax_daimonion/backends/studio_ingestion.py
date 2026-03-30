@@ -148,7 +148,7 @@ def _capture_audio(duration_s: float, sample_rate: int = 48000) -> np.ndarray | 
 
         import soundfile as sf
 
-        from shared.tmp_wav import tmp_wav_path
+        from agents._tmp_wav import tmp_wav_path
 
         tmp_path = str(tmp_wav_path())
 

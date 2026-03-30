@@ -10,7 +10,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, field_validator
 
-from shared.working_mode import WORKING_MODE_FILE, WorkingMode
+from logos._working_mode import WORKING_MODE_FILE, WorkingMode
 
 router = APIRouter(prefix="/api", tags=["system"])
 

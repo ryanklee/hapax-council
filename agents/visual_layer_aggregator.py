@@ -23,6 +23,15 @@ from pathlib import Path
 
 import httpx
 
+from agents._telemetry import (
+    hapax_interaction,
+    trace_api_poll,
+    trace_episode_closed,
+    trace_phone_signals,
+    trace_prediction_tick,
+    trace_stimmung_update,
+    trace_visual_tick,
+)
 from agents.content_scheduler import (
     ContentPools,
     ContentScheduler,
@@ -61,15 +70,6 @@ from shared.apperception_tick import ApperceptionTick
 from shared.correction_memory import CorrectionStore, check_for_corrections
 from shared.episodic_memory import EpisodeBuilder, EpisodeStore
 from shared.stimmung import StimmungCollector, SystemStimmung
-from shared.telemetry import (
-    hapax_interaction,
-    trace_api_poll,
-    trace_episode_closed,
-    trace_phone_signals,
-    trace_prediction_tick,
-    trace_stimmung_update,
-    trace_visual_tick,
-)
 
 log = logging.getLogger("visual_layer_aggregator")
 
@@ -108,14 +108,14 @@ SLOW_INTERVAL_S = SLOW_POLL_S
 # ── API ──────────────────────────────────────────────────────────────────────
 
 # ── Camera roles available for injection ─────────────────────────────────────
-from shared.cameras import (
+from agents._cameras import (
     CAMERA_ROLES,
     can_enrich_persons,
 )
-from shared.cameras import (
+from agents._cameras import (
     SHORT_TO_ROLE as _ROLE_MAP,
 )
-from shared.cameras import (
+from agents._cameras import (
     resolution as cam_resolution,
 )
 

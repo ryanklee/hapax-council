@@ -573,7 +573,7 @@ def run_full_sync() -> None:
     _write_profile_facts(state)
 
     # Sensor protocol — write state + impingement
-    from shared.sensor_protocol import emit_sensor_impingement, write_sensor_state
+    from agents._sensor_protocol import emit_sensor_impingement, write_sensor_state
 
     unread = sum(1 for e in state.messages.values() if e.is_unread)
     write_sensor_state("gmail", {"unread_count": unread, "last_sync": time.time()})
@@ -608,7 +608,7 @@ def run_auto() -> None:
     _write_profile_facts(state)
 
     # Sensor protocol — write state + impingement on changes
-    from shared.sensor_protocol import emit_sensor_impingement, write_sensor_state
+    from agents._sensor_protocol import emit_sensor_impingement, write_sensor_state
 
     unread = sum(1 for e in state.messages.values() if e.is_unread)
     write_sensor_state("gmail", {"unread_count": unread, "last_sync": time.time()})

@@ -2867,7 +2867,7 @@ async def check_langfuse_error_spikes() -> list[CheckResult]:
     t = time.monotonic()
 
     try:
-        from shared.langfuse_client import LANGFUSE_PK, query_recent_errors
+        from agents._langfuse_client import LANGFUSE_PK, query_recent_errors
     except ImportError:
         return []
 
@@ -3664,7 +3664,7 @@ def write_infra_snapshot(report: HealthReport) -> None:
     timers = _collect_all_timers()
 
     # Add container cron jobs (sync-pipeline)
-    from shared.working_mode import get_working_mode
+    from agents._working_mode import get_working_mode
 
     wmode = get_working_mode()
     crontab = AI_AGENTS_DIR / "sync-pipeline" / f"crontab.{wmode}"

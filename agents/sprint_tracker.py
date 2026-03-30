@@ -545,7 +545,7 @@ def tick() -> bool:
 
     # Write sensor state for DMN
     try:
-        from shared.sensor_protocol import write_sensor_state
+        from agents._sensor_protocol import write_sensor_state
 
         write_sensor_state(
             "sprint",
