@@ -19,6 +19,7 @@ import logging
 import signal
 import time
 from pathlib import Path
+from typing import Any
 
 from agents.dmn.buffer import DMNBuffer
 from agents.dmn.pulse import DMNPulse
@@ -85,6 +86,7 @@ class DMNDaemon:
         self._imagination = ImaginationLoop()
         self._running = True
         self._start_time = time.monotonic()
+        self._reverie: Any = None  # ReverieActuationLoop, initialized in run()
 
     async def run(self) -> None:
         """Main loop — never stops unless signalled."""
@@ -101,6 +103,15 @@ class DMNDaemon:
         except Exception:
             log.warning("Reverie bootstrap failed", exc_info=True)
 
+        # Initialize Reverie actuation loop — visual peer of Daimonion
+        try:
+            from agents.reverie.actuation import ReverieActuationLoop
+
+            self._reverie = ReverieActuationLoop()
+            log.info("Reverie actuation loop initialized")
+        except Exception:
+            log.warning("Reverie actuation init failed", exc_info=True)
+
         asyncio.create_task(self._imagination_loop())
         asyncio.create_task(self._resolver_loop())
 
@@ -108,6 +119,10 @@ class DMNDaemon:
             try:
                 await self._pulse.tick()
                 self._write_output()
+
+                # Reverie actuation tick (1s cadence, same as main loop)
+                if self._reverie is not None:
+                    await self._reverie.tick()
             except Exception:
                 log.exception("DMN tick failed")
 
