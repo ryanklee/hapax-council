@@ -103,6 +103,6 @@ fn main_1() {
 fn main(@location(0) v_texcoord: vec2<f32>) -> FragmentOutput {
     v_texcoord_1 = v_texcoord;
     main_1();
-    let uniforms.resolution.y = fragColor;
-    return FragmentOutput(uniforms.resolution.y);
+    let out = fragColor;
+    return FragmentOutput(out);
 }

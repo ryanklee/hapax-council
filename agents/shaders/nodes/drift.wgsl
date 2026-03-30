@@ -22,8 +22,8 @@ fn hash(p: vec2<f32>) -> f32 {
     var p_1: vec2<f32>;
 
     p_1 = p;
-    let uniforms.time = p_1;
-    return fract((sin(dot(uniforms.time, vec2<f32>(127.1f, 311.7f))) * 43758.547f));
+    let hp = p_1;
+    return fract((sin(dot(hp, vec2<f32>(127.1f, 311.7f))) * 43758.547f));
 }
 
 fn noise(p_2: vec2<f32>) -> f32 {
@@ -36,8 +36,8 @@ fn noise(p_2: vec2<f32>) -> f32 {
     var d: f32;
 
     p_3 = p_2;
-    let uniforms.time = p_3;
-    i = floor(uniforms.time);
+    let np = p_3;
+    i = floor(np);
     let _e23 = p_3;
     f = fract(_e23);
     let _e26 = f;

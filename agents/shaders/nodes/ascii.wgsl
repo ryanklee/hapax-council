@@ -47,9 +47,9 @@ fn charFill(lum: f32, cellPos: vec2<f32>) -> f32 {
     dy = (_e28 - 0.5f);
     let _e32 = dx;
     let _e33 = dx;
-    let uniforms.resolution.y = dy;
+    let dy_val = dy;
     let _e36 = dy;
-    d = sqrt(((_e32 * _e33) + (uniforms.resolution.y * _e36)));
+    d = sqrt(((_e32 * _e33) + (dy_val * _e36)));
     let _e41 = lum_1;
     if (_e41 < 0.05f) {
         return 0f;
