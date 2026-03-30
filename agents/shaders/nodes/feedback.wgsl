@@ -4,6 +4,10 @@ struct Params {
     u_rotate: f32,
     u_blend_mode: f32,
     u_hue_shift: f32,
+    u_trace_center_x: f32,
+    u_trace_center_y: f32,
+    u_trace_radius: f32,
+    u_trace_strength: f32,
 }
 
 struct FragmentOutput {
@@ -58,10 +62,16 @@ fn main_1() {
     let _e46 = uv;
     let _e47 = textureSample(tex_accum, tex_accum_sampler, _e46);
     acc = _e47;
+    // Trace-aware decay: regions where content recently dwelt decay slower,
+    // creating a ghostly afterimage that persists 3-5 seconds longer.
+    let trace_center = vec2<f32>(global.u_trace_center_x, global.u_trace_center_y);
+    let dist_to_trace = distance(v_texcoord_1, trace_center);
+    let trace_factor = smoothstep(global.u_trace_radius, 0.0, dist_to_trace) * global.u_trace_strength;
+    let effective_decay = mix(global.u_decay, min(global.u_decay * 0.3, 0.015), trace_factor);
+
     let _e49 = acc;
     let _e51 = acc;
-    let _e54 = global.u_decay;
-    let _e56 = (_e51.xyz * (1f - _e54));
+    let _e56 = (_e51.xyz * (1f - effective_decay));
     acc.x = _e56.x;
     acc.y = _e56.y;
     acc.z = _e56.z;

@@ -51,6 +51,12 @@ class ReverieActuationLoop:
         self._guest_reduction = guest_reduction_factor
         self._last_tick = time.monotonic()
         self._tick_count = 0
+        # Trace state (Amendment 2: dwelling and trace)
+        self._trace_center = (0.5, 0.5)
+        self._trace_radius = 0.0
+        self._trace_strength = 0.0
+        self._trace_decay_rate = 0.15  # strength decays ~7s to zero
+        self._last_salience = 0.0
 
     @property
     def shader_capability(self) -> Any:
@@ -120,11 +126,43 @@ class ReverieActuationLoop:
             for name in self._visual_chain._levels:
                 self._visual_chain._levels[name] *= reduction
 
-        # 7. Write visual chain state (for Rust StateReader)
+        # 7. Update trace state (Amendment 2: dwelling and trace)
+        self._update_trace(imagination, dt)
+
+        # 8. Write visual chain state (for Rust StateReader)
         self._visual_chain.write_state()
 
-        # 8. Write merged uniforms
+        # 9. Write merged uniforms
         self._write_uniforms(imagination, stimmung)
+
+    def _update_trace(self, imagination: dict[str, Any] | None, dt: float) -> None:
+        """Update trace state for dwelling/trace effect (Bachelard Amendment 2).
+
+        When content salience drops (fading out), the trace activates at the
+        content's last position. The feedback shader then decays slower in
+        that region, creating a ghostly afterimage.
+        """
+        current_salience = imagination.get("salience", 0.0) if imagination else 0.0
+
+        # Detect salience drop → activate trace
+        if self._last_salience > 0.2 and current_salience < self._last_salience * 0.5:
+            self._trace_strength = min(1.0, self._last_salience)
+            self._trace_radius = 0.3 + self._last_salience * 0.2
+            # Center from content reference positions (default center if unknown)
+            self._trace_center = (0.5, 0.5)
+            log.info(
+                "Trace activated: strength=%.2f radius=%.2f (salience %.2f→%.2f)",
+                self._trace_strength,
+                self._trace_radius,
+                self._last_salience,
+                current_salience,
+            )
+
+        # Decay trace strength over time
+        if self._trace_strength > 0:
+            self._trace_strength = max(0.0, self._trace_strength - self._trace_decay_rate * dt)
+
+        self._last_salience = current_salience
 
     def _apply_shader_impingement(self, imp: Any) -> None:
         """Translate a shader graph impingement into visual chain activations."""
@@ -192,6 +230,13 @@ class ReverieActuationLoop:
         # Add chain-derived params as node.param overrides
         for key, value in chain_params.items():
             uniforms[key] = value
+
+        # Add trace state for feedback shader (Amendment 2: dwelling)
+        if self._trace_strength > 0:
+            uniforms["feedback.trace_center_x"] = self._trace_center[0]
+            uniforms["feedback.trace_center_y"] = self._trace_center[1]
+            uniforms["feedback.trace_radius"] = self._trace_radius
+            uniforms["feedback.trace_strength"] = self._trace_strength
 
         # Add stimmung-derived signals
         if stimmung:
