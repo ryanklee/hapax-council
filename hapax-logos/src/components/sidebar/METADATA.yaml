@@ -1,0 +1,22 @@
+module: sidebar
+purpose: Sidebar panel system with 22 specialized panels covering briefing, health, profile, governance, costs, VRAM, scout, drift, goals, and more.
+version: 1
+
+interface:
+  props: []
+  emits: []
+  side_effects:
+    - polls multiple system APIs for panel data
+    - runs agent actions via AgentRunContext
+
+dependencies:
+  runtime:
+    - react
+    - tailwindcss
+  internal:
+    - shared
+
+execution: {}
+
+token_budget:
+  self: 9048

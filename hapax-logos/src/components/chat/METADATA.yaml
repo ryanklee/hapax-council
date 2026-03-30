@@ -1,0 +1,22 @@
+module: chat
+purpose: Chat message display, input, streaming, and conversation management for assistant/user/tool message types.
+version: 1
+
+interface:
+  props: []
+  emits: []
+  side_effects:
+    - streams LLM responses via SSE
+    - sends messages via API
+
+dependencies:
+  runtime:
+    - react
+    - tailwindcss
+  internal:
+    - shared
+
+execution: {}
+
+token_budget:
+  self: 9712

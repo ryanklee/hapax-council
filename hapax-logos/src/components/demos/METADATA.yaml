@@ -1,0 +1,21 @@
+module: demos
+purpose: Demo listing and detail view for browsing, viewing, and deleting recorded demos.
+version: 1
+
+interface:
+  props: []
+  emits: []
+  side_effects:
+    - fetches and deletes demos via API
+
+dependencies:
+  runtime:
+    - react
+    - tailwindcss
+    - lucide-react
+  internal: []
+
+execution: {}
+
+token_budget:
+  self: 1440

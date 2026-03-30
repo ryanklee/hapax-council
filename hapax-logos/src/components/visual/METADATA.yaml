@@ -1,0 +1,21 @@
+module: visual
+purpose: Visual surface rendering with WebGL frame streaming, layer controls, state readout, and surface preview for the perception pipeline.
+version: 1
+
+interface:
+  props: []
+  emits: []
+  side_effects:
+    - streams frames from FRAME_SERVER_URL via rAF
+    - reads page visibility state
+
+dependencies:
+  runtime:
+    - react
+    - tailwindcss
+  internal: []
+
+execution: {}
+
+token_budget:
+  self: 2368

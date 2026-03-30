@@ -1,0 +1,22 @@
+module: studio
+purpose: Studio monitoring surface: multi-camera grid with detection overlays, visual layer panel, and scene badge display.
+version: 1
+
+interface:
+  props: []
+  emits: []
+  side_effects:
+    - acquires/releases image pool frames
+    - polls studio and visual layer APIs
+
+dependencies:
+  runtime:
+    - react
+    - tailwindcss
+    - lucide-react
+  internal: []
+
+execution: {}
+
+token_budget:
+  self: 9552

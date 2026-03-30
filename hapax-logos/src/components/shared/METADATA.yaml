@@ -1,0 +1,22 @@
+module: shared
+purpose: Reusable utility components: error boundary, loading skeleton, markdown renderer, status badge, detail modal, and toast provider.
+version: 1
+
+interface:
+  props:
+    - children: ReactNode
+    - fallback: ReactNode
+  emits: []
+  side_effects:
+    - mounts toast notifications into portal
+
+dependencies:
+  runtime:
+    - react
+    - tailwindcss
+  internal: []
+
+execution: {}
+
+token_budget:
+  self: 3752

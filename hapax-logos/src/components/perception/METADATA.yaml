@@ -1,0 +1,22 @@
+module: perception
+purpose: Camera zone perception display with canvas rendering, zone overlays, channel strip, and sidebar meter for live visual signals.
+version: 1
+
+interface:
+  props: []
+  emits: []
+  side_effects:
+    - acquires/releases image pool frames
+    - renders WebGL perception canvas
+
+dependencies:
+  runtime:
+    - react
+    - tailwindcss
+  internal:
+    - studio
+
+execution: {}
+
+token_budget:
+  self: 6656

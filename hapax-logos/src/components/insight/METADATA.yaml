@@ -1,0 +1,22 @@
+module: insight
+purpose: Semantic query interface with input, result list, individual result display, and refinement controls.
+version: 1
+
+interface:
+  props:
+    - onSubmit: (query: string) => void
+  emits: []
+  side_effects:
+    - submits queries and refinements via API
+
+dependencies:
+  runtime:
+    - react
+    - tailwindcss
+    - lucide-react
+  internal: []
+
+execution: {}
+
+token_budget:
+  self: 6072
