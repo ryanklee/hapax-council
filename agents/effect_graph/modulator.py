@@ -45,17 +45,8 @@ class UniformModulator:
             self._smoothed[key] = val
             updates[key] = val
 
-        # Write current uniforms to /dev/shm for Rust pipeline
-        try:
-            import json
-            from pathlib import Path
-
-            uniforms_path = Path("/dev/shm/hapax-imagination/pipeline/uniforms.json")
-            if uniforms_path.parent.exists():
-                flat = {f"{node}.{param}": val for (node, param), val in self._smoothed.items()}
-                flat.update({f"signal.{k}": v for k, v in signals.items()})
-                uniforms_path.write_text(json.dumps(flat))
-        except Exception:
-            pass  # Non-critical
+        # NOTE: Reverie's uniforms.json is written by the Reverie actuation loop
+        # (agents/reverie/actuation.py), not by the compositor modulator.
+        # The compositor modulator drives GStreamer slot pipeline uniforms only.
 
         return updates
