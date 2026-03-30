@@ -21,6 +21,7 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -29,8 +30,36 @@ from typing import Literal
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 
-from shared.config import get_model
-from shared.operator import get_system_prompt_fragment
+from agents._operator import get_system_prompt_fragment
+
+# ── Vendored from shared/config.py ──────────────────────────────────────────
+_LITELLM_BASE: str = os.environ.get(
+    "LITELLM_API_BASE", os.environ.get("LITELLM_BASE_URL", "http://localhost:4000")
+)
+_LITELLM_KEY: str = os.environ.get("LITELLM_API_KEY", "")
+_MODELS: dict[str, str] = {
+    "fast": "gemini-flash",
+    "balanced": "claude-sonnet",
+    "long-context": "gemini-flash",
+    "reasoning": "qwen3:8b",
+    "coding": "qwen3:8b",
+    "local-fast": "qwen3:8b",
+}
+
+
+def get_model(alias_or_id: str = "balanced"):
+    """Create a LiteLLM-backed chat model (vendored from shared.config)."""
+    from pydantic_ai.models.openai import OpenAIChatModel
+    from pydantic_ai.providers.litellm import LiteLLMProvider
+
+    model_id = _MODELS.get(alias_or_id, alias_or_id)
+    return OpenAIChatModel(
+        model_id,
+        provider=LiteLLMProvider(api_base=_LITELLM_BASE, api_key=_LITELLM_KEY),
+    )
+
+
+# ── End vendored ────────────────────────────────────────────────────────────
 
 # Import Langfuse OTel config (side-effect: configures exporter)
 try:
@@ -58,8 +87,8 @@ log = logging.getLogger("profiler")
 
 # ── Schemas ──────────────────────────────────────────────────────────────────
 
-from shared.dimensions import DIMENSIONS as _DIMENSIONS
-from shared.dimensions import get_dimension_names
+from agents._dimensions import DIMENSIONS as _DIMENSIONS
+from agents._dimensions import get_dimension_names
 
 PROFILE_DIMENSIONS = get_dimension_names()
 
@@ -156,7 +185,7 @@ synthesis_agent = Agent(
 )
 
 # Register axiom compliance tools on agents that make architectural decisions
-from shared.axiom_tools import get_axiom_tools
+from agents._axiom_tools import get_axiom_tools
 
 for _tool_fn in get_axiom_tools():
     extraction_agent.tool(_tool_fn)
@@ -342,7 +371,7 @@ def group_facts_by_dimension(facts: list[ProfileFact]) -> dict[str, list[Profile
 
 # ── Pipeline ─────────────────────────────────────────────────────────────────
 
-from shared.config import PROFILES_DIR
+PROFILES_DIR: Path = Path(__file__).resolve().parent.parent / "profiles"
 
 DEFAULT_EXTRACTION_CONCURRENCY = 8
 
@@ -1147,7 +1176,7 @@ async def generate_digest(profile: UserProfile) -> dict:
     confidence per dimension for summarization. Returns the digest dict
     and saves it to profiles/operator-digest.json.
     """
-    from shared.config import get_model as _get_model
+    _get_model = get_model  # use module-level vendored get_model
 
     grouped = group_facts_by_dimension([f for dim in profile.dimensions for f in dim.facts])
 
@@ -1788,7 +1817,7 @@ async def run_digest() -> None:
 
 async def run_index_profile() -> None:
     """Index profile facts into Qdrant profile-facts collection."""
-    from shared.profile_store import ProfileStore
+    from agents._profile_store import ProfileStore
 
     profile = load_existing_profile()
     if not profile:
@@ -1806,7 +1835,7 @@ async def run_auto() -> None:
     Designed for systemd timer / cron invocation. Exits quickly (no LLM calls)
     when nothing has changed. Logs to stderr for journal compatibility.
     """
-    from shared.log_setup import configure_logging
+    from agents._log_setup import configure_logging
 
     configure_logging(agent="profiler")
 
@@ -1935,7 +1964,7 @@ async def run_auto() -> None:
         log.warning("Digest generation failed: %s", e)
 
     try:
-        from shared.profile_store import ProfileStore
+        from agents._profile_store import ProfileStore
 
         store = ProfileStore()
         store.ensure_collection()

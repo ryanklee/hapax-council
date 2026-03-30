@@ -70,12 +70,12 @@ SOURCE_TYPE_CHUNK_CAPS: dict[str, int] = {
     "ambient-audio": 100,
     "health-connect": 50,
 }
-from shared.config import (
+from agents._config import (
     CLAUDE_CONFIG_DIR,
     HAPAX_HOME,
     RAG_SOURCES_DIR,
 )
-from shared.config import (
+from agents._config import (
     VAULT_PATH as _VAULT_PATH,
 )
 
@@ -777,13 +777,13 @@ def read_decisions_log(path: Path) -> list[SourceChunk]:
 
 # ── Langfuse telemetry reader ────────────────────────────────────────────
 
-from shared.langfuse_client import (
+from agents._langfuse_client import (
     LANGFUSE_PK as _LANGFUSE_PK,
 )
-from shared.langfuse_client import (
+from agents._langfuse_client import (
     is_available as _check_langfuse_available,
 )
-from shared.langfuse_client import (
+from agents._langfuse_client import (
     langfuse_get as _langfuse_get,
 )
 
@@ -1077,7 +1077,7 @@ def _chunk_text(text: str, source_id: str, source_type: str) -> list[SourceChunk
 
 # ── Change detection ─────────────────────────────────────────────────────────
 
-from shared.config import PROFILES_DIR as STATE_DIR
+from agents._config import PROFILES_DIR as STATE_DIR
 
 STATE_FILE = STATE_DIR / ".state.json"
 
@@ -1308,7 +1308,7 @@ def read_correction_facts(days_back: int = 30) -> list[dict]:
     try:
         from qdrant_client.models import FieldCondition, Filter, Range
 
-        from shared.config import get_qdrant
+        from agents._config import get_qdrant
     except ImportError:
         return []
 

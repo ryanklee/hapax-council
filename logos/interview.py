@@ -13,15 +13,15 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 
 _log = logging.getLogger(__name__)
 
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
 
-from shared.config import get_model
-from shared.operator import get_goals, get_patterns, get_system_prompt_fragment
+from logos._config import get_model
+from logos._operator import get_goals, get_patterns, get_system_prompt_fragment
 
 # Import Langfuse OTel config (side-effect: configures exporter)
 try:
@@ -109,12 +109,12 @@ class InterviewState(BaseModel):
 class ProfileAnalysis:
     """Results of deterministic profile gap analysis."""
 
-    sparse_dimensions: list[dict[str, Any]] = field(default_factory=list)
+    sparse_dimensions: list[dict[str, object]] = field(default_factory=list)
     missing_dimensions: list[str] = field(default_factory=list)
-    low_confidence_clusters: list[dict[str, Any]] = field(default_factory=list)
-    goal_gaps: list[dict[str, Any]] = field(default_factory=list)
+    low_confidence_clusters: list[dict[str, object]] = field(default_factory=list)
+    goal_gaps: list[dict[str, object]] = field(default_factory=list)
     total_facts: int = 0
-    dimension_stats: dict[str, dict[str, Any]] = field(default_factory=dict)
+    dimension_stats: dict[str, dict[str, object]] = field(default_factory=dict)
     neurocognitive_gap: bool = False
 
 
@@ -123,11 +123,11 @@ def analyze_profile() -> ProfileAnalysis:
 
     Reads profiles/operator-profile.json and operator.json. Pure deterministic — no LLM calls.
     """
+    from agents._dimensions import get_dimension_names
     from agents.profiler import (
         group_facts_by_dimension,
         load_existing_profile,
     )
-    from shared.dimensions import get_dimension_names
 
     analysis = ProfileAnalysis()
     profile = load_existing_profile()
@@ -201,7 +201,7 @@ def analyze_profile() -> ProfileAnalysis:
     neuro_stats = analysis.dimension_stats.get("neurocognitive_profile", {"count": 0})
     if neuro_stats.get("count", 0) < 5:
         try:
-            from shared.operator import get_neurocognitive_profile
+            from logos._operator import get_neurocognitive_profile
 
             neuro_data = get_neurocognitive_profile()
             total_findings = sum(len(v) for v in neuro_data.values()) if neuro_data else 0
@@ -309,7 +309,7 @@ async def generate_interview_plan(
     # Try to load digest for richer planner input
     digest = None
     try:
-        from shared.profile_store import ProfileStore
+        from logos._profile_store import ProfileStore
 
         digest = ProfileStore().get_digest()
     except Exception:
@@ -458,7 +458,7 @@ def create_interview_agent(model_alias: str = "balanced") -> Agent[InterviewDeps
     )
 
     # Register on-demand operator context tools
-    from shared.context_tools import get_context_tools
+    from logos._context_tools import get_context_tools
 
     for tool_fn in get_context_tools():
         agent.tool(tool_fn)
@@ -715,7 +715,7 @@ def flush_pending_facts() -> str:
     import tempfile
 
     from agents.profiler import flush_interview_facts
-    from shared.config import LOGOS_STATE_DIR
+    from logos._config import LOGOS_STATE_DIR
 
     facts_path = LOGOS_STATE_DIR / "pending-facts.jsonl"
     if not facts_path.exists():

@@ -488,7 +488,7 @@ def _write_profile_facts(state: ChromeSyncState) -> None:
 
 def _write_sensor_snapshot(state: ChromeSyncState) -> None:
     """Write browsing summary to /dev/shm for DMN consumption."""
-    from shared.sensor_protocol import write_sensor_state
+    from agents._sensor_protocol import write_sensor_state
 
     sorted_domains = sorted(state.domains.items(), key=lambda x: x[1], reverse=True)
     write_sensor_state(
@@ -529,7 +529,7 @@ def _print_stats(state: ChromeSyncState) -> None:
 
 def run_full_sync() -> None:
     """Full sync of Chrome history and bookmarks."""
-    from shared.notify import send_notification
+    from agents._notify import send_notification
 
     state = _load_state()
     domains_written, bookmarks_updated = _full_sync(state)
@@ -537,7 +537,7 @@ def run_full_sync() -> None:
     _write_profile_facts(state)
     _write_sensor_snapshot(state)
 
-    from shared.sensor_protocol import emit_sensor_impingement
+    from agents._sensor_protocol import emit_sensor_impingement
 
     emit_sensor_impingement("chrome", "information_seeking", ["full_sync"], strength=0.3)
 
@@ -552,7 +552,7 @@ def run_full_sync() -> None:
 
 def run_auto() -> None:
     """Incremental Chrome sync."""
-    from shared.notify import send_notification
+    from agents._notify import send_notification
 
     state = _load_state()
 
@@ -567,7 +567,7 @@ def run_auto() -> None:
     _write_sensor_snapshot(state)
 
     if domains_written or bookmarks_updated:
-        from shared.sensor_protocol import emit_sensor_impingement
+        from agents._sensor_protocol import emit_sensor_impingement
 
         emit_sensor_impingement("chrome", "information_seeking", ["browsing_update"], strength=0.3)
         msg = (
@@ -601,7 +601,7 @@ def main() -> None:
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
 
-    from shared.log_setup import configure_logging
+    from agents._log_setup import configure_logging
 
     configure_logging(agent="chrome-sync", level="DEBUG" if args.verbose else None)
 

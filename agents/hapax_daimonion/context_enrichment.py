@@ -13,7 +13,7 @@ import time
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from shared.context import ContextAssembler
+    from agents._context import ContextAssembler
 
 log = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ def render_goals() -> str:
 def render_health() -> str:
     """System health status. Only surfaces when non-healthy."""
     try:
-        from shared.config import PROFILES_DIR
+        from agents._config import PROFILES_DIR
 
         path = PROFILES_DIR / "health-history.jsonl"
         if not path.exists():
@@ -136,7 +136,7 @@ def get_assembler() -> ContextAssembler:
     """Return the shared ContextAssembler, creating it lazily if needed."""
     global _assembler
     if _assembler is None:
-        from shared.context import ContextAssembler
+        from agents._context import ContextAssembler
 
         _assembler = ContextAssembler(
             goals_fn=_collect_goals,
@@ -166,7 +166,7 @@ def _collect_goals() -> list[dict]:
 def _collect_health() -> dict:
     """Collect health summary for EnrichmentContext."""
     try:
-        from shared.config import PROFILES_DIR
+        from agents._config import PROFILES_DIR
 
         health_file = PROFILES_DIR / "health-history.jsonl"
         if not health_file.exists():

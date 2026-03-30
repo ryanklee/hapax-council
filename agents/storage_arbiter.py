@@ -15,13 +15,16 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 
 import yaml
 from pydantic import BaseModel, Field
 
-from shared.config import AUDIO_ARCHIVE_DIR, PROFILES_DIR
+_HAPAX_HOME: Path = Path(os.environ.get("HAPAX_HOME", str(Path.home())))
+AUDIO_ARCHIVE_DIR: Path = _HAPAX_HOME / "audio-recording" / "archive"
+PROFILES_DIR: Path = Path(__file__).resolve().parent.parent / "profiles"
 
 log = logging.getLogger(__name__)
 
@@ -309,7 +312,7 @@ def main() -> None:
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
 
-    from shared.log_setup import configure_logging
+    from agents._log_setup import configure_logging
 
     configure_logging(agent="storage-arbiter", level="DEBUG" if args.verbose else None)
 

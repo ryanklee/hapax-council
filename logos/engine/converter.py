@@ -16,8 +16,8 @@ import logging
 import time
 from pathlib import Path
 
+from logos._impingement import Impingement, ImpingementType
 from logos.engine.models import ChangeEvent
-from shared.impingement import Impingement, ImpingementType
 
 _log = logging.getLogger(__name__)
 
@@ -122,8 +122,8 @@ def convert(event: ChangeEvent) -> Impingement:
 
     # Compute embedding for affordance retrieval (non-blocking, best-effort)
     try:
-        from shared.config import embed_safe
-        from shared.impingement import render_impingement_text
+        from logos._config import embed_safe
+        from logos._impingement import render_impingement_text
 
         text = render_impingement_text(imp)
         vec = embed_safe(text, prefix="search_query")

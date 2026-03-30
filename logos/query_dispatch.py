@@ -7,7 +7,7 @@ import time
 from dataclasses import dataclass
 
 from agents.dev_story.query import QueryDeps, create_agent, extract_full_output
-from shared.config import PROFILES_DIR
+from logos._config import PROFILES_DIR
 
 log = logging.getLogger(__name__)
 
@@ -153,7 +153,7 @@ def _create_system_ops_agent():
     """Create the system-ops query agent and its deps."""
     from agents.system_ops.query import SystemOpsDeps
     from agents.system_ops.query import create_agent as create_system_ops_agent
-    from shared.ops_db import build_ops_db
+    from logos._ops_db import build_ops_db
 
     db = build_ops_db(PROFILES_DIR)
     agent = create_system_ops_agent()

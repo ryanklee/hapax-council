@@ -7,6 +7,7 @@ pre-mortem, and tension map synthesis.
 
 import json
 import os
+import os as _os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -14,7 +15,10 @@ from pathlib import Path
 import httpx
 import yaml
 
-from shared.config import LITELLM_BASE as LITELLM_URL
+LITELLM_URL: str = _os.environ.get(
+    "LITELLM_API_BASE",
+    _os.environ.get("LITELLM_BASE_URL", "http://localhost:4000"),
+)
 
 LITELLM_KEY = os.environ.get(
     "LITELLM_API_KEY",
@@ -718,7 +722,7 @@ def main():
 
     # Metric extraction + governance probe evaluation
     try:
-        from shared.deliberation_metrics import (
+        from agents._deliberation_metrics import (
             append_metrics,
             extract_metrics,
             format_batch_summary,
@@ -741,7 +745,7 @@ def main():
         print(f"\n{format_batch_summary(all_metrics)}")
 
         # Run deliberation sufficiency probes
-        from shared.sufficiency_probes import run_probes
+        from agents._sufficiency_probes import run_probes
 
         probe_results = run_probes(axiom_id="executive_function")
         delib_probes = [r for r in probe_results if r.probe_id.startswith("probe-delib-")]

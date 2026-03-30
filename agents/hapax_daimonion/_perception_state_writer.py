@@ -11,12 +11,13 @@ import logging
 import time
 from collections import deque
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from agents.hapax_daimonion.consent_state import ConsentStateTracker
     from agents.hapax_daimonion.conversation_pipeline import ConversationPipeline
     from agents.hapax_daimonion.perception import PerceptionEngine
+    from agents.hapax_daimonion.perception_ring import PerceptionRing
     from agents.hapax_daimonion.session import VoiceLifecycle
     from shared.governance.consent import ConsentRegistry
 
@@ -46,7 +47,7 @@ _perception_write_failures: int = 0
 # ── Supplementary content ring buffer ─────────────────────────────────────
 
 _CONTENT_TTL_S = 60.0
-_supplementary_content: deque[dict[str, Any]] = deque(maxlen=5)
+_supplementary_content: deque[dict[str, object]] = deque(maxlen=5)
 
 
 def push_supplementary_content(
@@ -72,7 +73,7 @@ def push_supplementary_content(
     _supplementary_content.append(item)
 
 
-def _get_live_content() -> list[dict[str, Any]]:
+def _get_live_content() -> list[dict[str, object]]:
     """Return non-expired supplementary content items."""
     now = time.time()
     return [c for c in _supplementary_content if now - c.get("ts", 0) < c.get("ttl", 300)]
@@ -84,7 +85,7 @@ def _get_live_content() -> list[dict[str, Any]]:
 def _snapshot_voice_session(
     session: VoiceLifecycle | None,
     pipeline: ConversationPipeline | None,
-) -> dict[str, Any]:
+) -> dict[str, object]:
     """Build voice_session block from daemon state."""
     if session is None or not session.is_active:
         return {"active": False}
@@ -200,7 +201,7 @@ def _compute_aggregate_confidence(perception: PerceptionEngine) -> float:
 # ── Scene inventory helper ────────────────────────────────────────────────
 
 
-def _parse_scene_inventory(raw: object) -> dict[str, Any]:
+def _parse_scene_inventory(raw: object) -> dict[str, object]:
     """Parse scene inventory from behavior value (JSON string or dict)."""
     if isinstance(raw, dict):
         return raw
@@ -326,7 +327,7 @@ def write_perception_state(
     watch_activity = str(_bval("watch_activity_state", "unknown"))
 
     try:
-        state: dict[str, Any] = {
+        state: dict[str, object] = {
             "production_activity": str(_bval("production_activity", "")),
             "music_genre": str(_bval("music_genre", "")),
             "flow_state": flow_state,
@@ -482,10 +483,10 @@ def write_perception_state(
 
 # ── Perception Ring Buffer (WS1) ────────────────────────────────────────────
 
-_perception_ring: Any = None  # Lazy init to avoid import cycles
+_perception_ring: PerceptionRing | None = None  # Lazy init to avoid import cycles
 
 
-def _push_to_ring(state: dict[str, Any]) -> None:
+def _push_to_ring(state: dict[str, object]) -> None:
     """Push snapshot to the shared perception ring buffer."""
     global _perception_ring
     if _perception_ring is None:
@@ -496,6 +497,6 @@ def _push_to_ring(state: dict[str, Any]) -> None:
     _perception_ring.push(snapshot)
 
 
-def get_perception_ring() -> Any:
+def get_perception_ring() -> PerceptionRing | None:
     """Return the global perception ring (or None if not yet initialized)."""
     return _perception_ring

@@ -19,7 +19,7 @@ from statistics import mean
 
 from pydantic import BaseModel, Field
 
-from shared.config import PROFILES_DIR
+from agents._config import PROFILES_DIR
 
 try:
     from shared import langfuse_config  # noqa: F401
@@ -438,7 +438,7 @@ def main() -> None:
     parser.add_argument("--output", choices=["json", "markdown"], default="json")
     args = parser.parse_args()
 
-    from shared.log_setup import configure_logging
+    from agents._log_setup import configure_logging
 
     configure_logging(agent="sdlc-metrics")
 

@@ -8,10 +8,9 @@ but a capability that gets activated by contextual need.
 from __future__ import annotations
 
 import logging
-from typing import Any
 
-from shared.capability import CapabilityCategory, ResourceTier, SystemContext
-from shared.impingement import Impingement
+from agents._capability import CapabilityCategory, ResourceTier, SystemContext
+from agents._impingement import Impingement
 
 log = logging.getLogger("voice.capability")
 
@@ -96,7 +95,7 @@ class SpeechProductionCapability:
 
         return 0.0
 
-    def activate(self, impingement: Impingement, level: float) -> dict[str, Any]:
+    def activate(self, impingement: Impingement, level: float) -> dict[str, object]:
         """Queue a spontaneous speech impingement for the voice daemon to consume."""
         self._activation_level = level
         self._pending.append(impingement)

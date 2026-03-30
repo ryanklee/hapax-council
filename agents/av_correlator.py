@@ -50,7 +50,7 @@ CACHE_DIR = Path.home() / ".cache" / "av-correlator"
 STATE_FILE = CACHE_DIR / "state.json"
 CHANGES_LOG = CACHE_DIR / "changes.jsonl"
 
-from shared.cameras import CAMERA_ROLES
+from agents._cameras import CAMERA_ROLES
 
 # Audio segments are 15 minutes
 AUDIO_SEGMENT_DURATION = timedelta(minutes=15)
@@ -581,7 +581,7 @@ def _ensure_collection() -> None:
     """Create the studio_moments Qdrant collection if it doesn't exist."""
     from qdrant_client.models import Distance, VectorParams
 
-    from shared.config import EXPECTED_EMBED_DIMENSIONS, STUDIO_MOMENTS_COLLECTION, get_qdrant
+    from agents._config import EXPECTED_EMBED_DIMENSIONS, STUDIO_MOMENTS_COLLECTION, get_qdrant
 
     client = get_qdrant()
     collections = [c.name for c in client.get_collections().collections]
@@ -632,7 +632,7 @@ def _build_summary_text(window: CorrelationWindow) -> str:
 
 def _upsert_moment(window: CorrelationWindow) -> bool:
     """Upsert a correlated moment to the studio_moments Qdrant collection."""
-    from shared.config import STUDIO_MOMENTS_COLLECTION, embed_safe, get_qdrant
+    from agents._config import STUDIO_MOMENTS_COLLECTION, embed_safe, get_qdrant
 
     summary = _build_summary_text(window)
     vector = embed_safe(summary, prefix="search_document")
@@ -769,7 +769,7 @@ def _correlate_window(
 
 def _run_correlation(state: CorrelatorState) -> dict[str, int]:
     """Run the full correlation pipeline."""
-    from shared.notify import send_notification
+    from agents._notify import send_notification
 
     log.info("Discovering audio sidecars...")
     audio_sidecars = _discover_audio_sidecars()
@@ -911,7 +911,7 @@ def _run_correlation(state: CorrelatorState) -> dict[str, int]:
 
 def _search_moments(query: str, limit: int = 10) -> None:
     """Search the studio_moments Qdrant collection with a natural language query."""
-    from shared.config import STUDIO_MOMENTS_COLLECTION, embed, get_qdrant
+    from agents._config import STUDIO_MOMENTS_COLLECTION, embed, get_qdrant
 
     try:
         _ensure_collection()
@@ -1003,7 +1003,7 @@ def _print_stats(state: CorrelatorState) -> None:
 
     # Qdrant collection stats
     try:
-        from shared.config import STUDIO_MOMENTS_COLLECTION, get_qdrant
+        from agents._config import STUDIO_MOMENTS_COLLECTION, get_qdrant
 
         client = get_qdrant()
         info = client.get_collection(STUDIO_MOMENTS_COLLECTION)
@@ -1024,7 +1024,7 @@ def main() -> None:
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
 
-    from shared.log_setup import configure_logging
+    from agents._log_setup import configure_logging
 
     configure_logging(agent="av-correlator", level="DEBUG" if args.verbose else None)
 

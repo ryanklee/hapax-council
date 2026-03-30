@@ -1,0 +1,21 @@
+module: hapax
+purpose: WebGL ambient generative shader background for the Hapax Corpora surface, self-throttled with FPS control.
+version: 1
+
+interface:
+  props: []
+  emits: []
+  side_effects:
+    - acquires WebGL canvas context
+    - runs rAF render loop
+
+dependencies:
+  runtime:
+    - react
+    - tailwindcss
+  internal: []
+
+execution: {}
+
+token_budget:
+  self: 2224

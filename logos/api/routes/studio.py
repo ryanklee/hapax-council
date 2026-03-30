@@ -10,25 +10,29 @@ import asyncio
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, HTTPException
+
+if TYPE_CHECKING:
+    from agents.effect_graph.registry import ShaderRegistry
+    from agents.effect_graph.runtime import GraphRuntime
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from starlette.responses import StreamingResponse
 
 from logos.api.cache import cache
 
-_graph_runtime: Any = None
-_shader_registry: Any = None
+_graph_runtime: GraphRuntime | None = None
+_shader_registry: ShaderRegistry | None = None
 
 
-def set_graph_runtime(runtime: Any) -> None:
+def set_graph_runtime(runtime: GraphRuntime) -> None:
     global _graph_runtime
     _graph_runtime = runtime
 
 
-def set_shader_registry(registry: Any) -> None:
+def set_shader_registry(registry: ShaderRegistry) -> None:
     global _shader_registry
     _shader_registry = registry
 
@@ -48,7 +52,7 @@ def _dict_factory(fields: list[tuple]) -> dict:
     return result
 
 
-def _to_dict(obj: Any) -> Any:
+def _to_dict(obj: object) -> object:
     if obj is None:
         return None
     if isinstance(obj, list):
@@ -56,11 +60,11 @@ def _to_dict(obj: Any) -> Any:
     if isinstance(obj, Path):
         return str(obj)
     if hasattr(obj, "__dataclass_fields__"):
-        return asdict(obj, dict_factory=_dict_factory)
+        return asdict(obj, dict_factory=_dict_factory)  # type: ignore[arg-type]
     return obj
 
 
-def _slow_response(data: Any) -> JSONResponse:
+def _slow_response(data: object) -> JSONResponse:
     return JSONResponse(content=data, headers={"X-Cache-Age": str(cache.slow_cache_age())})
 
 
@@ -222,8 +226,8 @@ async def search_moments(req: MomentSearchRequest):
 def _search_moments_sync(query: str, limit: int) -> list[dict]:
     """Synchronous CLAP search against Qdrant studio_moments."""
     try:
+        from logos.api.routes._config import STUDIO_MOMENTS_COLLECTION, get_qdrant
         from shared.clap import embed_text
-        from shared.config import STUDIO_MOMENTS_COLLECTION, get_qdrant
     except ImportError:
         return []
 
@@ -356,7 +360,7 @@ async def select_effect(req: EffectSelectRequest):
         # Read previous preset for trace context
         prev = ""
         try:
-            from shared.telemetry import trace_compositor_effect
+            from logos._telemetry import trace_compositor_effect
 
             prev_file = Path("/dev/shm/hapax-compositor/fx-current.txt")
             if prev_file.exists():
@@ -540,7 +544,7 @@ async def get_ambient_content():
 
     # Profile facts from Qdrant
     try:
-        from shared.config import get_qdrant
+        from logos.api.routes._config import get_qdrant
 
         client = get_qdrant()
         # Scroll random points from profile-facts collection
@@ -560,7 +564,7 @@ async def get_ambient_content():
 
     # Studio moments (recent CLAP classifications)
     try:
-        from shared.config import STUDIO_MOMENTS_COLLECTION, get_qdrant
+        from logos.api.routes._config import STUDIO_MOMENTS_COLLECTION, get_qdrant
 
         client = get_qdrant()
         result = client.scroll(
@@ -649,7 +653,7 @@ _BUILTIN_PRESETS = Path(__file__).parent.parent.parent.parent / "presets"
 _USER_PRESETS = Path.home() / ".config" / "hapax" / "effect-presets"
 
 
-def _load_preset(name: str) -> Any:
+def _load_preset(name: str) -> object:
     from agents.effect_graph.types import EffectGraph
 
     for d in (_USER_PRESETS, _BUILTIN_PRESETS):
@@ -665,7 +669,7 @@ async def get_effect_graph():
 
 
 @router.put("/studio/effect/graph")
-async def replace_effect_graph(request: dict[str, Any]):
+async def replace_effect_graph(request: dict[str, object]):
     from agents.effect_graph.types import EffectGraph
 
     if not _graph_runtime:
@@ -686,7 +690,7 @@ async def replace_effect_graph(request: dict[str, Any]):
 
 
 @router.patch("/studio/effect/graph")
-async def patch_effect_graph(request: dict[str, Any]):
+async def patch_effect_graph(request: dict[str, object]):
     from agents.effect_graph.types import GraphPatch
 
     if not _graph_runtime:
@@ -699,7 +703,7 @@ async def patch_effect_graph(request: dict[str, Any]):
 
 
 @router.patch("/studio/effect/graph/node/{node_id}/params")
-async def patch_node_params(node_id: str, params: dict[str, Any]):
+async def patch_node_params(node_id: str, params: dict[str, object]):
     if not _graph_runtime:
         raise HTTPException(503, "Compositor not available")
     _graph_runtime.patch_node_params(node_id, params)
@@ -720,7 +724,7 @@ async def remove_graph_node(node_id: str):
 
 
 @router.patch("/studio/layer/{layer}/palette")
-async def set_layer_palette(layer: str, palette: dict[str, Any]):
+async def set_layer_palette(layer: str, palette: dict[str, object]):
     from agents.effect_graph.types import LayerPalette
 
     if layer not in ("live", "smooth", "hls"):
@@ -743,7 +747,7 @@ async def get_layer_status():
 
 
 @router.put("/studio/effect/graph/modulations")
-async def replace_modulations(bindings: list[dict[str, Any]]):
+async def replace_modulations(bindings: list[dict[str, object]]):
     from agents.effect_graph.types import ModulationBinding
 
     if not _graph_runtime:
@@ -836,7 +840,7 @@ COMPOSITOR_LAYER_DIR = Path("/dev/shm/hapax-compositor")
 
 
 @router.patch("/studio/layer/{layer}/enabled")
-async def set_layer_enabled(layer: str, body: dict[str, Any]):
+async def set_layer_enabled(layer: str, body: dict[str, object]):
     """Enable or disable a source layer."""
     if layer not in ("live", "smooth", "hls"):
         raise HTTPException(400, f"Invalid layer: {layer}")
@@ -850,7 +854,7 @@ async def set_layer_enabled(layer: str, body: dict[str, Any]):
 
 
 @router.patch("/studio/layer/smooth/delay")
-async def set_smooth_delay(body: dict[str, Any]):
+async def set_smooth_delay(body: dict[str, object]):
     """Set the smooth layer temporal delay in seconds."""
     delay = body.get("delay_seconds")
     if not isinstance(delay, (int, float)) or delay < 0 or delay > 30:
@@ -865,7 +869,7 @@ async def set_smooth_delay(body: dict[str, Any]):
 
 
 @router.put("/studio/presets/{name}")
-async def save_preset(name: str, body: dict[str, Any]):
+async def save_preset(name: str, body: dict[str, object]):
     """Save the current or provided graph as a user preset."""
     from agents.effect_graph.types import EffectGraph
 
@@ -917,7 +921,7 @@ async def list_cameras():
 
 
 @router.post("/studio/camera/select")
-async def select_camera(body: dict[str, Any]):
+async def select_camera(body: dict[str, object]):
     """Set the hero camera role for the studio view."""
     role = body.get("role")
     if not role or not isinstance(role, str):

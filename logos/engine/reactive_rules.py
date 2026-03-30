@@ -20,10 +20,10 @@ import asyncio
 import logging
 import time
 
+from logos._telemetry import hapax_event
 from logos.engine.models import Action, ChangeEvent
 from logos.engine.rules import Rule
 from shared.governance.carrier import CarrierRegistry
-from shared.telemetry import hapax_event
 
 _log = logging.getLogger(__name__)
 
@@ -56,8 +56,8 @@ async def _handle_config_changed(*, path: str) -> str:
 
 async def _handle_sdlc_event(*, path: str) -> str:
     """Send notification and refresh slow cache for SDLC events."""
+    from logos._notify import send_notification
     from logos.api.cache import cache
-    from shared.notify import send_notification
 
     await asyncio.to_thread(
         send_notification,
@@ -270,7 +270,7 @@ def get_knowledge_scheduler() -> QuietWindowScheduler:
 async def _handle_knowledge_maintenance(*, ignore_fn=None) -> str:
     """Run knowledge maintenance after quiet window expires."""
     from agents.knowledge_maint import run_maintenance
-    from shared.config import PROFILES_DIR
+    from logos._config import PROFILES_DIR
 
     # Self-trigger prevention for output files
     if ignore_fn is not None:
@@ -527,9 +527,9 @@ _consolidation_scheduler = QuietWindowScheduler(quiet_window_s=300)
 
 async def _handle_pattern_consolidation(*, ignore_fn=None) -> str:
     """Run WS3 L3 pattern consolidation after episodes accumulate."""
-    from shared.correction_memory import CorrectionStore
-    from shared.episodic_memory import EpisodeStore
-    from shared.pattern_consolidation import PatternStore, run_consolidation
+    from agents._correction_memory import CorrectionStore
+    from logos._episodic_memory import EpisodeStore
+    from logos._pattern_consolidation import PatternStore, run_consolidation
 
     _consolidation_scheduler.consume()
 
@@ -587,7 +587,7 @@ _correction_synthesis_scheduler = QuietWindowScheduler(quiet_window_s=600)
 
 async def _handle_correction_synthesis(*, ignore_fn=None) -> str:
     """Synthesize accumulated corrections into profile facts."""
-    from shared.correction_synthesis import run_correction_synthesis
+    from logos._correction_synthesis import run_correction_synthesis
 
     _correction_synthesis_scheduler.consume()
     result = await run_correction_synthesis()
@@ -720,7 +720,7 @@ async def _handle_consent_transition(*, from_phase: str, to_phase: str) -> str:
     _log.info("CONSENT transition: %s → %s", from_phase, to_phase)
 
     if to_phase == "consent_pending":
-        from shared.notify import send_notification
+        from logos._notify import send_notification
 
         await asyncio.to_thread(
             send_notification,
@@ -729,7 +729,7 @@ async def _handle_consent_transition(*, from_phase: str, to_phase: str) -> str:
             priority="high",
         )
     elif to_phase == "no_guest" and from_phase in ("consent_pending", "consent_refused"):
-        from shared.notify import send_notification
+        from logos._notify import send_notification
 
         await asyncio.to_thread(
             send_notification,

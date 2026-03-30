@@ -8,7 +8,6 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Any
 
 from .compiler import ExecutionPlan, ExecutionStep, GraphCompiler
 from .registry import ShaderRegistry
@@ -67,7 +66,7 @@ def validate_wgsl(source: str) -> bool:
             Path(tmp_path).unlink(missing_ok=True)
 
 
-def compile_to_wgsl_plan(graph: EffectGraph) -> dict[str, Any]:
+def compile_to_wgsl_plan(graph: EffectGraph) -> dict[str, object]:
     """Compile an EffectGraph into a WGSL execution plan dict.
 
     Uses GraphCompiler for topological ordering, then maps each ExecutionStep
@@ -79,7 +78,7 @@ def compile_to_wgsl_plan(graph: EffectGraph) -> dict[str, Any]:
     compiler = GraphCompiler(registry)
     plan: ExecutionPlan = compiler.compile(graph)
 
-    passes: list[dict[str, Any]] = []
+    passes: list[dict[str, object]] = []
     steps = [s for s in plan.steps if s.node_type != "output"]
 
     for i, step in enumerate(steps):
@@ -133,7 +132,7 @@ def compile_to_wgsl_plan(graph: EffectGraph) -> dict[str, Any]:
         if is_temporal:
             inputs.append(f"@accum_{step.node_id}")
 
-        descriptor: dict[str, Any] = {
+        descriptor: dict[str, object] = {
             "node_id": step.node_id,
             "shader": f"{step.node_type}.wgsl",
             "type": pass_type,
@@ -155,7 +154,7 @@ def compile_to_wgsl_plan(graph: EffectGraph) -> dict[str, Any]:
 
 
 def write_wgsl_pipeline(
-    plan: dict[str, Any],
+    plan: dict[str, object],
     output_dir: Path | None = None,
     nodes_dir: Path | None = None,
 ) -> Path:
@@ -186,7 +185,7 @@ def write_wgsl_pipeline(
         )
 
     # Copy each required .wgsl file, validating combined source first.
-    valid_passes: list[dict[str, Any]] = []
+    valid_passes: list[dict[str, object]] = []
     for p in plan.get("passes", []):
         shader_name = p.get("shader", "")
         src = nodes_dir / shader_name

@@ -579,7 +579,7 @@ def _print_stats(state: ObsidianSyncState) -> None:
 
 def run_full_sync() -> None:
     """Full vault sync."""
-    from shared.notify import send_notification
+    from agents._notify import send_notification
 
     state = _load_state()
     written, deleted = _full_sync(state=state)
@@ -587,7 +587,7 @@ def run_full_sync() -> None:
     _write_profile_facts(state)
 
     # Sensor protocol — write state + impingement
-    from shared.sensor_protocol import emit_sensor_impingement, write_sensor_state
+    from agents._sensor_protocol import emit_sensor_impingement, write_sensor_state
 
     write_sensor_state("obsidian", {"note_count": len(state.notes), "last_sync": time.time()})
     if written or deleted:
@@ -600,7 +600,7 @@ def run_full_sync() -> None:
 
 def run_auto() -> None:
     """Incremental vault sync — only changed files."""
-    from shared.notify import send_notification
+    from agents._notify import send_notification
 
     state = _load_state()
 
@@ -614,7 +614,7 @@ def run_auto() -> None:
     _write_profile_facts(state)
 
     # Sensor protocol — write state + impingement on changes
-    from shared.sensor_protocol import emit_sensor_impingement, write_sensor_state
+    from agents._sensor_protocol import emit_sensor_impingement, write_sensor_state
 
     write_sensor_state("obsidian", {"note_count": len(state.notes), "last_sync": time.time()})
     if written or deleted:
@@ -649,7 +649,7 @@ def main() -> None:
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
 
-    from shared.log_setup import configure_logging
+    from agents._log_setup import configure_logging
 
     configure_logging(agent="obsidian-sync", level="DEBUG" if args.verbose else None)
 

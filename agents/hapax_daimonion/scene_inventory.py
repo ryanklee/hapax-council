@@ -330,7 +330,7 @@ class SceneInventory:
                 reverse=True,
             )[:_SNAPSHOT_MAX_OBJECTS]
 
-            from shared.cameras import resolution as _cam_resolution
+            from agents._cameras import resolution as _cam_resolution
 
             objects_out = []
             for o in recent:
@@ -403,7 +403,7 @@ class SceneInventory:
 
         Unlike snapshot(), this includes the raw bounding box data needed for rendering.
         """
-        from shared.cameras import resolution as _cam_resolution
+        from agents._cameras import resolution as _cam_resolution
 
         with self._lock:
             now = time.time()

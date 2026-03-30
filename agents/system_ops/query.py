@@ -9,9 +9,9 @@ from pathlib import Path
 
 from pydantic_ai import Agent
 
-from shared.config import get_model
-from shared.ops_db import get_table_schemas as _get_table_schemas
-from shared.ops_db import run_sql
+from agents._config import get_model
+from agents._ops_db import get_table_schemas as _get_table_schemas
+from agents._ops_db import run_sql
 
 log = logging.getLogger(__name__)
 
@@ -131,7 +131,7 @@ def create_agent() -> Agent:
     @agent.tool
     async def infra_snapshot(ctx) -> str:
         """Get the current infrastructure state: containers, timers, GPU, cycle mode."""
-        from shared.ops_live import get_infra_snapshot
+        from agents._ops_live import get_infra_snapshot
 
         return get_infra_snapshot(ctx.deps.profiles_dir)
 
@@ -142,21 +142,21 @@ def create_agent() -> Agent:
         Valid sections: docker, systemd, qdrant_collections, ollama, gpu,
         disk, listening_ports, pass_entries, litellm_routes, profile_files.
         """
-        from shared.ops_live import get_manifest_section
+        from agents._ops_live import get_manifest_section
 
         return get_manifest_section(ctx.deps.profiles_dir, section)
 
     @agent.tool
     async def langfuse_cost(ctx, days: int = 7) -> str:
         """Query LLM usage costs from Langfuse for the given time window."""
-        from shared.ops_live import query_langfuse_cost
+        from agents._ops_live import query_langfuse_cost
 
         return query_langfuse_cost(days=days)
 
     @agent.tool
     async def qdrant_stats(ctx) -> str:
         """Get current Qdrant collection statistics: names and point counts."""
-        from shared.ops_live import query_qdrant_stats
+        from agents._ops_live import query_qdrant_stats
 
         return query_qdrant_stats()
 

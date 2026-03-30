@@ -25,16 +25,17 @@ from pydantic import BaseModel
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from shared.axiom_enforcement import check_full
-from shared.axiom_registry import load_axioms, load_implications
-from shared.langfuse_trace_export import TraceContext, is_file_export
-from shared.sdlc_github import (
+from sdlc.github import (
     add_pr_labels,
     fetch_pr,
     fetch_pr_changed_files,
     fetch_pr_diff,
     post_pr_comment,
 )
+from sdlc.trace_export import TraceContext, is_file_export
+
+from agents._axiom_enforcement import check_full
+from agents._axiom_registry import load_axioms, load_implications
 
 # ---------------------------------------------------------------------------
 # Structured output
@@ -269,7 +270,7 @@ def run_axiom_gate(pr_number: int, *, dry_run: bool = False) -> AxiomGateResult:
     duration_ms = int((time.monotonic() - t0) * 1000)
 
     try:
-        from shared.sdlc_log import log_sdlc_event
+        from sdlc.log import log_sdlc_event
 
         log_sdlc_event(
             "axiom-gate",
@@ -305,7 +306,7 @@ def run_axiom_gate(pr_number: int, *, dry_run: bool = False) -> AxiomGateResult:
         pass
 
     try:
-        from shared.audit import log_audit
+        from sdlc.audit import log_audit
 
         log_audit(
             action="sdlc_axiom_gate",

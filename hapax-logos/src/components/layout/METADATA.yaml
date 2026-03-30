@@ -1,0 +1,23 @@
+module: layout
+purpose: Application-level layout primitives: modal shell, health toast watcher, and manual drawer.
+version: 1
+
+interface:
+  props:
+    - visible: boolean
+    - title: string
+  emits: []
+  side_effects:
+    - watches health API for toast triggers
+
+dependencies:
+  runtime:
+    - react
+    - tailwindcss
+  internal:
+    - shared
+
+execution: {}
+
+token_budget:
+  self: 3680

@@ -11,7 +11,6 @@ import asyncio
 import json
 import logging
 import time
-from typing import Any
 
 from agents.fortress.chunks import ChunkCompressor
 from agents.fortress.config import DeliberationConfig
@@ -117,11 +116,11 @@ async def run_deliberation(
     compressor: ChunkCompressor,
     prev_state: FastFortressState | FullFortressState | None,
     config: DeliberationConfig,
-    tool_dispatch: dict[str, Any] | None = None,
+    tool_dispatch: dict[str, object] | None = None,
     recent_events: list[str] | None = None,
     recent_decisions: list[str] | None = None,
     dmn_buffer: str = "",
-) -> list[dict[str, Any]]:
+) -> list[dict[str, object]]:
     """Run a single ReAct deliberation cycle.
 
     Returns list of action dicts suitable for bridge dispatch.
@@ -141,7 +140,7 @@ async def run_deliberation(
     )
 
     openai_tools = _to_openai_tools(FORTRESS_TOOLS)
-    actions: list[dict[str, Any]] = []
+    actions: list[dict[str, object]] = []
     tool_calls_used = 0
     start_time = time.monotonic()
     iteration = 0
@@ -224,8 +223,8 @@ async def run_deliberation(
 
 def _dispatch_tool(
     name: str,
-    args: dict[str, Any],
-    dispatch_table: dict[str, Any] | None,
+    args: dict[str, object],
+    dispatch_table: dict[str, object] | None,
 ) -> str:
     """Route tool call to the appropriate observation function."""
     if dispatch_table and name in dispatch_table:
@@ -237,20 +236,20 @@ def _dispatch_tool(
     return f"Tool '{name}' not available in this context."
 
 
-def _parse_text_actions(text: str) -> list[dict[str, Any]]:
+def _parse_text_actions(text: str) -> list[dict[str, object]]:
     """Parse action requests from LLM's final text response.
 
     Looks for structured action blocks like:
     ACTION: dig_room at center
     ACTION: import_orders library/basic
     """
-    actions: list[dict[str, Any]] = []
+    actions: list[dict[str, object]] = []
     for line in text.split("\n"):
         line = line.strip()
         if line.upper().startswith("ACTION:"):
             parts = line[7:].strip().split(None, 1)
             if parts:
-                action: dict[str, Any] = {"action": parts[0]}
+                action: dict[str, object] = {"action": parts[0]}
                 if len(parts) > 1:
                     action["params"] = parts[1]
                 actions.append(action)

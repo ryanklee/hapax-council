@@ -140,7 +140,7 @@ class SyncState(BaseModel):
 
 def _get_drive_service():
     """Build authenticated Drive API service."""
-    from shared.google_auth import build_service
+    from agents._google_auth import build_service
 
     return build_service("drive", "v3", SCOPES)
 
@@ -819,7 +819,7 @@ def run_auth() -> None:
 
 def run_full_scan() -> None:
     """Full scan + sync all files."""
-    from shared.notify import send_notification
+    from agents._notify import send_notification
 
     service = _get_drive_service()
     state = _load_state()
@@ -847,7 +847,7 @@ def run_full_scan() -> None:
     _write_profile_facts(state)
 
     # Sensor protocol — write state + impingement
-    from shared.sensor_protocol import emit_sensor_impingement, write_sensor_state
+    from agents._sensor_protocol import emit_sensor_impingement, write_sensor_state
 
     write_sensor_state("gdrive", {"file_count": len(state.files), "last_sync": time.time()})
     emit_sensor_impingement("gdrive", "information_seeking", ["full_scan"])
@@ -859,7 +859,7 @@ def run_full_scan() -> None:
 
 def run_auto() -> None:
     """Incremental sync — changes since last run."""
-    from shared.notify import send_notification
+    from agents._notify import send_notification
 
     service = _get_drive_service()
     state = _load_state()
@@ -888,7 +888,7 @@ def run_auto() -> None:
     _write_profile_facts(state)
 
     # Sensor protocol — write state + impingement on changes
-    from shared.sensor_protocol import emit_sensor_impingement, write_sensor_state
+    from agents._sensor_protocol import emit_sensor_impingement, write_sensor_state
 
     write_sensor_state("gdrive", {"file_count": len(state.files), "last_sync": time.time()})
     if synced:
@@ -939,7 +939,7 @@ def main() -> None:
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
 
-    from shared.log_setup import configure_logging
+    from agents._log_setup import configure_logging
 
     configure_logging(agent="gdrive-sync", level="DEBUG" if args.verbose else None)
 

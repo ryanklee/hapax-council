@@ -8,7 +8,6 @@ import uuid
 from datetime import datetime, timedelta
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Any
 
 import yaml
 
@@ -66,7 +65,7 @@ class SpawnRule(RuleBase):
     def _write_manifest(self, topic: str, context: str = "") -> Path:
         """Write a spawn manifest YAML and record the child in state."""
         child_id = str(uuid.uuid4())[:8]
-        manifest: dict[str, Any] = {
+        manifest: dict[str, object] = {
             "child_id": child_id,
             "parent_session": self._state.session_id,
             "topic": topic,
@@ -92,7 +91,7 @@ class SpawnRule(RuleBase):
     # Public API
     # ------------------------------------------------------------------
 
-    def claim_pending_manifest(self, state: SessionState) -> dict[str, Any] | None:
+    def claim_pending_manifest(self, state: SessionState) -> dict[str, object] | None:
         """Claim a pending manifest within the 10-minute window.
 
         Scans spawns_dir for pending manifests. Returns the manifest data
@@ -102,7 +101,7 @@ class SpawnRule(RuleBase):
         now = datetime.now()
         for manifest_path in sorted(self.spawns_dir.glob("*.yaml")):
             try:
-                data: dict[str, Any] = yaml.safe_load(manifest_path.read_text()) or {}
+                data: dict[str, object] = yaml.safe_load(manifest_path.read_text()) or {}
             except (OSError, yaml.YAMLError):
                 continue
 
@@ -136,14 +135,14 @@ class SpawnRule(RuleBase):
 
         return None
 
-    def check_completed_children(self, state: SessionState) -> list[dict[str, Any]]:
+    def check_completed_children(self, state: SessionState) -> list[dict[str, object]]:
         """Scan for completed spawn manifests and return their result data."""
         completed = []
         for child in state.children:
             if child.session_id in self._reunited_children:
                 continue
             try:
-                data: dict[str, Any] = yaml.safe_load(child.spawn_manifest.read_text()) or {}
+                data: dict[str, object] = yaml.safe_load(child.spawn_manifest.read_text()) or {}
             except (OSError, yaml.YAMLError):
                 continue
             if data.get("status") == "completed":
@@ -161,7 +160,7 @@ class SpawnRule(RuleBase):
 
         for manifest_path in self.spawns_dir.glob("*.yaml"):
             try:
-                data: dict[str, Any] = yaml.safe_load(manifest_path.read_text()) or {}
+                data: dict[str, object] = yaml.safe_load(manifest_path.read_text()) or {}
             except (OSError, yaml.YAMLError):
                 continue
             if data.get("claimed_by") == self._state.session_id:

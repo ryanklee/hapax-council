@@ -179,7 +179,7 @@ def _clear_chat_session() -> None:
     would show "I'm the interview agent" responses instead of system tool responses.
     """
     try:
-        from shared.config import LOGOS_STATE_DIR
+        from agents._config import LOGOS_STATE_DIR
 
         session_file = LOGOS_STATE_DIR / "chat-session.json"
         if session_file.exists():

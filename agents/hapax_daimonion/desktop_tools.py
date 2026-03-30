@@ -11,7 +11,7 @@ import time
 
 from pipecat.adapters.schemas.function_schema import FunctionSchema
 
-from shared.hyprland import HyprlandIPC
+from agents._hyprland import HyprlandIPC
 
 log = logging.getLogger(__name__)
 

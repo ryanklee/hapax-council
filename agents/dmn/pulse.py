@@ -24,9 +24,9 @@ from pathlib import Path
 
 import httpx
 
+from agents._impingement import Impingement, ImpingementType
 from agents.dmn.buffer import DMNBuffer
 from agents.dmn.sensor import read_all
-from shared.impingement import Impingement, ImpingementType
 
 VISUAL_OBSERVATION_PATH = Path("/dev/shm/hapax-dmn/visual-observation.txt")
 

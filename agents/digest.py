@@ -29,8 +29,8 @@ log = logging.getLogger(__name__)
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 
-from shared.config import PROFILES_DIR, get_model, get_qdrant
-from shared.operator import get_system_prompt_fragment
+from agents._config import PROFILES_DIR, get_model, get_qdrant
+from agents._operator import get_system_prompt_fragment
 
 # Import Langfuse OTel config (side-effect: configures exporter)
 try:
@@ -183,13 +183,13 @@ digest_agent = Agent(
 )
 
 # Register on-demand operator context tools
-from shared.context_tools import get_context_tools
+from agents._context_tools import get_context_tools
 
 for _tool_fn in get_context_tools():
     digest_agent.tool(_tool_fn)
 
 # Register axiom compliance tools
-from shared.axiom_tools import get_axiom_tools
+from agents._axiom_tools import get_axiom_tools
 
 for _tool_fn in get_axiom_tools():
     digest_agent.tool(_tool_fn)
@@ -356,8 +356,8 @@ def format_digest_human(digest: Digest) -> str:
 
 def send_notification(digest: Digest) -> None:
     """Send digest notification via ntfy + desktop (shared.notify)."""
-    from shared.notify import obsidian_uri
-    from shared.notify import send_notification as _notify
+    from agents._notify import obsidian_uri
+    from agents._notify import send_notification as _notify
 
     body_parts = [digest.headline]
     s = digest.stats
@@ -379,7 +379,7 @@ DIGEST_JSON_FILE = PROFILES_DIR / "digest.json"
 
 
 async def main() -> None:
-    from shared.cli import add_common_args
+    from agents._cli import add_common_args
 
     parser = argparse.ArgumentParser(
         description="Content digest generator",
@@ -396,7 +396,7 @@ async def main() -> None:
         digest_md = format_digest_md(digest)
 
         # Axiom enforcement check before write (Gap 8)
-        from shared.axiom_enforcer import enforce_output
+        from agents._axiom_enforcer import enforce_output
 
         enforcement = enforce_output(digest_md, "digest", DIGEST_MD_FILE)
         if not enforcement.allowed:
@@ -417,7 +417,7 @@ async def main() -> None:
         DIGEST_JSON_FILE.write_text(digest.model_dump_json(indent=2))
         print(f"Saved to {DIGEST_MD_FILE}", file=sys.stderr)
 
-        from shared.vault_writer import write_digest_to_vault
+        from agents._vault_writer import write_digest_to_vault
 
         vault_path = write_digest_to_vault(digest_md)
         if vault_path:

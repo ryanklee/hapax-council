@@ -26,9 +26,10 @@ from pydantic import BaseModel
 # Ensure project root is importable.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from shared.axiom_registry import load_axioms
-from shared.langfuse_trace_export import TraceContext, is_file_export
-from shared.sdlc_github import fetch_issue
+from sdlc.github import fetch_issue
+from sdlc.trace_export import TraceContext, is_file_export
+
+from agents._axiom_registry import load_axioms
 
 # ---------------------------------------------------------------------------
 # Structured output model
@@ -251,7 +252,7 @@ def find_similar_closed(
 
     if not skip_github:
         try:
-            from shared.sdlc_github import search_closed_issues
+            from sdlc.github import search_closed_issues
 
             query = " ".join(keywords[:4])
             gh_results = search_closed_issues(query, limit=5)
@@ -310,7 +311,7 @@ def run_triage(
     duration_ms = int((time.monotonic() - t0) * 1000)
 
     try:
-        from shared.sdlc_log import log_sdlc_event
+        from sdlc.log import log_sdlc_event
 
         log_sdlc_event(
             "triage",
@@ -331,7 +332,7 @@ def run_triage(
         pass
 
     try:
-        from shared.audit import log_audit
+        from sdlc.audit import log_audit
 
         log_audit(
             action="sdlc_triage",

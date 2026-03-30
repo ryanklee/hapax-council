@@ -90,21 +90,31 @@ class HealthReport(BaseModel):
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
-from shared.config import (
-    AI_AGENTS_DIR,
-    AXIOM_AUDIT_DIR,
-    CLAUDE_CONFIG_DIR,
-    HAPAX_HOME,
-    LITELLM_BASE,
-    LLM_STACK_DIR,
-    OLLAMA_URL,
-    PASSWORD_STORE_DIR,
-    PROFILES_DIR,
-    QDRANT_URL,
-    RAG_INGEST_STATE_DIR,
-    RAG_SOURCES_DIR,
-    load_expected_timers,
+# ── Vendored from shared/config.py ──────────────────────────────────────────
+LITELLM_BASE: str = os.environ.get(
+    "LITELLM_API_BASE",
+    os.environ.get("LITELLM_BASE_URL", "http://localhost:4000"),
 )
+QDRANT_URL: str = os.environ.get("QDRANT_URL", "http://localhost:6333")
+OLLAMA_URL: str = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+
+HAPAX_HOME: Path = Path(os.environ.get("HAPAX_HOME", str(Path.home())))
+HAPAX_CACHE_DIR: Path = HAPAX_HOME / ".cache"
+HAPAX_PROJECTS_DIR: Path = HAPAX_HOME / "projects"
+LLM_STACK_DIR: Path = HAPAX_HOME / "llm-stack"
+CLAUDE_CONFIG_DIR: Path = HAPAX_HOME / ".claude"
+PASSWORD_STORE_DIR: Path = HAPAX_HOME / ".password-store"
+RAG_SOURCES_DIR: Path = HAPAX_HOME / "documents" / "rag-sources"
+
+AXIOM_AUDIT_DIR: Path = HAPAX_CACHE_DIR / "axiom-audit"
+RAG_INGEST_STATE_DIR: Path = HAPAX_CACHE_DIR / "rag-ingest"
+
+HAPAX_COUNCIL_DIR: Path = HAPAX_PROJECTS_DIR / "hapax-council"
+AI_AGENTS_DIR: Path = HAPAX_COUNCIL_DIR  # legacy alias
+PROFILES_DIR: Path = Path(__file__).resolve().parent.parent / "profiles"
+SYSTEMD_USER_DIR: Path = Path.home() / ".config" / "systemd" / "user"
+
+from agents._config import load_expected_timers  # depends on shared.agent_registry
 
 WATCH_STATE_DIR: Path = HAPAX_HOME / "hapax-state" / "watch"
 EDGE_STATE_DIR: Path = HAPAX_HOME / "hapax-state" / "edge"
@@ -656,8 +666,6 @@ async def check_systemd_services() -> list[CheckResult]:
 async def check_systemd_drift() -> list[CheckResult]:
     """Verify deployed systemd units match repo source."""
     t = time.monotonic()
-    from shared.config import SYSTEMD_USER_DIR
-
     repo_units = AI_AGENTS_DIR / "systemd" / "units"
     deployed_dir = SYSTEMD_USER_DIR
 
@@ -1786,7 +1794,7 @@ LATENCY_THRESHOLDS = {
 def _get_threshold(check_name: str, default: float) -> float:
     """Load threshold override if available, else return default."""
     try:
-        from shared.threshold_tuner import get_threshold
+        from agents._threshold_tuner import get_threshold
 
         return get_threshold(check_name, default)
     except Exception:
@@ -2087,7 +2095,7 @@ async def check_capacity_forecasts() -> list[CheckResult]:
     """Alert when any resource is forecast to exhaust within 7 days."""
     t = time.monotonic()
     try:
-        from shared.capacity import forecast_exhaustion
+        from agents._capacity import forecast_exhaustion
 
         forecasts = forecast_exhaustion()
         if not forecasts:
@@ -2146,7 +2154,7 @@ async def check_axiom_registry() -> list[CheckResult]:
 
     # Check registry exists and is parseable
     try:
-        from shared.axiom_registry import AXIOMS_PATH, load_axioms
+        from agents._axiom_registry import AXIOMS_PATH, load_axioms
 
         registry_file = AXIOMS_PATH / "registry.yaml"
         if registry_file.exists():
@@ -2197,9 +2205,9 @@ async def check_axiom_registry() -> list[CheckResult]:
     # Check precedent collection exists in Qdrant
     t2 = time.monotonic()
     try:
-        from shared.config import get_qdrant
+        from qdrant_client import QdrantClient
 
-        client = get_qdrant()
+        client = QdrantClient(QDRANT_URL)
         collections = [c.name for c in client.get_collections().collections]
         if "axiom-precedents" in collections:
             info = client.get_collection("axiom-precedents")
@@ -2220,7 +2228,7 @@ async def check_axiom_registry() -> list[CheckResult]:
                     group="axioms",
                     status=Status.DEGRADED,
                     message="axiom-precedents collection not found in Qdrant",
-                    remediation="cd ~/projects/hapax-council && uv run python -c 'from shared.axiom_precedents import PrecedentStore; PrecedentStore().ensure_collection()'",
+                    remediation="cd ~/projects/hapax-council && uv run python -c 'from agents._axiom_precedents import PrecedentStore; PrecedentStore().ensure_collection()'",
                     duration_ms=_timed(t2),
                 )
             )
@@ -2239,8 +2247,8 @@ async def check_axiom_registry() -> list[CheckResult]:
     # Check implications exist for active axioms
     t3 = time.monotonic()
     try:
-        from shared.axiom_registry import load_axioms as _load_axioms
-        from shared.axiom_registry import load_implications
+        from agents._axiom_registry import load_axioms as _load_axioms
+        from agents._axiom_registry import load_implications
 
         active = _load_axioms()
         if active:
@@ -2281,7 +2289,7 @@ async def check_axiom_registry() -> list[CheckResult]:
     # Check supremacy — domain T0 blocks vs constitutional T0 blocks
     t4 = time.monotonic()
     try:
-        from shared.axiom_registry import validate_supremacy
+        from agents._axiom_registry import validate_supremacy
 
         tensions = validate_supremacy()
         if not tensions:
@@ -2503,7 +2511,7 @@ async def check_axiom_ef_zero_config() -> list[CheckResult]:
 
     # Agents that should be runnable with no required args
     # research takes a positional query arg (acceptable — it's the input, not config)
-    from shared.agent_registry import get_registry
+    from agents._agent_registry import get_registry
 
     zero_config_agents = [a.id for a in get_registry().zero_config_agents()]
 
@@ -2822,7 +2830,7 @@ async def check_skill_syntax() -> list[CheckResult]:
     """Validate Claude Code skill definitions are syntactically valid."""
     t = time.monotonic()
     try:
-        from shared.sufficiency_probes import _check_skill_syntax
+        from agents._sufficiency_probes import _check_skill_syntax
 
         met, evidence = _check_skill_syntax()
         status = Status.HEALTHY if met else Status.DEGRADED
@@ -2859,7 +2867,7 @@ async def check_langfuse_error_spikes() -> list[CheckResult]:
     t = time.monotonic()
 
     try:
-        from shared.langfuse_client import LANGFUSE_PK, query_recent_errors
+        from agents._langfuse_client import LANGFUSE_PK, query_recent_errors
     except ImportError:
         return []
 
@@ -2999,7 +3007,7 @@ def _get_sync_agents() -> dict[str, Path]:
     Falls back to hardcoded list if registry is unavailable.
     """
     try:
-        from shared.agent_registry import AgentCategory, get_registry
+        from agents._agent_registry import AgentCategory, get_registry
 
         registry = get_registry()
         sync_agents = registry.agents_by_category(AgentCategory.SYNC)
@@ -3200,7 +3208,7 @@ async def _run_checks_inner(
     raw_results = cleaned_results
 
     # Group results and annotate tiers
-    from shared.service_tiers import ServiceTier, tier_for_check
+    from agents._service_tiers import ServiceTier, tier_for_check
 
     grouped: dict[str, list[CheckResult]] = {}
     for g, checks in raw_results:
@@ -3402,7 +3410,7 @@ async def run_fixes(report: HealthReport, yes: bool = False) -> int:
 
     # Sort fixable checks by service dependency order
     try:
-        from shared.service_graph import remediation_order
+        from agents._service_graph import remediation_order
 
         service_names = []
         for c in fixable:
@@ -3656,7 +3664,7 @@ def write_infra_snapshot(report: HealthReport) -> None:
     timers = _collect_all_timers()
 
     # Add container cron jobs (sync-pipeline)
-    from shared.working_mode import get_working_mode
+    from agents._working_mode import get_working_mode
 
     wmode = get_working_mode()
     crontab = AI_AGENTS_DIR / "sync-pipeline" / f"crontab.{wmode}"

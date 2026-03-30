@@ -14,11 +14,11 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
+from agents._impingement import Impingement, ImpingementType
 from agents.hapax_daimonion.primitives import Behavior
-from shared.impingement import Impingement, ImpingementType
 
 if TYPE_CHECKING:
-    from shared.hyprland import WindowInfo
+    from agents._hyprland import WindowInfo
 
 log = logging.getLogger(__name__)
 
@@ -352,6 +352,15 @@ class PerceptionEngine:
             self._provided_by[name] = backend.name
         backend.start()
         log.info("Registered perception backend: %s (provides: %s)", backend.name, backend.provides)
+
+    def stop(self) -> None:
+        """Stop all registered backends and release their subprocesses."""
+        for name, backend in self._backends.items():
+            try:
+                backend.stop()
+                log.info("Stopped perception backend: %s", name)
+            except Exception:
+                log.warning("Failed to stop backend %s", name, exc_info=True)
 
     def replace_backend(self, backend: PerceptionBackend) -> None:
         """Replace a backend by name. New backend must be available."""

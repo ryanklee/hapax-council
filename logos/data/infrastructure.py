@@ -10,8 +10,8 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 
-from shared.config import PROFILES_DIR
-from shared.working_mode import get_working_mode
+from logos._config import PROFILES_DIR
+from logos._working_mode import get_working_mode
 
 INFRA_SNAPSHOT = PROFILES_DIR / "infra-snapshot.json"
 

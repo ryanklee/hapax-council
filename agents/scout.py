@@ -37,8 +37,36 @@ import yaml
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 
-from shared.config import get_model
-from shared.operator import get_system_prompt_fragment
+from agents._operator import get_system_prompt_fragment
+
+# ── Vendored from shared/config.py ──────────────────────────────────────────
+_LITELLM_BASE: str = os.environ.get(
+    "LITELLM_API_BASE", os.environ.get("LITELLM_BASE_URL", "http://localhost:4000")
+)
+_LITELLM_KEY: str = os.environ.get("LITELLM_API_KEY", "")
+_MODELS: dict[str, str] = {
+    "fast": "gemini-flash",
+    "balanced": "claude-sonnet",
+    "long-context": "gemini-flash",
+    "reasoning": "qwen3:8b",
+    "coding": "qwen3:8b",
+    "local-fast": "qwen3:8b",
+}
+
+
+def get_model(alias_or_id: str = "balanced"):
+    """Create a LiteLLM-backed chat model (vendored from shared.config)."""
+    from pydantic_ai.models.openai import OpenAIChatModel
+    from pydantic_ai.providers.litellm import LiteLLMProvider
+
+    model_id = _MODELS.get(alias_or_id, alias_or_id)
+    return OpenAIChatModel(
+        model_id,
+        provider=LiteLLMProvider(api_base=_LITELLM_BASE, api_key=_LITELLM_KEY),
+    )
+
+
+# ── End vendored ────────────────────────────────────────────────────────────
 
 # Import Langfuse OTel config (side-effect: configures exporter)
 try:
@@ -52,7 +80,7 @@ _tracer = trace.get_tracer(__name__)
 
 log = logging.getLogger("scout")
 
-from shared.config import PROFILES_DIR
+PROFILES_DIR: Path = Path(__file__).resolve().parent.parent / "profiles"
 
 REGISTRY_FILE = PROFILES_DIR / "component-registry.yaml"
 REPORT_JSON = PROFILES_DIR / "scout-report.json"
@@ -286,12 +314,12 @@ eval_agent = Agent(
 )
 
 # Register on-demand operator context tools
-from shared.context_tools import get_context_tools
+from agents._context_tools import get_context_tools
 
 for _tool_fn in get_context_tools():
     eval_agent.tool(_tool_fn)
 
-from shared.axiom_tools import get_axiom_tools
+from agents._axiom_tools import get_axiom_tools
 
 for _tool_fn in get_axiom_tools():
     eval_agent.tool(_tool_fn)
@@ -366,7 +394,7 @@ def _build_usage_map() -> dict[str, str]:
     """Build component-key → usage description map from Langfuse data."""
     with _tracer.start_as_current_span("scout.build_usage_map"):
         try:
-            from shared.langfuse_client import is_available, langfuse_get
+            from agents._langfuse_client import is_available, langfuse_get
         except ImportError:
             return {}
 
@@ -609,7 +637,7 @@ def send_notification(report: ScoutReport) -> None:
     summary = f"Scout: {len(actionable)} component(s) need attention"
     body = "\n".join(f"- {r.component}: {r.tier}" for r in actionable[:3])
 
-    from shared.notify import send_notification as _notify
+    from agents._notify import send_notification as _notify
 
     _notify("Horizon Scan", f"{summary}\n{body}", priority="default", tags=["telescope"])
 
@@ -635,7 +663,7 @@ async def main() -> None:
     )
     args = parser.parse_args()
 
-    from shared.log_setup import configure_logging
+    from agents._log_setup import configure_logging
 
     configure_logging(agent="scout")
 

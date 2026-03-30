@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
 
 log = logging.getLogger("reverie.governance")
 
@@ -21,11 +21,11 @@ GPU_STATE = Path("/proc/driver/nvidia/gpus")  # existence check only
 class VisualVeto:
     """A single veto condition for visual actuation."""
 
-    def __init__(self, name: str, check: Any) -> None:
+    def __init__(self, name: str, check: Callable[[dict[str, object]], str | None]) -> None:
         self.name = name
         self._check = check
 
-    def evaluate(self, ctx: dict[str, Any]) -> str | None:
+    def evaluate(self, ctx: dict[str, object]) -> str | None:
         """Return reason string if vetoed, None if allowed."""
         return self._check(ctx)
 
@@ -43,7 +43,7 @@ class VisualVetoChain:
     def add(self, veto: VisualVeto) -> None:
         self._vetoes.append(veto)
 
-    def evaluate(self, ctx: dict[str, Any]) -> tuple[bool, str | None]:
+    def evaluate(self, ctx: dict[str, object]) -> tuple[bool, str | None]:
         """Evaluate all vetoes. Returns (allowed, reason)."""
         for veto in self._vetoes:
             reason = veto.evaluate(ctx)
@@ -52,7 +52,7 @@ class VisualVetoChain:
         return True, None
 
 
-def _check_consent(ctx: dict[str, Any]) -> str | None:
+def _check_consent(ctx: dict[str, object]) -> str | None:
     """Veto if consent is refused (guest present, no contract)."""
     consent_phase = ctx.get("consent_phase", "no_guest")
     if consent_phase == "consent_refused":
@@ -60,7 +60,7 @@ def _check_consent(ctx: dict[str, Any]) -> str | None:
     return None
 
 
-def _check_gpu(ctx: dict[str, Any]) -> str | None:
+def _check_gpu(ctx: dict[str, object]) -> str | None:
     """Veto if GPU is unavailable."""
     pipeline_dir = Path("/dev/shm/hapax-imagination/pipeline")
     if not pipeline_dir.exists():
@@ -68,7 +68,7 @@ def _check_gpu(ctx: dict[str, Any]) -> str | None:
     return None
 
 
-def _check_stimmung_critical(ctx: dict[str, Any]) -> str | None:
+def _check_stimmung_critical(ctx: dict[str, object]) -> str | None:
     """Veto heavy visual effects under critical system health."""
     stance = ctx.get("stance", "nominal")
     if stance == "critical":

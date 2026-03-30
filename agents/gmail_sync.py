@@ -151,7 +151,7 @@ has_attachments: {str(e.has_attachments).lower()}
 
 def _get_gmail_service():
     """Build authenticated Gmail API service."""
-    from shared.google_auth import build_service
+    from agents._google_auth import build_service
 
     return build_service("gmail", "v1", SCOPES)
 
@@ -562,7 +562,7 @@ def run_auth() -> None:
 
 def run_full_sync() -> None:
     """Full Gmail metadata sync."""
-    from shared.notify import send_notification
+    from agents._notify import send_notification
 
     service = _get_gmail_service()
     state = _load_state()
@@ -573,7 +573,7 @@ def run_full_sync() -> None:
     _write_profile_facts(state)
 
     # Sensor protocol — write state + impingement
-    from shared.sensor_protocol import emit_sensor_impingement, write_sensor_state
+    from agents._sensor_protocol import emit_sensor_impingement, write_sensor_state
 
     unread = sum(1 for e in state.messages.values() if e.is_unread)
     write_sensor_state("gmail", {"unread_count": unread, "last_sync": time.time()})
@@ -586,7 +586,7 @@ def run_full_sync() -> None:
 
 def run_auto() -> None:
     """Incremental Gmail sync."""
-    from shared.notify import send_notification
+    from agents._notify import send_notification
 
     service = _get_gmail_service()
     state = _load_state()
@@ -608,7 +608,7 @@ def run_auto() -> None:
     _write_profile_facts(state)
 
     # Sensor protocol — write state + impingement on changes
-    from shared.sensor_protocol import emit_sensor_impingement, write_sensor_state
+    from agents._sensor_protocol import emit_sensor_impingement, write_sensor_state
 
     unread = sum(1 for e in state.messages.values() if e.is_unread)
     write_sensor_state("gmail", {"unread_count": unread, "last_sync": time.time()})
@@ -645,7 +645,7 @@ def main() -> None:
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
 
-    from shared.log_setup import configure_logging
+    from agents._log_setup import configure_logging
 
     configure_logging(agent="gmail-sync", level="DEBUG" if args.verbose else None)
 

@@ -46,7 +46,7 @@ class PhasedExecutor:
                 _log.debug("Skipping %s: dependency %s failed/skipped", action.name, dep)
                 return
 
-        from shared.telemetry import hapax_span
+        from logos._telemetry import hapax_span
 
         with hapax_span(
             "engine",

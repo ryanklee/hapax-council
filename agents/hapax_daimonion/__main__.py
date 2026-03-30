@@ -2476,6 +2476,13 @@ class VoiceDaemon:
             # Stop audio input
             self._audio_input.stop()
 
+            # Stop perception backends (kills pw-record subprocesses)
+            self.perception.stop()
+
+            # Stop noise reference captures
+            if self._noise_reference is not None:
+                self._noise_reference.stop()
+
             self.chime_player.close()
 
             # Close actuation

@@ -13,17 +13,16 @@ from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
+from logos._config import AI_AGENTS_DIR, PROFILES_DIR, RAG_SOURCES_DIR
+from logos._stimmung import Stance
+from logos._telemetry import hapax_event, hapax_interaction
+from logos._working_mode import WorkingMode, get_working_mode
 from logos.engine.executor import PhasedExecutor
 from logos.engine.models import ActionPlan as ActionPlan
 from logos.engine.models import ChangeEvent
 from logos.engine.rules import RuleRegistry, evaluate_rules
 from logos.engine.watcher import DirectoryWatcher
-from shared.config import AI_AGENTS_DIR, PROFILES_DIR, RAG_SOURCES_DIR
-from shared.stimmung import Stance
-from shared.telemetry import hapax_event, hapax_interaction
-from shared.working_mode import WorkingMode, get_working_mode
 
 # ── Persistent Event Counters (WS2) ─────────────────────────────────────────
 
@@ -212,10 +211,10 @@ class ReactiveEngine:
         self._start_time: float | None = None
 
         # Impingement cascade integration
+        from logos._affordance import CapabilityRecord
+        from logos._affordance_pipeline import AffordancePipeline
         from logos.engine.converter import convert as _convert
         from logos.engine.rule_capability import RuleCapability, generate_rule_description
-        from shared.affordance import CapabilityRecord
-        from shared.affordance_pipeline import AffordancePipeline
 
         self._convert_event = _convert
         self._rule_capability_class = RuleCapability
@@ -245,7 +244,7 @@ class ReactiveEngine:
         self._events_since_save = 0
 
         # WS4: time-windowed frequency tracker (distribution shift detection)
-        from shared.frequency_window import FrequencyWindow
+        from logos._frequency_window import FrequencyWindow
 
         self._frequency_window = FrequencyWindow(window_s=3600.0)  # 1 hour window
 
@@ -255,7 +254,7 @@ class ReactiveEngine:
         return self._registry
 
     @property
-    def status(self) -> dict[str, Any]:
+    def status(self) -> dict[str, object]:
         """Current engine status."""
         uptime = time.monotonic() - self._start_time if self._start_time else 0
         return {
@@ -404,7 +403,7 @@ class ReactiveEngine:
             event.doc_type,
         )
 
-        from shared.telemetry import hapax_score, hapax_span, hapax_trace
+        from logos._telemetry import hapax_score, hapax_span, hapax_trace
 
         with hapax_trace(
             "engine",

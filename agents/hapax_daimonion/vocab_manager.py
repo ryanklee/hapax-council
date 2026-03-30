@@ -15,7 +15,6 @@ import logging
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -73,7 +72,7 @@ class VocabEntry:
     cameras_seen: set[str] = field(default_factory=set)
     session_count: int = 0
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, object]:
         """Serialize for JSON persistence."""
         return {
             "label": self.label,
@@ -88,7 +87,7 @@ class VocabEntry:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> VocabEntry:
+    def from_dict(cls, d: dict[str, object]) -> VocabEntry:
         """Deserialize from JSON."""
         return cls(
             label=d["label"],

@@ -16,13 +16,27 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 import httpx
 
+from agents._active_correction import CorrectionSeeker
+from agents._apperception_tick import ApperceptionTick
+from agents._correction_memory import CorrectionStore, check_for_corrections
+from agents._episodic_memory import EpisodeBuilder, EpisodeStore
+from agents._stimmung import StimmungCollector, SystemStimmung
+from agents._telemetry import (
+    hapax_interaction,
+    trace_api_poll,
+    trace_episode_closed,
+    trace_phone_signals,
+    trace_prediction_tick,
+    trace_stimmung_update,
+    trace_visual_tick,
+)
 from agents.content_scheduler import (
     ContentPools,
     ContentScheduler,
@@ -55,20 +69,6 @@ from agents.visual_layer_state import (
     VisualLayerState,
     VoiceSessionState,
     WatershedEvent,
-)
-from shared.active_correction import CorrectionSeeker
-from shared.apperception_tick import ApperceptionTick
-from shared.correction_memory import CorrectionStore, check_for_corrections
-from shared.episodic_memory import EpisodeBuilder, EpisodeStore
-from shared.stimmung import StimmungCollector, SystemStimmung
-from shared.telemetry import (
-    hapax_interaction,
-    trace_api_poll,
-    trace_episode_closed,
-    trace_phone_signals,
-    trace_prediction_tick,
-    trace_stimmung_update,
-    trace_visual_tick,
 )
 
 log = logging.getLogger("visual_layer_aggregator")
@@ -108,17 +108,18 @@ SLOW_INTERVAL_S = SLOW_POLL_S
 # ── API ──────────────────────────────────────────────────────────────────────
 
 # ── Camera roles available for injection ─────────────────────────────────────
-from shared.cameras import (
+from agents._cameras import (
     CAMERA_ROLES,
     can_enrich_persons,
 )
-from shared.cameras import (
+from agents._cameras import (
     SHORT_TO_ROLE as _ROLE_MAP,
 )
-from shared.cameras import (
+from agents._cameras import (
     resolution as cam_resolution,
 )
-from shared.config import LOGOS_API_URL as LOGOS_BASE
+
+LOGOS_BASE: str = os.environ.get("COCKPIT_BASE_URL", "http://localhost:8051/api")
 
 # ── Experimental camera filters for ambient injection ────────────────────────
 
@@ -563,7 +564,7 @@ def _map_scene_inventory(data: dict) -> list[ClassificationDetection]:
 
         # Person enrichments: for persons on any enrichment-capable camera, not suppressed
         # Prefer per-entity enrichments from inventory, fall back to global perception-state
-        enrichment_kwargs: dict[str, Any] = {}
+        enrichment_kwargs: dict[str, object] = {}
         if is_person and is_enrichment_cam and not consent_suppressed:
             for field_name in (
                 "gaze_direction",
@@ -601,7 +602,7 @@ def _map_scene_inventory(data: dict) -> list[ClassificationDetection]:
                     )
 
         # Temporal delta: compute from raw sightings with timestamps
-        temporal_kwargs: dict[str, Any] = {}
+        temporal_kwargs: dict[str, object] = {}
         raw_sightings = obj.get("raw_sightings", [])
         first_seen_ts = obj.get("first_seen", 0.0)
         last_seen_ts = obj.get("last_seen", 0.0)
@@ -851,7 +852,7 @@ class VisualLayerAggregator:
 
         # Adaptive cadence state (Phase 5)
         self._prev_display_state: str = "ambient"
-        self._last_perception_data: dict[str, Any] = {}
+        self._last_perception_data: dict[str, object] = {}
         self._ambient_fetch_done: bool = False
         self._epoch: int = 0
 
@@ -1150,7 +1151,7 @@ class VisualLayerAggregator:
             self._episode_store = None
             return  # don't try pattern store if base stores failed
         try:
-            from shared.pattern_consolidation import PatternStore
+            from agents._pattern_consolidation import PatternStore
 
             self._pattern_store = PatternStore()
             self._pattern_store.ensure_collection()
@@ -1833,7 +1834,7 @@ class VisualLayerAggregator:
             min(1.0, max(0.0, state.ambient_params.brightness + nudge.brightness_offset)), 3
         )
 
-    def _apply_biometric_modulation(self, params: Any) -> Any:
+    def _apply_biometric_modulation(self, params: AmbientParams) -> AmbientParams:
         """Modulate ambient params based on biometric state (Batch E).
 
         Modulate, don't comment. Changes visual texture so the operator's

@@ -19,8 +19,8 @@ log = logging.getLogger("code_review")
 
 from pydantic_ai import Agent
 
-from shared.config import get_model
-from shared.operator import get_system_prompt_fragment
+from agents._config import get_model
+from agents._operator import get_system_prompt_fragment
 
 try:
     from shared import langfuse_config  # noqa: F401
@@ -64,11 +64,11 @@ For diffs, focus on the changed lines, not surrounding context."""
 
 def _make_agent(model_alias: str) -> Agent:
     a = Agent(get_model(model_alias), deps_type=ReviewDeps, system_prompt=SYSTEM_PROMPT)
-    from shared.context_tools import get_context_tools
+    from agents._context_tools import get_context_tools
 
     for _tool_fn in get_context_tools():
         a.tool(_tool_fn)
-    from shared.axiom_tools import get_axiom_tools
+    from agents._axiom_tools import get_axiom_tools
 
     for _tool_fn in get_axiom_tools():
         a.tool(_tool_fn)

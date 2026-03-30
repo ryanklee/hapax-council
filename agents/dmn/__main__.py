@@ -19,7 +19,10 @@ import logging
 import signal
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from agents.reverie.actuation import ReverieActuationLoop
 
 from agents.dmn.buffer import DMNBuffer
 from agents.dmn.pulse import DMNPulse
@@ -86,7 +89,7 @@ class DMNDaemon:
         self._imagination = ImaginationLoop()
         self._running = True
         self._start_time = time.monotonic()
-        self._reverie: Any = None  # ReverieActuationLoop, initialized in run()
+        self._reverie: ReverieActuationLoop | None = None  # initialized in run()
 
     async def run(self) -> None:
         """Main loop — never stops unless signalled."""

@@ -6,7 +6,6 @@ import asyncio
 import json
 import logging
 from pathlib import Path
-from typing import Any
 
 from agents.session_conductor.rules import HookEvent, RuleRegistry
 from agents.session_conductor.state import SessionState
@@ -35,7 +34,7 @@ class ConductorServer:
     # Event processing
     # ------------------------------------------------------------------
 
-    def process_event(self, event_data: dict[str, Any]) -> dict[str, Any]:
+    def process_event(self, event_data: dict[str, object]) -> dict[str, object]:
         """Route a hook event through the registry and persist state.
 
         Returns a dict with 'action' and optional 'message'/'rewrite' keys.

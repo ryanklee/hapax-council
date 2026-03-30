@@ -28,11 +28,42 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
+# ── Vendored from shared/config.py ──────────────────────────────────────────
+import os
+
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 
-from shared.config import get_model
-from shared.operator import get_system_prompt_fragment
+from agents._operator import get_system_prompt_fragment
+
+_LITELLM_BASE: str = os.environ.get(
+    "LITELLM_API_BASE",
+    os.environ.get("LITELLM_BASE_URL", "http://localhost:4000"),
+)
+_LITELLM_KEY: str = os.environ.get("LITELLM_API_KEY", "")
+_MODELS: dict[str, str] = {
+    "fast": "gemini-flash",
+    "balanced": "claude-sonnet",
+    "long-context": "gemini-flash",
+    "reasoning": "qwen3:8b",
+    "coding": "qwen3:8b",
+    "local-fast": "qwen3:8b",
+}
+
+
+def get_model(alias_or_id: str = "balanced"):
+    """Create a LiteLLM-backed chat model (vendored from shared.config)."""
+    from pydantic_ai.models.openai import OpenAIChatModel
+    from pydantic_ai.providers.litellm import LiteLLMProvider
+
+    model_id = _MODELS.get(alias_or_id, alias_or_id)
+    return OpenAIChatModel(
+        model_id,
+        provider=LiteLLMProvider(api_base=_LITELLM_BASE, api_key=_LITELLM_KEY),
+    )
+
+
+# ── End vendored ────────────────────────────────────────────────────────────
 
 # Import Langfuse OTel config (side-effect: configures exporter)
 try:
@@ -47,8 +78,8 @@ _tracer = trace.get_tracer(__name__)
 from agents.activity_analyzer import generate_activity_report
 from agents.health_monitor import format_human as format_health
 from agents.health_monitor import run_checks
-from shared.config import PROFILES_DIR
 
+PROFILES_DIR: Path = Path(__file__).resolve().parent.parent / "profiles"
 SCOUT_REPORT = PROFILES_DIR / "scout-report.json"
 DIGEST_REPORT = PROFILES_DIR / "digest.json"
 
@@ -198,12 +229,12 @@ briefing_agent = Agent(
 )
 
 # Register on-demand operator context tools
-from shared.context_tools import get_context_tools
+from agents._context_tools import get_context_tools
 
 for _tool_fn in get_context_tools():
     briefing_agent.tool(_tool_fn)
 
-from shared.axiom_tools import get_axiom_tools
+from agents._axiom_tools import get_axiom_tools
 
 for _tool_fn in get_axiom_tools():
     briefing_agent.tool(_tool_fn)
@@ -260,7 +291,7 @@ def _collect_deliberation_health() -> str | None:
     """Collect deliberation health via metrics + sufficiency probes."""
     with _tracer.start_as_current_span("briefing.collect_deliberation_health"):
         try:
-            from shared.deliberation_metrics import read_recent_metrics
+            from agents._deliberation_metrics import read_recent_metrics
 
             metrics = read_recent_metrics(n=6)
             if not metrics:
@@ -291,7 +322,7 @@ def _collect_deliberation_health() -> str | None:
 
             # Run deliberation probes for governance status
             try:
-                from shared.sufficiency_probes import run_probes
+                from agents._sufficiency_probes import run_probes
 
                 probe_results = run_probes(axiom_id="executive_function")
                 delib_probes = [r for r in probe_results if r.probe_id.startswith("probe-delib-")]
@@ -322,7 +353,7 @@ def _collect_axiom_status() -> dict:
             "pending_precedents": 0,
         }
         try:
-            from shared.sufficiency_probes import run_probes
+            from agents._sufficiency_probes import run_probes
 
             probes = run_probes()
             result["probe_total"] = len(probes)
@@ -332,7 +363,7 @@ def _collect_axiom_status() -> dict:
         except Exception:
             pass
         try:
-            from shared.axiom_precedents import PrecedentStore
+            from agents._axiom_precedents import PrecedentStore
 
             store = PrecedentStore()
             pending = store.get_pending_review(limit=50)
@@ -460,7 +491,7 @@ async def _generate_briefing_impl(hours: int = 24) -> Briefing:
         data_source_section = "\n## Data Source Warnings\n" + "\n".join(ds_warnings) + "\n"
 
     # Build goals section with momentum tracking
-    from shared.operator import get_goals
+    from agents._operator import get_goals
 
     goals = get_goals()[:5]
     goals_section = ""
@@ -491,8 +522,8 @@ async def _generate_briefing_impl(hours: int = 24) -> Briefing:
     # Build predictive section from capacity forecasts and recurring issues
     predictive_section = ""
     try:
-        from shared.capacity import forecast_exhaustion
-        from shared.health_history import get_recurring_issues, get_uptime_trend
+        from agents._capacity import forecast_exhaustion
+        from agents._health_history import get_recurring_issues, get_uptime_trend
 
         forecasts = forecast_exhaustion()
         warnings = [f for f in forecasts if f.is_warning(threshold_days=14)]
@@ -586,7 +617,7 @@ async def _generate_briefing_impl(hours: int = 24) -> Briefing:
     # Today's schedule from calendar
     calendar_section = ""
     try:
-        from shared.calendar_context import CalendarContext
+        from agents._calendar_context import CalendarContext
 
         ctx = CalendarContext()
         today_meetings = ctx.meetings_in_range(days=1)
@@ -613,11 +644,11 @@ async def _generate_briefing_impl(hours: int = 24) -> Briefing:
     # Drive activity from Qdrant
     drive_section = ""
     try:
+        from qdrant_client import QdrantClient
         from qdrant_client.models import FieldCondition, Filter, MatchValue, Range
 
-        from shared.config import get_qdrant
-
-        client = get_qdrant()
+        _qdrant_url = os.environ.get("QDRANT_URL", "http://localhost:6333")
+        client = QdrantClient(_qdrant_url)
         since_ts = time.time() - (hours * 3600)
         results = client.scroll(
             collection_name="documents",
@@ -715,7 +746,7 @@ async def _generate_briefing_impl(hours: int = 24) -> Briefing:
     # SDLC pipeline status
     sdlc_section = ""
     try:
-        from shared.sdlc_status import collect_sdlc_status, format_sdlc_section
+        from agents._sdlc_status import collect_sdlc_status, format_sdlc_section
 
         sdlc = collect_sdlc_status(hours=hours)
         sdlc_section = format_sdlc_section(sdlc)
@@ -872,8 +903,8 @@ def format_briefing_human(briefing: Briefing) -> str:
 
 def send_notification(briefing: Briefing) -> None:
     """Send briefing notification via ntfy + desktop (shared.notify)."""
-    from shared.notify import briefing_uri
-    from shared.notify import send_notification as _notify
+    from agents._notify import briefing_uri
+    from agents._notify import send_notification as _notify
 
     summary = briefing.headline
     body_parts = [summary]
@@ -917,7 +948,7 @@ async def main() -> None:
         briefing_md = format_briefing_md(briefing)
 
         # Axiom enforcement check before write (Gap 8)
-        from shared.axiom_enforcer import enforce_output
+        from agents._axiom_enforcer import enforce_output
 
         enforcement = enforce_output(briefing_md, "briefing", BRIEFING_FILE)
         if not enforcement.allowed:
@@ -938,7 +969,7 @@ async def main() -> None:
         print(f"Saved to {BRIEFING_FILE}", file=sys.stderr)
 
         # Also write to Obsidian vault for Sync
-        from shared.vault_writer import write_briefing_to_vault, write_nudges_to_vault
+        from agents._vault_writer import write_briefing_to_vault, write_nudges_to_vault
 
         vault_path = write_briefing_to_vault(briefing_md)
         if vault_path:

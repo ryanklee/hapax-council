@@ -42,7 +42,9 @@ log = logging.getLogger(__name__)
 # ── Constants ────────────────────────────────────────────────────────────────
 
 LANGFUSE_BASE_URL = os.environ.get("LANGFUSE_BASE_URL", "http://localhost:3000")
-from shared.config import LITELLM_BASE as LITELLM_BASE_URL
+LITELLM_BASE_URL: str = os.environ.get(
+    "LITELLM_API_BASE", os.environ.get("LITELLM_BASE_URL", "http://localhost:4000")
+)
 
 CACHE_DIR = Path.home() / ".cache" / "langfuse-sync"
 STATE_FILE = CACHE_DIR / "state.json"
@@ -806,7 +808,7 @@ def _print_stats(state: LangfuseSyncState) -> None:
 
 def run_full_sync() -> None:
     """Full sync of Langfuse traces."""
-    from shared.notify import send_notification
+    from agents._notify import send_notification
 
     state = _load_state()
     files_written = _full_sync(state)
@@ -814,7 +816,7 @@ def run_full_sync() -> None:
     _write_profile_facts(state)
 
     # Sensor protocol — write state + impingement
-    from shared.sensor_protocol import emit_sensor_impingement, write_sensor_state
+    from agents._sensor_protocol import emit_sensor_impingement, write_sensor_state
 
     write_sensor_state(
         "langfuse",
@@ -838,7 +840,7 @@ def run_full_sync() -> None:
 
 def run_auto() -> None:
     """Incremental Langfuse sync."""
-    from shared.notify import send_notification
+    from agents._notify import send_notification
 
     state = _load_state()
 
@@ -852,7 +854,7 @@ def run_auto() -> None:
     _write_profile_facts(state)
 
     # Sensor protocol — write state + impingement on changes
-    from shared.sensor_protocol import emit_sensor_impingement, write_sensor_state
+    from agents._sensor_protocol import emit_sensor_impingement, write_sensor_state
 
     write_sensor_state(
         "langfuse",
@@ -900,7 +902,7 @@ def main() -> None:
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
 
-    from shared.log_setup import configure_logging
+    from agents._log_setup import configure_logging
 
     configure_logging(agent="langfuse-sync", level="DEBUG" if args.verbose else None)
 

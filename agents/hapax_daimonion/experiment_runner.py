@@ -103,7 +103,7 @@ CLAIMS: dict[int, ClaimSpec] = {
 
 def _fetch_voice_traces(since_hours: float = 48) -> list[dict]:
     """Fetch voice traces with full score data from Langfuse REST API."""
-    from shared.langfuse_client import langfuse_get
+    from agents._langfuse_client import langfuse_get
 
     since = (datetime.now(UTC) - timedelta(hours=since_hours)).isoformat()
 
@@ -399,7 +399,7 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="Print results without saving")
     args = parser.parse_args()
 
-    from shared.log_setup import configure_logging
+    from agents._log_setup import configure_logging
 
     configure_logging(agent="experiment-runner")
 

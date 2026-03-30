@@ -149,7 +149,7 @@ def _check_interview_facts() -> tuple[bool, int]:
 def _check_priorities_validated(analysis) -> bool:
     """Check if goals exist and have corresponding profile coverage."""
     try:
-        from shared.operator import get_goals
+        from logos._operator import get_goals
 
         goals = get_goals()
         if not goals:

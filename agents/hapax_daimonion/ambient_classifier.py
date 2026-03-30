@@ -176,8 +176,11 @@ def _capture_audio_pipewire(duration_s: float = CAPTURE_DURATION_S) -> np.ndarra
     """Capture audio from the PipeWire default sink monitor.
 
     Returns float32 mono audio at PANNS_SAMPLE_RATE, or None on failure.
-    Uses Popen with explicit cleanup to prevent zombie pw-record processes.
+    Captures exactly duration_s of audio then kills the process cleanly.
     """
+
+    num_bytes = int(PANNS_SAMPLE_RATE * duration_s * 2)  # int16 = 2 bytes
+
     cmd = [
         "pw-record",
         "--format",
@@ -195,29 +198,33 @@ def _capture_audio_pipewire(duration_s: float = CAPTURE_DURATION_S) -> np.ndarra
     proc = None
     try:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-        stdout, _ = proc.communicate(timeout=duration_s + 2)
-        if not stdout:
-            log.warning("pw-record produced no output")
-            return None
-        audio_int16 = np.frombuffer(stdout, dtype=np.int16)
-        if len(audio_int16) < PANNS_SAMPLE_RATE:
-            log.warning("pw-record captured too little audio (%d samples)", len(audio_int16))
-            return None
-        return audio_int16.astype(np.float32) / 32768.0
-    except subprocess.TimeoutExpired:
-        if proc:
-            proc.kill()
-            proc.wait()
-        log.warning("pw-record timed out after %.1fs", duration_s + 2)
+        # Read exactly the bytes we need instead of communicate() which waits for EOF
+        stdout = proc.stdout.read(num_bytes)  # type: ignore[union-attr]
+        return _parse_captured_audio(stdout)
     except FileNotFoundError:
         log.warning("pw-record not found — PipeWire not available")
     except Exception:
         log.exception("Failed to capture audio via pw-record")
     finally:
-        if proc and proc.poll() is None:
-            proc.kill()
+        if proc is not None:
+            try:
+                proc.kill()
+            except OSError:
+                pass
             proc.wait()
     return None
+
+
+def _parse_captured_audio(stdout: bytes | None) -> np.ndarray | None:
+    """Parse raw PCM bytes into float32 array for PANNs."""
+    if not stdout:
+        log.warning("pw-record produced no output")
+        return None
+    audio_int16 = np.frombuffer(stdout, dtype=np.int16)
+    if len(audio_int16) < PANNS_SAMPLE_RATE:
+        log.warning("pw-record captured too little audio (%d samples)", len(audio_int16))
+        return None
+    return audio_int16.astype(np.float32) / 32768.0
 
 
 async def async_classify(

@@ -200,7 +200,7 @@ def collect_open_prs() -> list[dict]:
 def collect_next_meetings() -> list[dict]:
     """Get upcoming meetings from calendar context."""
     try:
-        from shared.calendar_context import CalendarContext
+        from agents._calendar_context import CalendarContext
 
         ctx = CalendarContext()
         result = []

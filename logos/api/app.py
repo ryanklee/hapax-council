@@ -37,7 +37,7 @@ async def lifespan(app: FastAPI):
 
     # Verify Qdrant collection schemas (non-fatal)
     try:
-        from shared.qdrant_schema import log_collection_issues
+        from logos._qdrant_schema import log_collection_issues
 
         await log_collection_issues()
     except Exception:

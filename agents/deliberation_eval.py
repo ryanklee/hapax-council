@@ -15,7 +15,7 @@ import argparse
 import logging
 from pathlib import Path
 
-from shared.deliberation_metrics import (
+from agents._deliberation_metrics import (
     DELIBERATIONS_DIR,
     EVAL_FILE,
     extract_batch,
@@ -49,7 +49,7 @@ def _escalate_pseudo_deliberations() -> None:
         return
 
     try:
-        from shared.axiom_precedents import Precedent, PrecedentStore
+        from agents._axiom_precedents import Precedent, PrecedentStore
 
         ids = ", ".join(m.deliberation_id for m in pseudo[:5])
         store = PrecedentStore()
@@ -110,7 +110,7 @@ def main() -> None:
         print("SUFFICIENCY PROBES (ex-delib-*)")
         print(f"{'=' * 60}")
 
-        from shared.sufficiency_probes import run_probes
+        from agents._sufficiency_probes import run_probes
 
         results = run_probes(axiom_id="executive_function")
         delib_results = [r for r in results if r.probe_id.startswith("probe-delib-")]

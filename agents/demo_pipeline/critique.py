@@ -6,8 +6,8 @@ import logging
 
 from pydantic_ai import Agent
 
+from agents._config import get_model
 from agents.demo_models import DemoQualityReport, DemoScript, QualityDimension
-from shared.config import get_model
 
 log = logging.getLogger(__name__)
 
@@ -1160,7 +1160,7 @@ async def critique_and_revise(
         # After first iteration, use compressed research context
         if iteration > 0 and _compressed_research is None:
             try:
-                from shared.context_compression import _get_compressor
+                from agents._context_compression import _get_compressor
 
                 compressor = _get_compressor()
                 if compressor is not None:

@@ -22,7 +22,6 @@ import threading
 import time
 from collections import Counter, deque
 from pathlib import Path
-from typing import Any
 
 import cv2
 import numpy as np
@@ -81,7 +80,7 @@ def _estimate_gaze(face_landmarks: list, image_w: int, image_h: int) -> str:
 
 
 def _infer_cross_modal_activity(
-    per_camera_behaviors: dict[str, dict[str, Any]],
+    per_camera_behaviors: dict[str, dict[str, object]],
     audio_activity: str,
     audio_genre: str,
     audio_energy: float,
@@ -178,7 +177,7 @@ class _VisionCache:
         self._lock = threading.Lock()
         self._detected_objects: str = "[]"
         self._per_camera_detections: dict[str, str] = {}  # role → JSON detections
-        self._per_camera_behaviors: dict[str, dict[str, Any]] = {}  # role → behavior dict
+        self._per_camera_behaviors: dict[str, dict[str, object]] = {}  # role → behavior dict
         self._person_count: int = 0
         self._pose_summary: str = "unknown"
         self._scene_objects: str = ""
@@ -861,7 +860,7 @@ class VisionBackend:
         """Detect hands in overhead frame and map centroids to instrument zones."""
         import mediapipe as mp
 
-        from shared.cameras import point_in_zone
+        from agents._cameras import point_in_zone
 
         if not getattr(self, "_gesture_recognizer", None):
             self._run_hand_gesture(frame)  # triggers lazy init
@@ -1828,7 +1827,7 @@ class VisionBackend:
 
                 # Route per-person enrichments to SceneInventory entities
                 # Any Brio-class camera can enrich persons (multi-perspective)
-                from shared.cameras import can_enrich_persons as _can_enrich
+                from agents._cameras import can_enrich_persons as _can_enrich
 
                 if _can_enrich(role) and hasattr(self, "_inventory"):
                     try:

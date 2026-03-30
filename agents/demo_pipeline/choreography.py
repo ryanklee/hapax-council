@@ -10,11 +10,10 @@ import json
 import logging
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
 
 from pydantic_ai import Agent
 
-from shared.config import get_model
+from agents._config import get_model
 
 log = logging.getLogger(__name__)
 
@@ -87,7 +86,7 @@ def _annotate_narration(text: str, speech_rate: float = SPEECH_RATE_WPM) -> str:
     return " ".join(annotated_parts)
 
 
-def _parse_actions(raw: str) -> list[dict[str, Any]]:
+def _parse_actions(raw: str) -> list[dict[str, object]]:
     """Parse LLM output into action list, tolerant of markdown wrapping."""
     text = raw.strip()
     # Strip markdown code fence if present
@@ -115,7 +114,7 @@ async def choreograph(
     script: DemoScript,
     speech_rate: float = SPEECH_RATE_WPM,
     on_progress: Callable[[str], None] | None = None,
-) -> list[list[dict[str, Any]]]:
+) -> list[list[dict[str, object]]]:
     """Generate granular UI action timelines for each scene.
 
     Returns a list of action arrays, one per scene (matching script.scenes order).
@@ -133,7 +132,7 @@ async def choreograph(
     else:
         log.warning("UI reference not found at %s", UI_REFERENCE_PATH)
 
-    all_actions: list[list[dict[str, Any]]] = []
+    all_actions: list[list[dict[str, object]]] = []
 
     for i, scene in enumerate(script.scenes):
         annotated = _annotate_narration(scene.narration, speech_rate)

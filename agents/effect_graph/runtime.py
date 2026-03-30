@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import copy
 import logging
-from typing import Any
+from collections.abc import Callable
 
-from .compiler import GraphCompiler
+from .compiler import ExecutionPlan, GraphCompiler
 from .modulator import UniformModulator
 from .registry import ShaderRegistry
 from .types import EffectGraph, GraphPatch, LayerPalette
@@ -22,21 +22,21 @@ class GraphRuntime:
         self._compiler = compiler
         self._modulator = modulator
         self._current_graph: EffectGraph | None = None
-        self._current_plan: Any = None
+        self._current_plan: ExecutionPlan | None = None
         self._layer_palettes: dict[str, LayerPalette] = {
             "live": LayerPalette(),
             "smooth": LayerPalette(),
             "hls": LayerPalette(),
         }
-        self._on_plan_changed: Any = None
-        self._on_params_changed: Any = None
+        self._on_plan_changed: Callable[[ExecutionPlan | None, ExecutionPlan], None] | None = None
+        self._on_params_changed: Callable[[str, dict[str, object]], None] | None = None
 
     @property
     def current_graph(self) -> EffectGraph | None:
         return self._current_graph
 
     @property
-    def current_plan(self) -> Any:
+    def current_plan(self) -> ExecutionPlan | None:
         return self._current_plan
 
     @property
@@ -59,7 +59,7 @@ class GraphRuntime:
             self._on_plan_changed(old, plan)
         log.info("Loaded graph '%s' (%d nodes)", graph.name, len(graph.nodes))
 
-    def patch_node_params(self, node_id: str, params: dict[str, Any]) -> None:
+    def patch_node_params(self, node_id: str, params: dict[str, object]) -> None:
         if not self._current_graph:
             return
         node = self._current_graph.nodes.get(node_id)
@@ -113,7 +113,7 @@ class GraphRuntime:
     def get_layer_palette(self, layer: str) -> LayerPalette:
         return self._layer_palettes.get(layer, LayerPalette())
 
-    def get_graph_state(self) -> dict[str, Any]:
+    def get_graph_state(self) -> dict[str, object]:
         if not self._current_graph:
             return {"graph": None, "layer_palettes": {}, "modulations": []}
         return {

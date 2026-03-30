@@ -13,7 +13,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from shared.working_mode import is_research
+from logos._working_mode import is_research
 
 
 def _probe_idle_threshold() -> int:
@@ -30,7 +30,7 @@ def _probe_cooldown() -> int:
 PROBE_IDLE_THRESHOLD = 300
 PROBE_COOLDOWN = 600
 
-from shared.config import LOGOS_STATE_DIR
+from logos._config import LOGOS_STATE_DIR
 
 _STATE_PATH = LOGOS_STATE_DIR / "probe-state.json"
 

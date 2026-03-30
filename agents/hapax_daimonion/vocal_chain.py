@@ -12,8 +12,8 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-from shared.affordance import CapabilityRecord, OperationalProperties
-from shared.impingement import Impingement
+from agents._affordance import CapabilityRecord, OperationalProperties
+from agents._impingement import Impingement
 
 log = logging.getLogger(__name__)
 
@@ -258,7 +258,7 @@ class VocalChainCapability:
 
         return 0.0
 
-    def activate(self, impingement: Impingement, level: float) -> dict[str, Any]:
+    def activate(self, impingement: Impingement, level: float) -> dict[str, object]:
         """Activate vocal chain — sets activation level for cascade tracking."""
         self._activation_level = level
         log.info(

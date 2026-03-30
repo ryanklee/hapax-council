@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import types
 from dataclasses import dataclass, field
-from typing import Any
 
 from shared.governance.consent_label import ConsentLabel
 
@@ -29,7 +28,7 @@ class ActuationEvent:
     wall_time: float = 0.0
     target_time: float = 0.0
     latency_ms: float = 0.0
-    params: dict[str, Any] = field(default_factory=dict)
+    params: dict[str, object] = field(default_factory=dict)
     consent_label: ConsentLabel | None = None
 
     def __post_init__(self) -> None:

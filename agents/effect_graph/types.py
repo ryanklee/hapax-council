@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -16,7 +15,7 @@ class PortType(StrEnum):
 
 class ParamDef(BaseModel):
     type: str
-    default: Any
+    default: object
     min: float | None = None
     max: float | None = None
     enum_values: list[str] | None = None
@@ -36,7 +35,7 @@ class ShaderDef(BaseModel):
 
 class NodeInstance(BaseModel):
     type: str
-    params: dict[str, Any] = Field(default_factory=dict)
+    params: dict[str, object] = Field(default_factory=dict)
 
 
 class EdgeDef(BaseModel):

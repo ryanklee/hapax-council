@@ -1,0 +1,27 @@
+module: terrain
+purpose: Primary application terrain: split-pane layout with ground, field, fortress, and watershed regions, plus command registry, signals, agent output drawer, and detail pane.
+version: 1
+
+interface:
+  props: []
+  emits: []
+  side_effects:
+    - bridges command registry via WebSocket relay
+    - queries system APIs for all sub-regions
+    - renders ambient canvas and camera feeds
+
+dependencies:
+  runtime:
+    - react
+    - tailwindcss
+    - "@tanstack/react-query"
+  internal:
+    - hapax
+    - dashboard
+    - studio
+    - visual
+
+execution: {}
+
+token_budget:
+  self: 37168

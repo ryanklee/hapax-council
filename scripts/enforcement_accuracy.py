@@ -97,7 +97,7 @@ class PatternStats:
 
 def _scan_file(path: Path, agent_id: str) -> list[dict]:
     """Run enforcement patterns against a single file, return audit entries."""
-    from shared.axiom_pattern_checker import check_output
+    from agents._axiom_pattern_checker import check_output
 
     try:
         text = path.read_text()
@@ -161,7 +161,7 @@ def cmd_backfill() -> None:
 
     # Digest history (JSONL — extract text fields)
     if DIGEST_HISTORY.exists():
-        from shared.axiom_pattern_checker import check_output
+        from agents._axiom_pattern_checker import check_output
 
         count = 0
         for line in DIGEST_HISTORY.read_text().splitlines():
@@ -392,7 +392,7 @@ def _compute_stats() -> dict[str, PatternStats]:
 
     # Also include patterns with no matches (zero baseline)
     try:
-        from shared.axiom_pattern_checker import load_patterns
+        from agents._axiom_pattern_checker import load_patterns
 
         for p in load_patterns():
             all_pattern_ids.add(p.id)

@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Any
 
 from .registry import ShaderRegistry
 from .types import EdgeDef, EffectGraph
@@ -22,7 +21,7 @@ class GraphValidationError(Exception):
 class ExecutionStep:
     node_id: str
     node_type: str
-    params: dict[str, Any]
+    params: dict[str, object]
     shader_source: str | None
     input_edges: list[EdgeDef]
     output_edges: list[EdgeDef]

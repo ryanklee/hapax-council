@@ -21,7 +21,6 @@ import logging
 import time
 from collections import defaultdict
 from pathlib import Path
-from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -108,7 +107,7 @@ class MarkovChain:
     def total_observations(self) -> int:
         return sum(self._totals.values())
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, object]:
         """Serialize for persistence."""
         return {
             "counts": {k: dict(v) for k, v in self._counts.items()},
@@ -117,7 +116,7 @@ class MarkovChain:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any], smoothing: float = 0.1) -> MarkovChain:
+    def from_dict(cls, data: dict[str, object], smoothing: float = 0.1) -> MarkovChain:
         """Deserialize from persistence."""
         chain = cls(smoothing=smoothing)
         for from_state, transitions in data.get("counts", {}).items():
@@ -186,11 +185,11 @@ class FlowTimingModel:
         sorted_d = sorted(self._session_durations)
         return sorted_d[len(sorted_d) // 2]
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, object]:
         return {"session_durations": self._session_durations}
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> FlowTimingModel:
+    def from_dict(cls, data: dict[str, object]) -> FlowTimingModel:
         model = cls()
         model._session_durations = data.get("session_durations", [])
         return model
@@ -234,14 +233,14 @@ class CircadianModel:
             return None
         return round(sum(scores) / len(scores), 2)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, object]:
         return {
             "activity_by_hour": {str(k): dict(v) for k, v in self._activity_by_hour.items()},
             "flow_by_hour": {str(k): v for k, v in self._flow_by_hour.items()},
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> CircadianModel:
+    def from_dict(cls, data: dict[str, object]) -> CircadianModel:
         model = cls()
         for hour_str, counts in data.get("activity_by_hour", {}).items():
             hour = int(hour_str)

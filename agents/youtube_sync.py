@@ -101,7 +101,7 @@ class YouTubeSyncState(BaseModel):
 
 def _get_youtube_service():
     """Build authenticated YouTube Data API service."""
-    from shared.google_auth import build_service
+    from agents._google_auth import build_service
 
     return build_service("youtube", "v3", SCOPES)
 
@@ -548,7 +548,7 @@ def run_auth() -> None:
 
 def run_full_sync() -> None:
     """Full sync of all YouTube data."""
-    from shared.notify import send_notification
+    from agents._notify import send_notification
 
     service = _get_youtube_service()
     state = _load_state()
@@ -559,7 +559,7 @@ def run_full_sync() -> None:
     _write_profile_facts(state)
 
     # Sensor protocol — write state + impingement
-    from shared.sensor_protocol import emit_sensor_impingement, write_sensor_state
+    from agents._sensor_protocol import emit_sensor_impingement, write_sensor_state
 
     write_sensor_state(
         "youtube",
@@ -610,7 +610,7 @@ def main() -> None:
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
 
-    from shared.log_setup import configure_logging
+    from agents._log_setup import configure_logging
 
     configure_logging(agent="youtube-sync", level="DEBUG" if args.verbose else None)
 

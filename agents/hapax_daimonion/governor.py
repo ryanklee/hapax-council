@@ -15,6 +15,7 @@ import logging
 import re
 import time
 
+from agents._axiom_enforcement import ComplianceRule, check_fast
 from agents.hapax_daimonion.governance import (
     Candidate,
     FallbackChain,
@@ -24,7 +25,6 @@ from agents.hapax_daimonion.governance import (
     VetoResult,
 )
 from agents.hapax_daimonion.perception import EnvironmentState
-from shared.axiom_enforcement import ComplianceRule, check_fast
 
 log = logging.getLogger(__name__)
 

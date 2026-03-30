@@ -13,7 +13,7 @@ import json
 import sys
 from pathlib import Path
 
-from shared.dimensions import get_dimension_names
+from agents._dimensions import get_dimension_names
 
 # ── Key heuristics for dimensions that fan out ────────────────────────────────
 
@@ -155,7 +155,7 @@ def migrate_profile(profile_path: Path) -> dict:
 
 
 def main():
-    from shared.config import PROFILES_DIR
+    from agents._config import PROFILES_DIR
 
     dry_run = "--dry-run" in sys.argv
     profile_path = PROFILES_DIR / "operator-profile.json"

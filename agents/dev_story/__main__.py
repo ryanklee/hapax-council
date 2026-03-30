@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 
-from shared.config import CLAUDE_CONFIG_DIR, PROFILES_DIR
+from agents._config import CLAUDE_CONFIG_DIR, PROFILES_DIR
 
 DB_PATH = str(PROFILES_DIR / "dev-story.db")
 CLAUDE_PROJECTS_DIR = CLAUDE_CONFIG_DIR / "projects"
@@ -139,7 +139,7 @@ def main() -> None:
     parser.add_argument("--correlations", action="store_true", help="Show correlation quality")
     args = parser.parse_args()
 
-    from shared.log_setup import configure_logging
+    from agents._log_setup import configure_logging
 
     configure_logging(agent="dev-story")
 

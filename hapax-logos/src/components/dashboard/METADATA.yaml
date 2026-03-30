@@ -1,0 +1,21 @@
+module: dashboard
+purpose: System dashboard with agent grid, health status, nudge list, copilot banner, and output pane.
+version: 1
+
+interface:
+  props: []
+  emits: []
+  side_effects:
+    - polls agent and system health APIs
+
+dependencies:
+  runtime:
+    - react
+    - tailwindcss
+  internal:
+    - shared
+
+execution: {}
+
+token_budget:
+  self: 5368

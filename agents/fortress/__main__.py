@@ -14,7 +14,6 @@ import logging
 import signal
 import time
 from pathlib import Path
-from typing import Any
 
 from agents.fortress.bridge import DFHackBridge
 from agents.fortress.chunks import ChunkCompressor
@@ -45,7 +44,7 @@ MAINTENANCE_INTERVAL = 30.0
 IDLE_POLL_INTERVAL = 5.0
 
 
-def _atomic_write(path: Path, data: dict[str, Any]) -> None:
+def _atomic_write(path: Path, data: dict[str, object]) -> None:
     """Write JSON atomically via tmp+rename."""
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
@@ -83,8 +82,8 @@ class FortressDaemon:
         self._dmn_impingement_cursor = 0
 
         # Affordance pipeline: index fortress capability and register interrupt tokens
-        from shared.affordance import CapabilityRecord
-        from shared.affordance_pipeline import AffordancePipeline
+        from agents._affordance import CapabilityRecord
+        from agents._affordance_pipeline import AffordancePipeline
 
         self._affordance_pipeline = AffordancePipeline()
         self._affordance_pipeline.index_capability(
@@ -245,7 +244,7 @@ class FortressDaemon:
 
     async def _impingement_consumer_loop(self) -> None:
         """Poll DMN impingements and route through affordance pipeline."""
-        from shared.impingement import Impingement
+        from agents._impingement import Impingement
 
         imp_path = Path("/dev/shm/hapax-dmn/impingements.jsonl")
 
@@ -454,7 +453,7 @@ class FortressDaemon:
         _atomic_write(GOVERNANCE_FILE, governance)
 
         # Goals state
-        goals_data: list[dict[str, Any]] = []
+        goals_data: list[dict[str, object]] = []
         for goal in DEFAULT_GOALS:
             goal_state = self._goal_planner.tracker.goal_state(goal.id)
             subgoals = []

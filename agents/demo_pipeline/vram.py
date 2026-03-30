@@ -10,7 +10,7 @@ import httpx
 
 log = logging.getLogger(__name__)
 
-from shared.config import OLLAMA_URL
+from agents._config import OLLAMA_URL
 
 TTS_VRAM_MB = 8000
 

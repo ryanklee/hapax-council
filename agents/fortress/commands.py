@@ -7,7 +7,6 @@ Commands are frozen (no TOCTOU bugs) and carry full provenance.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
 
 
 @dataclass(frozen=True)
@@ -17,34 +16,46 @@ class FortressCommand:
     id: str  # unique command ID (assigned by bridge on send)
     action: str  # dig, build, place, order, military, labor, pause, save, raw
     chain: str  # which governance chain produced this
-    params: dict[str, Any] = field(default_factory=dict)
+    params: dict[str, object] = field(default_factory=dict)
     created_at: float = 0.0
     governance_allowed: bool = True
     governance_denied_by: tuple[str, ...] = ()
 
-    def to_bridge_dict(self) -> dict[str, Any]:
+    def to_bridge_dict(self) -> dict[str, object]:
         """Convert to dict suitable for DFHackBridge.send_command()."""
         return {"action": self.action, **self.params}
 
 
-def cmd_dig(chain: str, blueprint_csv: str, **kw: Any) -> FortressCommand:
+def cmd_dig(chain: str, blueprint_csv: str, **kw: object) -> FortressCommand:
     """Create a dig command from a blueprint CSV string."""
     return FortressCommand(
-        id="", action="dig", chain=chain, params={"blueprint": blueprint_csv}, **kw
+        id="",
+        action="dig",
+        chain=chain,
+        params={"blueprint": blueprint_csv},
+        **kw,  # type: ignore[arg-type]
     )
 
 
-def cmd_build(chain: str, blueprint_csv: str, **kw: Any) -> FortressCommand:
+def cmd_build(chain: str, blueprint_csv: str, **kw: object) -> FortressCommand:
     """Create a build command from a blueprint CSV string."""
     return FortressCommand(
-        id="", action="build", chain=chain, params={"blueprint": blueprint_csv}, **kw
+        id="",
+        action="build",
+        chain=chain,
+        params={"blueprint": blueprint_csv},
+        **kw,  # type: ignore[arg-type]
     )
 
 
-def cmd_place(chain: str, blueprint_csv: str, **kw: Any) -> FortressCommand:
+def cmd_place(chain: str, blueprint_csv: str, **kw: object) -> FortressCommand:
     """Create a furniture placement command from a blueprint CSV string."""
     return FortressCommand(
-        id="", action="place", chain=chain, params={"blueprint": blueprint_csv}, **kw
+        id="",
+        action="place",
+        chain=chain,
+        params={"blueprint": blueprint_csv},
+        **kw,  # type: ignore[arg-type]
     )
 
 
@@ -53,7 +64,7 @@ def cmd_order(
     item_type: str,
     material: str = "",
     quantity: int = 1,
-    **kw: Any,
+    **kw: object,
 ) -> FortressCommand:
     """Create a work order command."""
     return FortressCommand(
@@ -65,7 +76,7 @@ def cmd_order(
     )
 
 
-def cmd_military(chain: str, operation: str, **kw: Any) -> FortressCommand:
+def cmd_military(chain: str, operation: str, **kw: object) -> FortressCommand:
     """Create a military command (station, attack, train, etc.)."""
     params = {"operation": operation}
     # Pull known military params out of kw, leave the rest for FortressCommand
@@ -80,7 +91,7 @@ def cmd_labor(
     unit_id: int,
     labor: str,
     enabled: bool = True,
-    **kw: Any,
+    **kw: object,
 ) -> FortressCommand:
     """Create a labor assignment command."""
     return FortressCommand(
@@ -92,6 +103,6 @@ def cmd_labor(
     )
 
 
-def cmd_pause(chain: str, state: bool = True, **kw: Any) -> FortressCommand:
+def cmd_pause(chain: str, state: bool = True, **kw: object) -> FortressCommand:
     """Create a pause/unpause command."""
     return FortressCommand(id="", action="pause", chain=chain, params={"state": state}, **kw)

@@ -17,7 +17,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from shared.impingement import Impingement, ImpingementType
+from agents._impingement import Impingement, ImpingementType
 
 log = logging.getLogger(__name__)
 
@@ -342,7 +342,7 @@ class ImaginationLoop:
         if self._agent is None:
             from pydantic_ai import Agent
 
-            from shared.config import get_model
+            from agents._config import get_model
 
             self._agent = Agent(
                 get_model("reasoning"),

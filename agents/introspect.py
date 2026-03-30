@@ -113,9 +113,16 @@ class InfrastructureManifest(BaseModel):
 
 # ── Collectors ───────────────────────────────────────────────────────────────
 
-from shared.config import LITELLM_BASE as _litellm_base
-from shared.config import LLM_STACK_DIR, PASSWORD_STORE_DIR, PROFILES_DIR
-from shared.config import OLLAMA_URL as _ollama_url
+# ── Vendored from shared/config.py ──────────────────────────────────────────
+_HAPAX_HOME: Path = Path(os.environ.get("HAPAX_HOME", str(Path.home())))
+_litellm_base: str = os.environ.get(
+    "LITELLM_API_BASE", os.environ.get("LITELLM_BASE_URL", "http://localhost:4000")
+)
+_ollama_url: str = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+LLM_STACK_DIR: Path = _HAPAX_HOME / "llm-stack"
+PASSWORD_STORE_DIR: Path = _HAPAX_HOME / ".password-store"
+PROFILES_DIR: Path = Path(__file__).resolve().parent.parent / "profiles"
+# ── End vendored ────────────────────────────────────────────────────────────
 
 COMPOSE_FILE = LLM_STACK_DIR / "docker-compose.yml"
 PASSWORD_STORE = PASSWORD_STORE_DIR

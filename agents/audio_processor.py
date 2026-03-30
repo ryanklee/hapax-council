@@ -749,7 +749,7 @@ def _transcribe_segment(waveform: np.ndarray, sr: int, start: float, end: float)
     end_idx = int(end * sr)
     chunk = waveform[start_idx:end_idx]
 
-    from shared.tmp_wav import tmp_wav_path
+    from agents._tmp_wav import tmp_wav_path
 
     tmp_path = tmp_wav_path()
     try:
@@ -777,7 +777,7 @@ def _diarize_segment(waveform: np.ndarray, sr: int, start: float, end: float) ->
     end_idx = int(end * sr)
     chunk = waveform[start_idx:end_idx]
 
-    from shared.tmp_wav import tmp_wav_path
+    from agents._tmp_wav import tmp_wav_path
 
     tmp_path = tmp_wav_path()
     try:
@@ -1404,8 +1404,8 @@ def _clap_enrich(
     Gracefully degrades — logs warning and returns on any failure.
     """
     try:
+        from agents._config import STUDIO_MOMENTS_COLLECTION, ensure_studio_moments_collection
         from shared.clap import classify_zero_shot, embed_audio
-        from shared.config import STUDIO_MOMENTS_COLLECTION, ensure_studio_moments_collection
     except ImportError:
         log.debug("CLAP not available, skipping enrichment")
         return
@@ -1432,7 +1432,7 @@ def _clap_enrich(
     try:
         from qdrant_client.models import PointStruct
 
-        from shared.config import get_qdrant
+        from agents._config import get_qdrant
 
         ensure_studio_moments_collection()
         client = get_qdrant()
@@ -1579,7 +1579,7 @@ def _archive_file(raw_path: Path, info: ProcessedFileInfo) -> Path | None:
 
 def _process_new_files(state: AudioProcessorState) -> dict[str, int]:
     """Find and process all unprocessed raw FLAC files."""
-    from shared.notify import send_notification
+    from agents._notify import send_notification
 
     RAW_DIR.mkdir(parents=True, exist_ok=True)
     files = _find_unprocessed_files(RAW_DIR, state)
@@ -1700,7 +1700,7 @@ def main() -> None:
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
 
-    from shared.log_setup import configure_logging
+    from agents._log_setup import configure_logging
 
     configure_logging(agent="audio-processor", level="DEBUG" if args.verbose else None)
 

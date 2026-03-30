@@ -196,7 +196,7 @@ def evaluate_turn(
 
     Returns dict of score_name → value for logging.
     """
-    from shared.telemetry import hapax_score
+    from agents._telemetry import hapax_score
 
     # Recent user turns from messages
     recent_user = [
@@ -262,7 +262,7 @@ def score_turn_pair_coherence(user_text: str, assistant_text: str) -> float | No
     Returns float 0.0-1.0, or None if embedding fails.
     """
     try:
-        from shared.config import embed_safe
+        from agents._config import embed_safe
 
         user_vec = embed_safe(user_text, prefix="search_query")
         asst_vec = embed_safe(assistant_text, prefix="search_document")

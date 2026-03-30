@@ -15,7 +15,7 @@ import sys
 import time
 from pathlib import Path
 
-from shared.cameras import CAMERA_ROLES
+from agents._cameras import CAMERA_ROLES
 
 log = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ def main() -> None:
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
 
-    from shared.log_setup import configure_logging
+    from agents._log_setup import configure_logging
 
     configure_logging(agent="studio-person-detector", level="DEBUG" if args.verbose else None)
 

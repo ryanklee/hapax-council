@@ -6,7 +6,6 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from .types import ParamDef, PortType
 
@@ -64,7 +63,7 @@ class ShaderRegistry:
     def get(self, node_type: str) -> LoadedShaderDef | None:
         return self._defs.get(node_type)
 
-    def schema(self, node_type: str) -> dict[str, Any] | None:
+    def schema(self, node_type: str) -> dict[str, object] | None:
         d = self._defs.get(node_type)
         if not d:
             return None
@@ -78,5 +77,5 @@ class ShaderRegistry:
             "compute": d.compute,
         }
 
-    def all_schemas(self) -> dict[str, Any]:
+    def all_schemas(self) -> dict[str, object]:
         return {k: self.schema(k) for k in self._defs}

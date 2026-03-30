@@ -14,7 +14,7 @@ from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
 
-from shared.config import RAG_SOURCES_DIR
+from agents._config import RAG_SOURCES_DIR
 
 OUTPUT_DIR: Path = RAG_SOURCES_DIR / "health-connect"
 

@@ -10,17 +10,21 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from logos.interview import InterviewState
 
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter
 
-from shared.config import LLM_STACK_DIR as _LLM_STACK_DIR
-from shared.config import LOGOS_STATE_DIR, embed, get_model, get_qdrant
-from shared.operator import get_system_prompt_fragment
+from logos._config import LLM_STACK_DIR as _LLM_STACK_DIR
+from logos._config import LOGOS_STATE_DIR, embed, get_model, get_qdrant
+from logos._operator import get_system_prompt_fragment
 
 log = logging.getLogger("logos.chat_agent")
 
@@ -91,12 +95,12 @@ def create_chat_agent(model_alias: str = "balanced") -> Agent[ChatDeps, str]:
     )
 
     # Register on-demand operator context tools
-    from shared.context_tools import get_context_tools
+    from logos._context_tools import get_context_tools
 
     for tool_fn in get_context_tools():
         agent.tool(tool_fn)
 
-    from shared.axiom_tools import get_axiom_tools
+    from logos._axiom_tools import get_axiom_tools
 
     for tool_fn in get_axiom_tools():
         agent.tool(tool_fn)
@@ -619,7 +623,7 @@ def create_chat_agent(model_alias: str = "balanced") -> Agent[ChatDeps, str]:
             ]
 
             # LLM analysis
-            from shared.health_analysis import analyze_failures
+            from logos._health_analysis import analyze_failures
 
             analysis = await analyze_failures(failed, history_dicts, {})
 
@@ -652,7 +656,7 @@ def create_chat_agent(model_alias: str = "balanced") -> Agent[ChatDeps, str]:
     @agent.tool
     async def review_pending_precedents(ctx: RunContext[ChatDeps]) -> str:
         """Show axiom precedents created by agents that await operator review."""
-        from shared.axiom_precedents import PrecedentStore
+        from logos._axiom_precedents import PrecedentStore
 
         try:
             store = PrecedentStore()
@@ -683,7 +687,7 @@ def create_chat_agent(model_alias: str = "balanced") -> Agent[ChatDeps, str]:
         Args:
             precedent_id: The precedent ID to confirm (e.g., PRE-20260303-abc123).
         """
-        from shared.axiom_precedents import PrecedentStore
+        from logos._axiom_precedents import PrecedentStore
 
         try:
             store = PrecedentStore()
@@ -704,7 +708,7 @@ def create_chat_agent(model_alias: str = "balanced") -> Agent[ChatDeps, str]:
             precedent_id: The precedent ID to reject.
             correction: The operator's corrected reasoning for this situation.
         """
-        from shared.axiom_precedents import Precedent, PrecedentStore
+        from logos._axiom_precedents import Precedent, PrecedentStore
 
         try:
             store = PrecedentStore()
@@ -748,10 +752,10 @@ class ChatSession:
     last_turn_tokens: int = 0
     generating: bool = False
     mode: Literal["chat", "interview"] = "chat"
-    interview_state: Any = field(default=None, repr=False)  # InterviewState | None
+    interview_state: InterviewState | None = field(default=None, repr=False)
 
     _agent: Agent[ChatDeps, str] | None = field(default=None, repr=False)
-    _interview_agent: Any | None = field(default=None, repr=False)
+    _interview_agent: Agent | None = field(default=None, repr=False)
 
     @property
     def agent(self) -> Agent[ChatDeps, str]:
@@ -810,9 +814,9 @@ class ChatSession:
     async def start_interview(
         self,
         *,
-        on_text_delta: Any | None = None,
-        on_tool_call: Any | None = None,
-        on_plan_ready: Any | None = None,
+        on_text_delta: Callable[[str], None] | None = None,
+        on_tool_call: Callable[[str, str], None] | None = None,
+        on_plan_ready: Callable[[], None] | None = None,
     ) -> str:
         """Analyze profile, generate plan, switch to interview mode.
 
@@ -917,8 +921,8 @@ class ChatSession:
         self,
         prompt: str,
         *,
-        on_text_delta: Any | None = None,
-        on_tool_call: Any | None = None,
+        on_text_delta: Callable[[str], None] | None = None,
+        on_tool_call: Callable[[str, str], None] | None = None,
     ) -> str:
         """Send a message and stream the response.
 
@@ -1024,7 +1028,7 @@ class ChatSession:
         # Pre-compress old text with LLMLingua-2 before LLM summarization
         # This reduces token cost of the summary call itself
         try:
-            from shared.context_compression import _get_compressor
+            from logos._context_compression import _get_compressor
 
             compressor = _get_compressor()
             if compressor is not None:
@@ -1053,8 +1057,8 @@ class ChatSession:
         self,
         prompt: str,
         *,
-        on_text_delta: Any | None = None,
-        on_tool_call: Any | None = None,
+        on_text_delta: Callable[[str], None] | None = None,
+        on_tool_call: Callable[[str, str], None] | None = None,
     ) -> str:
         """Send a message through the interview agent.
 
@@ -1126,7 +1130,7 @@ class ChatSession:
     def save(self, path: Path) -> None:
         """Save session state to a JSON file."""
         path.parent.mkdir(parents=True, exist_ok=True)
-        data: dict[str, Any] = {
+        data: dict[str, object] = {
             "model_alias": self.model_alias,
             "conversation_summary": self.conversation_summary,
             "total_tokens": self.total_tokens,

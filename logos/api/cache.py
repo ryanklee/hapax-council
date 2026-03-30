@@ -11,7 +11,19 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from logos.accommodations import AccommodationSet
+    from logos.data.briefing import BriefingData
+    from logos.data.cost import CostSnapshot
+    from logos.data.drift import DriftSummary
+    from logos.data.goals import GoalSnapshot
+    from logos.data.gpu import VramSnapshot
+    from logos.data.health import HealthSnapshot
+    from logos.data.readiness import ReadinessSnapshot
+    from logos.data.scout import ScoutData
+    from logos.data.studio import StudioSnapshot
 
 log = logging.getLogger("logos.api")
 
@@ -21,22 +33,22 @@ class DataCache:
     """In-memory cache for all data collector results."""
 
     # Fast refresh (30s)
-    health: Any = None
-    gpu: Any = None
+    health: HealthSnapshot | None = None
+    gpu: VramSnapshot | None = None
     containers: list = field(default_factory=list)
     timers: list = field(default_factory=list)
 
     # Slow refresh (5min)
-    briefing: Any = None
-    scout: Any = None
-    drift: Any = None
-    cost: Any = None
-    goals: Any = None
-    readiness: Any = None
+    briefing: BriefingData | None = None
+    scout: ScoutData | None = None
+    drift: DriftSummary | None = None
+    cost: CostSnapshot | None = None
+    goals: GoalSnapshot | None = None
+    readiness: ReadinessSnapshot | None = None
     nudges: list = field(default_factory=list)
     agents: list = field(default_factory=list)
-    accommodations: Any = None
-    studio: Any = None
+    accommodations: AccommodationSet | None = None
+    studio: StudioSnapshot | None = None
 
     # Refresh timestamps (monotonic seconds)
     _fast_refreshed_at: float = 0.0

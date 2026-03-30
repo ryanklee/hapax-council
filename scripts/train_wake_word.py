@@ -1612,7 +1612,7 @@ Examples:
 
 
 def main() -> None:
-    from shared.log_setup import configure_logging
+    from agents._log_setup import configure_logging
 
     configure_logging(agent="train-wake")
 

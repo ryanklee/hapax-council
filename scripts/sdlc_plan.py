@@ -23,9 +23,10 @@ from pydantic import BaseModel
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from shared.axiom_registry import load_axioms
-from shared.langfuse_trace_export import TraceContext, is_file_export
-from shared.sdlc_github import fetch_issue, post_issue_comment
+from sdlc.github import fetch_issue, post_issue_comment
+from sdlc.trace_export import TraceContext, is_file_export
+
+from agents._axiom_registry import load_axioms
 
 # ---------------------------------------------------------------------------
 # Structured output
@@ -57,7 +58,7 @@ def _load_codebase_context(issue_text: str) -> str:
     """Load codebase context — prefer Qdrant, fall back to static map."""
     # Try Qdrant first (available on self-hosted runner).
     try:
-        from shared.config import embed, get_qdrant
+        from agents._config import embed, get_qdrant
 
         client = get_qdrant()
         vector = embed(issue_text, prefix="search_query")
@@ -199,7 +200,7 @@ def run_plan(issue_number: int, *, dry_run: bool = False, post_comment: bool = T
     duration_ms = int((time.monotonic() - t0) * 1000)
 
     try:
-        from shared.sdlc_log import log_sdlc_event
+        from sdlc.log import log_sdlc_event
 
         log_sdlc_event(
             "plan",
@@ -221,7 +222,7 @@ def run_plan(issue_number: int, *, dry_run: bool = False, post_comment: bool = T
         pass
 
     try:
-        from shared.audit import log_audit
+        from sdlc.audit import log_audit
 
         log_audit(
             action="sdlc_plan",

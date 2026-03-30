@@ -15,8 +15,8 @@ log = logging.getLogger("research")
 from pydantic_ai import Agent
 from qdrant_client import QdrantClient
 
-from shared.config import EMBEDDING_MODEL, embed, get_model, get_qdrant
-from shared.operator import get_goals, get_system_prompt_fragment
+from agents._config import EMBEDDING_MODEL, embed, get_model, get_qdrant
+from agents._operator import get_goals, get_system_prompt_fragment
 
 # Import Langfuse OTel config (side-effect: configures exporter)
 try:
@@ -81,13 +81,13 @@ agent = Agent(
 )
 
 # Register on-demand operator context tools
-from shared.context_tools import get_context_tools
+from agents._context_tools import get_context_tools
 
 for _tool_fn in get_context_tools():
     agent.tool(_tool_fn)
 
 # Register axiom compliance tools
-from shared.axiom_tools import get_axiom_tools
+from agents._axiom_tools import get_axiom_tools
 
 for _tool_fn in get_axiom_tools():
     agent.tool(_tool_fn)

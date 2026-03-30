@@ -126,7 +126,7 @@ def _collect_action_item_nudges(
 def _collect_health_nudges(nudges: list[Nudge]) -> None:
     """Generate per-check nudges weighted by service tier."""
     try:
-        from shared.service_tiers import TIER_NUDGE_SCORES, tier_for_check
+        from logos._service_tiers import TIER_NUDGE_SCORES, tier_for_check
 
         history = collect_health_history(limit=1)
         if not history.entries:
@@ -429,7 +429,7 @@ def _collect_scout_nudges(nudges: list[Nudge]) -> None:
 def _collect_sufficiency_nudges(nudges: list[Nudge]) -> None:
     """Run sufficiency probes and generate nudges for failures."""
     try:
-        from shared.sufficiency_probes import run_probes
+        from agents._sufficiency_probes import run_probes
 
         results = run_probes()
         failures = [r for r in results if not r.met]
@@ -467,7 +467,7 @@ def _collect_knowledge_sufficiency_nudges(nudges: list[Nudge]) -> None:
 def _collect_precedent_nudges(nudges: list[Nudge]) -> None:
     """Generate nudges for agent precedents awaiting operator review."""
     try:
-        from shared.axiom_precedents import PrecedentStore
+        from logos._axiom_precedents import PrecedentStore
 
         store = PrecedentStore()
         pending = store.get_pending_review()
@@ -503,7 +503,7 @@ def _collect_precedent_nudges(nudges: list[Nudge]) -> None:
 def _collect_rag_quality_nudges(nudges: list[Nudge]) -> None:
     """G3: Surface knowledge gaps from RAG zero-result queries."""
     try:
-        from shared.langfuse_client import query_zero_result_spans
+        from logos._langfuse_client import query_zero_result_spans
 
         zero_results = query_zero_result_spans(hours=24)
         if not zero_results:
