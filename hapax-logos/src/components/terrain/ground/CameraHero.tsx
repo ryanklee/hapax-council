@@ -33,7 +33,7 @@ export function CameraHero({
   useEffect(() => { selectEffect(effectSourceId); }, [effectSourceId]);
   // When an effect source is selected, use it as the live source for snapshots
   const batchResult = useBatchSnapshot(heroRole, 50);
-  const fxResult = useSnapshotPoll(effectUrl ?? "/api/studio/stream/fx", 50, !!effectUrl);
+  const fxResult = useSnapshotPoll(effectUrl ?? `${LOGOS_API_URL}/studio/stream/fx`, 50, !!effectUrl);
   const { imgRef, isStale } = effectUrl ? fxResult : batchResult;
 
   // Pre-warm: eagerly fetch first frame so there's no blank/black initial state
@@ -43,7 +43,7 @@ export function CameraHero({
     prewarmed.current = true;
     const url = effectUrl
       ? `${effectUrl}${effectUrl.includes("?") ? "&" : "?"}_t=${Date.now()}`
-      : `/api/studio/stream/cameras/batch?roles=${heroRole}&_t=${Date.now()}`;
+      : `${LOGOS_API_URL}/studio/stream/cameras/batch?roles=${heroRole}&_t=${Date.now()}`;
     // For batch endpoint we just trigger the poll; for direct URL, pre-load into imgRef
     if (effectUrl) {
       const loader = new Image();
