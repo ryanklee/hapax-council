@@ -28,11 +28,42 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
+# ── Vendored from shared/config.py ──────────────────────────────────────────
+import os
+
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 
-from shared.config import get_model
 from shared.operator import get_system_prompt_fragment
+
+_LITELLM_BASE: str = os.environ.get(
+    "LITELLM_API_BASE",
+    os.environ.get("LITELLM_BASE_URL", "http://localhost:4000"),
+)
+_LITELLM_KEY: str = os.environ.get("LITELLM_API_KEY", "")
+_MODELS: dict[str, str] = {
+    "fast": "gemini-flash",
+    "balanced": "claude-sonnet",
+    "long-context": "gemini-flash",
+    "reasoning": "qwen3:8b",
+    "coding": "qwen3:8b",
+    "local-fast": "qwen3:8b",
+}
+
+
+def get_model(alias_or_id: str = "balanced"):
+    """Create a LiteLLM-backed chat model (vendored from shared.config)."""
+    from pydantic_ai.models.openai import OpenAIChatModel
+    from pydantic_ai.providers.litellm import LiteLLMProvider
+
+    model_id = _MODELS.get(alias_or_id, alias_or_id)
+    return OpenAIChatModel(
+        model_id,
+        provider=LiteLLMProvider(api_base=_LITELLM_BASE, api_key=_LITELLM_KEY),
+    )
+
+
+# ── End vendored ────────────────────────────────────────────────────────────
 
 # Import Langfuse OTel config (side-effect: configures exporter)
 try:
@@ -47,8 +78,8 @@ _tracer = trace.get_tracer(__name__)
 from agents.activity_analyzer import generate_activity_report
 from agents.health_monitor import format_human as format_health
 from agents.health_monitor import run_checks
-from shared.config import PROFILES_DIR
 
+PROFILES_DIR: Path = Path(__file__).resolve().parent.parent / "profiles"
 SCOUT_REPORT = PROFILES_DIR / "scout-report.json"
 DIGEST_REPORT = PROFILES_DIR / "digest.json"
 
@@ -613,11 +644,11 @@ async def _generate_briefing_impl(hours: int = 24) -> Briefing:
     # Drive activity from Qdrant
     drive_section = ""
     try:
+        from qdrant_client import QdrantClient
         from qdrant_client.models import FieldCondition, Filter, MatchValue, Range
 
-        from shared.config import get_qdrant
-
-        client = get_qdrant()
+        _qdrant_url = os.environ.get("QDRANT_URL", "http://localhost:6333")
+        client = QdrantClient(_qdrant_url)
         since_ts = time.time() - (hours * 3600)
         results = client.scroll(
             collection_name="documents",

@@ -90,21 +90,31 @@ class HealthReport(BaseModel):
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
-from shared.config import (
-    AI_AGENTS_DIR,
-    AXIOM_AUDIT_DIR,
-    CLAUDE_CONFIG_DIR,
-    HAPAX_HOME,
-    LITELLM_BASE,
-    LLM_STACK_DIR,
-    OLLAMA_URL,
-    PASSWORD_STORE_DIR,
-    PROFILES_DIR,
-    QDRANT_URL,
-    RAG_INGEST_STATE_DIR,
-    RAG_SOURCES_DIR,
-    load_expected_timers,
+# ── Vendored from shared/config.py ──────────────────────────────────────────
+LITELLM_BASE: str = os.environ.get(
+    "LITELLM_API_BASE",
+    os.environ.get("LITELLM_BASE_URL", "http://localhost:4000"),
 )
+QDRANT_URL: str = os.environ.get("QDRANT_URL", "http://localhost:6333")
+OLLAMA_URL: str = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+
+HAPAX_HOME: Path = Path(os.environ.get("HAPAX_HOME", str(Path.home())))
+HAPAX_CACHE_DIR: Path = HAPAX_HOME / ".cache"
+HAPAX_PROJECTS_DIR: Path = HAPAX_HOME / "projects"
+LLM_STACK_DIR: Path = HAPAX_HOME / "llm-stack"
+CLAUDE_CONFIG_DIR: Path = HAPAX_HOME / ".claude"
+PASSWORD_STORE_DIR: Path = HAPAX_HOME / ".password-store"
+RAG_SOURCES_DIR: Path = HAPAX_HOME / "documents" / "rag-sources"
+
+AXIOM_AUDIT_DIR: Path = HAPAX_CACHE_DIR / "axiom-audit"
+RAG_INGEST_STATE_DIR: Path = HAPAX_CACHE_DIR / "rag-ingest"
+
+HAPAX_COUNCIL_DIR: Path = HAPAX_PROJECTS_DIR / "hapax-council"
+AI_AGENTS_DIR: Path = HAPAX_COUNCIL_DIR  # legacy alias
+PROFILES_DIR: Path = Path(__file__).resolve().parent.parent / "profiles"
+SYSTEMD_USER_DIR: Path = Path.home() / ".config" / "systemd" / "user"
+
+from shared.config import load_expected_timers  # depends on shared.agent_registry
 
 WATCH_STATE_DIR: Path = HAPAX_HOME / "hapax-state" / "watch"
 EDGE_STATE_DIR: Path = HAPAX_HOME / "hapax-state" / "edge"
@@ -656,8 +666,6 @@ async def check_systemd_services() -> list[CheckResult]:
 async def check_systemd_drift() -> list[CheckResult]:
     """Verify deployed systemd units match repo source."""
     t = time.monotonic()
-    from shared.config import SYSTEMD_USER_DIR
-
     repo_units = AI_AGENTS_DIR / "systemd" / "units"
     deployed_dir = SYSTEMD_USER_DIR
 
@@ -2197,9 +2205,9 @@ async def check_axiom_registry() -> list[CheckResult]:
     # Check precedent collection exists in Qdrant
     t2 = time.monotonic()
     try:
-        from shared.config import get_qdrant
+        from qdrant_client import QdrantClient
 
-        client = get_qdrant()
+        client = QdrantClient(QDRANT_URL)
         collections = [c.name for c in client.get_collections().collections]
         if "axiom-precedents" in collections:
             info = client.get_collection("axiom-precedents")
