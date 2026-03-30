@@ -410,7 +410,7 @@ def enrich_payload(base_payload: dict, frontmatter: dict) -> dict:
     }
 
     # DD-11: Extract consent label from frontmatter if present
-    from shared.frontmatter import extract_consent_label, extract_provenance
+    from agents._frontmatter import extract_consent_label, extract_provenance
 
     consent_label = extract_consent_label(frontmatter)
     if consent_label is not None:

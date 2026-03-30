@@ -26,8 +26,8 @@ from watchdog.events import (
 from watchdog.observers import Observer
 from watchdog.observers.polling import PollingObserver
 
+from logos._frontmatter import parse_frontmatter
 from logos.engine.models import ChangeEvent
-from shared.frontmatter import parse_frontmatter
 
 _log = logging.getLogger(__name__)
 

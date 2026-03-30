@@ -87,8 +87,8 @@ log = logging.getLogger("profiler")
 
 # ── Schemas ──────────────────────────────────────────────────────────────────
 
-from shared.dimensions import DIMENSIONS as _DIMENSIONS
-from shared.dimensions import get_dimension_names
+from agents._dimensions import DIMENSIONS as _DIMENSIONS
+from agents._dimensions import get_dimension_names
 
 PROFILE_DIMENSIONS = get_dimension_names()
 

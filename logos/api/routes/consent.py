@@ -153,7 +153,7 @@ async def trace_consent(
 
     if source_path.exists():
         try:
-            from shared.frontmatter import (
+            from logos._frontmatter import (
                 extract_consent_label,
                 extract_provenance,
                 parse_frontmatter,

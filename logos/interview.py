@@ -123,11 +123,11 @@ def analyze_profile() -> ProfileAnalysis:
 
     Reads profiles/operator-profile.json and operator.json. Pure deterministic — no LLM calls.
     """
+    from agents._dimensions import get_dimension_names
     from agents.profiler import (
         group_facts_by_dimension,
         load_existing_profile,
     )
-    from shared.dimensions import get_dimension_names
 
     analysis = ProfileAnalysis()
     profile = load_existing_profile()
