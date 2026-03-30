@@ -10,6 +10,10 @@ uniform float u_zoom;
 uniform float u_rotate;
 uniform float u_blend_mode;
 uniform float u_hue_shift;
+uniform float u_trace_center_x;
+uniform float u_trace_center_y;
+uniform float u_trace_radius;
+uniform float u_trace_strength;
 void main() {
     vec2 center = vec2(0.5);
     vec2 uv = v_texcoord - center;
@@ -19,7 +23,12 @@ void main() {
     uv /= u_zoom;
     uv += center;
     vec4 acc = texture2D(tex_accum, uv);
-    acc.rgb *= (1.0 - u_decay);
+    // Trace-aware decay: ghostly afterimage where content dwelt
+    vec2 trace_center = vec2(u_trace_center_x, u_trace_center_y);
+    float dist_to_trace = distance(v_texcoord, trace_center);
+    float trace_factor = smoothstep(u_trace_radius, 0.0, dist_to_trace) * u_trace_strength;
+    float effective_decay = mix(u_decay, min(u_decay * 0.3, 0.015), trace_factor);
+    acc.rgb *= (1.0 - effective_decay);
     if (u_hue_shift > 0.0) {
         float a = u_hue_shift * 3.14159 / 180.0;
         float c = cos(a);
