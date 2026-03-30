@@ -26,41 +26,6 @@ const FRAGMENT_CYCLE_MS = 12000; // rotate floating text fragments
 
 // ── Types ────────────────────────────────────────────────────────────────
 
-interface SignalEntry {
-  category: string;
-  severity: number;
-  title: string;
-  detail: string;
-  source_id: string;
-}
-
-interface AmbientParams {
-  speed: number;
-  turbulence: number;
-  color_warmth: number;
-  brightness: number;
-}
-
-interface VoiceSession {
-  active: boolean;
-  state: string;
-  turn_count: number;
-  last_utterance: string;
-  last_response: string;
-  active_tool: string | null;
-  barge_in: boolean;
-  routing_tier: string;
-  routing_reason: string;
-  routing_activation: number;
-  // Experiment monitoring
-  context_anchor_success: number;
-  frustration_score: number;
-  frustration_rolling_avg: number;
-  acceptance_type: string;
-  spoken_words: number;
-  word_limit: number;
-}
-
 interface SupplementaryContent {
   content_type: string;
   title: string;
@@ -81,20 +46,14 @@ interface InjectedFeed {
   injected_at: number;
 }
 
-interface VisualLayerState {
-  available?: boolean;
-  display_state: string;
-  zone_opacities: Record<string, number>;
-  signals: Record<string, SignalEntry[]>;
-  ambient_params: AmbientParams;
-  voice_session: VoiceSession;
-  voice_content: SupplementaryContent[];
-  injected_feeds: InjectedFeed[];
-  ambient_text: string;
-  activity_label: string;
-  activity_detail: string;
-  timestamp: number;
-}
+// Use the API type directly — HapaxPage adds local extensions via optional fields
+type VisualLayerState = import("../api/types").VisualLayerState & {
+  voice_content?: SupplementaryContent[];
+  injected_feeds?: InjectedFeed[];
+  ambient_text?: string;
+  activity_label?: string;
+  activity_detail?: string;
+};
 
 // ── Fallback ambient fragments (used when no dynamic content available) ──
 
