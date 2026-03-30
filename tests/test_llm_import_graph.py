@@ -33,8 +33,14 @@ def test_build_graph_includes_agents():
 
 def test_transitive_cost_exceeds_self_cost():
     graph = build_graph(["agents", "shared"])
-    dd = graph.get("agents.drift_detector")
-    if dd:
-        assert dd.transitive_token_cost > dd.token_cost, (
-            "drift_detector transitive cost should exceed self cost"
-        )
+    # Find any agent that still imports from shared (drift_detector is now self-contained)
+    found = False
+    for name, info in graph.items():
+        if name.startswith("agents.") and info.transitive_deps:
+            assert info.transitive_token_cost >= info.token_cost, (
+                f"{name} transitive cost should be >= self cost"
+            )
+            if info.transitive_token_cost > info.token_cost:
+                found = True
+                break
+    assert found, "Expected at least one agent with transitive deps exceeding self cost"

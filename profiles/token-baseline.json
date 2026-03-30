@@ -539,18 +539,12 @@
       "agents.health_monitor",
       "agents.introspect",
       "shared.agent_registry",
-      "shared.axiom_enforcement",
-      "shared.axiom_patterns",
       "shared.axiom_precedents",
       "shared.axiom_registry",
-      "shared.axiom_tools",
       "shared.capacity",
-      "shared.ci_discovery",
       "shared.config",
       "shared.context_compression",
-      "shared.context_tools",
       "shared.deliberation_metrics",
-      "shared.document_registry",
       "shared.fix_capabilities",
       "shared.fix_capabilities.base",
       "shared.fix_capabilities.docker_cap",
@@ -566,7 +560,6 @@
       "shared.notify",
       "shared.operator",
       "shared.profile_store",
-      "shared.registry_checks",
       "shared.service_graph",
       "shared.service_tiers",
       "shared.stimmung",
@@ -574,7 +567,7 @@
       "shared.threshold_tuner",
       "shared.working_mode"
     ],
-    "transitive_token_cost": 192080
+    "transitive_token_cost": 171270
   },
   "agents.demo_eval": {
     "path": "agents/demo_eval.py",
@@ -611,18 +604,12 @@
       "agents.health_monitor",
       "agents.introspect",
       "shared.agent_registry",
-      "shared.axiom_enforcement",
-      "shared.axiom_patterns",
       "shared.axiom_precedents",
       "shared.axiom_registry",
-      "shared.axiom_tools",
       "shared.capacity",
-      "shared.ci_discovery",
       "shared.config",
       "shared.context_compression",
-      "shared.context_tools",
       "shared.deliberation_metrics",
-      "shared.document_registry",
       "shared.fix_capabilities",
       "shared.fix_capabilities.base",
       "shared.fix_capabilities.docker_cap",
@@ -639,7 +626,6 @@
       "shared.notify",
       "shared.operator",
       "shared.profile_store",
-      "shared.registry_checks",
       "shared.service_graph",
       "shared.service_tiers",
       "shared.stimmung",
@@ -647,7 +633,7 @@
       "shared.threshold_tuner",
       "shared.working_mode"
     ],
-    "transitive_token_cost": 201400
+    "transitive_token_cost": 180590
   },
   "agents.demo_models": {
     "path": "agents/demo_models.py",
@@ -842,18 +828,12 @@
       "agents.health_monitor",
       "agents.introspect",
       "shared.agent_registry",
-      "shared.axiom_enforcement",
-      "shared.axiom_patterns",
       "shared.axiom_precedents",
       "shared.axiom_registry",
-      "shared.axiom_tools",
       "shared.capacity",
-      "shared.ci_discovery",
       "shared.config",
       "shared.context_compression",
-      "shared.context_tools",
       "shared.deliberation_metrics",
-      "shared.document_registry",
       "shared.fix_capabilities",
       "shared.fix_capabilities.base",
       "shared.fix_capabilities.docker_cap",
@@ -869,7 +849,6 @@
       "shared.notify",
       "shared.operator",
       "shared.profile_store",
-      "shared.registry_checks",
       "shared.service_graph",
       "shared.service_tiers",
       "shared.stimmung",
@@ -877,7 +856,7 @@
       "shared.threshold_tuner",
       "shared.working_mode"
     ],
-    "transitive_token_cost": 122000
+    "transitive_token_cost": 101190
   },
   "agents.demo_pipeline.screencasts": {
     "path": "agents/demo_pipeline/screencasts.py",
@@ -1187,25 +1166,208 @@
     "transitive_token_cost": 1350
   },
   "agents.drift_detector": {
-    "path": "agents/drift_detector.py",
-    "loc": 988,
-    "token_cost": 9880,
+    "path": "agents/drift_detector/__init__.py",
+    "loc": 41,
+    "token_cost": 410,
+    "transitive_deps": [],
+    "transitive_token_cost": 410
+  },
+  "agents.drift_detector.__main__": {
+    "path": "agents/drift_detector/__main__.py",
+    "loc": 4,
+    "token_cost": 40,
+    "transitive_deps": [],
+    "transitive_token_cost": 40
+  },
+  "agents.drift_detector.agent": {
+    "path": "agents/drift_detector/agent.py",
+    "loc": 155,
+    "token_cost": 1550,
+    "transitive_deps": [],
+    "transitive_token_cost": 1550
+  },
+  "agents.drift_detector.axiom_patterns": {
+    "path": "agents/drift_detector/axiom_patterns.py",
+    "loc": 104,
+    "token_cost": 1040,
+    "transitive_deps": [],
+    "transitive_token_cost": 1040
+  },
+  "agents.drift_detector.axiom_registry": {
+    "path": "agents/drift_detector/axiom_registry.py",
+    "loc": 112,
+    "token_cost": 1120,
+    "transitive_deps": [],
+    "transitive_token_cost": 1120
+  },
+  "agents.drift_detector.axiom_tools": {
+    "path": "agents/drift_detector/axiom_tools.py",
+    "loc": 98,
+    "token_cost": 980,
     "transitive_deps": [
-      "agents.health_monitor",
-      "agents.introspect",
       "shared.agent_registry",
       "shared.axiom_enforcement",
-      "shared.axiom_patterns",
       "shared.axiom_precedents",
       "shared.axiom_registry",
-      "shared.axiom_tools",
-      "shared.capacity",
-      "shared.ci_discovery",
       "shared.config",
-      "shared.context_compression",
-      "shared.context_tools",
+      "shared.gpu_semaphore"
+    ],
+    "transitive_token_cost": 14330
+  },
+  "agents.drift_detector.ci_discovery": {
+    "path": "agents/drift_detector/ci_discovery.py",
+    "loc": 94,
+    "token_cost": 940,
+    "transitive_deps": [],
+    "transitive_token_cost": 940
+  },
+  "agents.drift_detector.cli": {
+    "path": "agents/drift_detector/cli.py",
+    "loc": 104,
+    "token_cost": 1040,
+    "transitive_deps": [],
+    "transitive_token_cost": 1040
+  },
+  "agents.drift_detector.collectors": {
+    "path": "agents/drift_detector/collectors.py",
+    "loc": 141,
+    "token_cost": 1410,
+    "transitive_deps": [],
+    "transitive_token_cost": 1410
+  },
+  "agents.drift_detector.collectors_infra": {
+    "path": "agents/drift_detector/collectors_infra.py",
+    "loc": 96,
+    "token_cost": 960,
+    "transitive_deps": [],
+    "transitive_token_cost": 960
+  },
+  "agents.drift_detector.config": {
+    "path": "agents/drift_detector/config.py",
+    "loc": 53,
+    "token_cost": 530,
+    "transitive_deps": [],
+    "transitive_token_cost": 530
+  },
+  "agents.drift_detector.context_tools": {
+    "path": "agents/drift_detector/context_tools.py",
+    "loc": 156,
+    "token_cost": 1560,
+    "transitive_deps": [
+      "shared.agent_registry",
+      "shared.config",
+      "shared.gpu_semaphore",
+      "shared.profile_store"
+    ],
+    "transitive_token_cost": 9030
+  },
+  "agents.drift_detector.docs": {
+    "path": "agents/drift_detector/docs.py",
+    "loc": 56,
+    "token_cost": 560,
+    "transitive_deps": [],
+    "transitive_token_cost": 560
+  },
+  "agents.drift_detector.document_registry": {
+    "path": "agents/drift_detector/document_registry.py",
+    "loc": 104,
+    "token_cost": 1040,
+    "transitive_deps": [],
+    "transitive_token_cost": 1040
+  },
+  "agents.drift_detector.fix_apply": {
+    "path": "agents/drift_detector/fix_apply.py",
+    "loc": 131,
+    "token_cost": 1310,
+    "transitive_deps": [],
+    "transitive_token_cost": 1310
+  },
+  "agents.drift_detector.fix_context": {
+    "path": "agents/drift_detector/fix_context.py",
+    "loc": 70,
+    "token_cost": 700,
+    "transitive_deps": [],
+    "transitive_token_cost": 700
+  },
+  "agents.drift_detector.fixes": {
+    "path": "agents/drift_detector/fixes.py",
+    "loc": 99,
+    "token_cost": 990,
+    "transitive_deps": [],
+    "transitive_token_cost": 990
+  },
+  "agents.drift_detector.freshness": {
+    "path": "agents/drift_detector/freshness.py",
+    "loc": 166,
+    "token_cost": 1660,
+    "transitive_deps": [],
+    "transitive_token_cost": 1660
+  },
+  "agents.drift_detector.introspect": {
+    "path": "agents/drift_detector/introspect.py",
+    "loc": 127,
+    "token_cost": 1270,
+    "transitive_deps": [],
+    "transitive_token_cost": 1270
+  },
+  "agents.drift_detector.manifest_fmt": {
+    "path": "agents/drift_detector/manifest_fmt.py",
+    "loc": 69,
+    "token_cost": 690,
+    "transitive_deps": [],
+    "transitive_token_cost": 690
+  },
+  "agents.drift_detector.models": {
+    "path": "agents/drift_detector/models.py",
+    "loc": 102,
+    "token_cost": 1020,
+    "transitive_deps": [],
+    "transitive_token_cost": 1020
+  },
+  "agents.drift_detector.notify": {
+    "path": "agents/drift_detector/notify.py",
+    "loc": 136,
+    "token_cost": 1360,
+    "transitive_deps": [],
+    "transitive_token_cost": 1360
+  },
+  "agents.drift_detector.operator": {
+    "path": "agents/drift_detector/operator.py",
+    "loc": 70,
+    "token_cost": 700,
+    "transitive_deps": [],
+    "transitive_token_cost": 700
+  },
+  "agents.drift_detector.probes_alerting": {
+    "path": "agents/drift_detector/probes_alerting.py",
+    "loc": 129,
+    "token_cost": 1290,
+    "transitive_deps": [
+      "shared.agent_registry",
+      "shared.config",
+      "shared.gpu_semaphore"
+    ],
+    "transitive_token_cost": 6820
+  },
+  "agents.drift_detector.probes_boundary": {
+    "path": "agents/drift_detector/probes_boundary.py",
+    "loc": 151,
+    "token_cost": 1510,
+    "transitive_deps": [],
+    "transitive_token_cost": 1510
+  },
+  "agents.drift_detector.probes_coverage": {
+    "path": "agents/drift_detector/probes_coverage.py",
+    "loc": 53,
+    "token_cost": 530,
+    "transitive_deps": [
+      "agents.health_monitor",
+      "shared.agent_registry",
+      "shared.axiom_precedents",
+      "shared.axiom_registry",
+      "shared.capacity",
+      "shared.config",
       "shared.deliberation_metrics",
-      "shared.document_registry",
       "shared.fix_capabilities",
       "shared.fix_capabilities.base",
       "shared.fix_capabilities.docker_cap",
@@ -1219,17 +1381,113 @@
       "shared.gpu_semaphore",
       "shared.langfuse_client",
       "shared.notify",
-      "shared.operator",
-      "shared.profile_store",
-      "shared.registry_checks",
       "shared.service_graph",
       "shared.service_tiers",
-      "shared.stimmung",
       "shared.sufficiency_probes",
       "shared.threshold_tuner",
       "shared.working_mode"
     ],
-    "transitive_token_cost": 110940
+    "transitive_token_cost": 76110
+  },
+  "agents.drift_detector.probes_deliberation": {
+    "path": "agents/drift_detector/probes_deliberation.py",
+    "loc": 129,
+    "token_cost": 1290,
+    "transitive_deps": [
+      "shared.agent_registry",
+      "shared.config",
+      "shared.deliberation_metrics",
+      "shared.gpu_semaphore"
+    ],
+    "transitive_token_cost": 9570
+  },
+  "agents.drift_detector.probes_executive": {
+    "path": "agents/drift_detector/probes_executive.py",
+    "loc": 151,
+    "token_cost": 1510,
+    "transitive_deps": [],
+    "transitive_token_cost": 1510
+  },
+  "agents.drift_detector.probes_runtime": {
+    "path": "agents/drift_detector/probes_runtime.py",
+    "loc": 169,
+    "token_cost": 1690,
+    "transitive_deps": [
+      "shared.agent_registry"
+    ],
+    "transitive_token_cost": 3720
+  },
+  "agents.drift_detector.probes_single_user": {
+    "path": "agents/drift_detector/probes_single_user.py",
+    "loc": 36,
+    "token_cost": 360,
+    "transitive_deps": [],
+    "transitive_token_cost": 360
+  },
+  "agents.drift_detector.probes_skill": {
+    "path": "agents/drift_detector/probes_skill.py",
+    "loc": 64,
+    "token_cost": 640,
+    "transitive_deps": [],
+    "transitive_token_cost": 640
+  },
+  "agents.drift_detector.prompt_builder": {
+    "path": "agents/drift_detector/prompt_builder.py",
+    "loc": 44,
+    "token_cost": 440,
+    "transitive_deps": [],
+    "transitive_token_cost": 440
+  },
+  "agents.drift_detector.registry_awareness": {
+    "path": "agents/drift_detector/registry_awareness.py",
+    "loc": 96,
+    "token_cost": 960,
+    "transitive_deps": [],
+    "transitive_token_cost": 960
+  },
+  "agents.drift_detector.registry_checks": {
+    "path": "agents/drift_detector/registry_checks.py",
+    "loc": 144,
+    "token_cost": 1440,
+    "transitive_deps": [],
+    "transitive_token_cost": 1440
+  },
+  "agents.drift_detector.scanners": {
+    "path": "agents/drift_detector/scanners.py",
+    "loc": 127,
+    "token_cost": 1270,
+    "transitive_deps": [],
+    "transitive_token_cost": 1270
+  },
+  "agents.drift_detector.shm_readers": {
+    "path": "agents/drift_detector/shm_readers.py",
+    "loc": 103,
+    "token_cost": 1030,
+    "transitive_deps": [
+      "shared.stimmung"
+    ],
+    "transitive_token_cost": 4120
+  },
+  "agents.drift_detector.sufficiency_probes": {
+    "path": "agents/drift_detector/sufficiency_probes.py",
+    "loc": 101,
+    "token_cost": 1010,
+    "transitive_deps": [],
+    "transitive_token_cost": 1010
+  },
+  "agents.drift_detector.system_prompt": {
+    "path": "agents/drift_detector/system_prompt.py",
+    "loc": 96,
+    "token_cost": 960,
+    "transitive_deps": [],
+    "transitive_token_cost": 960
+  },
+  "agents.drift_detector.watershed": {
+    "path": "agents/drift_detector/watershed.py",
+    "loc": 76,
+    "token_cost": 760,
+    "transitive_deps": [],
+    "transitive_token_cost": 760
   },
   "agents.effect_graph": {
     "path": "agents/effect_graph/__init__.py",
@@ -9710,6 +9968,27 @@
     "transitive_deps": [],
     "transitive_token_cost": 2770
   },
+  "scripts.llm_metadata_gen": {
+    "path": "scripts/llm_metadata_gen.py",
+    "loc": 319,
+    "token_cost": 3190,
+    "transitive_deps": [],
+    "transitive_token_cost": 3190
+  },
+  "scripts.llm_validate": {
+    "path": "scripts/llm_validate.py",
+    "loc": 170,
+    "token_cost": 1700,
+    "transitive_deps": [],
+    "transitive_token_cost": 1700
+  },
+  "scripts.llm_vendor": {
+    "path": "scripts/llm_vendor.py",
+    "loc": 262,
+    "token_cost": 2620,
+    "transitive_deps": [],
+    "transitive_token_cost": 2620
+  },
   "scripts.migrate-shader-params": {
     "path": "scripts/migrate-shader-params.py",
     "loc": 81,
@@ -11781,44 +12060,13 @@
     "token_cost": 2430,
     "transitive_deps": [
       "agents.drift_detector",
-      "agents.health_monitor",
-      "agents.introspect",
       "shared.agent_registry",
-      "shared.axiom_enforcement",
-      "shared.axiom_patterns",
-      "shared.axiom_precedents",
-      "shared.axiom_registry",
-      "shared.axiom_tools",
-      "shared.capacity",
       "shared.ci_discovery",
       "shared.config",
-      "shared.context_compression",
-      "shared.context_tools",
-      "shared.deliberation_metrics",
       "shared.document_registry",
-      "shared.fix_capabilities",
-      "shared.fix_capabilities.base",
-      "shared.fix_capabilities.docker_cap",
-      "shared.fix_capabilities.evaluator",
-      "shared.fix_capabilities.filesystem_cap",
-      "shared.fix_capabilities.ollama_cap",
-      "shared.fix_capabilities.pipeline",
-      "shared.fix_capabilities.profiles_cap",
-      "shared.fix_capabilities.queues_cap",
-      "shared.fix_capabilities.systemd_cap",
-      "shared.gpu_semaphore",
-      "shared.langfuse_client",
-      "shared.notify",
-      "shared.operator",
-      "shared.profile_store",
-      "shared.service_graph",
-      "shared.service_tiers",
-      "shared.stimmung",
-      "shared.sufficiency_probes",
-      "shared.threshold_tuner",
-      "shared.working_mode"
+      "shared.gpu_semaphore"
     ],
-    "transitive_token_cost": 110940
+    "transitive_token_cost": 10510
   },
   "shared.sdlc_github": {
     "path": "shared/sdlc_github.py",
