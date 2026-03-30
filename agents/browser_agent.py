@@ -19,9 +19,9 @@ from pathlib import Path
 
 import httpx
 
+from agents._browser_services import resolve_url
 from agents._config import LOGOS_API_URL
 from agents._context_compression import _get_compressor
-from shared.browser_services import resolve_url
 
 log = logging.getLogger(__name__)
 

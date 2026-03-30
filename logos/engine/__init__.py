@@ -212,9 +212,9 @@ class ReactiveEngine:
 
         # Impingement cascade integration
         from logos._affordance import CapabilityRecord
+        from logos._affordance_pipeline import AffordancePipeline
         from logos.engine.converter import convert as _convert
         from logos.engine.rule_capability import RuleCapability, generate_rule_description
-        from shared.affordance_pipeline import AffordancePipeline
 
         self._convert_event = _convert
         self._rule_capability_class = RuleCapability
@@ -244,7 +244,7 @@ class ReactiveEngine:
         self._events_since_save = 0
 
         # WS4: time-windowed frequency tracker (distribution shift detection)
-        from shared.frequency_window import FrequencyWindow
+        from logos._frequency_window import FrequencyWindow
 
         self._frequency_window = FrequencyWindow(window_s=3600.0)  # 1 hour window
 

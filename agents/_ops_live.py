@@ -13,7 +13,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from agents._config import get_qdrant
-from shared.ops_db import _load_json
+from agents._ops_db import _load_json
 
 log = logging.getLogger("shared.ops_live")
 

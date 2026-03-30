@@ -43,7 +43,7 @@ async def check_axiom_compliance(
     """
     _log_tool_usage("check_axiom_compliance")
     try:
-        from shared.axiom_enforcement import check_full
+        from agents._axiom_enforcement import check_full
 
         result = check_full(situation, axiom_id=axiom_id, domain=domain)
 

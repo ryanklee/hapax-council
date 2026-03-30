@@ -379,7 +379,7 @@ def _check_scope_coverage() -> tuple[bool, str]:
     verifies that scope.items is non-empty and that a corresponding
     capability-coverage entry or probe exists.
     """
-    from shared.axiom_registry import load_axioms, load_implications
+    from agents._axiom_registry import load_axioms, load_implications
 
     axioms = load_axioms()
     problems: list[str] = []
@@ -592,7 +592,7 @@ PROBES.extend(EXECUTIVE_FUNCTION_PROBES)
 
 def _check_deliberation_hoop_tests() -> tuple[bool, str]:
     """Check that multi-round deliberations pass >= 2 of 3 hoop tests (ex-delib-001)."""
-    from shared.deliberation_metrics import read_recent_metrics
+    from agents._deliberation_metrics import read_recent_metrics
 
     metrics = read_recent_metrics(n=20)
     multi_round = [m for m in metrics if m.total_rounds > 1]
@@ -618,7 +618,7 @@ def _check_deliberation_hoop_tests() -> tuple[bool, str]:
 
 def _check_deliberation_activation_rate() -> tuple[bool, str]:
     """Check that multi-round deliberation activation rate exceeds 10% (ex-delib-002)."""
-    from shared.deliberation_metrics import read_recent_metrics
+    from agents._deliberation_metrics import read_recent_metrics
 
     metrics = read_recent_metrics(n=20)
     multi_round = [m for m in metrics if m.total_rounds > 1]
@@ -637,7 +637,7 @@ def _check_deliberation_activation_rate() -> tuple[bool, str]:
 
 def _check_deliberation_concession_asymmetry() -> tuple[bool, str]:
     """Check that concession asymmetry does not exceed 3.0x (ex-delib-003)."""
-    from shared.deliberation_metrics import read_recent_metrics
+    from agents._deliberation_metrics import read_recent_metrics
 
     metrics = read_recent_metrics(n=20)
     with_concessions = [m for m in metrics if m.concession_count > 0]
@@ -663,7 +663,7 @@ def _check_deliberation_concession_asymmetry() -> tuple[bool, str]:
 
 def _check_deliberation_activation_trend() -> tuple[bool, str]:
     """Check activation rate trend is not declining across batches (ex-delib-004)."""
-    from shared.deliberation_metrics import read_recent_metrics
+    from agents._deliberation_metrics import read_recent_metrics
 
     metrics = read_recent_metrics(n=20)
     # Only consider multi-round deliberations for trend (early convergence has 0% structurally)
@@ -739,7 +739,7 @@ def _check_skill_syntax() -> tuple[bool, str]:
     """Check that Claude Code skill definitions are syntactically valid (ex-skill-health-001)."""
     import ast
 
-    from shared.config import CLAUDE_CONFIG_DIR
+    from agents._config import CLAUDE_CONFIG_DIR
 
     skills_dir = CLAUDE_CONFIG_DIR / "skills"
     if not skills_dir.exists():
@@ -821,7 +821,7 @@ def _check_gitignore_security() -> tuple[bool, str]:
     """Check repos have required .gitignore patterns and no tracked secrets (cb-secret-scan-001)."""
     import subprocess
 
-    from shared.config import LOGOS_WEB_DIR
+    from agents._config import LOGOS_WEB_DIR
 
     repos = {
         "hapax-council": AI_AGENTS_DIR,
@@ -952,7 +952,7 @@ def _check_sync_fresh() -> tuple[bool, str]:
     from pathlib import Path
 
     # Derive sync agent list from registry (single source of truth)
-    from shared.agent_registry import AgentCategory, get_registry
+    from agents._agent_registry import AgentCategory, get_registry
 
     registry = get_registry()
     sync_agents = registry.agents_by_category(AgentCategory.SYNC)
@@ -1062,7 +1062,7 @@ def _check_capability_coverage() -> tuple[bool, str]:
 
     # Part 1: Agent registry health_group coverage
     try:
-        from shared.agent_registry import get_registry
+        from agents._agent_registry import get_registry
 
         registry = get_registry()
         # Import CHECK_REGISTRY from health_monitor (may not be available in all contexts)
@@ -1086,7 +1086,7 @@ def _check_capability_coverage() -> tuple[bool, str]:
     try:
         import yaml
 
-        from shared.config import HAPAXROMANA_DIR
+        from agents._config import HAPAXROMANA_DIR
 
         coverage_file = HAPAXROMANA_DIR / "axioms" / "capability-coverage.yaml"
         if coverage_file.exists():

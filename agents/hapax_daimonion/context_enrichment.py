@@ -13,7 +13,7 @@ import time
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from shared.context import ContextAssembler
+    from agents._context import ContextAssembler
 
 log = logging.getLogger(__name__)
 
@@ -136,7 +136,7 @@ def get_assembler() -> ContextAssembler:
     """Return the shared ContextAssembler, creating it lazily if needed."""
     global _assembler
     if _assembler is None:
-        from shared.context import ContextAssembler
+        from agents._context import ContextAssembler
 
         _assembler = ContextAssembler(
             goals_fn=_collect_goals,

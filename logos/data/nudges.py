@@ -126,7 +126,7 @@ def _collect_action_item_nudges(
 def _collect_health_nudges(nudges: list[Nudge]) -> None:
     """Generate per-check nudges weighted by service tier."""
     try:
-        from shared.service_tiers import TIER_NUDGE_SCORES, tier_for_check
+        from logos._service_tiers import TIER_NUDGE_SCORES, tier_for_check
 
         history = collect_health_history(limit=1)
         if not history.entries:

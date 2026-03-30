@@ -23,6 +23,9 @@ from pathlib import Path
 
 import httpx
 
+from agents._active_correction import CorrectionSeeker
+from agents._apperception_tick import ApperceptionTick
+from agents._correction_memory import CorrectionStore, check_for_corrections
 from agents._episodic_memory import EpisodeBuilder, EpisodeStore
 from agents._stimmung import StimmungCollector, SystemStimmung
 from agents._telemetry import (
@@ -67,9 +70,6 @@ from agents.visual_layer_state import (
     VoiceSessionState,
     WatershedEvent,
 )
-from shared.active_correction import CorrectionSeeker
-from shared.apperception_tick import ApperceptionTick
-from shared.correction_memory import CorrectionStore, check_for_corrections
 
 log = logging.getLogger("visual_layer_aggregator")
 
@@ -1151,7 +1151,7 @@ class VisualLayerAggregator:
             self._episode_store = None
             return  # don't try pattern store if base stores failed
         try:
-            from shared.pattern_consolidation import PatternStore
+            from agents._pattern_consolidation import PatternStore
 
             self._pattern_store = PatternStore()
             self._pattern_store.ensure_collection()

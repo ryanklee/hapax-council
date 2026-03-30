@@ -50,7 +50,7 @@ class FusedFaceResult:
 
 def _normalize_color(image: np.ndarray) -> np.ndarray:
     """Gray world color normalization — delegates to shared.color_utils."""
-    from shared.color_utils import normalize_color
+    from agents._color_utils import normalize_color
 
     return normalize_color(image)
 

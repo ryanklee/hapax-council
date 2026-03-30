@@ -43,10 +43,10 @@ class ReverieActuationLoop:
     """
 
     def __init__(self) -> None:
+        from agents._context import ContextAssembler
         from agents.effect_graph.capability import ShaderGraphCapability
         from agents.reverie.governance import build_default_veto_chain, guest_reduction_factor
         from agents.visual_chain import VisualChainCapability
-        from shared.context import ContextAssembler
 
         self._shader_cap = ShaderGraphCapability()
         self._visual_chain = VisualChainCapability(decay_rate=0.02)

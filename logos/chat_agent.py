@@ -623,7 +623,7 @@ def create_chat_agent(model_alias: str = "balanced") -> Agent[ChatDeps, str]:
             ]
 
             # LLM analysis
-            from shared.health_analysis import analyze_failures
+            from logos._health_analysis import analyze_failures
 
             analysis = await analyze_failures(failed, history_dicts, {})
 

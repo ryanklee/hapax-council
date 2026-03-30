@@ -379,7 +379,7 @@ DIGEST_JSON_FILE = PROFILES_DIR / "digest.json"
 
 
 async def main() -> None:
-    from shared.cli import add_common_args
+    from agents._cli import add_common_args
 
     parser = argparse.ArgumentParser(
         description="Content digest generator",
@@ -396,7 +396,7 @@ async def main() -> None:
         digest_md = format_digest_md(digest)
 
         # Axiom enforcement check before write (Gap 8)
-        from shared.axiom_enforcer import enforce_output
+        from agents._axiom_enforcer import enforce_output
 
         enforcement = enforce_output(digest_md, "digest", DIGEST_MD_FILE)
         if not enforcement.allowed:
@@ -417,7 +417,7 @@ async def main() -> None:
         DIGEST_JSON_FILE.write_text(digest.model_dump_json(indent=2))
         print(f"Saved to {DIGEST_MD_FILE}", file=sys.stderr)
 
-        from shared.vault_writer import write_digest_to_vault
+        from agents._vault_writer import write_digest_to_vault
 
         vault_path = write_digest_to_vault(digest_md)
         if vault_path:

@@ -1794,7 +1794,7 @@ LATENCY_THRESHOLDS = {
 def _get_threshold(check_name: str, default: float) -> float:
     """Load threshold override if available, else return default."""
     try:
-        from shared.threshold_tuner import get_threshold
+        from agents._threshold_tuner import get_threshold
 
         return get_threshold(check_name, default)
     except Exception:
@@ -2095,7 +2095,7 @@ async def check_capacity_forecasts() -> list[CheckResult]:
     """Alert when any resource is forecast to exhaust within 7 days."""
     t = time.monotonic()
     try:
-        from shared.capacity import forecast_exhaustion
+        from agents._capacity import forecast_exhaustion
 
         forecasts = forecast_exhaustion()
         if not forecasts:
@@ -3208,7 +3208,7 @@ async def _run_checks_inner(
     raw_results = cleaned_results
 
     # Group results and annotate tiers
-    from shared.service_tiers import ServiceTier, tier_for_check
+    from agents._service_tiers import ServiceTier, tier_for_check
 
     grouped: dict[str, list[CheckResult]] = {}
     for g, checks in raw_results:
@@ -3410,7 +3410,7 @@ async def run_fixes(report: HealthReport, yes: bool = False) -> int:
 
     # Sort fixable checks by service dependency order
     try:
-        from shared.service_graph import remediation_order
+        from agents._service_graph import remediation_order
 
         service_names = []
         for c in fixable:

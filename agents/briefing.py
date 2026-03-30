@@ -522,8 +522,8 @@ async def _generate_briefing_impl(hours: int = 24) -> Briefing:
     # Build predictive section from capacity forecasts and recurring issues
     predictive_section = ""
     try:
-        from shared.capacity import forecast_exhaustion
-        from shared.health_history import get_recurring_issues, get_uptime_trend
+        from agents._capacity import forecast_exhaustion
+        from agents._health_history import get_recurring_issues, get_uptime_trend
 
         forecasts = forecast_exhaustion()
         warnings = [f for f in forecasts if f.is_warning(threshold_days=14)]
@@ -617,7 +617,7 @@ async def _generate_briefing_impl(hours: int = 24) -> Briefing:
     # Today's schedule from calendar
     calendar_section = ""
     try:
-        from shared.calendar_context import CalendarContext
+        from agents._calendar_context import CalendarContext
 
         ctx = CalendarContext()
         today_meetings = ctx.meetings_in_range(days=1)
@@ -746,7 +746,7 @@ async def _generate_briefing_impl(hours: int = 24) -> Briefing:
     # SDLC pipeline status
     sdlc_section = ""
     try:
-        from shared.sdlc_status import collect_sdlc_status, format_sdlc_section
+        from agents._sdlc_status import collect_sdlc_status, format_sdlc_section
 
         sdlc = collect_sdlc_status(hours=hours)
         sdlc_section = format_sdlc_section(sdlc)
@@ -948,7 +948,7 @@ async def main() -> None:
         briefing_md = format_briefing_md(briefing)
 
         # Axiom enforcement check before write (Gap 8)
-        from shared.axiom_enforcer import enforce_output
+        from agents._axiom_enforcer import enforce_output
 
         enforcement = enforce_output(briefing_md, "briefing", BRIEFING_FILE)
         if not enforcement.allowed:
@@ -969,7 +969,7 @@ async def main() -> None:
         print(f"Saved to {BRIEFING_FILE}", file=sys.stderr)
 
         # Also write to Obsidian vault for Sync
-        from shared.vault_writer import write_briefing_to_vault, write_nudges_to_vault
+        from agents._vault_writer import write_briefing_to_vault, write_nudges_to_vault
 
         vault_path = write_briefing_to_vault(briefing_md)
         if vault_path:

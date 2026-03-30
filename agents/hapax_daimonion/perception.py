@@ -18,7 +18,7 @@ from agents._impingement import Impingement, ImpingementType
 from agents.hapax_daimonion.primitives import Behavior
 
 if TYPE_CHECKING:
-    from shared.hyprland import WindowInfo
+    from agents._hyprland import WindowInfo
 
 log = logging.getLogger(__name__)
 

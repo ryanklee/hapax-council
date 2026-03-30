@@ -32,7 +32,7 @@ async def lookup_constraints(ctx: RunContext[Any], categories: str = "") -> str:
         categories: Comma-separated constraint categories to look up (e.g., "python,docker").
     """
     log.info("context_tool_invoked tool=lookup_constraints categories=%s", categories)
-    from shared.operator import get_constraints
+    from logos._operator import get_constraints
 
     cats = tuple(c.strip() for c in categories.split(",") if c.strip()) if categories else ()
     try:
@@ -63,7 +63,7 @@ async def lookup_patterns(ctx: RunContext[Any], categories: str = "") -> str:
         categories: Comma-separated pattern categories to look up (e.g., "workflow,development").
     """
     log.info("context_tool_invoked tool=lookup_patterns categories=%s", categories)
-    from shared.operator import get_patterns
+    from logos._operator import get_patterns
 
     cats = tuple(c.strip() for c in categories.split(",") if c.strip()) if categories else ()
     try:

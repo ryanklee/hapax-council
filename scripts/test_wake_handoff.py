@@ -22,7 +22,7 @@ import time
 
 import numpy as np
 
-from shared.log_setup import configure_logging
+from agents._log_setup import configure_logging
 
 configure_logging(agent="test-wake")
 log = logging.getLogger("test_wake_handoff")

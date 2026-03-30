@@ -83,7 +83,7 @@ class FortressDaemon:
 
         # Affordance pipeline: index fortress capability and register interrupt tokens
         from agents._affordance import CapabilityRecord
-        from shared.affordance_pipeline import AffordancePipeline
+        from agents._affordance_pipeline import AffordancePipeline
 
         self._affordance_pipeline = AffordancePipeline()
         self._affordance_pipeline.index_capability(

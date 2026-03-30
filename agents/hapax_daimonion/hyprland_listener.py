@@ -14,7 +14,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from shared.hyprland import HyprlandIPC
+from agents._hyprland import HyprlandIPC
 
 log = logging.getLogger(__name__)
 

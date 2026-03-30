@@ -10,8 +10,8 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from agents.hapax_daimonion.ir_signals import IR_STATE_DIR
+from logos._ir_models import IrDetectionReport
 from logos.api.routes._config import HAPAX_HOME
-from shared.ir_models import IrDetectionReport
 
 log = logging.getLogger(__name__)
 

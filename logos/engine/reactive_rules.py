@@ -527,9 +527,9 @@ _consolidation_scheduler = QuietWindowScheduler(quiet_window_s=300)
 
 async def _handle_pattern_consolidation(*, ignore_fn=None) -> str:
     """Run WS3 L3 pattern consolidation after episodes accumulate."""
+    from agents._correction_memory import CorrectionStore
     from logos._episodic_memory import EpisodeStore
-    from shared.correction_memory import CorrectionStore
-    from shared.pattern_consolidation import PatternStore, run_consolidation
+    from logos._pattern_consolidation import PatternStore, run_consolidation
 
     _consolidation_scheduler.consume()
 
@@ -587,7 +587,7 @@ _correction_synthesis_scheduler = QuietWindowScheduler(quiet_window_s=600)
 
 async def _handle_correction_synthesis(*, ignore_fn=None) -> str:
     """Synthesize accumulated corrections into profile facts."""
-    from shared.correction_synthesis import run_correction_synthesis
+    from logos._correction_synthesis import run_correction_synthesis
 
     _correction_synthesis_scheduler.consume()
     result = await run_correction_synthesis()

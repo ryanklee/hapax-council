@@ -188,7 +188,7 @@ def embed(text: str, model: str | None = None, prefix: str = "search_query") -> 
         span.set_attribute("rag.embed.text_length", len(text))
         prefixed = f"{prefix}: {text}" if prefix else text
         try:
-            from shared.gpu_semaphore import gpu_slot
+            from agents._gpu_semaphore import gpu_slot
 
             client = _get_ollama_client()
             with gpu_slot():
@@ -238,7 +238,7 @@ def embed_batch(
         span.set_attribute("rag.embed_batch.total_chars", sum(len(t) for t in texts))
         prefixed = [f"{prefix}: {t}" if prefix else t for t in texts]
         try:
-            from shared.gpu_semaphore import gpu_slot
+            from agents._gpu_semaphore import gpu_slot
 
             client = _get_ollama_client()
             with gpu_slot():

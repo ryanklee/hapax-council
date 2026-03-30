@@ -715,7 +715,7 @@ class ConversationPipeline:
         if not self._running:
             return
 
-        from shared.telemetry import hapax_trace
+        from agents._telemetry import hapax_trace
 
         _t_start = time.monotonic()
         _utt_trace_cm = hapax_trace(
@@ -741,7 +741,7 @@ class ConversationPipeline:
         self, audio_bytes: bytes, _utt_trace, _t_start: float
     ) -> None:
         """Inner utterance processing — extracted so try/finally guarantees trace closure."""
-        from shared.telemetry import hapax_bool_score, hapax_event, hapax_score
+        from agents._telemetry import hapax_bool_score, hapax_event, hapax_score
 
         # STT
         self.state = ConvState.TRANSCRIBING
@@ -1897,7 +1897,7 @@ class ConversationPipeline:
                     len(pcm),
                     text[:40],
                 )
-                from shared.telemetry import hapax_event
+                from agents._telemetry import hapax_event
 
                 hapax_event(
                     "voice",
@@ -2059,7 +2059,7 @@ class ConversationPipeline:
 
         score = 1.0 if str(sentinel) in numbers else 0.0
         try:
-            from shared.telemetry import hapax_event
+            from agents._telemetry import hapax_event
 
             hapax_event(
                 "voice",

@@ -14,8 +14,8 @@ from pathlib import Path
 from opentelemetry import trace
 
 from agents._config import embed, get_qdrant
+from agents._ops_db import _load_json
 from agents._profile_store import ProfileStore
-from shared.ops_db import _load_json
 
 log = logging.getLogger("shared.knowledge_search")
 _rag_tracer = trace.get_tracer("hapax.rag")

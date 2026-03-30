@@ -84,7 +84,7 @@ def fetch_sessions(since_hours: float = 24, max_sessions: int = 10) -> list[dict
     """Fetch recent voice session traces from Langfuse via REST API."""
     from datetime import datetime, timedelta
 
-    from shared.langfuse_client import langfuse_get
+    from agents._langfuse_client import langfuse_get
 
     since = (datetime.now(UTC) - timedelta(hours=since_hours)).isoformat()
 
@@ -412,7 +412,7 @@ def collect_per_turn_scores(session_traces: list[dict]) -> list[dict[str, float]
 def push_scores(session_eval: SessionEval, session_id: str) -> None:
     """Push evaluation scores back to Langfuse."""
     try:
-        from shared.telemetry import hapax_event
+        from agents._telemetry import hapax_event
 
         hapax_event(
             "voice",
@@ -582,7 +582,7 @@ async def main() -> None:
     parser.add_argument("--since", type=float, default=24, help="Hours to look back")
     args = parser.parse_args()
 
-    from shared.log_setup import configure_logging
+    from agents._log_setup import configure_logging
 
     configure_logging(agent="eval-grounding")
 

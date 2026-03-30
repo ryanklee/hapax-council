@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from opentelemetry.trace import get_tracer
 
+from agents._hyprland import HyprlandIPC
 from agents.hapax_daimonion.hyprland_listener import FocusEvent, HyprlandEventListener
 from agents.hapax_daimonion.notification_queue import VoiceNotification
 from agents.hapax_daimonion.screen_capturer import ScreenCapturer
@@ -18,7 +19,6 @@ from agents.hapax_daimonion.screen_models import (
 )
 from agents.hapax_daimonion.webcam_capturer import WebcamCapturer
 from agents.hapax_daimonion.workspace_analyzer import WorkspaceAnalyzer
-from shared.hyprland import HyprlandIPC
 
 _tracer = get_tracer("hapax_daimonion.workspace_monitor")
 
