@@ -19,3 +19,9 @@ repos:
         language: script
         always_run: true
         pass_filenames: false
+      - id: llm-patterns
+        name: LLM-optimized code patterns
+        entry: scripts/check-llm-patterns
+        language: script
+        always_run: true
+        pass_filenames: false
