@@ -16,7 +16,7 @@ import logging
 import time
 from pathlib import Path
 
-from shared.apperception import ApperceptionCascade, CascadeEvent, SelfModel
+from shared.apperception import ApperceptionCascade, ApperceptionStore, CascadeEvent, SelfModel
 
 log = logging.getLogger("apperception_tick")
 
@@ -41,29 +41,53 @@ class ApperceptionTick:
     def __init__(self) -> None:
         self._cascade = self._load_model()
         self._prev_stimmung_stance: str = "nominal"
+        # _last_save and _last_flush use time.monotonic() (interval measurement).
+        # Event timestamps and SHM payload use time.time() (wall clock for consumers).
+        # These serve different purposes and should NOT be unified.
         self._last_save: float = 0.0
+        self._last_flush: float = 0.0
         self._last_correction_ts: float = 0.0  # dedup corrections
+        self._tick_seq: int = 0
+        self._store = ApperceptionStore()
+        try:
+            self._store.ensure_collection()
+        except Exception:
+            log.debug("Failed to ensure apperception collection", exc_info=True)
 
     def tick(self) -> None:
         """Run one apperception cycle. Call this every 3-5 seconds."""
+        self._tick_seq += 1
         stance = self._read_stimmung_stance()
         events = self._collect_events(stance)
 
         pending_actions: list[str] = []
         for event in events:
             result = self._cascade.process(event, stimmung_stance=stance)
-            if result and result.action:
-                pending_actions.append(result.action)
+            if result:
+                self._store.add(result)
+                if result.action:
+                    pending_actions.append(result.action)
 
-        self._write_shm(pending_actions)
+        self._write_shm(pending_actions, event_count=len(events))
 
         now = time.monotonic()
+        if now - self._last_flush >= 60.0:
+            try:
+                self._store.flush()
+            except Exception:
+                log.debug("Failed to flush apperception store", exc_info=True)
+            self._last_flush = now
+
         if now - self._last_save >= 300.0:
             self.save_model()
             self._last_save = now
 
     def save_model(self) -> None:
         """Persist self-model to cache. Call on shutdown."""
+        try:
+            self._store.flush()
+        except Exception:
+            log.debug("Failed to flush store on save", exc_info=True)
         try:
             APPERCEPTION_CACHE_DIR.mkdir(parents=True, exist_ok=True)
             data = self._cascade.model.to_dict()
@@ -160,12 +184,14 @@ class ApperceptionTick:
         except Exception:
             return "nominal"
 
-    def _write_shm(self, pending_actions: list[str]) -> None:
+    def _write_shm(self, pending_actions: list[str], event_count: int = 0) -> None:
         try:
             payload = {
                 "self_model": self._cascade.model.to_dict(),
                 "pending_actions": pending_actions,
                 "timestamp": time.time(),
+                "tick_seq": self._tick_seq,
+                "events_this_tick": event_count,
             }
             APPERCEPTION_DIR.mkdir(parents=True, exist_ok=True)
             tmp = APPERCEPTION_FILE.with_suffix(".tmp")
