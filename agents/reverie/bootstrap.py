@@ -20,6 +20,12 @@ VOCABULARY_PRESET = "reverie_vocabulary.json"
 PIPELINE_DIR = Path("/dev/shm/hapax-imagination/pipeline")
 
 
+def load_vocabulary() -> dict:
+    """Load the vocabulary preset as a raw dict (for mixer to clone and mutate)."""
+    preset_path = PRESET_DIR / VOCABULARY_PRESET
+    return json.loads(preset_path.read_text())
+
+
 def write_vocabulary_plan() -> bool:
     """Compile and write the permanent visual vocabulary to SHM.
 
