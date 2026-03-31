@@ -105,6 +105,7 @@ class CorrectionStore:
         vec = embed(correction.correction_text, prefix="search_document")
         point_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"correction-{correction.id}"))
 
+        self.ensure_collection()
         self.client.upsert(
             COLLECTION,
             [

@@ -277,6 +277,7 @@ class EpisodeStore:
             uuid.uuid5(uuid.NAMESPACE_DNS, f"episode-{episode.start_ts:.0f}-{episode.activity}")
         )
 
+        self.ensure_collection()
         self.client.upsert(
             COLLECTION,
             [PointStruct(id=point_id, vector=vec, payload=episode.model_dump())],

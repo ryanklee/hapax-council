@@ -179,6 +179,7 @@ class PrecedentStore:
             vec = embed(precedent.situation, prefix="search_document")
             point_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"axiom-precedent-{precedent.id}"))
 
+            self.ensure_collection()
             self.client.upsert(
                 COLLECTION,
                 [PointStruct(id=point_id, vector=vec, payload=self._to_payload(precedent))],
