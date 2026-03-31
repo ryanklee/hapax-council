@@ -208,3 +208,31 @@ class TestOllamaFailureTracking:
         degraded = [i for i in impingements if i.source == "dmn.ollama_degraded"]
         assert len(degraded) >= 1
         assert degraded[0].content["metric"] == "ollama_degraded"
+
+
+class TestTPNActiveStaleness:
+    def test_stale_signal_returns_false(self, tmp_path):
+        from agents.dmn.__main__ import _read_tpn_active
+
+        path = tmp_path / "tpn_active"
+        path.write_text(f"1:{time.time() - 10:.3f}")
+        assert _read_tpn_active(path) is False
+
+    def test_fresh_signal_returns_true(self, tmp_path):
+        from agents.dmn.__main__ import _read_tpn_active
+
+        path = tmp_path / "tpn_active"
+        path.write_text(f"1:{time.time():.3f}")
+        assert _read_tpn_active(path) is True
+
+    def test_legacy_format_still_works(self, tmp_path):
+        from agents.dmn.__main__ import _read_tpn_active
+
+        path = tmp_path / "tpn_active"
+        path.write_text("1")
+        assert _read_tpn_active(path) is True
+
+    def test_missing_file_returns_false(self, tmp_path):
+        from agents.dmn.__main__ import _read_tpn_active
+
+        assert _read_tpn_active(tmp_path / "nonexistent") is False

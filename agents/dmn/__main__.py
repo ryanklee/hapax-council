@@ -42,6 +42,23 @@ TPN_ACTIVE_FILE = DMN_STATE_DIR / "tpn_active"
 LOOP_TICK_S = 1.0
 
 
+def _read_tpn_active(path: Path = TPN_ACTIVE_FILE, stale_s: float = 5.0) -> bool:
+    """Read TPN active signal with staleness check.
+
+    Format: "1:{timestamp}" or "0:{timestamp}" (new) or bare "1"/"0" (legacy).
+    """
+    try:
+        raw = path.read_text().strip()
+        if ":" in raw:
+            value, ts = raw.split(":", 1)
+            if time.time() - float(ts) > stale_s:
+                return False
+            return value == "1"
+        return raw == "1"
+    except (OSError, ValueError):
+        return False
+
+
 class DMNDaemon:
     """Always-on DMN daemon."""
 
@@ -114,13 +131,7 @@ class DMNDaemon:
         log.info("Imagination loop starting")
         while self._running:
             try:
-                try:
-                    if TPN_ACTIVE_FILE.exists():
-                        active = TPN_ACTIVE_FILE.read_text().strip() == "1"
-                        self._imagination.set_tpn_active(active)
-                except OSError:
-                    pass
-
+                self._imagination.set_tpn_active(_read_tpn_active())
                 observations = self._buffer.recent_observations(5)
                 snapshot = read_all()
                 await self._imagination.tick(observations, snapshot)
@@ -188,12 +199,7 @@ class DMNDaemon:
                         visual_chain.activate(imp, score)
 
         # Read TPN active flag (anti-correlation signal from voice daemon)
-        try:
-            if TPN_ACTIVE_FILE.exists():
-                active = TPN_ACTIVE_FILE.read_text().strip() == "1"
-                self._pulse.set_tpn_active(active)
-        except OSError:
-            pass
+        self._pulse.set_tpn_active(_read_tpn_active())
 
         # Status for monitoring
         status = {
