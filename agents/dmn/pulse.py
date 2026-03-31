@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import time
-from pathlib import Path
 
 from agents._circuit_breaker import CircuitBreaker
 from agents._impingement import Impingement, ImpingementType
@@ -17,9 +16,6 @@ from agents.dmn.ollama import (
     _ollama_generate,
 )
 from agents.dmn.sensor import read_all
-from agents.dmn.vision import _generate_visual_observation
-
-VISUAL_OBSERVATION_PATH = Path("/dev/shm/hapax-dmn/visual-observation.txt")
 
 log = logging.getLogger("dmn.pulse")
 
@@ -195,24 +191,6 @@ class DMNPulse:
         self._pending_impingements.clear()
         return pending
 
-    async def _write_visual_observation(self, snapshot: dict) -> None:
-        visual = snapshot.get("visual_surface", {})
-        if not visual or visual.get("stale", True):
-            return
-        frame_path = visual.get("frame_path")
-        if not frame_path:
-            return
-        narrative = snapshot.get("imagination", {}).get("narrative", "")
-        result = await _generate_visual_observation(frame_path, narrative)
-        if result:
-            try:
-                VISUAL_OBSERVATION_PATH.parent.mkdir(parents=True, exist_ok=True)
-                tmp = VISUAL_OBSERVATION_PATH.with_suffix(".tmp")
-                tmp.write_text(result)
-                tmp.rename(VISUAL_OBSERVATION_PATH)
-            except OSError:
-                log.warning("Failed to write visual observation", exc_info=True)
-
     async def _evaluative_tick(self, snapshot: dict) -> None:
         self._check_absolute_thresholds(snapshot)
         deltas = self._buffer.format_delta_context(self._prior_snapshot, snapshot)
@@ -245,7 +223,6 @@ class DMNPulse:
                     concerns.append(concern_part)
             self._buffer.add_evaluation(trajectory, concerns)
             log.debug("Evaluative: %s %s", trajectory, concerns)
-            await self._write_visual_observation(snapshot)
             if trajectory == "degrading":
                 self._pending_impingements.append(
                     Impingement(

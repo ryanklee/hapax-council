@@ -30,7 +30,7 @@ CURRENT_PATH = SHM_DIR / "current.json"
 STREAM_PATH = SHM_DIR / "stream.jsonl"
 STREAM_MAX_LINES = 50
 
-VISUAL_OBSERVATION_PATH = Path("/dev/shm/hapax-dmn/visual-observation.txt")
+VISUAL_OBSERVATION_PATH = Path("/dev/shm/hapax-vision/observation.txt")
 REVERBERATION_THRESHOLD = 0.5
 
 
