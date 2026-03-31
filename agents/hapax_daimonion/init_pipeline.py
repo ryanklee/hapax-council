@@ -106,7 +106,6 @@ def precompute_pipeline_deps(daemon: VoiceDaemon) -> None:
     from agents.hapax_daimonion.capability import SPEECH_DESCRIPTION, SpeechProductionCapability
 
     daemon._speech_capability = SpeechProductionCapability()
-    daemon._dmn_impingement_cursor = 0
 
     # Affordance pipeline
     from agents._affordance import CapabilityRecord, OperationalProperties
