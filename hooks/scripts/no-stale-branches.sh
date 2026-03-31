@@ -72,12 +72,45 @@ if [ "$is_destructive" = true ]; then
     if [[ -n "$branch" && "$branch" != "main" && "$branch" != "master" && "$branch" != "HEAD" ]]; then
       default_branch="main"
       git show-ref --verify --quiet refs/heads/main || default_branch="master"
-      ahead=$(git rev-list --count "${default_branch}..HEAD" 2>/dev/null || echo 0)
-      if [ "$ahead" -gt 0 ]; then
-        echo "BLOCKED: Destructive git command on branch '${branch}' with ${ahead} commit(s) ahead of ${default_branch}." >&2
-        echo "  Command: $(echo "$CMD" | head -c 120)" >&2
-        echo "  This would discard work. Use 'git stash' or submit a PR first." >&2
-        exit 2
+
+      # Allow: resetting TO main/origin/main (recovery, not destruction)
+      if echo "$CMD_STRIPPED" | grep -qE 'git\s+reset\s+--hard\s+(origin/)?main(\s|$)'; then
+        : # allow — resetting to main is recovery, not destruction
+      # Allow: removing worktrees / deleting branches whose remote tracking is gone (squash-merged)
+      elif echo "$CMD_STRIPPED" | grep -qE 'git\s+(worktree\s+remove|branch\s+-[dD])\s'; then
+        remote_gone=false
+        # Check current branch's remote tracking
+        tracking="$(git for-each-ref --format='%(upstream)' "refs/heads/${branch}" 2>/dev/null)"
+        if [ -n "$tracking" ]; then
+          git show-ref --verify --quiet "$tracking" 2>/dev/null || remote_gone=true
+        fi
+        # Check any feature branch names mentioned in the command
+        for mentioned_branch in $(echo "$CMD_STRIPPED" | grep -oE '(feat|fix|docs|chore)/[a-zA-Z0-9_-]+'); do
+          mb_tracking="$(git for-each-ref --format='%(upstream)' "refs/heads/${mentioned_branch}" 2>/dev/null)"
+          if [ -n "$mb_tracking" ]; then
+            git show-ref --verify --quiet "$mb_tracking" 2>/dev/null || remote_gone=true
+          elif [ -z "$mb_tracking" ]; then
+            # No tracking ref — check if remote branch exists at all
+            git show-ref --verify --quiet "refs/remotes/origin/${mentioned_branch}" 2>/dev/null || remote_gone=true
+          fi
+        done
+        if [ "$remote_gone" != true ]; then
+          ahead=$(git rev-list --count "${default_branch}..HEAD" 2>/dev/null || echo 0)
+          if [ "$ahead" -gt 0 ]; then
+            echo "BLOCKED: Destructive git command on branch '${branch}' with ${ahead} commit(s) ahead of ${default_branch}." >&2
+            echo "  Command: $(echo "$CMD" | head -c 120)" >&2
+            echo "  This would discard work. Use 'git stash' or submit a PR first." >&2
+            exit 2
+          fi
+        fi
+      else
+        ahead=$(git rev-list --count "${default_branch}..HEAD" 2>/dev/null || echo 0)
+        if [ "$ahead" -gt 0 ]; then
+          echo "BLOCKED: Destructive git command on branch '${branch}' with ${ahead} commit(s) ahead of ${default_branch}." >&2
+          echo "  Command: $(echo "$CMD" | head -c 120)" >&2
+          echo "  This would discard work. Use 'git stash' or submit a PR first." >&2
+          exit 2
+        fi
       fi
     fi
   fi
