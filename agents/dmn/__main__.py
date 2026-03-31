@@ -207,18 +207,22 @@ class DMNDaemon:
             except OSError:
                 pass
 
-            # Feed impingements to Reverie's capabilities for visual expression
+            # Feed impingements to Reverie via affordance pipeline
             if self._reverie is not None:
                 for imp in impingements:
-                    shader_cap = self._reverie.shader_capability
-                    visual_chain = self._reverie.visual_chain
-                    # ShaderGraphCapability: all imagination-sourced impingements
-                    if imp.source == "imagination":
-                        shader_cap.activate(imp, imp.strength)
-                    # VisualChainCapability: stimmung + evaluative impingements
-                    score = visual_chain.can_resolve(imp)
-                    if score > 0:
-                        visual_chain.activate(imp, score)
+                    candidates = self._reverie.pipeline.select(imp)
+                    for c in candidates:
+                        if c.capability_name == "shader_graph":
+                            self._reverie.shader_capability.activate(imp, imp.strength)
+                        elif c.capability_name == "visual_chain":
+                            score = self._reverie.visual_chain.can_resolve(imp)
+                            if score > 0:
+                                self._reverie.visual_chain.activate(imp, score)
+                        elif c.capability_name == "fortress_visual_response":
+                            s = imp.strength
+                            vc = self._reverie.visual_chain
+                            vc.activate_dimension("visual_chain.tension", imp, s * 0.8)
+                            vc.activate_dimension("visual_chain.degradation", imp, s * 0.6)
 
         # Read TPN active flag (anti-correlation signal from voice daemon)
         self._pulse.set_tpn_active(_read_tpn_active())
