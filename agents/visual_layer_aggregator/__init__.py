@@ -6,10 +6,17 @@ Re-exports for backward compatibility with existing imports.
 from .aggregator import VisualLayerAggregator
 from .constants import (
     FAST_INTERVAL_S,
+    HEALTH_HISTORY_PATH,
+    HEALTH_POLL_S,
+    INFRA_SNAPSHOT_PATH,
+    LANGFUSE_STATE_PATH,
     SLOW_INTERVAL_S,
+    SLOW_POLL_S,
     STATE_TICK_BASE_S,
+    WATCH_STATE_DIR,
 )
 from .signal_mappers import (
+    _map_scene_inventory,
     map_biometrics,
     map_briefing,
     map_copilot,
@@ -28,9 +35,16 @@ from .signal_mappers import (
 
 __all__ = [
     "FAST_INTERVAL_S",
+    "HEALTH_HISTORY_PATH",
+    "HEALTH_POLL_S",
+    "INFRA_SNAPSHOT_PATH",
+    "LANGFUSE_STATE_PATH",
     "SLOW_INTERVAL_S",
+    "SLOW_POLL_S",
     "STATE_TICK_BASE_S",
+    "WATCH_STATE_DIR",
     "VisualLayerAggregator",
+    "_map_scene_inventory",
     "map_biometrics",
     "map_briefing",
     "map_copilot",

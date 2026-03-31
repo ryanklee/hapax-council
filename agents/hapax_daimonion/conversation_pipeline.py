@@ -21,6 +21,7 @@ from pathlib import Path
 from agents.hapax_daimonion.config import LITELLM_BASE as _voice_litellm_base
 from agents.hapax_daimonion.conversation_helpers import (
     _CLAUSE_END,
+    _DENSITY_WORD_LIMITS,  # noqa: F401 — re-exported for tests
     _MAX_ACCUMULATION_S,
     _MAX_RESPONSE_TOKENS,
     _MAX_SPOKEN_WORDS,
@@ -35,6 +36,7 @@ from agents.hapax_daimonion.conversation_helpers import (
     _extract_substance,
     _lcs_word_length,
     _render_thread,
+    _stimmung_downgrade,  # noqa: F401 — re-exported for external consumers
     _strip_emoji,
 )
 

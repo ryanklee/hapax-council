@@ -10,7 +10,8 @@
 helper functions and constants (ThreadEntry dataclass, text processing
 utilities, TTS chunking constants, stimmung downgrade logic) into a new
 sibling file `conversation_helpers.py`. The pipeline file now imports from
-helpers instead of defining them inline.
+helpers instead of defining them inline. Follow-up: added `_DENSITY_WORD_LIMITS`
+and `_stimmung_downgrade` re-exports for test/external backward compat.
 
 ## Why
 

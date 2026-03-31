@@ -14,16 +14,7 @@ from typing import TYPE_CHECKING
 
 from agents._telemetry import trace_stimmung_update
 
-from .constants import (
-    HEALTH_HISTORY_PATH,
-    INFRA_SNAPSHOT_PATH,
-    LANGFUSE_STATE_PATH,
-    STIMMUNG_DIR,
-    STIMMUNG_FILE,
-    TEMPORAL_DIR,
-    TEMPORAL_FILE,
-    WATCH_STATE_DIR,
-)
+from . import constants as _c
 
 if TYPE_CHECKING:
     from .aggregator import VisualLayerAggregator
@@ -35,7 +26,7 @@ def update_stimmung_sources(agg: VisualLayerAggregator) -> None:
     """Collect stimmung readings from all available data sources."""
     # 1. Health history
     try:
-        text = HEALTH_HISTORY_PATH.read_text(encoding="utf-8").strip()
+        text = _c.HEALTH_HISTORY_PATH.read_text(encoding="utf-8").strip()
         if text:
             last_line = text.split("\n")[-1]
             h = json.loads(last_line)
@@ -47,7 +38,7 @@ def update_stimmung_sources(agg: VisualLayerAggregator) -> None:
 
     # 2. Infra snapshot -> GPU
     try:
-        infra = json.loads(INFRA_SNAPSHOT_PATH.read_text(encoding="utf-8"))
+        infra = json.loads(_c.INFRA_SNAPSHOT_PATH.read_text(encoding="utf-8"))
         gpu = infra.get("gpu") or {}
         used = gpu.get("used_mb", 0)
         total = gpu.get("total_mb", 0)
@@ -58,7 +49,7 @@ def update_stimmung_sources(agg: VisualLayerAggregator) -> None:
 
     # 3. Langfuse sync state
     try:
-        lf = json.loads(LANGFUSE_STATE_PATH.read_text(encoding="utf-8"))
+        lf = json.loads(_c.LANGFUSE_STATE_PATH.read_text(encoding="utf-8"))
         daily_costs = lf.get("daily_costs", {})
         today = date.today().isoformat()
         daily_cost = daily_costs.get(today, 0.0) if isinstance(daily_costs, dict) else 0.0
@@ -128,7 +119,7 @@ def update_biometrics(agg: VisualLayerAggregator) -> None:
     hrv_current = None
     hrv_baseline = None
     hrv_cv = None
-    hrv_data = read_watch_signal(WATCH_STATE_DIR / "hrv.json")
+    hrv_data = read_watch_signal(_c.WATCH_STATE_DIR / "hrv.json")
     if hrv_data is not None:
         current = hrv_data.get("current", {})
         window = hrv_data.get("window_1h", {})
@@ -140,7 +131,7 @@ def update_biometrics(agg: VisualLayerAggregator) -> None:
             hrv_cv = std / mean
 
     eda_active = False
-    eda_data = read_watch_signal(WATCH_STATE_DIR / "eda.json")
+    eda_data = read_watch_signal(_c.WATCH_STATE_DIR / "eda.json")
     if eda_data is not None:
         current = eda_data.get("current", {})
         eda_active = bool(current.get("eda_event") and current.get("duration_seconds", 0) > 120)
@@ -149,7 +140,7 @@ def update_biometrics(agg: VisualLayerAggregator) -> None:
 
     sleep_quality = None
     summary = read_watch_signal(
-        WATCH_STATE_DIR / "phone_health_summary.json", max_age_seconds=86400
+        _c.WATCH_STATE_DIR / "phone_health_summary.json", max_age_seconds=86400
     )
     if summary is not None:
         sleep_min = summary.get("sleep_duration_min")
@@ -157,7 +148,7 @@ def update_biometrics(agg: VisualLayerAggregator) -> None:
             sleep_quality = max(0.0, min(1.0, sleep_min / 480.0))
 
     activity_level = 0.0
-    activity_data = read_watch_signal(WATCH_STATE_DIR / "activity.json")
+    activity_data = read_watch_signal(_c.WATCH_STATE_DIR / "activity.json")
     if activity_data is not None:
         state = activity_data.get("state", "")
         activity_levels = {
@@ -170,7 +161,7 @@ def update_biometrics(agg: VisualLayerAggregator) -> None:
         activity_level = activity_levels.get(state, 0.1)
 
     hr_zone = 0.0
-    hr_data = read_watch_signal(WATCH_STATE_DIR / "heartrate.json")
+    hr_data = read_watch_signal(_c.WATCH_STATE_DIR / "heartrate.json")
     if hr_data is not None:
         bpm = hr_data.get("current", {}).get("bpm")
         if bpm is not None:
@@ -198,10 +189,10 @@ def write_stimmung(agg: VisualLayerAggregator) -> None:
     if agg._stimmung is None:
         return
     try:
-        STIMMUNG_DIR.mkdir(parents=True, exist_ok=True)
-        tmp = STIMMUNG_FILE.with_suffix(".tmp")
+        _c.STIMMUNG_DIR.mkdir(parents=True, exist_ok=True)
+        tmp = _c.STIMMUNG_FILE.with_suffix(".tmp")
         tmp.write_text(agg._stimmung.model_dump_json(), encoding="utf-8")
-        tmp.rename(STIMMUNG_FILE)
+        tmp.rename(_c.STIMMUNG_FILE)
     except OSError:
         log.debug("Failed to write stimmung state", exc_info=True)
 
@@ -223,9 +214,9 @@ def write_temporal_bands(agg: VisualLayerAggregator) -> None:
             "surprise_count": len(bands.surprises),
             "timestamp": time.time(),
         }
-        TEMPORAL_DIR.mkdir(parents=True, exist_ok=True)
-        tmp = TEMPORAL_FILE.with_suffix(".tmp")
+        _c.TEMPORAL_DIR.mkdir(parents=True, exist_ok=True)
+        tmp = _c.TEMPORAL_FILE.with_suffix(".tmp")
         tmp.write_text(json.dumps(payload), encoding="utf-8")
-        tmp.rename(TEMPORAL_FILE)
+        tmp.rename(_c.TEMPORAL_FILE)
     except Exception:
         log.debug("Failed to write temporal bands", exc_info=True)

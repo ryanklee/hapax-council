@@ -14,7 +14,7 @@ import logging
 
 from logos.engine.rules import Rule
 
-from .rules_phase0 import (
+from .rules_phase0 import (  # noqa: F401
     BIOMETRIC_STATE_RULE,
     CARRIER_INTAKE_RULE,
     COLLECTOR_REFRESH_RULE,
@@ -23,29 +23,34 @@ from .rules_phase0 import (
     PHONE_HEALTH_SUMMARY_RULE,
     PRESENCE_TRANSITION_RULE,
     SDLC_EVENT_RULE,
-    _audio_archive_sidecar_filter,
-    _audio_archive_sidecar_produce,
     _collector_refresh_filter,
     _collector_refresh_produce,
     _config_changed_filter,
     _config_changed_produce,
+    _handle_collector_refresh,
+    _handle_config_changed,
+    _handle_sdlc_event,
     _sdlc_event_filter,
     _sdlc_event_produce,
     get_carrier_registry,
     set_carrier_registry,
 )
-from .rules_phase1 import (
+from .rules_phase1 import (  # noqa: F401
     AUDIO_ARCHIVE_SIDECAR_RULE,
     AUDIO_CLAP_INDEXED_RULE,
     RAG_SOURCE_RULE,
+    _audio_archive_sidecar_filter,
+    _audio_archive_sidecar_produce,
     _audio_clap_indexed_filter,
     _audio_clap_indexed_produce,
+    _handle_rag_ingest,
 )
-from .rules_phase2 import (
+from .rules_phase2 import (  # noqa: F401
     CORRECTION_SYNTHESIS_RULE,
     KNOWLEDGE_MAINT_RULE,
     PATTERN_CONSOLIDATION_RULE,
     QuietWindowScheduler,
+    _handle_knowledge_maintenance,
     get_knowledge_scheduler,
 )
 
