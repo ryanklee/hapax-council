@@ -141,7 +141,7 @@ const edgeTypes = { flowing: FlowingEdge };
 
 // ── Sparkline ───────────────────────────────────────────────────────
 
-const SP_METRIC: Record<string, string> = { perception: "flow_score", stimmung: "health", temporal: "max_surprise", apperception: "coherence", voice: "routing_activation", compositor: "", phenomenal: "", engine: "", consent: "" };
+const SP_METRIC: Record<string, string> = { perception: "flow_score", stimmung: "health", stimmung_sync: "health", temporal: "max_surprise", apperception: "coherence", voice: "routing_activation", compositor: "", phenomenal: "", engine: "", consent: "" };
 const spHist: Record<string, number[]> = {};
 function pushSp(id: string, v: number | undefined | null) { if (v == null || typeof v !== "number") return; if (!spHist[id]) spHist[id] = []; spHist[id].push(v); if (spHist[id].length > 30) spHist[id].shift(); }
 function Sparkline({ nodeId, color }: { nodeId: string; color: string }) {
@@ -260,7 +260,8 @@ function SystemNode({ data }: { data: FlowNode }) {
   const sk = SP_METRIC[data.id]; if (sk && m[sk] !== undefined) pushSp(data.id, m[sk] as number);
 
   // Stimmung node gets stance-specific border opacity per design language §3.4
-  const stimmungBorderAlpha = data.id === "stimmung"
+  const isStimmung = data.id === "stimmung" || data.id === "stimmung_sync";
+  const stimmungBorderAlpha = isStimmung
     ? stance === "critical" ? 0.35 : stance === "degraded" ? 0.25 : stance === "cautious" ? 0.15 : 1
     : 1;
   const borderColor = stimmungBorderAlpha < 1
@@ -273,7 +274,7 @@ function SystemNode({ data }: { data: FlowNode }) {
 
   const body = () => { switch (data.id) {
     case "perception": return <PerceptionBody m={m} p={p} />;
-    case "stimmung": return <StimmungBody m={m} p={p} />;
+    case "stimmung": case "stimmung_sync": return <StimmungBody m={m} p={p} />;
     case "temporal": return <TemporalBody m={m} p={p} />;
     case "apperception": return <ApperceptionBody m={m} p={p} />;
     case "compositor": return <CompositorBody m={m} p={p} />;
@@ -327,7 +328,7 @@ function DetailPanel({ node, onClose }: { node: FlowNode | null; onClose: () => 
   const fc = flowColors(p), colors = fc[node.status as keyof typeof fc] || fc.offline, m = node.metrics || {};
 
   const detail = () => { switch (node.id) {
-    case "stimmung": { const dims = (m.dimensions as Record<string, { value: number; trend: string; freshness_s: number }>) || {};
+    case "stimmung": case "stimmung_sync": { const dims = (m.dimensions as Record<string, { value: number; trend: string; freshness_s: number }>) || {};
       return <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>{Object.entries(dims).map(([n, d]) => <div key={n} style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ color: d.freshness_s > 300 ? p["zinc-600"] : p["text-secondary"], fontSize: 10, width: 90 }}>{n.replace(/_/g, " ")}</span><HBar value={d.value} color={sevColor(d.value, p)} width={60} height={4} /><span style={{ color: p["text-primary"], fontSize: 10, width: 30 }}>{d.value.toFixed(2)}</span></div>)}</div>; }
     case "engine": return <div style={{ display: "flex", flexDirection: "column", gap: 2, fontSize: 10 }}>
       {[["events", m.events_processed], ["actions", m.actions_executed], ["rules", m.rules_evaluated], ["errors", m.error_count], ["novelty", (m.novelty_score as number)?.toFixed(3)], ["shift", (m.shift_score as number)?.toFixed(3)], ["uptime", `${Math.round(((m.uptime_s as number) ?? 0) / 60)}m`]].map(([k, v]) => <div key={k as string} style={{ color: p["text-secondary"] }}>{k as string}: <span style={{ color: k === "errors" && (v as number) > 0 ? p["red-400"] : p["text-primary"] }}>{String(v ?? 0)}</span></div>)}
@@ -390,7 +391,7 @@ export function FlowPage() {
   }, []);
 
   useEffect(() => { if (!flowState) return;
-    const stimmungNode = flowState.nodes.find(n => n.id === "stimmung");
+    const stimmungNode = flowState.nodes.find(n => n.id === "stimmung" || n.id === "stimmung_sync");
     const stance = (stimmungNode?.metrics?.stance as string) || "unknown";
     // Consent phase available from node metrics (used by edge rendering via edge_type)
     const rawNodes: Node[] = flowState.nodes.map(n => ({
@@ -441,7 +442,7 @@ export function FlowPage() {
       </ReactFlow>
       <DetailPanel node={selectedNode} onClose={() => setSelectedNode(null)} />
       <div style={{ position: "absolute", top: 12, left: 12, color: p["text-muted"], fontSize: 11, fontFamily: "'JetBrains Mono', monospace", zIndex: 10, letterSpacing: "0.08em" }}>SYSTEM ANATOMY — {flowState ? <><span style={{ color: ac > 0 ? p["green-400"] : p["text-muted"] }}>{ac}</span>/{tc} active</> : "connecting..."}</div>
-      {flowState && (() => { const sn = flowState.nodes.find(n => n.id === "stimmung"), stance = (sn?.metrics?.stance as string) || "unknown";
+      {flowState && (() => { const sn = flowState.nodes.find(n => n.id === "stimmung" || n.id === "stimmung_sync"), stance = (sn?.metrics?.stance as string) || "unknown";
         const ol = flowState.nodes.filter(n => n.status === "offline").length, ae = flowState.edges.filter(e => e.active).length, te = flowState.edges.length;
         return <div style={{ position: "absolute", bottom: 12, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 24, color: p["text-muted"], fontSize: 10, fontFamily: "'JetBrains Mono', monospace", zIndex: 10, letterSpacing: "0.05em", opacity: 0.8 }}>
           <span>stance: <span style={{ color: stColor(stance, p) }}>{stance}</span></span>
