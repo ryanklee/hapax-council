@@ -83,6 +83,17 @@ class AffordancePipeline:
         )
         self._index_breaker = CircuitBreaker("qdrant_index", failure_threshold=5, cooldown_s=60.0)
 
+    def _ensure_collection(self, client: object, vector_size: int) -> None:
+        """Create the affordances collection if it doesn't exist."""
+        from qdrant_client.models import Distance, VectorParams
+
+        if not client.collection_exists(COLLECTION_NAME):  # type: ignore[union-attr]
+            client.create_collection(  # type: ignore[union-attr]
+                collection_name=COLLECTION_NAME,
+                vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
+            )
+            log.info("Created Qdrant collection '%s' (dim=%d)", COLLECTION_NAME, vector_size)
+
     def index_capability(self, record: CapabilityRecord) -> bool:
         from shared.config import embed_safe, get_qdrant
 
@@ -96,6 +107,7 @@ class AffordancePipeline:
             from qdrant_client.models import PointStruct
 
             client = get_qdrant()
+            self._ensure_collection(client, len(embedding))
             point_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, record.name))
             client.upsert(
                 collection_name=COLLECTION_NAME,
