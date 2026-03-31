@@ -176,6 +176,8 @@ while IFS= read -r branch; do
     [ "$short" = "HEAD" ] && continue
     [ "$branch" = "origin" ] && continue
     echo "$short" | grep -qE '^dependabot/' && continue
+    # Skip remote branches whose local counterpart is in another worktree
+    echo "$other_wt_branches" | grep -qF "|${short}" && continue
     ahead=$(git rev-list --count "main..$branch" 2>/dev/null || echo 0)
     if [ "$ahead" -gt 0 ]; then
         # Skip if a local branch already covers this
