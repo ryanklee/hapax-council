@@ -216,17 +216,10 @@ class DMNDaemon:
             except OSError:
                 log.warning("Failed to write impingements to %s", IMPINGEMENTS_FILE, exc_info=True)
 
-            # Feed impingements to Reverie via affordance pipeline
+            # Feed impingements to Reverie via mixer's affordance pipeline
             if self._reverie is not None:
                 for imp in impingements:
-                    candidates = self._reverie.pipeline.select(imp)
-                    for c in candidates:
-                        if c.capability_name == "shader_graph":
-                            self._reverie.shader_capability.activate(imp, imp.strength)
-                        elif c.capability_name == "visual_chain":
-                            score = self._reverie.visual_chain.can_resolve(imp)
-                            if score > 0:
-                                self._reverie.visual_chain.activate(imp, score)
+                    self._reverie.dispatch_impingement(imp)
 
         # Read TPN active flag (anti-correlation signal from voice daemon)
         self._pulse.set_tpn_active(_read_tpn_active())

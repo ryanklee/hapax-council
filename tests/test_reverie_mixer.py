@@ -53,4 +53,44 @@ def test_mixer_has_same_interface_as_actuation_loop():
     assert hasattr(mixer, "shader_capability")
     assert hasattr(mixer, "visual_chain")
     assert hasattr(mixer, "tick")
+    assert hasattr(mixer, "dispatch_impingement")
     assert callable(mixer.tick)
+    assert callable(mixer.dispatch_impingement)
+
+
+def test_affordance_registration_includes_shader_nodes():
+    """Pipeline should register 12 shader node + 5 content + 3 legacy affordances."""
+    from agents.reverie._affordances import (
+        CONTENT_TYPE_AFFORDANCES,
+        LEGACY_AFFORDANCES,
+        SHADER_NODE_AFFORDANCES,
+    )
+
+    assert len(SHADER_NODE_AFFORDANCES) == 12
+    assert len(CONTENT_TYPE_AFFORDANCES) == 5
+    assert len(LEGACY_AFFORDANCES) == 3
+    # All shader nodes start with "node."
+    for name, _ in SHADER_NODE_AFFORDANCES:
+        assert name.startswith("node."), f"{name} should start with node."
+    # All content types start with "content."
+    for name, _ in CONTENT_TYPE_AFFORDANCES:
+        assert name.startswith("content."), f"{name} should start with content."
+
+
+def test_dispatch_impingement_activates_visual_chain():
+    """Dispatching an impingement with dimensions should activate the visual chain."""
+    from shared.impingement import Impingement, ImpingementType
+
+    mixer = ReverieMixer()
+    import time
+
+    imp = Impingement(
+        source="test",
+        type=ImpingementType.SALIENCE_INTEGRATION,
+        timestamp=time.time(),
+        strength=0.8,
+        content={"metric": "visual_modulation", "dimensions": {"intensity": 0.6}},
+    )
+    mixer.dispatch_impingement(imp)
+    level = mixer.visual_chain.get_dimension_level("visual_chain.intensity")
+    assert level > 0.0
