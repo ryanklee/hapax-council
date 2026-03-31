@@ -215,10 +215,10 @@ class ReverieActuationLoop:
 
         # Add trace state for feedback shader (Amendment 2: dwelling)
         if self._trace_strength > 0:
-            uniforms["feedback.trace_center_x"] = self._trace_center[0]
-            uniforms["feedback.trace_center_y"] = self._trace_center[1]
-            uniforms["feedback.trace_radius"] = self._trace_radius
-            uniforms["feedback.trace_strength"] = self._trace_strength
+            uniforms["fb.trace_center_x"] = self._trace_center[0]
+            uniforms["fb.trace_center_y"] = self._trace_center[1]
+            uniforms["fb.trace_radius"] = self._trace_radius
+            uniforms["fb.trace_strength"] = self._trace_strength
 
         # Add stimmung-derived signals
         if stimmung:

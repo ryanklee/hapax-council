@@ -143,7 +143,7 @@ async def impingement_consumer_loop(daemon: VoiceDaemon) -> None:
                                         c.combined,
                                     )
                             # Proactive utterance
-                            if imp.source == "imagination" and imp.strength >= 0.8:
+                            if imp.source == "imagination" and imp.strength >= 0.65:
                                 _handle_proactive_impingement(daemon, imp)
                         except Exception:
                             pass
