@@ -1,0 +1,11 @@
+[Unit]
+Description=Hapax Vision Observer — visual surface description
+After=hapax-secrets.service
+
+[Service]
+Type=oneshot
+ExecStart=/home/hapax/.local/bin/uv run python -m agents.vision_observer
+WorkingDirectory=/home/hapax/projects/hapax-council
+EnvironmentFile=/run/user/1000/hapax-secrets.env
+Environment=PATH=/home/hapax/.local/bin:/usr/local/bin:/usr/bin
+TimeoutStartSec=30
