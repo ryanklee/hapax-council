@@ -260,9 +260,12 @@ function SystemNode({ data }: { data: FlowNode }) {
   const sk = SP_METRIC[data.id]; if (sk && m[sk] !== undefined) pushSp(data.id, m[sk] as number);
 
   // Stimmung node gets stance-specific border opacity per design language §3.4
-  const borderOpacity = data.id === "stimmung"
+  const stimmungBorderAlpha = data.id === "stimmung"
     ? stance === "critical" ? 0.35 : stance === "degraded" ? 0.25 : stance === "cautious" ? 0.15 : 1
     : 1;
+  const borderColor = stimmungBorderAlpha < 1
+    ? `color-mix(in srgb, ${colors.border} ${(stimmungBorderAlpha * 100).toFixed(0)}%, transparent)`
+    : colors.border;
 
   const glowColor = `color-mix(in srgb, ${colors.border} ${stance === "critical" ? "8%" : "6%"}, transparent)`;
   const glowMin = breath.glow !== "none" ? `${breath.glow} ${glowColor}` : "none";
@@ -284,28 +287,31 @@ function SystemNode({ data }: { data: FlowNode }) {
   return (
     <div style={{
       background: colors.bg,
-      border: `1.5px solid ${colors.border}`,
+      border: `1.5px solid ${borderColor}`,
       borderRadius: 12,
       padding: "10px 14px",
       minWidth: 150,
       maxWidth: 220,
-      opacity: op * borderOpacity,
+      opacity: op,
       transition: "opacity 1s ease, transform 0.3s ease",
       fontFamily: "'JetBrains Mono', monospace",
-      animation: breath.dur !== "0s" ? `breathe ${breath.dur} ease-in-out infinite` : "none",
-      transform: breath.scale !== 1 ? `scale(${breath.scale})` : undefined,
+      animation: breath.dur !== "0s"
+        ? breath.scale !== 1
+          ? `breathe ${breath.dur} ease-in-out infinite, breathe-pulse ${breath.dur} ease-in-out infinite`
+          : `breathe ${breath.dur} ease-in-out infinite`
+        : "none",
       '--breathe-glow-min': glowMin,
       '--breathe-glow-max': glowMax,
     } as React.CSSProperties}>
       <Handle type="target" position={Position.Top} style={{ background: colors.border, width: 6, height: 6 }} />
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
         <span style={{ color: p["text-emphasis"], fontSize: 12, fontWeight: 600, letterSpacing: "0.02em" }}>{data.label}</span>
-        <span style={{ width: 6, height: 6, borderRadius: "50%", background: colors.border, boxShadow: data.status === "active" ? `0 0 6px ${colors.border}` : "none" }} />
+        <span style={{ width: 6, height: 6, borderRadius: "50%", background: colors.border }} />
       </div>
       <div style={{ fontSize: 10, lineHeight: "1.6" }}>
         {body()}
         {SP_METRIC[data.id] && <Sparkline nodeId={data.id} color={colors.border} />}
-        {data.status !== "offline" && <div style={{ color: p["border-muted"], marginTop: 3, fontSize: 9, textAlign: "right" }}>{data.age_s < 1 ? "now" : `${data.age_s.toFixed(0)}s`}</div>}
+        {data.status !== "offline" && <div style={{ color: p["text-muted"], marginTop: 3, fontSize: 9, textAlign: "right" }}>{data.age_s < 1 ? "now" : `${data.age_s.toFixed(0)}s`}</div>}
       </div>
       <Handle type="source" position={Position.Bottom} style={{ background: colors.border, width: 6, height: 6 }} />
     </div>
@@ -420,6 +426,7 @@ export function FlowPage() {
     <div style={{ width: "100%", height: "100%", background: p.bg, position: "relative" }}>
       <style>{`
         @keyframes breathe { 0%, 100% { box-shadow: var(--breathe-glow-min, none); opacity: 1; } 50% { box-shadow: var(--breathe-glow-max, none); opacity: 0.92; } }
+        @keyframes breathe-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.15); } }
         .react-flow__edge-path { transition: stroke 1s ease, opacity 1s ease; }
         .react-flow__handle { border: none !important; }
         .react-flow__controls { border-radius: 8px; overflow: hidden; }
