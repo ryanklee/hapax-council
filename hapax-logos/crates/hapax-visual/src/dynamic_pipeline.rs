@@ -85,9 +85,10 @@ struct DynamicPass {
     compute_pipeline: Option<wgpu::ComputePipeline>,
     uniform_bind_group: Option<wgpu::BindGroup>,
     input_bind_group_layout: Option<wgpu::BindGroupLayout>,
-    #[allow(dead_code)]
     params_buffer: Option<wgpu::Buffer>,
     params_bind_group: Option<wgpu::BindGroup>,
+    param_order: Vec<String>,
+    current_params: Vec<f32>,
     inputs: Vec<String>,
     output: String,
     steps_per_frame: u32,
@@ -396,6 +397,15 @@ impl DynamicPipeline {
                     input_bind_group_layout: None,
                     params_buffer: None,
                     params_bind_group: None,
+                    param_order: plan_pass.param_order.clone(),
+                    current_params: {
+                        let mut v: Vec<f32> = plan_pass.param_order.iter()
+                            .map(|name| plan_pass.uniforms.get(name).copied().unwrap_or(0.0) as f32)
+                            .collect();
+                        while v.len() < 4 { v.push(0.0); }
+                        while (v.len() * 4) % 16 != 0 { v.push(0.0); }
+                        v
+                    },
                     inputs: plan_pass.inputs.clone(),
                     output: plan_pass.output.clone(),
                     steps_per_frame: plan_pass.steps_per_frame,
@@ -499,6 +509,15 @@ impl DynamicPipeline {
                     input_bind_group_layout: None,
                     params_buffer: pbuf,
                     params_bind_group: pbg,
+                    param_order: plan_pass.param_order.clone(),
+                    current_params: {
+                        let mut v: Vec<f32> = plan_pass.param_order.iter()
+                            .map(|name| plan_pass.uniforms.get(name).copied().unwrap_or(0.0) as f32)
+                            .collect();
+                        while v.len() < 4 { v.push(0.0); }
+                        while (v.len() * 4) % 16 != 0 { v.push(0.0); }
+                        v
+                    },
                     inputs: plan_pass.inputs.clone(),
                     output: plan_pass.output.clone(),
                     steps_per_frame: plan_pass.steps_per_frame,
@@ -554,11 +573,36 @@ impl DynamicPipeline {
                             "temporal_distortion" => uniform_data.temporal_distortion = v,
                             "degradation" => uniform_data.degradation = v,
                             "pitch_displacement" => uniform_data.pitch_displacement = v,
-                            "formant_character" => uniform_data.formant_character = v,
+                            "diffusion" => uniform_data.diffusion = v,
                             _ => {}
                         }
                     }
-                    // node.param keys handled per-pass via params buffers at reload time
+                }
+
+                // Apply per-node param overrides from uniforms.json
+                for pass in &mut self.passes {
+                    if pass.params_buffer.is_none() || pass.param_order.is_empty() {
+                        continue;
+                    }
+                    let mut updated = false;
+                    for (i, name) in pass.param_order.iter().enumerate() {
+                        if i >= pass.current_params.len() {
+                            break;
+                        }
+                        let key = format!("{}.{}", pass.node_id, name);
+                        if let Some(&val) = overrides.get(&key) {
+                            let v = val as f32;
+                            if (pass.current_params[i] - v).abs() > f32::EPSILON {
+                                pass.current_params[i] = v;
+                                updated = true;
+                            }
+                        }
+                    }
+                    if updated {
+                        if let Some(ref buf) = pass.params_buffer {
+                            queue.write_buffer(buf, 0, bytemuck::cast_slice(&pass.current_params));
+                        }
+                    }
                 }
             }
         }

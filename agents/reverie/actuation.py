@@ -132,25 +132,35 @@ class ReverieActuationLoop:
         # 9. Write merged uniforms
         self._write_uniforms(imagination, stimmung)
 
+    # Per-slot approximate centers (matches content_layer.wgsl immensity_entry directions)
+    _SLOT_CENTERS = {0: (0.4, 0.4), 1: (0.6, 0.4), 2: (0.4, 0.6), 3: (0.6, 0.6)}
+
     def _update_trace(self, imagination: dict[str, object] | None, dt: float) -> None:
         """Update trace state for dwelling/trace effect (Bachelard Amendment 2).
 
         When content salience drops (fading out), the trace activates at the
-        content's last position. The feedback shader then decays slower in
-        that region, creating a ghostly afterimage.
+        content's approximate position based on its slot index.
         """
-        current_salience = imagination.get("salience", 0.0) if imagination else 0.0
+        current_salience = float(imagination.get("salience", 0.0)) if imagination else 0.0
 
         # Detect salience drop → activate trace
         if self._last_salience > 0.2 and current_salience < self._last_salience * 0.5:
             self._trace_strength = min(1.0, self._last_salience)
             self._trace_radius = 0.3 + self._last_salience * 0.2
-            # Center from content reference positions (default center if unknown)
-            self._trace_center = (0.5, 0.5)
+
+            # Approximate center from primary content slot
+            slot_idx = 0
+            if imagination:
+                refs = imagination.get("content_references", [])
+                if isinstance(refs, list) and len(refs) > 0:
+                    slot_idx = min(len(refs) - 1, 3)
+            self._trace_center = self._SLOT_CENTERS.get(slot_idx, (0.5, 0.5))
+
             log.info(
-                "Trace activated: strength=%.2f radius=%.2f (salience %.2f→%.2f)",
+                "Trace activated: strength=%.2f radius=%.2f center=%s (salience %.2f→%.2f)",
                 self._trace_strength,
                 self._trace_radius,
+                self._trace_center,
                 self._last_salience,
                 current_salience,
             )
@@ -195,8 +205,8 @@ class ReverieActuationLoop:
         material = "water"
         salience = 0.0
         if imagination:
-            material = imagination.get("material", "water")
-            salience = imagination.get("salience", 0.0)
+            material = str(imagination.get("material", "water"))
+            salience = float(imagination.get("salience", 0.0))
 
         material_val = float(MATERIAL_MAP.get(material, 0))
 
@@ -215,10 +225,10 @@ class ReverieActuationLoop:
 
         # Add trace state for feedback shader (Amendment 2: dwelling)
         if self._trace_strength > 0:
-            uniforms["feedback.trace_center_x"] = self._trace_center[0]
-            uniforms["feedback.trace_center_y"] = self._trace_center[1]
-            uniforms["feedback.trace_radius"] = self._trace_radius
-            uniforms["feedback.trace_strength"] = self._trace_strength
+            uniforms["fb.trace_center_x"] = self._trace_center[0]
+            uniforms["fb.trace_center_y"] = self._trace_center[1]
+            uniforms["fb.trace_radius"] = self._trace_radius
+            uniforms["fb.trace_strength"] = self._trace_strength
 
         # Add stimmung-derived signals
         if stimmung:
