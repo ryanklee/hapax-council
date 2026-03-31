@@ -144,6 +144,43 @@ Destructive command detection strips quoted strings before matching to prevent f
 - **`shared/consent.py`** — `ConsentContract`, `ConsentRegistry`, `contract_check()`
 - **`shared/agent_registry.py`** — `AgentManifest` (4-layer schema), query by category/capability/RACI
 
+## LLM-Optimized Code Patterns
+
+All code is written for LLM comprehension. These patterns are enforced by hooks.
+
+**Self-contained modules:**
+- Every agent is a self-contained package with vendored dependencies
+- No `from shared.` imports in consumer code (use `from agents._X` vendored modules)
+- Cross-agent imports forbidden — vendor needed schemas
+
+**File size:**
+- No Python file over 300 LOC (enforced by `llm-file-size-gate.sh`)
+- Split by concern before continuing if a file grows beyond 300
+
+**Type density:**
+- Zero explicit `Any` types (enforced by basedpyright `reportExplicitAny`)
+- Use concrete types, tagged unions with `Literal`, or Protocol classes
+- 81 legacy `Any` in GStreamer/ML/hardware — do not add new ones
+
+**METADATA.yaml:**
+- Every agent package must have a `METADATA.yaml`
+- Generate: `uv run python scripts/llm_metadata_gen.py agents.<name> --write`
+- Validate: `uv run python scripts/llm_validate.py`
+
+**No dynamic dispatch:**
+- No `__getattr__` for lazy loading
+- No registry-based dispatch — use explicit function calls
+- All code paths statically traceable
+
+**Vendored dependencies:**
+- 66 shims at `agents/_*.py`, 40 at `logos/_*.py`
+- New vendored modules: `agents/_<module>.py` with underscore prefix
+- Generate: `uv run python scripts/llm_vendor.py agents.<name> --apply`
+
+**Token budget:**
+- Check: `uv run python scripts/llm_import_graph.py --module <name>`
+- Target: <5K tokens per self-contained package
+
 ## Voice Grounding Research Continuity
 
 Research state persists in `agents/hapax_daimonion/proofs/RESEARCH-STATE.md`. After any session with research decisions or implementation progress on the voice grounding project, update this file before ending. When the operator says "refresh research context" or "update research context", read the state file and selectively read the tier-2 documents it references.
