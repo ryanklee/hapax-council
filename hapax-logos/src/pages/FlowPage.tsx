@@ -165,7 +165,7 @@ function PerceptionBody({ m, p }: { m: NodeMetrics; p: ThemePalette }) {
 
 function StimmungBody({ m, p }: { m: NodeMetrics; p: ThemePalette }) {
   const dims = (m.dimensions as Record<string, { value: number; trend: string; freshness_s: number }>) || {};
-  const stance = (m.stance as string) || "unknown";
+  const stance = (m.stance as string) || (m.overall_stance as string) || "unknown";
   const tg = (t: string, c: string) => <span style={{ fontSize: 6, color: c, lineHeight: 1 }}>{t === "rising" ? "\u25B2" : t === "falling" ? "\u25BC" : "\u2014"}</span>;
   return <>
     <div style={{ height: 3, width: "100%", background: stColor(stance, p), borderRadius: 1, marginBottom: 4 }} />
@@ -392,7 +392,7 @@ export function FlowPage() {
 
   useEffect(() => { if (!flowState) return;
     const stimmungNode = flowState.nodes.find(n => n.id === "stimmung" || n.id === "stimmung_sync");
-    const stance = (stimmungNode?.metrics?.stance as string) || "unknown";
+    const stance = (stimmungNode?.metrics?.stance as string) || (stimmungNode?.metrics?.overall_stance as string) || "unknown";
     // Consent phase available from node metrics (used by edge rendering via edge_type)
     const rawNodes: Node[] = flowState.nodes.map(n => ({
       id: n.id, type: "system",
@@ -442,7 +442,7 @@ export function FlowPage() {
       </ReactFlow>
       <DetailPanel node={selectedNode} onClose={() => setSelectedNode(null)} />
       <div style={{ position: "absolute", top: 12, left: 12, color: p["text-muted"], fontSize: 11, fontFamily: "'JetBrains Mono', monospace", zIndex: 10, letterSpacing: "0.08em" }}>SYSTEM ANATOMY — {flowState ? <><span style={{ color: ac > 0 ? p["green-400"] : p["text-muted"] }}>{ac}</span>/{tc} active</> : "connecting..."}</div>
-      {flowState && (() => { const sn = flowState.nodes.find(n => n.id === "stimmung" || n.id === "stimmung_sync"), stance = (sn?.metrics?.stance as string) || "unknown";
+      {flowState && (() => { const sn = flowState.nodes.find(n => n.id === "stimmung" || n.id === "stimmung_sync"), stance = (sn?.metrics?.stance as string) || (sn?.metrics?.overall_stance as string) || "unknown";
         const ol = flowState.nodes.filter(n => n.status === "offline").length, ae = flowState.edges.filter(e => e.active).length, te = flowState.edges.length;
         return <div style={{ position: "absolute", bottom: 12, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 24, color: p["text-muted"], fontSize: 10, fontFamily: "'JetBrains Mono', monospace", zIndex: 10, letterSpacing: "0.05em", opacity: 0.8 }}>
           <span>stance: <span style={{ color: stColor(stance, p) }}>{stance}</span></span>
