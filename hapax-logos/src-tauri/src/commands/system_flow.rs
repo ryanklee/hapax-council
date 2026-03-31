@@ -196,6 +196,17 @@ pub fn get_system_flow() -> SystemFlowState {
             }
         }
     }
+    let recent_observations: Vec<serde_json::Value> = model.get("recent_observations")
+        .and_then(|v| v.as_array()).cloned().unwrap_or_default()
+        .into_iter().rev().take(5).collect::<Vec<_>>().into_iter().rev().collect();
+    let recent_reflections: Vec<serde_json::Value> = model.get("recent_reflections")
+        .and_then(|v| v.as_array()).cloned().unwrap_or_default()
+        .into_iter().rev().take(3).collect::<Vec<_>>().into_iter().rev().collect();
+    let pending_actions: Vec<serde_json::Value> = apperception.as_ref()
+        .and_then(|a| a.get("pending_actions")).and_then(|v| v.as_array()).cloned()
+        .unwrap_or_default().into_iter().take(3).collect();
+    let tick_seq = apperception.as_ref().and_then(|a| a.get("tick_seq")).and_then(|v| v.as_u64()).unwrap_or(0);
+    let events_this_tick = apperception.as_ref().and_then(|a| a.get("events_this_tick")).and_then(|v| v.as_u64()).unwrap_or(0);
     nodes.push(NodeState {
         id: "apperception".into(),
         label: "Apperception".into(),
@@ -207,6 +218,11 @@ pub fn get_system_flow() -> SystemFlowState {
             "observation_count": model.get("recent_observations").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0),
             "reflection_count": model.get("recent_reflections").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0),
             "pending_action_count": apperception.as_ref().and_then(|a| a.get("pending_actions")).and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0),
+            "recent_observations": recent_observations,
+            "recent_reflections": recent_reflections,
+            "pending_actions": pending_actions,
+            "tick_seq": tick_seq,
+            "events_this_tick": events_this_tick,
         }) } else { serde_json::json!({}) },
     });
 

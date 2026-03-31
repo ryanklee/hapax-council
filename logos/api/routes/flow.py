@@ -336,6 +336,11 @@ async def get_flow_state_legacy(request: Request) -> dict:
                 "observation_count": len(model.get("recent_observations", [])),
                 "reflection_count": len(model.get("recent_reflections", [])),
                 "pending_action_count": len((apperception or {}).get("pending_actions", [])),
+                "recent_observations": model.get("recent_observations", [])[-5:],
+                "recent_reflections": model.get("recent_reflections", [])[-3:],
+                "pending_actions": (apperception or {}).get("pending_actions", [])[:3],
+                "tick_seq": (apperception or {}).get("tick_seq", 0),
+                "events_this_tick": (apperception or {}).get("events_this_tick", 0),
             }
             if apperception
             else {},
