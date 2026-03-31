@@ -2,9 +2,11 @@
 
 from .agent import (  # noqa: F401
     detect_drift,
+    drift_agent,
     format_human,
 )
 from .docs import (  # noqa: F401
+    DOC_FILES,
     HAPAX_REPO_DIRS,
     load_docs,
 )

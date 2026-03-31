@@ -17,6 +17,7 @@ import httpx
 
 from agents._active_correction import CorrectionSeeker
 from agents._apperception_tick import ApperceptionTick
+from agents._cameras import CAMERA_ROLES
 from agents._correction_memory import CorrectionStore
 from agents._episodic_memory import EpisodeBuilder, EpisodeStore
 from agents._stimmung import StimmungCollector, SystemStimmung
@@ -59,7 +60,6 @@ from agents.visual_layer_state import (
 from .constants import (
     AMBIENT_CONTENT_INTERVAL_S,
     CAMERA_FILTERS,
-    CAMERA_ROLES,
     HEALTH_POLL_S,
     LOGOS_BASE,
     OUTPUT_DIR,

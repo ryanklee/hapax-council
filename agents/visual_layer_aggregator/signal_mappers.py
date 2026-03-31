@@ -6,6 +6,9 @@ import logging
 import time
 from datetime import datetime
 
+from agents._cameras import SHORT_TO_ROLE as _ROLE_MAP
+from agents._cameras import can_enrich_persons
+from agents._cameras import resolution as cam_resolution
 from agents._stimmung import SystemStimmung
 from agents.temporal_delta import compute_temporal_delta
 from agents.temporal_scales import MinuteSummary
@@ -23,10 +26,7 @@ from agents.visual_layer_state import (
 )
 
 from .constants import (
-    _ROLE_MAP,
     PERCEPTION_MINUTES_PATH,
-    cam_resolution,
-    can_enrich_persons,
 )
 
 log = logging.getLogger("visual_layer_aggregator")
