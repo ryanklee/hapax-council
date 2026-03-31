@@ -141,13 +141,13 @@ class EchoCanceller:
         with self._ref_lock:
             raw_ref = self._ref_buf.popleft() if self._ref_buf else None
 
-        # Latency compensation: delay reference by 1 frame (~30ms) so it
-        # aligns with when the acoustic echo actually reaches the mic.
-        ref = None
-        if raw_ref is not None:
-            self._latency_buf.append(raw_ref)
-            if len(self._latency_buf) >= self._latency_frames:
-                ref = self._latency_buf.popleft()
+            # Latency compensation: delay reference by 1 frame (~30ms) so it
+            # aligns with when the acoustic echo actually reaches the mic.
+            ref = None
+            if raw_ref is not None:
+                self._latency_buf.append(raw_ref)
+                if len(self._latency_buf) >= self._latency_frames:
+                    ref = self._latency_buf.popleft()
 
         if ref is None:
             # No echo to cancel — passthrough
@@ -196,6 +196,15 @@ class EchoCanceller:
         if self._state:
             self._lib.speex_echo_state_destroy(self._state)
             self._state = None
+
+    def __del__(self) -> None:
+        self.destroy()
+
+    def __enter__(self) -> EchoCanceller:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.destroy()
 
 
 def _resample_24k_to_16k(pcm_24k: bytes) -> bytes:
