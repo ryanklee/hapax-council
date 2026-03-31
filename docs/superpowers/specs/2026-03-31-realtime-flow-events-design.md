@@ -1,8 +1,8 @@
 # Real-Time Flow Events — Directional Call Visualization
 
 **Date:** 2026-03-31
-**Status:** Approved
-**Scope:** Backend event bus + instrumentation across 6 sources + Tauri SSE bridge + frontend dot animation
+**Status:** Implemented
+**Scope:** Backend event bus + instrumentation across 6 sources + Tauri SSE bridge + frontend dot animation + verified consumption map
 
 ## Problem
 
@@ -142,6 +142,36 @@ Two consumers of the event bus:
 | `logos/api/app.py` | Create EventBus singleton at startup, attach to app.state |
 | `hapax-logos/src-tauri/src/main.rs` | Register flow events command |
 | `hapax-logos/src/pages/FlowPage.tsx` | Listen for `flow-event` Tauri events, render transient dots on edges |
+
+## Implementation Notes
+
+### Verified consumption map
+
+The original design routed SHM write events to all declared topology edges from the source node. This inflated a single file write into N fake "calls" — the topology says paths exist, not that data flowed on each one simultaneously. We know the source wrote but not which targets consumed it.
+
+The implementation uses a static verified consumption map (`_VERIFIED_CONSUMERS` in `flow_observer.py`) derived from a codebase audit of actual `json.loads(path.read_text())` calls across agent source code. Only edges where Agent B's source code provably reads Agent A's SHM file produce dot events.
+
+| Producer | Verified Consumers |
+|---|---|
+| `stimmung_sync` | `hapax_daimonion`, `reactive_engine`, `studio_compositor` |
+| `temporal_bands` | `hapax_daimonion`, `studio_compositor` |
+| `apperception` | `hapax_daimonion` |
+| `studio_compositor` | `hapax_daimonion` |
+| `dmn` | `hapax_daimonion`, `studio_compositor` |
+| `hapax_daimonion` | `studio_compositor` |
+
+This map must be updated when agent consumption patterns change in source code.
+
+### Dot animation
+
+Dots traverse edge bezier paths over 2s (ease-out spline), with soft fade-in over the first 15% and fade-out over the last 25%. A Gaussian blur filter provides a subtle glow halo. Each event spawns one dot; bursts appear as clusters.
+
+### Additional fixes during implementation
+
+- **VLA readiness bug**: Missing `Path` import in `stimmung_methods.py` crashed the entire `_api_poll_loop`, preventing `poll_ambient_content` from running, keeping terrain readiness stuck at "collecting" forever.
+- **SHM writer ID mismatch**: SHM directory names (e.g., `compositor`) don't match node IDs (e.g., `studio_compositor`). Fixed with `_writer_node_map` populated from manifest state paths plus explicit entries for agents without SHM state paths.
+- **Events router prefix**: Events SSE endpoint was at `/events/stream` but Tauri bridge expected `/api/events/stream`. Added `/api` prefix to router.
+- **Stimmung stance field**: Dynamic discovery returns `overall_stance` not `stance`. Added fallback at all read sites.
 
 ## Out of Scope
 
