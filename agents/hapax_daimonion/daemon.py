@@ -16,6 +16,7 @@ from agents.hapax_daimonion.event_log import EventLog
 from agents.hapax_daimonion.frame_gate import FrameGate
 from agents.hapax_daimonion.governor import PipelineGovernor
 from agents.hapax_daimonion.hotkey import HotkeyServer
+from agents.hapax_daimonion.init_phase import InitPhase
 from agents.hapax_daimonion.notification_queue import NotificationQueue
 from agents.hapax_daimonion.perception import PerceptionEngine
 from agents.hapax_daimonion.presence import PresenceDetector
@@ -43,11 +44,26 @@ class VoiceDaemon:
 
     def __init__(self, cfg: DaimonionConfig | None = None) -> None:
         self.cfg = cfg if cfg is not None else load_config()
-        self._init_core_subsystems()
-        self._init_perception_layer()
-        self._init_state_and_observability()
-        self._init_voice_pipeline()
-        self._init_actuation_layer()
+        self._init_completed: set[InitPhase] = set()
+        self._init_failed: dict[InitPhase, str] = {}
+
+        for phase, init_fn in [
+            (InitPhase.CORE, self._init_core_subsystems),
+            (InitPhase.PERCEPTION, self._init_perception_layer),
+            (InitPhase.STATE, self._init_state_and_observability),
+            (InitPhase.VOICE, self._init_voice_pipeline),
+            (InitPhase.ACTUATION, self._init_actuation_layer),
+        ]:
+            try:
+                init_fn()
+                self._init_completed.add(phase)
+            except Exception as exc:
+                self._init_failed[phase] = str(exc)
+                log.error("Init phase %s failed: %s", phase.value, exc, exc_info=True)
+
+    def is_ready(self) -> bool:
+        """True if all init phases completed successfully."""
+        return len(self._init_completed) == len(InitPhase)
 
     def _init_core_subsystems(self) -> None:
         """Initialize session, presence, gate, hotkey, wake word, TTS, chime."""
