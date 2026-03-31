@@ -1,6 +1,6 @@
 # Voice Grounding Research State
 
-**Last updated:** 2026-03-29 (session 19b — daimonion full treatment, VRAM budget resolution)
+**Last updated:** 2026-03-31 (session 20 — daimonion gap closure, responsive grounding acts)
 **Update convention:** After any session with research decisions or implementation progress, update this file before ending.
 
 ## Position (one paragraph)
@@ -101,6 +101,8 @@ This project implements Clark & Brennan's (1991) conversational grounding theory
 - Verify Shaikh et al. ACL 2025 citation accuracy (23.23% figure, venue)
 - Phase A stability criterion: need 3 consecutive session means within 20% of phase mean. No sessions since Mar 25 — need fresh evening sessions to evaluate
 - Sprint 0 gate: if DMN contradiction rate >15% or salience r < 0.1, must rescope those measures
+- Cycle 3 contingency: if Cycle 2 shows RLHF non-compliance with Traum act directives, approach B (structural injection) needed
+- Grounding acts coverage: system now instructs 5/7 Traum acts via directives; actual model compliance is the measurement target
 
 ## Operator Action Items (from session 3 research)
 
@@ -153,6 +155,28 @@ Infrastructure optimization. No changes to experiment code or grounding theory.
 **Impact on grounding research:** None. DMN quality improvement benefits situation modeling but does not affect experiment LLM paths.
 
 **Impact on grounding research:** Tool re-enablement is gated by ToolContext — Research mode suppresses all tools unless `experiment_tools_enabled` flag is set. Phase A baseline continues unaffected. Model downsize changes the reasoning tier available to non-experiment agents but does not affect the voice daemon's experiment LLM path (routed through `balanced`/`fast` tiers).
+
+## Session 20 (2026-03-31): Daimonion Gap Closure — Exhaustive Model-vs-Implementation Audit
+
+Mixed R&D and research infrastructure. Changes to grounding directive text (DEVIATION-032). No changes to experiment state machine, DVs, or analysis infrastructure.
+
+**Exhaustive audit.** Synthesized a unified model of daimonion from all conversations, design documents, and research from the last 3 days (50+ files, 80+ citations). Evaluated every claim against actual implementation code. Identified 7 gaps ranging from 20% to 90% fidelity.
+
+**Gap 1: Mode-driven grounding activation (FIXED).** `pipeline_start.py` set `enable_grounding=True` in R&D mode but `conversation_pipeline.py` checks `grounding_directive`, `effort_modulation`, `cross_session` — different flag names. Fixed with `_apply_mode_grounding_defaults()` using `setdefault()`. R&D mode now activates all grounding features. Research mode still uses experiment config file. `experiment_mode=True` prevents override. 3 tests.
+
+**Gap 2: Responsive grounding act directives (NEW, DEVIATION-032).** Extended `_STRATEGY_DIRECTIVES` to encode Traum's (1994) 5 responsive acts as directive text injected into VOLATILE band. REPAIR_1 → acknowledge + rephrase. REPAIR_2 → ask what's unclear. CONTESTED → acknowledge disagreement. GROUNDED → don't revisit. Neutral → check understanding. Approach A (directive-only) chosen over B (structural injection) to stay within pre-registered experiment framework. If Cycle 2 shows LLM non-compliance with directives, approach B is the Cycle 3 contingency. 6 tests.
+
+**Gap 3: Vocal chain impingement wiring (FIXED).** `VocalChainCapability.can_resolve()` existed but nothing called it. Added `activate_from_impingement()` method that maps impingement dimensions to vocal chain MIDI dimensions. Wired into `impingement_consumer_loop` in `run_loops_aux.py`. DMN impingements with vocal affordances, stimmung shifts, or evaluative signals now activate Evil Pet + S-4 hardware modulation. 3 tests.
+
+**Gap 4: ExpressionCoordinator wiring (FIXED).** `shared/expression.py` ExpressionCoordinator was initialized but never used by daimonion. Wired into impingement consumer: when multiple modalities recruited for the same impingement, coordinator distributes the source fragment to each. Closes queue #021 Phase 5 integration. 3 tests.
+
+**Gap 5: Tool metadata completion (FIXED).** Added _META entries for 5 phone tools (find_phone, lock_phone, send_to_phone, media_control, phone_notifications). Registry now reports 30 capabilities (was 26). 2 tests.
+
+**Gap 6: Documentation accuracy (FIXED).** Updated README: 9 async loops (was 5), 23 backends (was 8), updated package structure. Added Known Limitations section documenting RLHF compliance gap, keyword-based acceptance classification, and tick-driven cognitive loop.
+
+**Impact on grounding research:** Gap 2 changes directive text in grounding_ledger.py (frozen experiment file). DEVIATION-032 filed. State machine logic unchanged. DVs unchanged. The new directive text will be active in Phase B (treatment) only when `grounding_directive` flag is true. Phase A baseline unaffected. Gap 1 makes grounding features default in R&D mode (non-experiment voice sessions) — this does not affect experiment sessions which use explicit config.
+
+**Open question added:** Cycle 3 contingency: if Cycle 2 shows RLHF non-compliance with Traum act directives, approach B (structural act injection via prefilled assistant content or bridge phrases) becomes the next research direction.
 
 ## Research Infrastructure (added session 3)
 
