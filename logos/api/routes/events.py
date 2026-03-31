@@ -11,7 +11,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from logos.event_bus import EventBus
 
-router = APIRouter(tags=["events"])
+router = APIRouter(prefix="/api", tags=["events"])
 
 _bus: EventBus | None = None
 
