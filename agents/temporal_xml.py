@@ -39,14 +39,14 @@ def format_temporal_xml(bands: TemporalBands) -> str:
         parts.append("  <session_context>")
         if bands.current_session:
             s = bands.current_session
-            dur = s.get("duration_s", 0) / 60
+            dur = float(s.get("duration_s", 0)) / 60
             parts.append(
                 f'    <current activity="{s.get("activity", "")}" '
                 f'flow="{s.get("flow_state", "idle")}" '
                 f'duration_m="{dur:.0f}" />'
             )
         for s in bands.recent_sessions:
-            dur = s.get("duration_s", 0) / 60
+            dur = float(s.get("duration_s", 0)) / 60
             parts.append(
                 f'    <past activity="{s.get("activity", "")}" '
                 f'flow="{s.get("flow_state", "idle")}" '
