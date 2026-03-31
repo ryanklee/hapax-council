@@ -377,3 +377,177 @@ async def test_pi_handler_emits_detection_event() -> None:
     assert len(pi_events) == 1
     assert pi_events[0].source == "pi-desk"
     assert pi_events[0].target == "perception"
+
+
+# ---------------------------------------------------------------------------
+# Task 6: InstrumentedQdrantClient emits qdrant.op events
+# ---------------------------------------------------------------------------
+
+
+def test_instrumented_qdrant_emits_on_search() -> None:
+    """InstrumentedQdrantClient emits qdrant.op event on search()."""
+    from unittest.mock import MagicMock
+
+    from shared.config import InstrumentedQdrantClient
+
+    bus = EventBus()
+    mock_client = MagicMock()
+    mock_client.search.return_value = [{"id": 1}]
+
+    wrapped = InstrumentedQdrantClient(mock_client, bus, agent_name="test-agent")
+    result = wrapped.search("my-collection", query_vector=[0.1, 0.2])
+
+    mock_client.search.assert_called_once_with(
+        collection_name="my-collection", query_vector=[0.1, 0.2]
+    )
+    assert result == [{"id": 1}]
+
+    events = bus.recent()
+    assert len(events) == 1
+    assert events[0].kind == "qdrant.op"
+    assert events[0].source == "test-agent"
+    assert events[0].target == "qdrant"
+    assert events[0].label == "search/my-collection"
+
+
+def test_instrumented_qdrant_emits_on_upsert() -> None:
+    """InstrumentedQdrantClient emits qdrant.op event on upsert()."""
+    from unittest.mock import MagicMock
+
+    from shared.config import InstrumentedQdrantClient
+
+    bus = EventBus()
+    mock_client = MagicMock()
+
+    wrapped = InstrumentedQdrantClient(mock_client, bus, agent_name="indexer")
+    wrapped.upsert("docs", points=[])
+
+    events = bus.recent()
+    assert len(events) == 1
+    assert events[0].label == "upsert/docs"
+
+
+def test_instrumented_qdrant_delegates_unknown_attrs() -> None:
+    """InstrumentedQdrantClient delegates unknown attributes to underlying client."""
+    from unittest.mock import MagicMock
+
+    from shared.config import InstrumentedQdrantClient
+
+    bus = EventBus()
+    mock_client = MagicMock()
+    mock_client.get_collections.return_value = "collections"
+
+    wrapped = InstrumentedQdrantClient(mock_client, bus)
+    result = wrapped.get_collections()
+
+    mock_client.get_collections.assert_called_once()
+    assert result == "collections"
+    assert len(bus.recent()) == 0  # no event for non-instrumented methods
+
+
+# ---------------------------------------------------------------------------
+# Task 7: emit_llm_call convenience function
+# ---------------------------------------------------------------------------
+
+
+def test_emit_llm_call_with_global_bus() -> None:
+    """emit_llm_call emits an llm.call event when global bus is set."""
+    import logos.event_bus as eb
+
+    bus = EventBus()
+    eb.set_global_bus(bus)
+    try:
+        eb.emit_llm_call("my-agent", "claude-sonnet", duration_ms=150.0)
+
+        events = bus.recent()
+        assert len(events) == 1
+        assert events[0].kind == "llm.call"
+        assert events[0].source == "my-agent"
+        assert events[0].target == "llm"
+        assert events[0].label == "claude-sonnet"
+        assert events[0].meta == {"duration_ms": 150.0}
+    finally:
+        eb._global_bus = None
+
+
+def test_emit_llm_call_without_global_bus() -> None:
+    """emit_llm_call is a no-op when global bus is not set."""
+    import logos.event_bus as eb
+
+    eb._global_bus = None
+    eb.emit_llm_call("agent", "model")  # should not raise
+
+
+def test_emit_llm_call_no_duration() -> None:
+    """emit_llm_call omits duration_ms from meta when not provided."""
+    import logos.event_bus as eb
+
+    bus = EventBus()
+    eb.set_global_bus(bus)
+    try:
+        eb.emit_llm_call("agent", "gemini-flash")
+        events = bus.recent()
+        assert events[0].meta == {}
+    finally:
+        eb._global_bus = None
+
+
+# ---------------------------------------------------------------------------
+# Task 8: build_external_nodes
+# ---------------------------------------------------------------------------
+
+
+def test_build_external_nodes_from_recent_events() -> None:
+    """build_external_nodes creates nodes and edges from recent events."""
+    from logos.api.flow_external import build_external_nodes
+
+    bus = EventBus()
+    now = time.time()
+
+    bus.emit(FlowEvent(kind="llm.call", source="agent-a", target="llm", label="claude-sonnet"))
+    bus.emit(FlowEvent(kind="qdrant.op", source="agent-b", target="qdrant", label="search/docs"))
+    bus.emit(FlowEvent(kind="pi.detection", source="pi-desk", target="perception", label="ir/desk"))
+
+    nodes, edges = build_external_nodes(bus, since=now - 1)
+
+    node_ids = {n["id"] for n in nodes}
+    assert node_ids == {"llm", "qdrant", "pi_fleet"}
+
+    for node in nodes:
+        assert node["status"] == "active"
+        assert node["pipeline_layer"] == "external"
+        assert node["metrics"]["recent_count"] >= 1
+
+    edge_pairs = {(e["source"], e["target"]) for e in edges}
+    assert ("agent-a", "llm") in edge_pairs
+    assert ("agent-b", "qdrant") in edge_pairs
+    assert ("pi-desk", "perception") in edge_pairs
+
+    for edge in edges:
+        assert edge["active"] is True
+        assert edge["edge_type"] == "emergent"
+
+
+def test_build_external_nodes_empty_when_no_events() -> None:
+    """build_external_nodes returns empty lists when no matching events."""
+    from logos.api.flow_external import build_external_nodes
+
+    bus = EventBus()
+    nodes, edges = build_external_nodes(bus, since=time.time() - 60)
+
+    assert nodes == []
+    assert edges == []
+
+
+def test_build_external_nodes_ignores_non_external_kinds() -> None:
+    """build_external_nodes ignores events with non-external kinds."""
+    from logos.api.flow_external import build_external_nodes
+
+    bus = EventBus()
+    now = time.time()
+    bus.emit(FlowEvent(kind="shm.write", source="stimmung", target="perception"))
+    bus.emit(FlowEvent(kind="engine.rule", source="engine", target="engine"))
+
+    nodes, edges = build_external_nodes(bus, since=now - 1)
+    assert nodes == []
+    assert edges == []

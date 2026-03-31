@@ -57,6 +57,34 @@ class _AsyncSubscription:
             self._bus._remove_subscriber(self)
 
 
+# ---------------------------------------------------------------------------
+# Module-level bus reference for non-request code paths
+# ---------------------------------------------------------------------------
+
+_global_bus: EventBus | None = None
+
+
+def set_global_bus(bus: EventBus) -> None:
+    """Register the application-wide EventBus (called once at startup)."""
+    global _global_bus
+    _global_bus = bus
+
+
+def emit_llm_call(agent_name: str, model: str, duration_ms: float | None = None) -> None:
+    """Convenience: emit an llm.call event if global bus is set."""
+    if _global_bus is not None:
+        meta = {"duration_ms": duration_ms} if duration_ms is not None else {}
+        _global_bus.emit(
+            FlowEvent(
+                kind="llm.call",
+                source=agent_name,
+                target="llm",
+                label=model,
+                meta=meta,
+            )
+        )
+
+
 class EventBus:
     """Central pub-sub bus for hapax flow events.
 
