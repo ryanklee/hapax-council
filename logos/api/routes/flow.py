@@ -151,6 +151,15 @@ async def get_flow_state(request: Request) -> dict:
     for n in nodes:
         n.pop("_state_path", None)
 
+    # Append external nodes (LLM, Qdrant, Pi) from recent EventBus events
+    bus = getattr(request.app.state, "event_bus", None)
+    if bus:
+        from logos.api.flow_external import build_external_nodes
+
+        ext_nodes, ext_edges = build_external_nodes(bus, since=time.time() - 60)
+        nodes.extend(ext_nodes)
+        edges.extend(ext_edges)
+
     return {"nodes": nodes, "edges": edges, "timestamp": time.time()}
 
 

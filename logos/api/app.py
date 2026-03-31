@@ -69,11 +69,12 @@ async def lifespan(app: FastAPI):
 
     # Start event bus
     from logos.api.routes.events import set_event_bus
-    from logos.event_bus import EventBus
+    from logos.event_bus import EventBus, set_global_bus
 
     event_bus = EventBus(maxlen=500)
     app.state.event_bus = event_bus
     set_event_bus(event_bus)
+    set_global_bus(event_bus)
 
     # Start reactive engine
     try:
