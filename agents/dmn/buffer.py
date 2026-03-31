@@ -162,27 +162,30 @@ class DMNBuffer:
           [PRIMACY] Retentional summary
           [MIDDLE]  Older observations (deprioritized naturally)
           [RECENCY] Latest observations + latest evaluation
+
+        Middle-zone observations are trimmed oldest-first to stay within
+        MAX_BUFFER_TOKENS (estimated as len/4).
         """
-        parts = []
-
-        # Primacy zone: consolidated summary
+        primacy = ""
         if self._retentional_summary:
-            parts.append(f"<retentional_summary>{self._retentional_summary}</retentional_summary>")
+            primacy = f"<retentional_summary>{self._retentional_summary}</retentional_summary>"
 
-        # Middle zone: older observations
         obs_list = list(self._observations)
-        if len(obs_list) > 6:
-            for obs in obs_list[:-6]:
-                parts.append(obs.format())
-
-        # Recency zone: latest observations + evaluation
-        recent = obs_list[-6:] if len(obs_list) > 6 else obs_list
-        for obs in recent:
-            parts.append(obs.format())
-
+        middle = [obs.format() for obs in obs_list[:-6]] if len(obs_list) > 6 else []
+        recent_obs = obs_list[-6:] if len(obs_list) > 6 else obs_list
+        recency = [obs.format() for obs in recent_obs]
         if self._evaluations:
-            parts.append(self._evaluations[-1].format())
+            recency.append(self._evaluations[-1].format())
 
+        # Trim middle zone to stay within token budget
+        while middle:
+            parts = [p for p in [primacy] + middle + recency if p]
+            text = "\n".join(parts)
+            if len(text) // 4 <= MAX_BUFFER_TOKENS:
+                return text
+            middle.pop(0)
+
+        parts = [p for p in [primacy] + recency if p]
         return "\n".join(parts)
 
     def format_delta_context(

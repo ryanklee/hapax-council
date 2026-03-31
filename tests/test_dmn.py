@@ -122,6 +122,21 @@ class TestDMNBuffer:
         deltas = buf.format_delta_context(snapshot, snapshot)
         assert deltas == []
 
+    def test_format_for_tpn_respects_token_budget(self):
+        """Middle-zone observations are trimmed when buffer exceeds token budget."""
+        buf = DMNBuffer()
+        buf.set_retentional_summary("Summary of prior observations.")
+        for i in range(18):
+            buf.add_observation(
+                f"Observation {i}: " + "detailed sensor reading " * 10,
+                raw_sensor=f"raw {i}",
+            )
+        result = buf.format_for_tpn()
+        estimated_tokens = len(result) // 4
+        assert estimated_tokens <= 1500, f"Buffer exceeded token budget: {estimated_tokens} tokens"
+        assert "Summary of prior observations" in result
+        assert "Observation 17" in result
+
 
 class TestDMNSensor:
     """Test sensor reading functions."""
