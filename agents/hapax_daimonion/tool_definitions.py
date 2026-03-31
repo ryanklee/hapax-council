@@ -255,5 +255,9 @@ def build_registry(
             )
         )
 
+    missing = set(_META.keys()) - set(handler_map.keys())
+    if missing:
+        log.warning("Tools defined in _META but missing handlers: %s", sorted(missing))
+
     log.info("Tool registry built: %d capabilities", len(registry.all_tools()))
     return registry

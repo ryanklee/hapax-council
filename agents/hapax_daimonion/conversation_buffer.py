@@ -81,6 +81,7 @@ class ConversationBuffer:
         self._speaking = False
         self._pending_utterance: bytes | None = None
         self._speaking_ended_at: float = 0.0
+        self._speaking_started_at: float = 0.0
 
         # Barge-in detection (active during SPEAKING state)
         self._barge_in_speech_count = 0
@@ -150,9 +151,7 @@ class ConversationBuffer:
             # Cooldown scales with how long Hapax was speaking: longer
             # responses produce more room echo that persists longer.
             self._speaking_ended_at = time.monotonic()
-            speaking_duration = self._speaking_ended_at - getattr(
-                self, "_speaking_started_at", self._speaking_ended_at
-            )
+            speaking_duration = self._speaking_ended_at - self._speaking_started_at
             # Base 2s + 0.3s per second of TTS, capped at 5s
             self._dynamic_cooldown_s = min(5.0, POST_TTS_COOLDOWN_S + speaking_duration * 0.3)
 

@@ -54,7 +54,14 @@ class VoxtralTTSService(TTSService):
         await self.start_ttfb_metrics()
 
         try:
-            pcm_bytes = await asyncio.to_thread(self._tts_manager.synthesize, text, "conversation")
+            pcm_bytes = await asyncio.wait_for(
+                asyncio.to_thread(self._tts_manager.synthesize, text, "conversation"),
+                timeout=30.0,
+            )
+        except TimeoutError:
+            log.warning("TTS synthesis timed out after 30s")
+            yield TTSStoppedFrame()
+            return
         except Exception:
             log.exception("TTS synthesis failed")
             yield TTSStoppedFrame()

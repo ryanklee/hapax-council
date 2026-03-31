@@ -243,6 +243,7 @@ class DeviceStateBackend:
             #     self._cache.update(bluetooth_nearby=ble)
             # except Exception:
             #     log.debug("BLE scan failed", exc_info=True)
+            self._cache.update(bluetooth_nearby="")
 
             try:
                 net = _scan_network_devices()

@@ -44,8 +44,7 @@ async def start_conversation_pipeline(daemon: VoiceDaemon) -> None:
     from agents.hapax_daimonion.persona import screen_context_block, system_prompt
 
     # Load experiment flags
-    if not hasattr(daemon, "_experiment_flags"):
-        daemon._experiment_flags = {}
+    daemon._experiment_flags = {}
     try:
         _exp_path = Path.home() / ".cache" / "hapax" / "voice-experiment.json"
         if _exp_path.exists():

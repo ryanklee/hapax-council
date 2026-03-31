@@ -54,6 +54,7 @@ class AudioExecutor:
 
     def _play_pcm(self, pcm_data: bytes, rate: int, channels: int, action: str) -> None:
         """Play PCM buffer through PyAudio. Runs in a background thread."""
+        stream = None
         try:
             stream = self._pa.open(
                 format=8,  # pyaudio.paInt16 = 8
@@ -62,10 +63,15 @@ class AudioExecutor:
                 output=True,
             )
             stream.write(pcm_data)
-            stream.stop_stream()
-            stream.close()
         except Exception as exc:
             log.warning("AudioExecutor playback failed for %s: %s", action, exc)
+        finally:
+            if stream is not None:
+                try:
+                    stream.stop_stream()
+                    stream.close()
+                except Exception:
+                    pass
 
     def available(self) -> bool:
         return self._pa is not None and self._sample_bank.sample_count > 0

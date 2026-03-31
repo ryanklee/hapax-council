@@ -29,7 +29,7 @@ def _audio_to_pcm_int16(audio: np.ndarray) -> bytes:
     """Convert float32 audio array to raw PCM int16 bytes."""
     # Clip to [-1, 1] then scale to int16 range
     audio = np.clip(audio, -1.0, 1.0)
-    pcm = (audio * 32767).astype(np.int16)
+    pcm = (audio * 32768).astype(np.int16)
     return pcm.tobytes()
 
 

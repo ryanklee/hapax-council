@@ -247,33 +247,28 @@ class PresenceEngine:
         return obs
 
     def _compute_posterior(self, observations: dict[str, bool | None]) -> float:
-        """Compute Bayesian posterior from likelihood ratios."""
-        # Start with odds form of prior (decayed toward 0.5)
-        prior = self._last_posterior
-        # Decay toward base prior
-        prior = prior + (self._prior - prior) * self._decay_rate
-        # Clamp to avoid log(0)
-        prior = max(0.001, min(0.999, prior))
+        """Compute Bayesian posterior from likelihood ratios (log-domain)."""
+        import math
 
-        # Convert to odds
-        odds = prior / (1.0 - prior)
+        prior = self._last_posterior
+        prior = prior + (self._prior - prior) * self._decay_rate
+        prior = max(0.001, min(0.999, prior))
+        log_odds = math.log(prior / (1.0 - prior))
 
         for signal_name, (p_present, p_absent) in self._signal_weights.items():
             observed = observations.get(signal_name)
             if observed is None:
-                continue  # Missing sensor → neutral
-
+                continue
             if observed:
-                # Signal is True: likelihood ratio = P(signal|present) / P(signal|absent)
-                lr = p_present / p_absent
+                lr = p_present / max(p_absent, 1e-12)
             else:
-                # Signal is False: likelihood ratio = P(¬signal|present) / P(¬signal|absent)
-                lr = (1.0 - p_present) / (1.0 - p_absent)
+                lr = (1.0 - p_present) / max(1.0 - p_absent, 1e-12)
+            log_odds += math.log(max(lr, 1e-12))
 
-            odds *= lr
-
-        # Convert odds back to probability
-        posterior = odds / (odds + 1.0)
+        try:
+            posterior = 1.0 / (1.0 + math.exp(-log_odds))
+        except OverflowError:
+            posterior = 0.0 if log_odds < 0 else 1.0
         return max(0.0, min(1.0, posterior))
 
     def _update_state_machine(self, posterior: float) -> None:
