@@ -69,6 +69,8 @@ class DMNDaemon:
         self._running = True
         self._start_time = time.monotonic()
         self._reverie: ReverieActuationLoop | None = None  # initialized in run()
+        self._resolver_failures: dict[str, int] = {}
+        self._resolver_skip_until: dict[str, float] = {}
 
     async def run(self) -> None:
         """Main loop — never stops unless signalled."""
@@ -153,10 +155,30 @@ class DMNDaemon:
                     data = json.loads(CURRENT_PATH.read_text())
                     frag_id = data.get("id", "")
                     if frag_id and frag_id != last_fragment_id:
-                        last_fragment_id = frag_id
-                        frag = ImaginationFragment.model_validate(data)
-                        resolve_references_staged(frag)
-                        log.debug("Resolved content for fragment %s", frag_id)
+                        skip_until = self._resolver_skip_until.get(frag_id)
+                        if skip_until and time.time() < skip_until:
+                            pass
+                        else:
+                            if skip_until:
+                                del self._resolver_skip_until[frag_id]
+                            last_fragment_id = frag_id
+                            try:
+                                frag = ImaginationFragment.model_validate(data)
+                                resolve_references_staged(frag)
+                                self._resolver_failures.pop(frag_id, None)
+                                log.debug("Resolved content for fragment %s", frag_id)
+                            except Exception:
+                                count = self._resolver_failures.get(frag_id, 0) + 1
+                                self._resolver_failures[frag_id] = count
+                                if count >= 5:
+                                    self._resolver_skip_until[frag_id] = time.time() + 60.0
+                                    log.warning(
+                                        "Resolver: skipping fragment %s after %d failures",
+                                        frag_id,
+                                        count,
+                                    )
+                                else:
+                                    log.debug("Resolver tick failed for %s (%d/5)", frag_id, count)
             except Exception:
                 log.warning("Resolver tick failed", exc_info=True)
 
