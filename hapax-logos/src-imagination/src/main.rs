@@ -188,7 +188,7 @@ impl ImaginationApp {
 
         if let Some(ct) = &mut self.content_textures {
             ct.poll(&gpu.queue);
-            ct.tick_fades(dt);
+            ct.tick_fades(dt, &gpu.queue);
         }
 
         let output = match gpu.surface.get_current_texture() {

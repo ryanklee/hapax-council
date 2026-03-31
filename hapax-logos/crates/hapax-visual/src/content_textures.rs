@@ -9,9 +9,15 @@ const MAX_SLOTS: usize = 4;
 const MANIFEST_PATH: &str = "/dev/shm/hapax-imagination/content/active/slots.json";
 const TEXTURE_WIDTH: u32 = 1920;
 const TEXTURE_HEIGHT: u32 = 1080;
-const FADE_RATE: f32 = 2.0;
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum FadePhase {
+    Idle,
+    Active,
+    FadingOut,
+    FadingIn,
+}
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 struct SlotManifest {
     fragment_id: String,
     slots: Vec<ManifestSlot>,
@@ -19,7 +25,7 @@ struct SlotManifest {
     continuation: bool,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 struct ManifestSlot {
     index: usize,
     path: String,
@@ -32,6 +38,7 @@ struct SlotState {
     opacity: f32,
     target_opacity: f32,
     path: String,
+    fade_phase: FadePhase,
 }
 
 impl Default for SlotState {
@@ -41,6 +48,7 @@ impl Default for SlotState {
             opacity: 0.0,
             target_opacity: 0.0,
             path: String::new(),
+            fade_phase: FadePhase::Idle,
         }
     }
 }
@@ -54,6 +62,8 @@ pub struct ContentTextureManager {
     current_fragment_id: String,
     last_poll: Instant,
     jpeg_decompressor: Option<turbojpeg::Decompressor>,
+    gap_timer: f32,
+    pending_manifest: Option<SlotManifest>,
 }
 
 impl ContentTextureManager {
@@ -79,6 +89,8 @@ impl ContentTextureManager {
             current_fragment_id: String::new(),
             last_poll: Instant::now(),
             jpeg_decompressor: turbojpeg::Decompressor::new().ok(),
+            gap_timer: 0.0,
+            pending_manifest: None,
         }
     }
 
@@ -142,12 +154,24 @@ impl ContentTextureManager {
             return;
         }
 
-        if !manifest.continuation {
+        if manifest.continuation {
+            // Continuation: simultaneous crossfade
+            self.apply_manifest(queue, &manifest);
+            self.current_fragment_id = manifest.fragment_id;
+        } else {
+            // Non-continuation: fade out, gap, then fade in
             for slot in &mut self.slots {
-                slot.target_opacity = 0.0;
+                if slot.active {
+                    slot.target_opacity = 0.0;
+                    slot.fade_phase = FadePhase::FadingOut;
+                }
             }
+            self.pending_manifest = Some(manifest);
+            self.gap_timer = 0.0;
         }
+    }
 
+    fn apply_manifest(&mut self, queue: &wgpu::Queue, manifest: &SlotManifest) {
         for ms in &manifest.slots {
             if ms.index >= MAX_SLOTS { continue; }
             if ms.path != self.slots[ms.index].path {
@@ -156,17 +180,40 @@ impl ContentTextureManager {
             self.slots[ms.index].active = true;
             self.slots[ms.index].target_opacity = ms.salience.clamp(0.0, 1.0);
             self.slots[ms.index].path = ms.path.clone();
+            self.slots[ms.index].fade_phase = FadePhase::FadingIn;
         }
-
-        self.current_fragment_id = manifest.fragment_id;
     }
 
     /// Advance fade animations (call every frame).
-    pub fn tick_fades(&mut self, dt: f32) {
+    pub fn tick_fades(&mut self, dt: f32, queue: &wgpu::Queue) {
+        let continuation_rate: f32 = 2.0;
+        let non_continuation_rate: f32 = 1.5;
+
+        // Check if pending non-continuation transition is ready
+        if self.pending_manifest.is_some() {
+            let all_faded = self.slots.iter().all(|s| {
+                s.fade_phase != FadePhase::FadingOut || s.opacity <= 0.001
+            });
+            if all_faded {
+                self.gap_timer += dt;
+                if self.gap_timer >= 0.5 {
+                    if let Some(manifest) = self.pending_manifest.take() {
+                        self.apply_manifest(queue, &manifest);
+                        self.current_fragment_id = manifest.fragment_id.clone();
+                    }
+                    self.gap_timer = 0.0;
+                }
+            }
+        }
+
         for slot in &mut self.slots {
             if !slot.active && slot.opacity <= 0.001 { continue; }
+            let rate = match slot.fade_phase {
+                FadePhase::FadingOut | FadePhase::FadingIn => non_continuation_rate,
+                _ => continuation_rate,
+            };
             let diff = slot.target_opacity - slot.opacity;
-            let step = FADE_RATE * dt;
+            let step = rate * dt;
             if diff.abs() < step {
                 slot.opacity = slot.target_opacity;
             } else {
@@ -175,6 +222,12 @@ impl ContentTextureManager {
             if slot.opacity <= 0.001 && slot.target_opacity <= 0.001 {
                 slot.active = false;
                 slot.opacity = 0.0;
+                slot.fade_phase = FadePhase::Idle;
+            }
+            if slot.fade_phase == FadePhase::FadingIn
+                && slot.opacity >= slot.target_opacity - 0.001
+            {
+                slot.fade_phase = FadePhase::Active;
             }
         }
     }
