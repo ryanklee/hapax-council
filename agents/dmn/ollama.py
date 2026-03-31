@@ -6,7 +6,7 @@ import logging
 
 import httpx
 
-log = logging.getLogger("dmn.pulse")
+log = logging.getLogger("dmn.ollama")
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
 DMN_MODEL = "qwen3.5:4b"
@@ -49,7 +49,7 @@ async def _ollama_generate(prompt: str, system: str) -> str:
             log.warning("Ollama returned %d", resp.status_code)
             return ""
     except Exception as exc:
-        log.debug("Ollama call failed: %s", exc)
+        log.warning("Ollama call failed: %s", exc)
         return ""
 
 

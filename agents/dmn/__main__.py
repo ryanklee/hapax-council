@@ -74,6 +74,7 @@ class DMNDaemon:
         self._resolver_failures: dict[str, int] = {}
         self._resolver_skip_until: dict[str, float] = {}
         self._resolver_consecutive_failures: int = 0
+        self._feedback_cursor: int = 0  # byte offset into impingements.jsonl
 
     async def run(self) -> None:
         """Main loop — never stops unless signalled."""
@@ -118,6 +119,7 @@ class DMNDaemon:
             try:
                 await self._pulse.tick()
                 self._write_output()
+                self._consume_fortress_feedback()
 
                 # Reverie actuation tick (1s cadence, same as main loop)
                 if self._reverie is not None:
@@ -200,7 +202,7 @@ class DMNDaemon:
             tmp.write_text(buffer_text, encoding="utf-8")
             tmp.rename(BUFFER_FILE)
         except OSError:
-            pass
+            log.warning("Failed to write buffer to %s", BUFFER_FILE, exc_info=True)
 
         # Drain and persist impingements (cross-daemon transport)
         impingements = self._pulse.drain_impingements()
@@ -212,7 +214,7 @@ class DMNDaemon:
                         f.write(imp.model_dump_json() + "\n")
                 log.info("Emitted %d impingements to JSONL", len(impingements))
             except OSError:
-                pass
+                log.warning("Failed to write impingements to %s", IMPINGEMENTS_FILE, exc_info=True)
 
             # Feed impingements to Reverie via affordance pipeline
             if self._reverie is not None:
@@ -247,6 +249,34 @@ class DMNDaemon:
             tmp = STATUS_FILE.with_suffix(".tmp")
             tmp.write_text(json.dumps(status), encoding="utf-8")
             tmp.rename(STATUS_FILE)
+        except OSError:
+            log.warning("Failed to write status to %s", STATUS_FILE, exc_info=True)
+
+    def _consume_fortress_feedback(self) -> None:
+        """Read fortress feedback impingements from JSONL and suppress re-emission."""
+        if not IMPINGEMENTS_FILE.exists():
+            return
+        try:
+            size = IMPINGEMENTS_FILE.stat().st_size
+            if size <= self._feedback_cursor:
+                return
+            with IMPINGEMENTS_FILE.open("r", encoding="utf-8") as f:
+                f.seek(self._feedback_cursor)
+                feedback = []
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        imp = Impingement.model_validate_json(line)
+                        if imp.source == "fortress.action_taken":
+                            feedback.append(imp)
+                    except Exception:
+                        continue
+                self._feedback_cursor = f.tell()
+            if feedback:
+                self._pulse.consume_fortress_feedback(feedback)
+                log.debug("Consumed %d fortress feedback impingements", len(feedback))
         except OSError:
             pass
 

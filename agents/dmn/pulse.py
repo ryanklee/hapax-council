@@ -211,7 +211,7 @@ class DMNPulse:
                 tmp.write_text(result)
                 tmp.rename(VISUAL_OBSERVATION_PATH)
             except OSError:
-                pass
+                log.warning("Failed to write visual observation", exc_info=True)
 
     async def _evaluative_tick(self, snapshot: dict) -> None:
         self._check_absolute_thresholds(snapshot)
