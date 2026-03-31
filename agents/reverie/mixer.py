@@ -68,17 +68,9 @@ class ReverieMixer:
 
     @staticmethod
     def _init_pipeline():
-        from agents._affordance import CapabilityRecord
-        from agents._affordance_pipeline import AffordancePipeline
+        from agents.reverie._affordances import build_reverie_pipeline
 
-        p = AffordancePipeline()
-        for n, d in [
-            ("shader_graph", "Activate shader graph effects from imagination"),
-            ("visual_chain", "Modulate visual chain from stimmung/evaluative"),
-            ("fortress_visual_response", "Visual pipeline for fortress crises"),
-        ]:
-            p.index_capability(CapabilityRecord(name=n, description=d, daemon="reverie"))
-        return p
+        return build_reverie_pipeline()
 
     @property
     def pipeline(self):
@@ -172,6 +164,31 @@ class ReverieMixer:
         content_density = len(imagination.get("content_references", [])) if imagination else 0
         self._write_visual_salience(salience=current_salience, content_density=content_density)
 
+    def dispatch_impingement(self, imp: Impingement) -> None:
+        """Route an impingement through the affordance pipeline.
+
+        The pipeline uses Qdrant cosine similarity to match the impingement
+        against all registered visual affordances. Matched capabilities
+        activate visual chain dimensions proportionally.
+        """
+        candidates = self._pipeline.select(imp)
+        for c in candidates:
+            if c.capability_name.startswith("node.") or c.capability_name.startswith("content."):
+                # Embedding-matched affordance — activate dimensions from impingement
+                self._apply_shader_impingement(imp)
+                break  # one activation per impingement
+            elif c.capability_name == "shader_graph":
+                self._shader_cap.activate(imp, imp.strength)
+                self._apply_shader_impingement(imp)
+            elif c.capability_name == "visual_chain":
+                score = self._visual_chain.can_resolve(imp)
+                if score > 0:
+                    self._visual_chain.activate(imp, score)
+            elif c.capability_name == "fortress_visual_response":
+                s = imp.strength
+                self._visual_chain.activate_dimension("visual_chain.tension", imp, s * 0.8)
+                self._visual_chain.activate_dimension("visual_chain.degradation", imp, s * 0.6)
+
     # --- Cross-modal coupling ---
 
     def _read_acoustic_impulse(self, path: Path | None = None) -> dict | None:
@@ -199,7 +216,8 @@ class ReverieMixer:
 
         imp = Impingement(
             source="daimonion.acoustic",
-            type=ImpingementType.SIGNAL,
+            type=ImpingementType.SALIENCE_INTEGRATION,
+            timestamp=time.time(),
             strength=min(1.0, energy),
             content={
                 "metric": "acoustic_impulse",
