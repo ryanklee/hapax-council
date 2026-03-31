@@ -68,10 +68,11 @@ class ContextAssembler:
         if self._cache is not None and (now - self._cache_time) < self._cache_ttl:
             return self._cache
 
+        stimmung_raw = self._read_stimmung_raw()
         ctx = EnrichmentContext(
             timestamp=time.time(),
-            stimmung_stance=self._read_stimmung_stance(),
-            stimmung_raw=self._read_stimmung_raw(),
+            stimmung_stance=stimmung_raw.get("overall_stance", "nominal"),
+            stimmung_raw=stimmung_raw,
             active_goals=self._safe_call(self._goals_fn, []),
             health_summary=self._safe_call(self._health_fn, {}),
             pending_nudges=self._safe_call(self._nudges_fn, []),
@@ -86,13 +87,6 @@ class ContextAssembler:
     def invalidate(self) -> None:
         """Force next assemble() to re-read all sources."""
         self._cache = None
-
-    def _read_stimmung_stance(self) -> str:
-        try:
-            raw = json.loads(self._stimmung_path.read_text(encoding="utf-8"))
-            return raw.get("overall_stance", "nominal")
-        except (FileNotFoundError, json.JSONDecodeError, OSError):
-            return "nominal"
 
     def _read_stimmung_raw(self) -> dict:
         try:

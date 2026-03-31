@@ -34,7 +34,7 @@ def update_stimmung_sources(agg: VisualLayerAggregator) -> None:
             total = h.get("total", healthy + h.get("degraded", 0) + h.get("failed", 0))
             agg._stimmung_collector.update_health(healthy, total)
     except (OSError, json.JSONDecodeError, IndexError):
-        pass
+        log.debug("Health history read failed", exc_info=True)
 
     # 2. Infra snapshot -> GPU
     try:
@@ -45,7 +45,7 @@ def update_stimmung_sources(agg: VisualLayerAggregator) -> None:
         if total > 0:
             agg._stimmung_collector.update_gpu(used, total)
     except (OSError, json.JSONDecodeError):
-        pass
+        log.debug("Infra snapshot read failed", exc_info=True)
 
     # 3. Langfuse sync state
     try:
@@ -59,7 +59,7 @@ def update_stimmung_sources(agg: VisualLayerAggregator) -> None:
             total_traces=int(lf.get("total_traces_synced", 0)),
         )
     except (OSError, json.JSONDecodeError):
-        pass
+        log.debug("Langfuse state read failed", exc_info=True)
 
     # 4. Biometrics (delegated)
     update_biometrics(agg)
@@ -80,11 +80,13 @@ def update_stimmung_sources(agg: VisualLayerAggregator) -> None:
     try:
         from pathlib import Path
 
+        from agents._stimmung import _STALE_THRESHOLD_S
+
         gqi_path = Path("/dev/shm/hapax-daimonion/grounding-quality.json")
         if gqi_path.exists():
             gqi_data = json.loads(gqi_path.read_text())
             gqi_age = time.time() - gqi_data.get("timestamp", 0)
-            if gqi_age < 120:
+            if gqi_age < _STALE_THRESHOLD_S:
                 gqi_val = gqi_data.get("gqi", 0.5)
                 agg._stimmung_collector.update_grounding_quality(gqi_val)
                 log.debug("GQI read: %.3f (age %.1fs)", gqi_val, gqi_age)

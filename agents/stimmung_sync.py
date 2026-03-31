@@ -34,6 +34,10 @@ DIMENSION_NAMES = [
     "processing_throughput",
     "perception_confidence",
     "llm_cost_pressure",
+    "grounding_quality",
+    "operator_stress",
+    "operator_energy",
+    "physiological_coherence",
 ]
 
 
