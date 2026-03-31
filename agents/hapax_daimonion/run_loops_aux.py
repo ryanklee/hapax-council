@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from agents._impingement_consumer import ImpingementConsumer
 from agents.hapax_daimonion.persona import format_notification  # noqa: F401 (patched in tests)
 
 if TYPE_CHECKING:
@@ -112,73 +113,63 @@ async def ambient_refresh_loop(daemon: VoiceDaemon) -> None:
 
 async def impingement_consumer_loop(daemon: VoiceDaemon) -> None:
     """Poll DMN impingements and route through affordance pipeline."""
-    from agents._impingement import Impingement
-
-    imp_path = Path("/dev/shm/hapax-dmn/impingements.jsonl")
+    consumer = ImpingementConsumer(Path("/dev/shm/hapax-dmn/impingements.jsonl"))
 
     while daemon._running:
         try:
-            if imp_path.exists():
-                text = imp_path.read_text(encoding="utf-8")
-                lines = text.strip().split("\n") if text.strip() else []
-
-                new_lines = lines[daemon._dmn_impingement_cursor :]
-                if new_lines:
-                    daemon._dmn_impingement_cursor = len(lines)
-
-                    for line in new_lines:
-                        if not line.strip():
-                            continue
-                        try:
-                            imp = Impingement.model_validate_json(line)
-                            candidates = await asyncio.to_thread(
-                                daemon._affordance_pipeline.select, imp
+            for imp in consumer.read_new():
+                try:
+                    candidates = await asyncio.to_thread(daemon._affordance_pipeline.select, imp)
+                    for c in candidates:
+                        if c.capability_name == "speech_production":
+                            daemon._speech_capability.activate(imp, c.combined)
+                            log.info(
+                                "Speech recruited via affordance: %s (score=%.2f)",
+                                imp.content.get("metric", imp.source),
+                                c.combined,
                             )
-                            for c in candidates:
-                                if c.capability_name == "speech_production":
-                                    daemon._speech_capability.activate(imp, c.combined)
-                                    log.info(
-                                        "Speech recruited via affordance: %s (score=%.2f)",
-                                        imp.content.get("metric", imp.source),
-                                        c.combined,
-                                    )
-                            # Vocal chain: modulate voice character via MIDI
-                            if hasattr(daemon, "_vocal_chain") and daemon._vocal_chain is not None:
-                                vc_score = daemon._vocal_chain.can_resolve(imp)
-                                if vc_score > 0.0:
-                                    daemon._vocal_chain.activate_from_impingement(imp)
-                                    log.debug(
-                                        "Vocal chain activated: %s (score=%.2f)",
-                                        imp.content.get("metric", imp.source),
-                                        vc_score,
-                                    )
-                            # Cross-modal coordination
-                            if len(candidates) > 1 and hasattr(daemon, "_expression_coordinator"):
-                                recruited_pairs = [
-                                    (
-                                        c.capability_name,
-                                        getattr(daemon, f"_{c.capability_name}", None),
-                                    )
-                                    for c in candidates
-                                ]
-                                recruited_pairs = [
-                                    (n, cap) for n, cap in recruited_pairs if cap is not None
-                                ]
-                                if len(recruited_pairs) > 1:
-                                    activations = daemon._expression_coordinator.coordinate(
-                                        imp.content, recruited_pairs
-                                    )
-                                    if activations:
-                                        log.info(
-                                            "Cross-modal coordination: %d modalities for %s",
-                                            len(activations),
-                                            imp.content.get("narrative", "")[:40],
-                                        )
-                            # Proactive utterance
-                            if imp.source == "imagination" and imp.strength >= 0.65:
-                                _handle_proactive_impingement(daemon, imp)
-                        except Exception:
-                            pass
+                        elif c.capability_name == "system_awareness":
+                            if hasattr(daemon, "_system_awareness"):
+                                score = daemon._system_awareness.can_resolve(imp)
+                                if score > 0:
+                                    daemon._system_awareness.activate(imp, score)
+                    # Vocal chain: modulate voice character via MIDI
+                    if hasattr(daemon, "_vocal_chain") and daemon._vocal_chain is not None:
+                        vc_score = daemon._vocal_chain.can_resolve(imp)
+                        if vc_score > 0.0:
+                            daemon._vocal_chain.activate_from_impingement(imp)
+                            log.debug(
+                                "Vocal chain activated: %s (score=%.2f)",
+                                imp.content.get("metric", imp.source),
+                                vc_score,
+                            )
+                    # Cross-modal coordination
+                    if len(candidates) > 1 and hasattr(daemon, "_expression_coordinator"):
+                        recruited_pairs = [
+                            (
+                                c.capability_name,
+                                getattr(daemon, f"_{c.capability_name}", None),
+                            )
+                            for c in candidates
+                        ]
+                        recruited_pairs = [
+                            (n, cap) for n, cap in recruited_pairs if cap is not None
+                        ]
+                        if len(recruited_pairs) > 1:
+                            activations = daemon._expression_coordinator.coordinate(
+                                imp.content, recruited_pairs
+                            )
+                            if activations:
+                                log.info(
+                                    "Cross-modal coordination: %d modalities for %s",
+                                    len(activations),
+                                    imp.content.get("narrative", "")[:40],
+                                )
+                    # Proactive utterance
+                    if imp.source == "imagination" and imp.strength >= 0.65:
+                        _handle_proactive_impingement(daemon, imp)
+                except Exception:
+                    pass
         except Exception:
             log.debug("Impingement consumer error (non-fatal)", exc_info=True)
 

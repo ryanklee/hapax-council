@@ -80,7 +80,7 @@ class FortressDaemon:
 
         self._fortress_capability = FortressGovernanceCapability()
 
-        from shared.impingement_consumer import ImpingementConsumer
+        from agents._impingement_consumer import ImpingementConsumer
 
         self._impingement_consumer = ImpingementConsumer(
             Path("/dev/shm/hapax-dmn/impingements.jsonl")
