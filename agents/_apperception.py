@@ -653,6 +653,8 @@ class ApperceptionStore:
         if not self._pending:
             return 0
 
+        self.ensure_collection()
+
         from agents._config import embed_batch_safe, get_qdrant
 
         batch = list(self._pending)
@@ -708,6 +710,8 @@ class ApperceptionStore:
         vector = embed_safe(query, prefix="search_query")
         if vector is None:
             return []
+
+        self.ensure_collection()
 
         try:
             client = get_qdrant()
