@@ -11,6 +11,7 @@ Provides:
 
 from __future__ import annotations
 
+import json
 import logging
 import subprocess
 import time
@@ -43,17 +44,8 @@ def _read_media_player() -> dict:
     # busctl output: s "paused" or s "playing"
     status = status_raw.split('"')[1] if '"' in status_raw else ""
 
-    # Track is a dict — harder to parse from busctl
-    # Use a simpler approach: just get Status + use cached track
-    track_raw = _busctl_get("Track")
     title = ""
     artist = ""
-    if track_raw:
-        # Parse the busctl dict output
-        for _part in track_raw.split('"'):
-            pass  # busctl dict parsing is complex
-
-    # Simpler: parse via subprocess with json output
     try:
         result = subprocess.run(
             [
@@ -70,8 +62,6 @@ def _read_media_player() -> dict:
             timeout=3,
         )
         if result.returncode == 0:
-            import json
-
             data = json.loads(result.stdout)
             track = data.get("data", {})
             # busctl --json=short wraps values as {"type":"s","data":"..."}
@@ -80,7 +70,7 @@ def _read_media_player() -> dict:
             title = title_val.get("data", "") if isinstance(title_val, dict) else str(title_val)
             artist = artist_val.get("data", "") if isinstance(artist_val, dict) else str(artist_val)
     except Exception:
-        pass
+        log.debug("Failed to read AVRCP track info", exc_info=True)
 
     return {"status": status, "title": title, "artist": artist}
 
