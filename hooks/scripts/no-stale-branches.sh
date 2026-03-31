@@ -36,8 +36,10 @@ echo "$CMD" | grep -qE '^\s*git\s+checkout\s+-[bB]\s' && is_create=true
 # git switch -c / git switch --create
 echo "$CMD" | grep -qE '^\s*git\s+switch\s+(-c|--create)\s' && is_create=true
 
-# git branch <name> (but not git branch -d/-D/--list/--show-current)
-echo "$CMD" | grep -qE '^\s*git\s+branch\s+[^-]' && is_create=true
+# git branch <name> (but not git branch -d/-D/--list/--show-current or piped commands)
+# Must not match: git branch | grep, git branch --show-current, git branch -D
+# Only match: git branch <word> where <word> starts with a letter (branch name)
+echo "$CMD" | grep -qE '^\s*git\s+branch\s+[a-zA-Z]' && is_create=true
 
 # git worktree add
 echo "$CMD" | grep -qE '^\s*git\s+worktree\s+add\s' && is_create=true
