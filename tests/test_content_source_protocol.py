@@ -26,8 +26,12 @@ def test_write_source_manifest_creates_directory():
         assert source_dir.exists()
         manifest = json.loads((source_dir / "manifest.json").read_text())
         assert manifest["source_id"] == f"imagination-{fragment.id}"
-        assert manifest["content_type"] == "text"
-        assert manifest["text"] == "test narrative"
+        assert manifest["content_type"] == "rgba"
+        assert manifest["width"] == 640
+        assert manifest["height"] == 360
+        assert (source_dir / "frame.rgba").exists()
+        frame_size = (source_dir / "frame.rgba").stat().st_size
+        assert frame_size == 640 * 360 * 4  # RGBA
 
 
 def test_write_source_protocol_opacity_from_salience():
