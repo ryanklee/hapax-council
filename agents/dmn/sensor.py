@@ -139,6 +139,9 @@ def read_visual_surface(
         "stale": frame_age > _DEFAULT_CONFIG.stale_threshold_s,
         "frame_path": str(fp) if fp.exists() else None,
         "imagination_fragment_id": imagination_data.get("id"),
+        "imagination_narrative": imagination_data.get("narrative", ""),
+        "imagination_salience": float(imagination_data.get("salience", 0.0)),
+        "imagination_material": imagination_data.get("material", "void"),
     }
 
 

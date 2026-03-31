@@ -79,6 +79,7 @@ class DMNBuffer:
         self._retentional_summary: str = ""
         self._tick_counter: int = 0
         self._last_consolidation: float = 0.0
+        self._imagination_context: str = ""
 
     @property
     def tick(self) -> int:
@@ -120,6 +121,13 @@ class DMNBuffer:
         """Set the consolidated retentional summary (position 0)."""
         self._retentional_summary = summary
         self._last_consolidation = time.time()
+
+    def set_imagination_context(self, salience: float, material: str, narrative: str) -> None:
+        """Set imagination context for TPN consumption."""
+        self._imagination_context = (
+            f'<imagination_context salience="{salience:.2f}" material="{material}">'
+            f"{narrative[:120]}</imagination_context>"
+        )
 
     def needs_consolidation(self) -> bool:
         """Check if buffer has enough entries to warrant consolidation."""
@@ -170,6 +178,8 @@ class DMNBuffer:
         if self._retentional_summary:
             primacy = f"<retentional_summary>{self._retentional_summary}</retentional_summary>"
 
+        imagination = self._imagination_context if self._imagination_context else ""
+
         obs_list = list(self._observations)
         middle = [obs.format() for obs in obs_list[:-6]] if len(obs_list) > 6 else []
         recent_obs = obs_list[-6:] if len(obs_list) > 6 else obs_list
@@ -179,13 +189,13 @@ class DMNBuffer:
 
         # Trim middle zone to stay within token budget
         while middle:
-            parts = [p for p in [primacy] + middle + recency if p]
+            parts = [p for p in [primacy, imagination] + middle + recency if p]
             text = "\n".join(parts)
             if len(text) // 4 <= MAX_BUFFER_TOKENS:
                 return text
             middle.pop(0)
 
-        parts = [p for p in [primacy] + recency if p]
+        parts = [p for p in [primacy, imagination] + recency if p]
         return "\n".join(parts)
 
     def format_delta_context(

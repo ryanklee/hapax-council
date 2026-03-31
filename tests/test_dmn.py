@@ -158,6 +158,22 @@ class TestDMNBuffer:
         assert "Observation 17" in result
 
 
+class TestImaginationContext:
+    def test_imagination_context_in_buffer(self):
+        buf = DMNBuffer()
+        buf.set_retentional_summary("Prior context summary.")
+        buf.set_imagination_context(0.8, "water", "flowing river visual")
+        for i in range(8):
+            buf.add_observation(f"observation {i}")
+        result = buf.format_for_tpn()
+        assert "imagination_context" in result
+        assert 'salience="0.80"' in result
+        assert 'material="water"' in result
+        summary_pos = result.index("retentional_summary")
+        imagination_pos = result.index("imagination_context")
+        assert imagination_pos > summary_pos
+
+
 class TestDMNSensor:
     """Test sensor reading functions."""
 

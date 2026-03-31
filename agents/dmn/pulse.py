@@ -51,6 +51,13 @@ class DMNPulse:
         sensory_rate = SENSORY_TICK_S * (2.0 if self._tpn_active else 1.0)
         evaluative_rate = EVALUATIVE_TICK_S * (2.0 if self._tpn_active else 1.0)
         snapshot = read_all()
+        vs = snapshot.get("visual_surface", {})
+        if vs.get("imagination_narrative"):
+            self._buffer.set_imagination_context(
+                salience=vs.get("imagination_salience", 0.0),
+                material=vs.get("imagination_material", "void"),
+                narrative=vs["imagination_narrative"],
+            )
         self._check_sensor_starvation(snapshot)
 
         if now - self._last_sensory >= sensory_rate:
