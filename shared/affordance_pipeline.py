@@ -6,6 +6,7 @@ import hashlib
 import json
 import logging
 import time
+import uuid
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
@@ -95,7 +96,7 @@ class AffordancePipeline:
             from qdrant_client.models import PointStruct
 
             client = get_qdrant()
-            point_id = hashlib.md5(record.name.encode(), usedforsecurity=False).hexdigest()[:16]
+            point_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, record.name))
             client.upsert(
                 collection_name=COLLECTION_NAME,
                 points=[
