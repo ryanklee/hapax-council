@@ -38,46 +38,8 @@ STATUS_FILE = DMN_STATE_DIR / "status.json"
 IMPINGEMENTS_FILE = DMN_STATE_DIR / "impingements.jsonl"
 TPN_ACTIVE_FILE = DMN_STATE_DIR / "tpn_active"
 
-MATERIAL_MAP = {"water": 0, "fire": 1, "earth": 2, "air": 3, "void": 4}
-UNIFORMS_FILE = Path("/dev/shm/hapax-imagination/pipeline/uniforms.json")
-
 # Main loop tick rate (fastest possible — individual ticks have their own cadence)
 LOOP_TICK_S = 1.0
-
-
-def write_imagination_uniforms(
-    imagination_path: Path | None = None,
-    uniforms_path: Path | None = None,
-) -> None:
-    """Write imagination state to uniforms.json for the Rust visual pipeline."""
-    if imagination_path is None:
-        imagination_path = CURRENT_PATH
-    if uniforms_path is None:
-        uniforms_path = UNIFORMS_FILE
-
-    try:
-        if not imagination_path.exists():
-            return
-        data = json.loads(imagination_path.read_text())
-    except (OSError, json.JSONDecodeError):
-        return
-
-    material = data.get("material", "water")
-    material_val = float(MATERIAL_MAP.get(material, 0))
-    salience = float(data.get("salience", 0.0))
-
-    uniforms = {
-        "custom": [material_val],
-        "slot_opacities": [salience, 0.0, 0.0, 0.0],
-    }
-
-    try:
-        uniforms_path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = uniforms_path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(uniforms))
-        tmp.rename(uniforms_path)
-    except OSError:
-        pass
 
 
 class DMNDaemon:
@@ -232,11 +194,6 @@ class DMNDaemon:
                 self._pulse.set_tpn_active(active)
         except OSError:
             pass
-
-        # NOTE: uniforms.json is now written by the Reverie actuation loop
-        # (agents/reverie/actuation.py), not by write_imagination_uniforms().
-        # The actuation loop merges imagination state + visual chain + stimmung
-        # + trace state into a single coherent uniform set.
 
         # Status for monitoring
         status = {
