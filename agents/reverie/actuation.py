@@ -256,10 +256,24 @@ class ReverieActuationLoop:
 
         # Add stimmung-derived signals
         if stimmung:
-            stance = stimmung.get("stance", "nominal")
+            stance = stimmung.get("overall_stance", "nominal")
             stance_map = {"nominal": 0.0, "cautious": 0.25, "degraded": 0.5, "critical": 1.0}
             uniforms["signal.stance"] = stance_map.get(stance, 0.0)
-            uniforms["signal.color_warmth"] = stimmung.get("color_warmth", 0.5)
+            # Derive color_warmth from worst infrastructure dimension value
+            # 0.0 = cool (nominal), 1.0 = warm (critical stress)
+            worst_infra = 0.0
+            for dim_key in (
+                "health",
+                "resource_pressure",
+                "error_rate",
+                "processing_throughput",
+                "perception_confidence",
+                "llm_cost_pressure",
+            ):
+                dim_data = stimmung.get(dim_key, {})
+                if isinstance(dim_data, dict):
+                    worst_infra = max(worst_infra, dim_data.get("value", 0.0))
+            uniforms["signal.color_warmth"] = worst_infra
 
         try:
             UNIFORMS_FILE.parent.mkdir(parents=True, exist_ok=True)

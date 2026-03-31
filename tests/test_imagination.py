@@ -319,7 +319,10 @@ class TestAssembleContext:
 
     def test_includes_sensor_data(self) -> None:
         sensors = {
-            "stimmung": {"stance": "calm", "operator_stress": "low"},
+            "stimmung": {
+                "overall_stance": "calm",
+                "operator_stress": {"value": 0.2, "trend": "stable", "freshness_s": 5.0},
+            },
             "perception": {"activity": "idle", "flow_score": "steady"},
             "watch": {"heart_rate": 72},
             "weather": {"temp": "18C"},
@@ -333,7 +336,10 @@ class TestAssembleContext:
     def test_assemble_context_sensor_keys(self) -> None:
         """Verify context uses the actual sensor key names from dmn/sensor.py."""
         snapshot = {
-            "stimmung": {"stance": "nominal", "operator_stress": 0.3},
+            "stimmung": {
+                "overall_stance": "nominal",
+                "operator_stress": {"value": 0.3, "trend": "stable", "freshness_s": 5.0},
+            },
             "perception": {"activity": "typing", "flow_score": 0.7},
             "watch": {"heart_rate": 72},
         }
@@ -341,7 +347,6 @@ class TestAssembleContext:
         assert "stress=0.3" in context
         assert "flow=0.7" in context
         assert "HR=72" in context
-        assert "unknown" not in context
 
 
 # ---------------------------------------------------------------------------

@@ -33,12 +33,19 @@ def _read_json(path: Path) -> dict | None:
 
 
 def _build_dimensions(raw: dict) -> dict[str, dict]:
-    """Build structured dimension objects from flat stimmung state keys."""
+    """Build structured dimension objects from nested stimmung state."""
     dimensions: dict[str, dict] = {}
     for key in _DIMENSION_KEYS:
-        value = raw.get(key, 0.0)
-        trend = raw.get(f"{key}_trend", "stable")
-        dimensions[key] = {"value": value, "trend": trend}
+        dim_data = raw.get(key, {})
+        if isinstance(dim_data, dict):
+            value = dim_data.get("value", 0.0)
+            trend = dim_data.get("trend", "stable")
+            freshness_s = dim_data.get("freshness_s", 0.0)
+        else:
+            value = 0.0
+            trend = "stable"
+            freshness_s = 0.0
+        dimensions[key] = {"value": value, "trend": trend, "freshness_s": freshness_s}
     return dimensions
 
 
