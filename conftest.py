@@ -44,6 +44,58 @@ def _stub_gpu_modules():
 _stub_gpu_modules()
 
 
+def _qdrant_available() -> bool:
+    """Check if Qdrant is reachable on localhost:6333."""
+    import socket
+
+    try:
+        s = socket.create_connection(("localhost", 6333), timeout=1)
+        s.close()
+        return True
+    except (ConnectionRefusedError, OSError):
+        return False
+
+
+_QDRANT_UP = _qdrant_available()
+
+
+@pytest.fixture(autouse=True, scope="function")
+def _mock_qdrant_if_unavailable():
+    """Prevent Qdrant connection errors in CI (no Qdrant server).
+
+    Patches get_qdrant() with a MagicMock client when Qdrant is unreachable.
+    Tests that explicitly test the Qdrant client can mark themselves with
+    @pytest.mark.needs_qdrant to skip instead.
+    """
+    if _QDRANT_UP:
+        yield
+        return
+
+    mock_client = MagicMock()
+    mock_client.get_collections.return_value = MagicMock(collections=[])
+    mock_client.scroll.return_value = ([], None)
+    mock_client.search.return_value = []
+    mock_client.count.return_value = MagicMock(count=0)
+
+    targets = [
+        "shared.config.get_qdrant",
+        "shared.config.get_qdrant_grpc",
+    ]
+    try:
+        import agents._config  # noqa: F401
+
+        targets.append("agents._config.get_qdrant")
+    except ImportError:
+        pass
+
+    patches = [patch(t, return_value=mock_client) for t in targets]
+    for p in patches:
+        p.start()
+    yield
+    for p in patches:
+        p.stop()
+
+
 @pytest.fixture(autouse=True, scope="function")
 def _block_real_notifications():
     """Prevent shared.notify from making real HTTP or subprocess calls.
