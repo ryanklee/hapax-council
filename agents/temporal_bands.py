@@ -14,13 +14,16 @@ from __future__ import annotations
 from agents.hapax_daimonion.perception_ring import PerceptionRing
 from agents.protention_engine import ProtentionEngine
 from agents.temporal_models import (
+    CircadianContext,
     ProtentionEntry,
     RetentionEntry,
     SurpriseField,
     TemporalBands,
 )
+from agents.temporal_scales import MultiScaleContext
 from agents.temporal_surprise import compute_surprise
 from agents.temporal_trend import trend_protention
+from agents.temporal_xml import format_temporal_xml
 
 # Re-export models for backward compatibility
 __all__ = [
@@ -44,8 +47,16 @@ class TemporalBandFormatter:
         self._protention_engine = protention_engine
         self._last_protention: list[ProtentionEntry] = []
 
-    def format(self, ring: PerceptionRing) -> TemporalBands:
-        """Build temporal bands from the ring buffer state."""
+    def format(
+        self,
+        ring: PerceptionRing,
+        multi_scale: MultiScaleContext | None = None,
+    ) -> TemporalBands:
+        """Build temporal bands from the ring buffer state.
+
+        If multi_scale is provided, minute/session/day context is attached
+        for richer temporal reasoning across multiple timescales.
+        """
         current = ring.current()
         if current is None:
             return TemporalBands()
@@ -57,51 +68,44 @@ class TemporalBandFormatter:
         protention = self._build_protention(ring)
         self._last_protention = protention
 
+        # Multi-scale context (optional)
+        minute_summaries: list[dict[str, object]] = []
+        current_session: dict[str, object] | None = None
+        recent_sessions: list[dict[str, object]] = []
+        day_context: CircadianContext | None = None
+
+        if multi_scale is not None:
+            for m in multi_scale.recent_minutes:
+                minute_summaries.append(m.model_dump())
+            if multi_scale.current_session is not None:
+                current_session = multi_scale.current_session.model_dump()
+            for s in multi_scale.recent_sessions:
+                recent_sessions.append(s.model_dump())
+            d = multi_scale.day
+            if d.total_minutes > 0:
+                day_context = CircadianContext(
+                    session_count=d.session_count,
+                    total_minutes=d.total_minutes,
+                    total_flow_minutes=d.total_flow_minutes,
+                    total_voice_minutes=d.total_voice_minutes,
+                    dominant_activity=d.dominant_activity,
+                    activities=d.activities,
+                )
+
         return TemporalBands(
             retention=retention,
             impression=impression,
             protention=protention,
             surprises=surprises,
+            minute_summaries=minute_summaries,
+            current_session=current_session,
+            recent_sessions=recent_sessions,
+            day_context=day_context,
         )
 
     def format_xml(self, bands: TemporalBands) -> str:
         """Format bands as XML tags for LLM context injection."""
-        parts: list[str] = ["<temporal_context>"]
-
-        if bands.retention:
-            parts.append("  <retention>")
-            for r in bands.retention:
-                attrs = f'age_s="{r.age_s:.0f}" flow="{r.flow_state}" activity="{r.activity}"'
-                if r.presence:
-                    attrs += f' presence="{r.presence}"'
-                parts.append(f"    <memory {attrs}>{r.summary}</memory>")
-            parts.append("  </retention>")
-
-        if bands.impression:
-            parts.append("  <impression>")
-            surprise_map = {s.field: s for s in bands.surprises}
-            for key, val in bands.impression.items():
-                sf = surprise_map.get(key)
-                if sf and sf.surprise > 0.3:
-                    parts.append(
-                        f'    <{key} surprise="{sf.surprise:.2f}" '
-                        f'expected="{sf.expected}">{val}</{key}>'
-                    )
-                else:
-                    parts.append(f"    <{key}>{val}</{key}>")
-            parts.append("  </impression>")
-
-        if bands.protention:
-            parts.append("  <protention>")
-            for p in bands.protention:
-                parts.append(
-                    f'    <prediction state="{p.predicted_state}" '
-                    f'confidence="{p.confidence:.2f}">{p.basis}</prediction>'
-                )
-            parts.append("  </protention>")
-
-        parts.append("</temporal_context>")
-        return "\n".join(parts)
+        return format_temporal_xml(bands)
 
     def _build_retention(self, ring: PerceptionRing, now: float) -> list[RetentionEntry]:
         """Sample 3 retention entries: recent (~5s), mid (~15s), far (~40s)."""

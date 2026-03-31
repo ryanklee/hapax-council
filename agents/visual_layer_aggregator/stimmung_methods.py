@@ -206,7 +206,8 @@ def write_temporal_bands(agg: VisualLayerAggregator) -> None:
         return
 
     try:
-        bands = agg._temporal_formatter.format(ring)
+        multi_scale_ctx = agg._multi_scale.context()
+        bands = agg._temporal_formatter.format(ring, multi_scale=multi_scale_ctx)
         xml = agg._temporal_formatter.format_xml(bands)
         payload = {
             "xml": xml,
@@ -215,6 +216,8 @@ def write_temporal_bands(agg: VisualLayerAggregator) -> None:
             "protention_count": len(bands.protention),
             "surprise_count": len(bands.surprises),
             "impression": bands.impression,
+            "minute_count": len(bands.minute_summaries),
+            "has_session": bands.current_session is not None,
             "timestamp": time.time(),
         }
         _c.TEMPORAL_DIR.mkdir(parents=True, exist_ok=True)

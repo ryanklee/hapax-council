@@ -149,7 +149,7 @@ class TestXmlFormat:
         fmt = TemporalBandFormatter()
         bands = fmt.format(ring)
         xml = fmt.format_xml(bands)
-        assert "<retention>" in xml
+        assert '<retention scale="tick">' in xml
         assert "<memory" in xml
 
     def test_xml_has_impression_section(self):

@@ -40,13 +40,35 @@ class SurpriseField(BaseModel, frozen=True):
     note: str = ""  # human-readable explanation
 
 
+class CircadianContext(BaseModel, frozen=True):
+    """Daily accumulation summary for LLM circadian reasoning."""
+
+    session_count: int = 0
+    total_minutes: int = 0
+    total_flow_minutes: int = 0
+    total_voice_minutes: int = 0
+    dominant_activity: str = ""
+    activities: dict[str, int] = Field(default_factory=dict)
+
+
 class TemporalBands(BaseModel, frozen=True):
-    """Complete temporal structure: retention → impression → protention."""
+    """Complete temporal structure: retention → impression → protention.
+
+    Tick-level retention (50s window) is always present. Multi-scale
+    fields (minute/session/day) are populated when a MultiScaleContext
+    is passed to the formatter.
+    """
 
     retention: list[RetentionEntry] = Field(default_factory=list)
     impression: dict[str, object] = Field(default_factory=dict)
     protention: list[ProtentionEntry] = Field(default_factory=list)
     surprises: list[SurpriseField] = Field(default_factory=list)
+
+    # Multi-scale retention (optional, from MultiScaleAggregator)
+    minute_summaries: list[dict[str, object]] = Field(default_factory=list)
+    current_session: dict[str, object] | None = None
+    recent_sessions: list[dict[str, object]] = Field(default_factory=list)
+    day_context: CircadianContext | None = None
 
     @property
     def max_surprise(self) -> float:
