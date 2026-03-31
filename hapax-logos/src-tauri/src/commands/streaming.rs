@@ -105,6 +105,59 @@ pub async fn cancel_stream_and_server(app: AppHandle, stream_id: u64) -> Result<
     Ok(())
 }
 
+/// Subscribe to the system flow event stream (/api/events/stream).
+/// Runs in a background task, emitting each SSE data payload as a
+/// Tauri event named "flow-event". Returns immediately.
+#[tauri::command]
+pub async fn subscribe_flow_events(app: AppHandle) -> Result<(), String> {
+    let app_handle = app.clone();
+
+    tokio::spawn(async move {
+        let url = format!("{}/events/stream", LOGOS_BASE);
+        let client = app_handle.state::<super::proxy::HttpClient>().0.clone();
+
+        let resp = match client.get(&url).send().await {
+            Ok(r) if r.status().is_success() => r,
+            Ok(r) => {
+                log::warn!("flow-event SSE: {}", r.status());
+                return;
+            }
+            Err(e) => {
+                log::warn!("flow-event SSE connect: {}", e);
+                return;
+            }
+        };
+
+        let mut byte_stream = resp.bytes_stream();
+        let mut buffer = String::new();
+
+        while let Some(chunk) = byte_stream.next().await {
+            match chunk {
+                Err(e) => {
+                    log::warn!("flow-event SSE read: {}", e);
+                    break;
+                }
+                Ok(bytes) => {
+                    let text = String::from_utf8_lossy(&bytes);
+                    buffer.push_str(&text);
+
+                    while let Some(newline_pos) = buffer.find('\n') {
+                        let line = buffer[..newline_pos].to_string();
+                        buffer = buffer[newline_pos + 1..].to_string();
+                        let line = line.trim_end_matches('\r');
+
+                        if let Some(data) = line.strip_prefix("data: ").or_else(|| line.strip_prefix("data:")) {
+                            let _ = app_handle.emit("flow-event", data.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    Ok(())
+}
+
 /// Internal: connect to FastAPI SSE, parse events, emit to frontend.
 async fn run_sse_stream(
     app: &AppHandle,
