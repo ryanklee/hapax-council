@@ -63,7 +63,11 @@ class ReverieMixer:
         # Cross-modal refractory damping (500ms)
         self._last_acoustic_inject = 0.0
         self._refractory_ms = 500
+        # Satellite recruitment
+        from agents.reverie._satellites import SatelliteManager
+        from agents.reverie.bootstrap import load_vocabulary
 
+        self._satellites = SatelliteManager(load_vocabulary(), decay_rate=0.02)
         self._pipeline = self._init_pipeline()
 
     @staticmethod
@@ -135,8 +139,10 @@ class ReverieMixer:
                 break
             self._apply_shader_impingement(imp)
 
-        # 4. Decay visual chain dimensions
+        # 4. Decay visual chain dimensions + satellites
         self._visual_chain.decay(dt)
+        self._satellites.decay(dt)
+        self._satellites.maybe_rebuild()
 
         # 5. Read imagination + stimmung from context
         imagination = ctx.imagination_fragments[0] if ctx.imagination_fragments else None
@@ -162,29 +168,31 @@ class ReverieMixer:
         # 9. Write cross-modal output
         current_salience = float(imagination.get("salience", 0.0)) if imagination else 0.0
         content_density = len(imagination.get("content_references", [])) if imagination else 0
-        self._write_visual_salience(salience=current_salience, content_density=content_density)
+        n_sat = self._satellites.active_count
+        self._write_visual_salience(
+            salience=current_salience, content_density=content_density, satellites_active=n_sat
+        )
 
     def dispatch_impingement(self, imp: Impingement) -> None:
-        """Route an impingement through the affordance pipeline.
-
-        The pipeline uses Qdrant cosine similarity to match the impingement
-        against all registered visual affordances. Matched capabilities
-        activate visual chain dimensions proportionally.
-        """
+        """Route impingement through affordance pipeline. Recruits satellites for node.* matches."""
         candidates = self._pipeline.select(imp)
         for c in candidates:
-            if c.capability_name.startswith("node.") or c.capability_name.startswith("content."):
-                # Embedding-matched affordance — activate dimensions from impingement
+            name = c.capability_name
+            if name.startswith("node."):
+                self._satellites.recruit(name.removeprefix("node."), c.combined)
                 self._apply_shader_impingement(imp)
-                break  # one activation per impingement
-            elif c.capability_name == "shader_graph":
+                break
+            elif name.startswith("content."):
+                self._apply_shader_impingement(imp)
+                break
+            elif name == "shader_graph":
                 self._shader_cap.activate(imp, imp.strength)
                 self._apply_shader_impingement(imp)
-            elif c.capability_name == "visual_chain":
+            elif name == "visual_chain":
                 score = self._visual_chain.can_resolve(imp)
                 if score > 0:
                     self._visual_chain.activate(imp, score)
-            elif c.capability_name == "fortress_visual_response":
+            elif name == "fortress_visual_response":
                 s = imp.strength
                 self._visual_chain.activate_dimension("visual_chain.tension", imp, s * 0.8)
                 self._visual_chain.activate_dimension("visual_chain.degradation", imp, s * 0.6)
@@ -235,6 +243,7 @@ class ReverieMixer:
         path: Path | None = None,
         salience: float = 0.0,
         content_density: int = 0,
+        satellites_active: int = 0,
     ) -> None:
         """Write visual salience for Daimonion cross-modal coupling."""
         p = path or VISUAL_SALIENCE_FILE
@@ -244,6 +253,7 @@ class ReverieMixer:
             "signals": {
                 "salience": salience,
                 "content_density": content_density,
+                "satellites_active": satellites_active,
                 "regime_shift": False,
             },
         }
