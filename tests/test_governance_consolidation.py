@@ -33,3 +33,22 @@ def test_fallback_chain_nested_veto_allows():
     result = chain.select("any_context")
     assert result.action == "action_a"
     assert result.selected_by == "gated"
+
+
+def test_governor_wrapper_collects_all_denials():
+    """GovernorWrapper should evaluate all policies, not stop at first denial."""
+    from shared.governance.consent_label import ConsentLabel
+    from shared.governance.governor import GovernorPolicy, GovernorWrapper
+    from shared.governance.labeled import Labeled
+
+    gov = GovernorWrapper("test-agent")
+    gov.add_input_policy(GovernorPolicy("policy_a", lambda _aid, _data: False, axiom_id="ax1"))
+    gov.add_input_policy(GovernorPolicy("policy_b", lambda _aid, _data: False, axiom_id="ax2"))
+    data = Labeled(value="test", label=ConsentLabel.bottom())
+    result = gov.check_input(data)
+    assert not result.allowed
+    assert result.denial is not None
+    assert "policy_a" in result.denial.reason
+    assert "policy_b" in result.denial.reason
+    assert "ax1" in result.denial.axiom_ids
+    assert "ax2" in result.denial.axiom_ids
