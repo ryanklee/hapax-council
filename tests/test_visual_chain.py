@@ -190,7 +190,7 @@ def test_compute_deltas_at_nonzero():
     imp = _make_impingement()
     cap.activate_dimension("visual_chain.intensity", imp, 1.0)
     deltas = cap.compute_param_deltas()
-    assert deltas.get("gradient.brightness", 0.0) > 0.0
+    assert deltas.get("noise.brightness", 0.0) > 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -210,7 +210,7 @@ def test_write_state_creates_json(tmp_path: Path):
     assert "params" in data
     assert "timestamp" in data
     assert data["levels"]["visual_chain.intensity"] == 0.7
-    assert data["params"]["gradient.brightness"] > 0.0
+    assert data["params"]["noise.brightness"] > 0.0
 
 
 def test_write_state_atomic(tmp_path: Path):
