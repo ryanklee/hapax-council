@@ -79,7 +79,12 @@ class FortressDaemon:
         from agents.fortress.capability import FORTRESS_DESCRIPTION, FortressGovernanceCapability
 
         self._fortress_capability = FortressGovernanceCapability()
-        self._dmn_impingement_cursor = 0
+
+        from shared.impingement_consumer import ImpingementConsumer
+
+        self._impingement_consumer = ImpingementConsumer(
+            Path("/dev/shm/hapax-dmn/impingements.jsonl")
+        )
 
         # Affordance pipeline: index fortress capability and register interrupt tokens
         from agents._affordance import CapabilityRecord
@@ -244,33 +249,18 @@ class FortressDaemon:
 
     async def _impingement_consumer_loop(self) -> None:
         """Poll DMN impingements and route through affordance pipeline."""
-        from agents._impingement import Impingement
-
-        imp_path = Path("/dev/shm/hapax-dmn/impingements.jsonl")
-
         while self._running:
             try:
-                if imp_path.exists():
-                    text = imp_path.read_text(encoding="utf-8")
-                    lines = text.strip().split("\n") if text.strip() else []
-
-                    new_lines = lines[self._dmn_impingement_cursor :]
-                    if new_lines:
-                        self._dmn_impingement_cursor = len(lines)
-
-                        for line in new_lines:
-                            if not line.strip():
-                                continue
-                            try:
-                                imp = Impingement.model_validate_json(line)
-                                candidates = self._affordance_pipeline.select(imp)
-                                for c in candidates:
-                                    if c.capability_name == "fortress_governance":
-                                        self._fortress_capability.activate(imp, c.combined)
-                                if candidates:
-                                    self._affordance_pipeline.add_inhibition(imp, duration_s=60.0)
-                            except Exception:
-                                pass
+                for imp in self._impingement_consumer.read_new():
+                    try:
+                        candidates = self._affordance_pipeline.select(imp)
+                        for c in candidates:
+                            if c.capability_name == "fortress_governance":
+                                self._fortress_capability.activate(imp, c.combined)
+                        if candidates:
+                            self._affordance_pipeline.add_inhibition(imp, duration_s=60.0)
+                    except Exception:
+                        pass
             except Exception:
                 log.debug("Impingement consumer error (non-fatal)", exc_info=True)
 
