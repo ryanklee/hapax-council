@@ -192,10 +192,14 @@ These loops do not share memory. They communicate exclusively through files. Thi
 
 ```
 /dev/shm/hapax-stimmung/
-  └── state.json         ← Visual aggregator writes (60s)
-                            Reactive engine reads (phase gating)
+  └── state.json         ← Visual aggregator writes (3-5s, nested JSON)
+                            Reactive engine reads (phase gating, 5min staleness)
                             Phenomenal context reads (voice LLM)
-                            Config reads (model downgrade)
+                            Logos API reads (/api/stimmung endpoint)
+                            Reverie actuation reads (stance + color_warmth)
+                            Imagination reads (system state context)
+                            Stimmung-sync reads (15min, RAG persistence)
+                            ContextAssembler reads (shared context cache)
 
 /dev/shm/hapax-temporal/
   └── bands.json          ← Visual aggregator writes (3s)
@@ -219,7 +223,7 @@ These loops do not share memory. They communicate exclusively through files. Thi
 
 1. Perception tick fires (2.5s). Reads all sensor backends: audio (PipeWire), vision (YOLO), biometrics (watch), workspace (Hyprland), keyboard (logind DBus). Bayesian presence engine fuses 8 signals → P(operator_present). Governor evaluates → "process" directive. Consent tracker checks face count, speaker ID.
 
-2. Visual aggregator polls perception state (3s). Maps to display state machine (ambient/alert/focus/interaction/error). Runs stimmung collector (6 dimensions → stance). Computes temporal bands (retention/impression/protention/surprise). Delegates apperception tick. Writes all to /dev/shm.
+2. Visual aggregator polls perception state (3s). Maps to display state machine (ambient/alert/focus/interaction/error). Runs stimmung collector (10 dimensions → stance). Computes temporal bands (retention/impression/protention/surprise). Delegates apperception tick. Writes all to /dev/shm.
 
 3. Studio compositor reads visual layer state from shm. Renders GStreamer pipeline with overlays. Outputs to /dev/video42 (v4l2loopback virtual webcam) and HLS stream.
 
@@ -239,7 +243,7 @@ These loops do not share memory. They communicate exclusively through files. Thi
 
 ### What Happens When the System Detects Something Wrong
 
-1. Stimmung collector aggregates 6 dimensions: health, resource_pressure, error_rate, processing_throughput, perception_confidence, llm_cost_pressure. Each dimension is a value 0.0-1.0 with trend (rising/falling/stable) and freshness.
+1. Stimmung collector aggregates 10 dimensions: 6 infrastructure (health, resource_pressure, error_rate, processing_throughput, perception_confidence, llm_cost_pressure), 1 cognitive (grounding_quality), and 3 biometric (operator_stress, operator_energy, physiological_coherence). Each dimension is a value 0.0-1.0 with trend (rising/falling/stable) and freshness. Biometric dimensions contribute at 0.5× weight, cognitive at 0.3×, so infrastructure dominates stance computation.
 
 2. Overall stance = worst non-stale dimension:
    - < 0.3 → nominal
@@ -370,18 +374,24 @@ Selects what to display in the ambient layer from 4 content pools: ambient text 
 
 **Epistemic status: Proven.** Pure logic, no I/O.
 
-6 dimensions, each a `DimensionReading` with value (0.0-1.0, higher = worse), trend (rising/falling/stable), and freshness (seconds since last update).
+10 dimensions (6 infrastructure + 1 cognitive + 3 biometric), each a `DimensionReading` with value (0.0-1.0, higher = worse), trend (rising/falling/stable), and freshness (seconds since last update). Canonical model: `shared/stimmung.py`. Vendored re-exports in `agents/_stimmung.py` and `logos/_stimmung.py`.
 
-| Dimension | Source | What It Measures |
-|-----------|--------|-----------------|
-| health | profiles/health-history.jsonl | System health check ratio |
-| resource_pressure | GPU snapshot | VRAM utilization |
-| error_rate | Reactive engine status | Action error ratio |
-| processing_throughput | Reactive engine events/min | Engine activity level |
-| perception_confidence | Perception age + confidence | Sensor data quality |
-| llm_cost_pressure | Langfuse daily cost | API spend vs $50/day ceiling |
+| Dimension | Class | Source | What It Measures |
+|-----------|-------|--------|-----------------|
+| health | infra | profiles/health-history.jsonl | System health check ratio |
+| resource_pressure | infra | GPU snapshot | VRAM utilization (80-95% remapped) |
+| error_rate | infra | Reactive engine status | Action error ratio |
+| processing_throughput | infra | Reactive engine events/min | Engine activity level |
+| perception_confidence | infra | Perception age + confidence | Sensor data quality |
+| llm_cost_pressure | infra | Langfuse daily cost | API spend vs $50/day ceiling |
+| grounding_quality | cognitive | /dev/shm/hapax-daimonion/grounding-quality.json | Voice GQI (inverted: 0=good) |
+| operator_stress | biometric | Watch HRV/EDA + frustration score | Operator physiological stress |
+| operator_energy | biometric | Watch sleep/activity/HR + contact mic desk engagement | Operator energy level |
+| physiological_coherence | biometric | HRV CV + skin temp CV | Physiological variability |
 
-**Recent fix (2026-03-18):** LLM cost ceiling was $5/day, triggering false-critical every day on normal $15-30/day usage. Fixed to $50/day. Idle engine throughput was treated as pressure (0.97 = system stressed). Fixed: idle engine = 0 pressure.
+Stance thresholds are per-class: infrastructure uses standard (0.30/0.60/0.85), biometric uses 0.5× weight (max DEGRADED), cognitive uses 0.3× weight (max CAUTIOUS).
+
+**SHM data flow:** VLA writes nested JSON (`SystemStimmung.model_dump_json()`) to `/dev/shm/hapax-stimmung/state.json` via atomic tmp→rename. Consumers read nested `{dim: {value, trend, freshness_s}}` format. Stimmung-sync timer (15min) persists daily summaries to `~/documents/rag-sources/stimmung/`.
 
 ### Temporal Band Formatter
 
@@ -683,7 +693,7 @@ Temporal Band Formatter (retention / impression / protention / surprise)
   ↓
 Apperception Cascade (self-observations, coherence, reflections)
   ↓
-Stimmung (6 dimensions → stance: nominal/cautious/degraded/critical)
+Stimmung (10 dimensions → stance: nominal/cautious/degraded/critical)
   ↓
 Phenomenal Context Renderer (6 progressive layers)
   ↓
@@ -1373,7 +1383,7 @@ curl http://localhost:8051/api/health
 | **Provenance expression** | PosBool(X) semiring for why-provenance — tensor (both) / plus (either) |
 | **Says monad** | Principal-annotated assertion wrapping data with WHO authorized it |
 | **Self-dimension** | Emergent aspect of Hapax self-knowledge, discovered through apperception cascade |
-| **Stimmung** | System-wide self-state vector — 6 dimensions + stance |
+| **Stimmung** | System-wide self-state vector — 10 dimensions (6 infra + 1 cognitive + 3 biometric) + stance |
 | **Temporal bands** | Husserlian retention/impression/protention for LLM prompt injection |
 | **Trio relay** | File-based coordination protocol for 2 Claude sessions + 1 operator |
 | **Context anchoring** | Conversational continuity via turn-by-turn thread injection, as opposed to profile-gated retrieval |

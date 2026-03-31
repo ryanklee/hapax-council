@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-31
 **Sprint:** 0, Day 2
-**Status:** Approved (pre-approved by operator)
+**Status:** Implemented — PR #471 merged, CI fixes on main (b38ae10e0)
 
 ## Problem Statement
 
