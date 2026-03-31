@@ -141,7 +141,7 @@ class ReverieActuationLoop:
         When content salience drops (fading out), the trace activates at the
         content's approximate position based on its slot index.
         """
-        current_salience = imagination.get("salience", 0.0) if imagination else 0.0
+        current_salience = float(imagination.get("salience", 0.0)) if imagination else 0.0
 
         # Detect salience drop → activate trace
         if self._last_salience > 0.2 and current_salience < self._last_salience * 0.5:
@@ -205,8 +205,8 @@ class ReverieActuationLoop:
         material = "water"
         salience = 0.0
         if imagination:
-            material = imagination.get("material", "water")
-            salience = imagination.get("salience", 0.0)
+            material = str(imagination.get("material", "water"))
+            salience = float(imagination.get("salience", 0.0))
 
         material_val = float(MATERIAL_MAP.get(material, 0))
 
