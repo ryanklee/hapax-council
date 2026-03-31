@@ -23,6 +23,7 @@ import numpy as np  # noqa: TC002 — Pi-side code
 from ir_biometrics import BiometricTracker
 from ir_hands import detect_hands_nir, detect_screens_nir
 from ir_inference import FaceLandmarkDetector, YoloDetector
+from ir_models import IrDetectionReport  # noqa: TC002 — Pi-side code
 from ir_report import build_report
 
 logging.basicConfig(
@@ -206,12 +207,14 @@ class IrEdgeDaemon:
             cv2.imwrite(str(self._captures_dir / f"{self._role}_{ts}.jpg"), grey)
 
     def _update_rppg(self, persons: list[dict], grey: np.ndarray) -> None:
+        self._biometrics.face_detected = False
         if not persons:
             return
         best = max(persons, key=lambda p: p.get("confidence", 0))
         head_pose = best.get("head_pose", {})
         if not (head_pose and head_pose.get("yaw") is not None):
             return
+        self._biometrics.face_detected = True
         bbox = best["bbox"]
         fy1, fy2 = bbox[1], bbox[1] + int((bbox[3] - bbox[1]) * 0.3)
         fx1, fx2 = bbox[0], bbox[2]
@@ -220,7 +223,9 @@ class IrEdgeDaemon:
             if forehead.size > 0:
                 self._biometrics.update_rppg_intensity(float(np.mean(forehead)))
 
-    def _build_report(self, motion_delta, persons, hands, screens, grey, inference_ms):
+    def _build_report(
+        self, motion_delta, persons, hands, screens, grey, inference_ms
+    ) -> IrDetectionReport:
         return build_report(
             self._hostname,
             self._role,
@@ -233,7 +238,7 @@ class IrEdgeDaemon:
             self._biometrics.snapshot(),
         )
 
-    async def _post_report(self, report) -> None:
+    async def _post_report(self, report: IrDetectionReport) -> None:
         """POST detection report to workstation."""
         try:
             resp = await self._client.post(
