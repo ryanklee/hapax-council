@@ -40,7 +40,8 @@ def _read_json(path: Path) -> dict | None:
         if not text.strip():
             return None
         return json.loads(text)
-    except (OSError, json.JSONDecodeError):
+    except (OSError, json.JSONDecodeError) as exc:
+        log.debug("Failed to read %s: %s", path, exc)
         return None
 
 
@@ -48,7 +49,8 @@ def _age_s(path: Path) -> float:
     """Seconds since file was last modified. Returns inf if missing."""
     try:
         return time.time() - path.stat().st_mtime
-    except OSError:
+    except OSError as exc:
+        log.debug("Failed to stat %s: %s", path, exc)
         return float("inf")
 
 
