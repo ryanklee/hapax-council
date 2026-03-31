@@ -249,6 +249,7 @@ class ContactMicBackend:
         self._source_name = source_name
         self._cache = _ContactMicCache()
         self._stop_event = threading.Event()
+        self._capture_failed = False
         self._thread: threading.Thread | None = None
         self._stream: object | None = None  # pyaudio.Stream (optional dep)
 
@@ -282,8 +283,8 @@ class ContactMicBackend:
         return PerceptionTier.FAST
 
     def available(self) -> bool:
-        """Check if the contact mic PipeWire source exists."""
-        if pyaudio is None:
+        """Check if the contact mic PipeWire source exists and capture is alive."""
+        if pyaudio is None or self._capture_failed:
             return False
         try:
             import subprocess
@@ -375,7 +376,7 @@ class ContactMicBackend:
             )
             self._stream = stream
 
-            log.info("Contact mic capturing from device %d", device_idx)
+            log.info("Contact mic capturing from %s", self._source_name)
 
             # State for onset detection and gesture classification
             smoothed_energy = 0.0
@@ -472,4 +473,7 @@ class ContactMicBackend:
             pa.terminate()
 
         except Exception:
-            log.debug("Contact mic capture failed", exc_info=True)
+            log.warning(
+                "Contact mic capture thread failed — marking backend degraded", exc_info=True
+            )
+            self._capture_failed = True
