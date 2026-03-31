@@ -180,13 +180,26 @@ async def run_inner(daemon: VoiceDaemon) -> None:
     finally:
         from agents.hapax_daimonion.pipeline_lifecycle import stop_pipeline
 
-        await stop_pipeline(daemon)
+        # 1. Stop audio input first (breaks frame source)
         daemon._audio_input.stop()
-        daemon.perception.stop()
 
+        # 2. Stop noise reference
         if daemon._noise_reference is not None:
             daemon._noise_reference.stop()
 
+        # 3. Stop pipeline (drains remaining frames)
+        await stop_pipeline(daemon)
+
+        # 4. Stop perception
+        daemon.perception.stop()
+
+        # 5. Cancel background tasks (before closing resources they may use)
+        for task in daemon._background_tasks:
+            task.cancel()
+        await asyncio.gather(*daemon._background_tasks, return_exceptions=True)
+        daemon._background_tasks.clear()
+
+        # 6. Close resources (chime, executors, PyAudio)
         daemon.chime_player.close()
         daemon.executor_registry.close_all()
         if daemon._shared_pa is not None:
@@ -195,6 +208,7 @@ async def run_inner(daemon: VoiceDaemon) -> None:
             except Exception:
                 pass
 
+        # 7. Flush telemetry
         daemon.event_log.close()
         from opentelemetry.trace import get_tracer_provider
 
@@ -202,10 +216,6 @@ async def run_inner(daemon: VoiceDaemon) -> None:
         if hasattr(provider, "force_flush"):
             provider.force_flush(timeout_millis=5000)
 
-        for task in daemon._background_tasks:
-            task.cancel()
-        await asyncio.gather(*daemon._background_tasks, return_exceptions=True)
-        daemon._background_tasks.clear()
-
+        # 8. Stop hotkey
         await daemon.hotkey.stop()
         log.info("Hapax Daimonion daemon stopped")
