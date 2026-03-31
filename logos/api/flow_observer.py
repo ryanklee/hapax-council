@@ -47,7 +47,7 @@ class FlowObserver:
         for d in self._shm_root.iterdir():
             if not d.is_dir() or not d.name.startswith("hapax-"):
                 continue
-            writer_name = d.name
+            writer_name = d.name.removeprefix("hapax-")
             for f in d.iterdir():
                 if not f.is_file():
                     continue

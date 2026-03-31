@@ -58,7 +58,7 @@ async def receive_ir_detection(
 
         bus.emit(
             FlowEvent(
-                kind="pi.detection", source=f"pi-{role}", target="perception", label=f"ir/{role}"
+                kind="pi.detection", source="pi_fleet", target="ir_perception", label=f"ir/{role}"
             )
         )
 
