@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from pathlib import Path
 
 log = logging.getLogger("reverie.uniforms")
@@ -82,13 +83,28 @@ def write_uniforms(
     material_val = float(MATERIAL_MAP.get(material, 0))
     chain_params = visual_chain.compute_param_deltas()
 
+    # Silence factor: attenuate vocabulary graph when imagination is absent or stale.
+    # Without this, the shader pipeline produces visual noise that looks
+    # expressive but represents nothing — implementation bleeding through
+    # as if it were DMN's visual projection.
+    IMAGINATION_STALE_S = 60.0
+    if imagination is None:
+        silence = 0.05
+    else:
+        frag_age = time.time() - float(imagination.get("timestamp", 0))
+        if frag_age > IMAGINATION_STALE_S:
+            # Fade toward silence as fragment ages beyond threshold
+            silence = max(0.05, 1.0 - (frag_age - IMAGINATION_STALE_S) / IMAGINATION_STALE_S)
+        else:
+            silence = 1.0
+
     uniforms: dict[str, object] = {
         "custom": [material_val],
         "slot_opacities": build_slot_opacities(imagination, salience),
     }
 
     for key, value in chain_params.items():
-        uniforms[key] = value * reduction if isinstance(value, (int, float)) else value
+        uniforms[key] = value * reduction * silence if isinstance(value, (int, float)) else value
 
     if trace_strength > 0:
         uniforms["fb.trace_center_x"] = trace_center[0]
