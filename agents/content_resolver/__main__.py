@@ -19,6 +19,7 @@ from pathlib import Path
 
 from agents.imagination import CURRENT_PATH, ImaginationFragment
 from agents.imagination_resolver import CONTENT_DIR, resolve_references_staged
+from shared.control_signal import ControlSignal, publish_health
 
 log = logging.getLogger("content-resolver")
 
@@ -70,6 +71,11 @@ class ContentResolverDaemon:
                             resolve_references_staged(frag)
                             self._failures.pop(frag_id, None)
                             log.debug("Resolved content for fragment %s", frag_id)
+                            publish_health(
+                                ControlSignal(
+                                    component="content_resolver", reference=1.0, perception=1.0
+                                )
+                            )
                         except Exception:
                             count = self._failures.get(frag_id, 0) + 1
                             self._failures[frag_id] = count
@@ -85,6 +91,11 @@ class ContentResolverDaemon:
                                     count,
                                     MAX_FAILURES_PER_FRAGMENT,
                                 )
+                            publish_health(
+                                ControlSignal(
+                                    component="content_resolver", reference=1.0, perception=0.0
+                                )
+                            )
             except Exception:
                 log.warning("Resolver tick failed", exc_info=True)
 
