@@ -284,21 +284,12 @@ class ContactMicBackend:
         return PerceptionTier.FAST
 
     def available(self) -> bool:
-        """Check if the contact mic PipeWire source exists and capture is alive."""
-        if pyaudio is None or self._capture_failed:
-            return False
-        try:
-            import subprocess
+        """Check if the contact mic PipeWire source exists and capture is alive.
 
-            result = subprocess.run(
-                ["pw-cli", "ls", "Node"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            return self._source_name in result.stdout
-        except Exception:
-            return False
+        Disabled: PyAudio's ALSA backend triggers SEGV under PipeWire.
+        Contact mic needs migration to pw-cat (like audio_input.py).
+        """
+        return False
 
     def start(self) -> None:
         if pyaudio is None:
