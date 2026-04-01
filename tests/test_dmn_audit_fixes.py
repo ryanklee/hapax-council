@@ -14,14 +14,13 @@ from agents.dmn.pulse import DMNPulse
 class TestFortressFeedbackWiring:
     """Tests that DMN reads fortress.action_taken impingements and suppresses re-emission."""
 
-    def test_consume_fortress_feedback_from_jsonl(self, tmp_path):
-        """DMNDaemon reads fortress feedback from JSONL and feeds to pulse."""
+    def test_consume_fortress_feedback_from_dedicated_file(self, tmp_path):
+        """DMNDaemon reads fortress feedback from dedicated fortress-actions.jsonl."""
         from agents.dmn.__main__ import DMNDaemon
 
         daemon = DMNDaemon()
-        jsonl = tmp_path / "impingements.jsonl"
+        actions_file = tmp_path / "fortress-actions.jsonl"
 
-        # Write a fortress feedback impingement
         feedback = Impingement(
             timestamp=time.time(),
             source="fortress.action_taken",
@@ -29,42 +28,17 @@ class TestFortressFeedbackWiring:
             strength=0.3,
             content={"trigger_metric": "drink_per_capita", "action_type": "brew"},
         )
-        jsonl.write_text(feedback.model_dump_json() + "\n")
+        actions_file.write_text(feedback.model_dump_json() + "\n")
 
-        # Patch the file path and run feedback consumption
-        with patch("agents.dmn.__main__.IMPINGEMENTS_FILE", jsonl):
-            daemon._consume_fortress_feedback()
-
-        # Verify the pulse suppresses drink_per_capita
+        daemon._consume_fortress_feedback(path=actions_file)
         assert "drink_per_capita" in daemon._pulse._fortress_acted_on
-
-    def test_consume_skips_non_fortress_impingements(self, tmp_path):
-        """Non-fortress impingements in the JSONL are ignored."""
-        from agents.dmn.__main__ import DMNDaemon
-
-        daemon = DMNDaemon()
-        jsonl = tmp_path / "impingements.jsonl"
-
-        dmn_imp = Impingement(
-            timestamp=time.time(),
-            source="dmn.evaluative",
-            type=ImpingementType.SALIENCE_INTEGRATION,
-            strength=0.6,
-            content={"trajectory": "degrading"},
-        )
-        jsonl.write_text(dmn_imp.model_dump_json() + "\n")
-
-        with patch("agents.dmn.__main__.IMPINGEMENTS_FILE", jsonl):
-            daemon._consume_fortress_feedback()
-
-        assert len(daemon._pulse._fortress_acted_on) == 0
 
     def test_cursor_advances_past_read_lines(self, tmp_path):
         """Feedback cursor advances so lines aren't re-processed."""
         from agents.dmn.__main__ import DMNDaemon
 
         daemon = DMNDaemon()
-        jsonl = tmp_path / "impingements.jsonl"
+        actions_file = tmp_path / "fortress-actions.jsonl"
 
         feedback = Impingement(
             timestamp=time.time(),
@@ -73,18 +47,16 @@ class TestFortressFeedbackWiring:
             strength=0.3,
             content={"trigger_metric": "drink_per_capita", "action_type": "brew"},
         )
-        jsonl.write_text(feedback.model_dump_json() + "\n")
+        actions_file.write_text(feedback.model_dump_json() + "\n")
 
-        with patch("agents.dmn.__main__.IMPINGEMENTS_FILE", jsonl):
-            daemon._consume_fortress_feedback()
-            cursor_after_first = daemon._feedback_cursor
+        daemon._consume_fortress_feedback(path=actions_file)
+        cursor_after_first = daemon._feedback_cursor
 
-            # Add a second impingement
-            with jsonl.open("a") as f:
-                f.write(feedback.model_dump_json() + "\n")
+        with actions_file.open("a") as f:
+            f.write(feedback.model_dump_json() + "\n")
 
-            daemon._consume_fortress_feedback()
-            assert daemon._feedback_cursor > cursor_after_first
+        daemon._consume_fortress_feedback(path=actions_file)
+        assert daemon._feedback_cursor > cursor_after_first
 
     def test_suppression_prevents_threshold_reemission(self):
         """After fortress acts on drink_per_capita, DMN doesn't re-emit it."""

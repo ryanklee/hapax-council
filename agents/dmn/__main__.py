@@ -20,12 +20,9 @@ import signal
 import time
 from pathlib import Path
 
-from agents._impingement import Impingement, ImpingementType
+from agents._impingement import Impingement
 from agents.dmn.buffer import DMNBuffer
 from agents.dmn.pulse import DMNPulse
-from agents.imagination import CURRENT_PATH, ImaginationFragment
-from agents.imagination_loop import ImaginationLoop
-from agents.imagination_resolver import CONTENT_DIR, resolve_references_staged
 
 log = logging.getLogger("dmn")
 
@@ -34,27 +31,10 @@ DMN_STATE_DIR = Path("/dev/shm/hapax-dmn")
 BUFFER_FILE = DMN_STATE_DIR / "buffer.txt"
 STATUS_FILE = DMN_STATE_DIR / "status.json"
 IMPINGEMENTS_FILE = DMN_STATE_DIR / "impingements.jsonl"
-TPN_ACTIVE_FILE = DMN_STATE_DIR / "tpn_active"
+FORTRESS_ACTIONS_FILE = DMN_STATE_DIR / "fortress-actions.jsonl"
 
 # Main loop tick rate (fastest possible — individual ticks have their own cadence)
 LOOP_TICK_S = 1.0
-
-
-def _read_tpn_active(path: Path = TPN_ACTIVE_FILE, stale_s: float = 5.0) -> bool:
-    """Read TPN active signal with staleness check.
-
-    Format: "1:{timestamp}" or "0:{timestamp}" (new) or bare "1"/"0" (legacy).
-    """
-    try:
-        raw = path.read_text().strip()
-        if ":" in raw:
-            value, ts = raw.split(":", 1)
-            if time.time() - float(ts) > stale_s:
-                return False
-            return value == "1"
-        return raw == "1"
-    except (OSError, ValueError):
-        return False
 
 
 class DMNDaemon:
@@ -63,33 +43,14 @@ class DMNDaemon:
     def __init__(self) -> None:
         self._buffer = DMNBuffer()
         self._pulse = DMNPulse(self._buffer)
-        self._imagination = ImaginationLoop()
         self._running = True
         self._start_time = time.monotonic()
-        self._resolver_failures: dict[str, int] = {}
-        self._resolver_skip_until: dict[str, float] = {}
-        self._resolver_consecutive_failures: int = 0
         self._feedback_cursor: int = 0  # byte offset into impingements.jsonl
 
     async def run(self) -> None:
         """Main loop — never stops unless signalled."""
         DMN_STATE_DIR.mkdir(parents=True, exist_ok=True)
         log.info("DMN daemon starting")
-
-        asyncio.create_task(self._imagination_loop())
-        asyncio.create_task(self._resolver_loop())
-
-        # Fire first imagination tick immediately — Reverie should reflect
-        # DMN state from the very first frame, not wait for cadence timer.
-        try:
-            from agents.dmn.sensor import read_all
-
-            observations = self._buffer.recent_observations(5)
-            snapshot = read_all()
-            await self._imagination.tick(observations, snapshot)
-            log.info("First imagination tick fired")
-        except Exception:
-            log.warning("First imagination tick failed", exc_info=True)
 
         while self._running:
             try:
@@ -102,68 +63,6 @@ class DMNDaemon:
             await asyncio.sleep(LOOP_TICK_S)
 
         log.info("DMN daemon stopped")
-
-    async def _imagination_loop(self) -> None:
-        """Run imagination loop on its own variable cadence."""
-        from agents.dmn.sensor import read_all
-
-        log.info("Imagination loop starting")
-        while self._running:
-            try:
-                self._imagination.set_tpn_active(_read_tpn_active())
-                observations = self._buffer.recent_observations(5)
-                snapshot = read_all()
-                await self._imagination.tick(observations, snapshot)
-            except Exception:
-                log.warning("Imagination tick failed", exc_info=True)
-
-            interval = self._imagination.cadence.current_interval()
-            await asyncio.sleep(interval)
-
-    async def _resolver_loop(self) -> None:
-        """Watch imagination fragments and resolve slow content references."""
-        log.info("Content resolver starting")
-        last_fragment_id = ""
-        CONTENT_DIR.mkdir(parents=True, exist_ok=True)
-
-        while self._running:
-            try:
-                if CURRENT_PATH.exists():
-                    data = json.loads(CURRENT_PATH.read_text())
-                    frag_id = data.get("id", "")
-                    if frag_id and frag_id != last_fragment_id:
-                        skip_until = self._resolver_skip_until.get(frag_id)
-                        if skip_until and time.time() < skip_until:
-                            pass
-                        else:
-                            if skip_until:
-                                del self._resolver_skip_until[frag_id]
-                            last_fragment_id = frag_id
-                            try:
-                                frag = ImaginationFragment.model_validate(data)
-                                resolve_references_staged(frag)
-                                self._resolver_failures.pop(frag_id, None)
-                                self._resolver_consecutive_failures = 0
-                                log.debug("Resolved content for fragment %s", frag_id)
-                            except Exception:
-                                count = self._resolver_failures.get(frag_id, 0) + 1
-                                self._resolver_failures[frag_id] = count
-                                self._resolver_consecutive_failures += 1
-                                if count >= 5:
-                                    self._resolver_skip_until[frag_id] = time.time() + 60.0
-                                    log.warning(
-                                        "Resolver: skipping fragment %s after %d failures",
-                                        frag_id,
-                                        count,
-                                    )
-                                else:
-                                    log.debug("Resolver tick failed for %s (%d/5)", frag_id, count)
-                                if self._resolver_consecutive_failures == 3:
-                                    self._emit_resolver_degraded()
-            except Exception:
-                log.warning("Resolver tick failed", exc_info=True)
-
-            await asyncio.sleep(0.5)
 
     def _write_output(self) -> None:
         """Write buffer, impingements, and status to /dev/shm."""
@@ -178,7 +77,6 @@ class DMNDaemon:
 
         # Drain and persist impingements (cross-daemon transport)
         impingements = self._pulse.drain_impingements()
-        impingements.extend(self._imagination.drain_impingements())
         if impingements:
             try:
                 with IMPINGEMENTS_FILE.open("a", encoding="utf-8") as f:
@@ -188,8 +86,20 @@ class DMNDaemon:
             except OSError:
                 log.warning("Failed to write impingements to %s", IMPINGEMENTS_FILE, exc_info=True)
 
-        # Read TPN active flag (anti-correlation signal from voice daemon)
-        self._pulse.set_tpn_active(_read_tpn_active())
+        # Publish sensor snapshot for imagination daemon
+        try:
+            from agents.dmn.sensor import publish_snapshot, read_all
+
+            snapshot = read_all()
+            publish_snapshot(snapshot)
+        except Exception:
+            log.warning("Failed to publish sensor snapshot", exc_info=True)
+
+        # Publish observations for imagination daemon
+        try:
+            self._buffer.publish_observations(5)
+        except Exception:
+            log.warning("Failed to publish observations", exc_info=True)
 
         # Status for monitoring
         status = {
@@ -197,7 +107,6 @@ class DMNDaemon:
             "uptime_s": round(time.monotonic() - self._start_time, 1),
             "buffer_entries": len(self._buffer),
             "tick": self._buffer.tick,
-            "imagination_active": self._imagination.activation_level > 0,
             "timestamp": time.time(),
         }
         try:
@@ -207,15 +116,15 @@ class DMNDaemon:
         except OSError:
             log.warning("Failed to write status to %s", STATUS_FILE, exc_info=True)
 
-    def _consume_fortress_feedback(self) -> None:
-        """Read fortress feedback impingements from JSONL and suppress re-emission."""
-        if not IMPINGEMENTS_FILE.exists():
+    def _consume_fortress_feedback(self, *, path: Path = FORTRESS_ACTIONS_FILE) -> None:
+        """Read fortress action feedback from dedicated JSONL (one-way, no dedup needed)."""
+        if not path.exists():
             return
         try:
-            size = IMPINGEMENTS_FILE.stat().st_size
+            size = path.stat().st_size
             if size <= self._feedback_cursor:
                 return
-            with IMPINGEMENTS_FILE.open("r", encoding="utf-8") as f:
+            with path.open("r", encoding="utf-8") as f:
                 f.seek(self._feedback_cursor)
                 feedback = []
                 for line in f:
@@ -224,34 +133,15 @@ class DMNDaemon:
                         continue
                     try:
                         imp = Impingement.model_validate_json(line)
-                        if imp.source == "fortress.action_taken":
-                            feedback.append(imp)
+                        feedback.append(imp)
                     except Exception:
                         continue
                 self._feedback_cursor = f.tell()
             if feedback:
                 self._pulse.consume_fortress_feedback(feedback)
-                log.debug("Consumed %d fortress feedback impingements", len(feedback))
+                log.debug("Consumed %d fortress feedback items", len(feedback))
         except OSError:
             pass
-
-    def _emit_resolver_degraded(self) -> None:
-        """Emit an impingement when the content resolver is failing repeatedly."""
-        imp = Impingement(
-            timestamp=time.time(),
-            source="dmn.resolver",
-            type=ImpingementType.ABSOLUTE_THRESHOLD,
-            strength=0.6,
-            content={"metric": "resolver_consecutive_failures", "value": 3},
-        )
-        try:
-            with IMPINGEMENTS_FILE.open("a", encoding="utf-8") as f:
-                f.write(imp.model_dump_json() + "\n")
-            log.warning(
-                "Content resolver degraded — emitted impingement after 3 consecutive failures"
-            )
-        except OSError:
-            log.warning("Content resolver degraded but failed to write impingement")
 
     def stop(self) -> None:
         self._running = False
