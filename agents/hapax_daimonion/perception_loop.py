@@ -19,6 +19,21 @@ log = logging.getLogger("hapax_daimonion")
 
 _DEFAULT_VETO_RESULT = VetoResult(allowed=True)
 
+_STIMMUNG_PATH = "/dev/shm/hapax-stimmung/state.json"
+
+
+def _sync_seeking_stance(daemon: VoiceDaemon) -> None:
+    """Read stimmung stance and sync SEEKING to salience router."""
+    import json
+    from pathlib import Path
+
+    try:
+        data = json.loads(Path(_STIMMUNG_PATH).read_text(encoding="utf-8"))
+        is_seeking = data.get("overall_stance", "nominal") == "seeking"
+        daemon._salience_router.set_seeking(is_seeking)
+    except Exception:
+        pass
+
 
 async def perception_loop(daemon: VoiceDaemon) -> None:
     """Run perception fast tick + governor evaluation on cadence."""
@@ -99,6 +114,8 @@ async def perception_loop(daemon: VoiceDaemon) -> None:
             if daemon._salience_router is not None:
                 refresh_concern_graph(daemon)
                 refresh_context_distillation(daemon)
+                # Sync SEEKING stance to salience router
+                _sync_seeking_stance(daemon)
 
             _sync_pipeline_state(daemon, state)
 

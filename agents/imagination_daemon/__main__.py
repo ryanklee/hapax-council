@@ -102,6 +102,19 @@ class ImaginationDaemon:
         self._consecutive_errors: int = 0
         self._consecutive_ok: int = 0
         self._cadence_degraded: bool = False
+        # Exploration signal tracking (spec §8, kappa=0.015, T_patience=240s)
+        from shared.exploration_tracker import ExplorationTrackerBundle
+
+        self._exploration = ExplorationTrackerBundle(
+            component="dmn_imagination",
+            edges=["observations", "stimmung_stance"],
+            traces=["observation_content", "snapshot_activity"],
+            neighbors=["dmn_pulse", "stimmung"],
+            kappa=0.015,
+            t_patience=240.0,
+        )
+        self._prev_obs_count: int = 0
+        self._prev_stance: str = "nominal"
 
     async def run(self) -> None:
         log.info("Imagination daemon starting")
@@ -141,6 +154,28 @@ class ImaginationDaemon:
                     if should_accelerate_from_engagement(snapshot_perception):
                         self._imagination.cadence._accelerated = True
 
+                    # Exploration signal computation
+                    obs_count = len(observations) if observations else 0
+                    self._exploration.feed_habituation(
+                        "observations", float(obs_count), float(self._prev_obs_count), 1.0
+                    )
+                    cur_stance = snapshot.get("stimmung", {}).get("overall_stance", "nominal")
+                    self._exploration.feed_habituation(
+                        "stimmung_stance",
+                        float(cur_stance != self._prev_stance),
+                        0.0,
+                        0.5,
+                    )
+                    self._exploration.feed_interest("observation_content", float(obs_count), 1.0)
+                    activity = snapshot.get("perception", {}).get("activity", "idle")
+                    self._exploration.feed_interest(
+                        "snapshot_activity", hash(activity) % 100 / 100.0, 0.3
+                    )
+                    self._exploration.feed_error(0.0 if observations else 1.0)
+                    self._exploration.compute_and_publish()
+                    self._prev_obs_count = obs_count
+                    self._prev_stance = cur_stance
+
                     # Drain and emit impingements
                     impingements = self._imagination.drain_impingements()
                     _emit_impingements(impingements)
@@ -178,6 +213,7 @@ class ImaginationDaemon:
 
             # Stimmung modulation: double cadence when degraded, pause when critical
             stance = _read_stimmung_stance()
+            self._imagination.cadence.set_seeking(stance == "seeking")
             if stance == "critical":
                 interval = 60.0  # effectively pause
             elif stance == "degraded":
