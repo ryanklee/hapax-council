@@ -137,7 +137,7 @@ class TemporalBandFormatter:
 
         # Exploration signal
         snap_hash = hash(str(current.get("activity", ""))) % 100 / 100.0
-        surprise_total = sum(s.magnitude for s in surprises) if surprises else 0.0
+        surprise_total = sum(s.surprise for s in surprises) if surprises else 0.0
         self._exploration.feed_habituation(
             "snapshot_content", snap_hash, self._prev_snapshot_hash, 0.3
         )
