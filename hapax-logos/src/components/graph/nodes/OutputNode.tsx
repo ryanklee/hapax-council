@@ -10,31 +10,26 @@ export interface OutputNodeData {
   [key: string]: unknown;
 }
 
-function OutputNodeInner({ data, selected }: NodeProps) {
-  const { label } = data as OutputNodeData;
-  const imgRef = useRef<HTMLImageElement>(null);
-  const fullscreenRef = useRef<HTMLImageElement>(null);
-  const [isStale, setIsStale] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+/** Shared polling hook — same proven pattern as SourceNode (Image() preloader). */
+function useFxPoll(imgRef: React.RefObject<HTMLImageElement | null>, intervalMs: number) {
   const lastSuccess = useRef(Date.now());
+  const [isStale, setIsStale] = useState(false);
 
   useEffect(() => {
     let running = true;
-    let pending = false;
     const poll = () => {
-      if (!running || pending) return;
-      pending = true;
-      // Direct src assignment — no preloader. The Tauri webview handles
-      // the image load inline. Preloading caused double-fetch issues.
-      const url = `${LOGOS_API_URL}/studio/stream/fx?_t=${Date.now()}`;
-      if (imgRef.current) imgRef.current.src = url;
-      if (fullscreenRef.current) fullscreenRef.current.src = url;
-      lastSuccess.current = Date.now();
-      setIsStale(false);
-      pending = false;
+      if (!running || !imgRef.current) return;
+      const loader = new Image();
+      loader.onload = () => {
+        if (running && imgRef.current) imgRef.current.src = loader.src;
+        lastSuccess.current = Date.now();
+        setIsStale(false);
+      };
+      loader.onerror = () => {};
+      loader.src = `${LOGOS_API_URL}/studio/stream/fx?_t=${Date.now()}`;
     };
     poll();
-    const pollTimer = setInterval(poll, 100);
+    const pollTimer = setInterval(poll, intervalMs);
     const staleTimer = setInterval(() => {
       if (Date.now() - lastSuccess.current > 5000) setIsStale(true);
     }, 2000);
@@ -43,9 +38,17 @@ function OutputNodeInner({ data, selected }: NodeProps) {
       clearInterval(pollTimer);
       clearInterval(staleTimer);
     };
-  }, []);
+  }, [imgRef, intervalMs]);
 
-  // Escape exits fullscreen
+  return isStale;
+}
+
+function OutputNodeInner({ data, selected }: NodeProps) {
+  const { label } = data as OutputNodeData;
+  const imgRef = useRef<HTMLImageElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const isStale = useFxPoll(imgRef, 100);
+
   useEffect(() => {
     if (!isFullscreen) return;
     const handler = (e: KeyboardEvent) => {
@@ -120,42 +123,31 @@ function OutputNodeInner({ data, selected }: NodeProps) {
 
       {isFullscreen &&
         createPortal(
-          <FullscreenOverlay
-            label={label}
-            imgRef={fullscreenRef}
-            onClose={() => setIsFullscreen(false)}
-          />,
+          <FullscreenOverlay onClose={() => setIsFullscreen(false)} />,
           document.body,
         )}
     </>
   );
 }
 
-/** Fullscreen overlay with toggleable preset controls. */
-function FullscreenOverlay({
-  label,
-  imgRef,
-  onClose,
-}: {
-  label: string;
-  imgRef: React.RefObject<HTMLImageElement | null>;
-  onClose: () => void;
-}) {
+/** Fullscreen overlay — has its OWN poll, independent of parent OutputNode. */
+function FullscreenOverlay({ onClose }: { onClose: () => void }) {
+  const imgRef = useRef<HTMLImageElement>(null);
   const [showPresets, setShowPresets] = useState(false);
   const [activePreset, setActivePreset] = useState("");
+
+  // Own independent poll — not shared with parent
+  useFxPoll(imgRef, 83);
+
   const allPresets = PRESET_CATEGORIES.flatMap((cat) =>
     cat.presets.map((p) => ({ name: p, category: cat.label })),
   );
 
-  const selectPreset = useCallback(
-    (name: string) => {
-      api.post("/studio/effect/select", { preset: name }).catch(() => {});
-      setActivePreset(name);
-    },
-    [],
-  );
+  const selectPreset = useCallback((name: string) => {
+    api.post("/studio/effect/select", { preset: name }).catch(() => {});
+    setActivePreset(name);
+  }, []);
 
-  // Fetch current preset on mount
   useEffect(() => {
     api.get<{ preset: string }>("/studio/effect/current")
       .then((r) => { if (r?.preset) setActivePreset(r.preset); })
@@ -178,20 +170,20 @@ function FullscreenOverlay({
         isolation: "isolate",
       }}
     >
-      {/* Video fill */}
+      {/* Video */}
       <div
         onClick={onClose}
         style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", overflow: "hidden" }}
       >
         <img
           ref={imgRef}
-          alt={label}
+          alt="fullscreen output"
           draggable={false}
           style={{ width: "100%", height: "100%", objectFit: "contain" }}
         />
       </div>
 
-      {/* Top bar — always visible, minimal */}
+      {/* Top bar */}
       <div
         style={{
           position: "absolute",
@@ -205,9 +197,7 @@ function FullscreenOverlay({
           background: "linear-gradient(rgba(0,0,0,0.6), transparent)",
         }}
       >
-        <span style={{ fontSize: 11, color: "#928374" }}>
-          {activePreset || label}
-        </span>
+        <span style={{ fontSize: 11, color: "#928374" }}>{activePreset || "output"}</span>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <button
             onClick={(e) => { e.stopPropagation(); setShowPresets(!showPresets); }}
@@ -227,7 +217,7 @@ function FullscreenOverlay({
         </div>
       </div>
 
-      {/* Preset strip — bottom, toggleable */}
+      {/* Preset strip */}
       {showPresets && (
         <div
           onClick={(e) => e.stopPropagation()}
