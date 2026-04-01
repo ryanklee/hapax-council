@@ -83,7 +83,9 @@ class DaimonionConfig(BaseModel):
     gemini_model: str = "gemini-2.5-flash-preview-native-audio"
     local_stt_model: str = "distil-large-v3"
     voxtral_voice_id: str = "gb_jane_neutral"
-    voxtral_ref_audio: str = "~/.local/share/hapax-daimonion/formant-refs/reed-24k.wav"  # eSpeak-NG Reed (Klatt mode 6) — formant carrier for hardware chain
+    voxtral_ref_audio: str = (
+        ""  # ref_audio voice cloning adds 5-8s latency per call — disabled for conversational tempo
+    )
 
     # Consent
     consent_debounce_s: float = 5.0  # sustained presence before triggering
