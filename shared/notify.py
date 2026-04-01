@@ -20,18 +20,19 @@ import json as _json
 import logging
 import os
 import subprocess
+import time
+from pathlib import Path
+from urllib.error import URLError
+from urllib.parse import quote
+from urllib.request import Request, urlopen
+
+from shared.governance.consent_label import ConsentLabel
 
 
 def _run_subprocess(*args, **kwargs):
     """Wrapper for subprocess.run, patchable without global side effects."""
     return subprocess.run(*args, **kwargs)  # noqa: S603
 
-
-import time
-from pathlib import Path
-from urllib.error import URLError
-from urllib.parse import quote
-from urllib.request import Request, urlopen
 
 _log = logging.getLogger(__name__)
 
@@ -201,6 +202,7 @@ def send_notification(
     tags: list[str] | None = None,
     topic: str | None = None,
     click_url: str | None = None,
+    consent_label: ConsentLabel | None = None,
 ) -> bool:
     """Send a push notification. Tries ntfy first, falls back to notify-send.
 
@@ -211,10 +213,19 @@ def send_notification(
         tags: ntfy tags/emojis (e.g. ["warning", "robot"]).
         topic: Override default topic.
         click_url: URL to open when notification is clicked (ntfy only).
+        consent_label: IFC gate — suppress notification if non-bottom (person-adjacent
+            data present without consent). None means no label check (default, safe).
 
     Returns:
         True if notification was delivered via at least one channel.
     """
+    # IFC boundary gate: suppress notifications carrying person-adjacent data
+    # when consent has not been granted. Currently all callers pass None (no label),
+    # so no notifications are suppressed. Gate is structural for future use.
+    if consent_label is not None and consent_label != ConsentLabel.bottom():
+        _log.info("Notification suppressed: consent label non-public (%s)", title)
+        return True  # pretend success — caller should not retry
+
     # Dedup: suppress identical notifications within cooldown window
     if _is_duplicate(title, message):
         _log.debug("Suppressed duplicate notification: %s", title)
