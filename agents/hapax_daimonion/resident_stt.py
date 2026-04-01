@@ -110,7 +110,7 @@ class ResidentSTT:
             segments, info = self._model.transcribe(
                 audio,
                 language="en",  # skip language detection (saves ~50ms)
-                beam_size=1,  # greedy for speed
+                beam_size=5,
                 vad_filter=False,  # we already did VAD
                 without_timestamps=True,
                 # Whisper treats initial_prompt as "preceding transcript" and
