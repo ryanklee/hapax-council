@@ -203,6 +203,7 @@ class CognitiveLoop:
                         and hasattr(self, "_speech_capability")
                         and self._speech_capability is not None
                         and self._speech_capability.has_pending()
+                        and self._pipeline.turn_count > 0  # operator must speak first
                     ):
                         # Spontaneous speech: impingement cascade recruited speech production
                         imp = self._speech_capability.consume_pending()
