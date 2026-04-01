@@ -1,4 +1,4 @@
-"""Tests for AudioExecutor — mocked PyAudio, daemon thread, Executor protocol."""
+"""Tests for AudioExecutor — pw-cat playback, daemon thread, Executor protocol."""
 
 from __future__ import annotations
 
@@ -33,16 +33,12 @@ class TestAudioExecutor(unittest.TestCase):
         bank = SampleBank(base)
         bank.load()
 
-        mock_pa = MagicMock()
-        mock_stream = MagicMock()
-        mock_pa.open.return_value = mock_stream
-
-        executor = AudioExecutor(pa=mock_pa, sample_bank=bank)
-        return executor, mock_pa, mock_stream
+        executor = AudioExecutor(sample_bank=bank)
+        return executor
 
     def test_satisfies_executor_protocol(self):
         with TemporaryDirectory() as tmpdir:
-            executor, _, _ = self._make_executor(tmpdir)
+            executor = self._make_executor(tmpdir)
             self.assertIsInstance(executor, Executor)
 
     @patch("agents.hapax_daimonion.audio_executor.threading.Thread")
@@ -51,7 +47,7 @@ class TestAudioExecutor(unittest.TestCase):
         mock_thread_cls.return_value = mock_thread
 
         with TemporaryDirectory() as tmpdir:
-            executor, _, _ = self._make_executor(tmpdir)
+            executor = self._make_executor(tmpdir)
             cmd = Command(action="vocal_throw", params={"energy_rms": 0.8})
             executor.execute(cmd)
 
@@ -60,34 +56,31 @@ class TestAudioExecutor(unittest.TestCase):
             self.assertTrue(kwargs["daemon"])
             mock_thread.start.assert_called_once()
 
-    def test_play_pcm_calls_stream_write(self):
+    @patch("agents.hapax_daimonion.pw_audio_output.play_pcm")
+    def test_play_pcm_calls_pw_cat(self, mock_play):
         with TemporaryDirectory() as tmpdir:
-            executor, mock_pa, mock_stream = self._make_executor(tmpdir)
+            executor = self._make_executor(tmpdir)
             executor._play_pcm(b"\x00\x00", 44100, 1, "test")
-            mock_pa.open.assert_called_once()
-            mock_stream.write.assert_called_once_with(b"\x00\x00")
-            mock_stream.stop_stream.assert_called_once()
-            mock_stream.close.assert_called_once()
+            mock_play.assert_called_once_with(b"\x00\x00", rate=44100, channels=1)
 
     def test_available_with_samples(self):
         with TemporaryDirectory() as tmpdir:
-            executor, _, _ = self._make_executor(tmpdir)
+            executor = self._make_executor(tmpdir)
             self.assertTrue(executor.available())
 
-    def test_unavailable_without_pa(self):
-        bank = SampleBank(Path("/nonexistent"))
-        executor = AudioExecutor(pa=None, sample_bank=bank)
+    def test_unavailable_without_samples(self):
+        executor = AudioExecutor(sample_bank=None)
         self.assertFalse(executor.available())
 
     def test_handles(self):
         with TemporaryDirectory() as tmpdir:
-            executor, _, _ = self._make_executor(tmpdir)
+            executor = self._make_executor(tmpdir)
             self.assertEqual(executor.handles, frozenset({"vocal_throw", "ad_lib"}))
 
     def test_execute_no_matching_sample(self):
         """execute with unknown action does not spawn thread."""
         with TemporaryDirectory() as tmpdir:
-            executor, _, _ = self._make_executor(tmpdir)
+            executor = self._make_executor(tmpdir)
             with patch("agents.hapax_daimonion.audio_executor.threading.Thread") as mock_thread_cls:
                 executor.execute(Command(action="nonexistent"))
                 mock_thread_cls.assert_not_called()

@@ -54,9 +54,7 @@ def _setup_mc_actuation(daemon: VoiceDaemon) -> None:
         log.info("No MC samples found, MC actuation disabled")
         return
 
-    ensure_shared_pa(daemon)
-
-    audio_exec = AudioExecutor(pa=daemon._shared_pa, sample_bank=sample_bank)
+    audio_exec = AudioExecutor(sample_bank=sample_bank)
     daemon.executor_registry.register(audio_exec)
 
     midi_backend = daemon.perception.registered_backends.get("midi_clock")
@@ -132,12 +130,4 @@ def _setup_obs_actuation(daemon: VoiceDaemon) -> None:
 
 
 def ensure_shared_pa(daemon: VoiceDaemon) -> None:
-    """Create shared PyAudio instance if not already created."""
-    if daemon._shared_pa is not None:
-        return
-    try:
-        import pyaudio
-
-        daemon._shared_pa = pyaudio.PyAudio()
-    except Exception:
-        log.warning("PyAudio not available, audio executors will be unavailable")
+    """No-op. Kept for API compatibility. PyAudio replaced by pw-cat."""

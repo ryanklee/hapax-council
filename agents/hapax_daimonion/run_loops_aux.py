@@ -123,6 +123,19 @@ async def impingement_consumer_loop(daemon: VoiceDaemon) -> None:
                     candidates = await asyncio.to_thread(daemon._affordance_pipeline.select, imp)
                     for c in candidates:
                         if c.capability_name == "speech_production":
+                            # Block speech recruitment when no conversation session is active
+                            # or when operator hasn't spoken yet (turn_count == 0).
+                            # Stimmung_critical spam was firing spontaneous speech
+                            # into empty sessions.
+                            pipeline = daemon._conversation_pipeline
+                            if not daemon.session.is_active or (
+                                pipeline is not None and pipeline.turn_count < 1
+                            ):
+                                log.debug(
+                                    "Speech recruitment blocked (no active session): %s",
+                                    imp.content.get("metric", imp.source),
+                                )
+                                continue
                             daemon._speech_capability.activate(imp, c.combined)
                             log.info(
                                 "Speech recruited via affordance: %s (score=%.2f)",

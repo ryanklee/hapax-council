@@ -13,12 +13,8 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import TYPE_CHECKING, Any
 
 from agents.hapax_daimonion.commands import Command
-
-if TYPE_CHECKING:
-    import pyaudio
 
 log = logging.getLogger(__name__)
 
@@ -28,9 +24,6 @@ class TTSExecutor:
 
     handles = {"tts_announce"}
     """
-
-    def __init__(self, pa: pyaudio.PyAudio | Any) -> None:
-        self._pa = pa
 
     @property
     def name(self) -> str:
@@ -61,30 +54,20 @@ class TTSExecutor:
         thread.start()
 
     def _play_pcm(self, pcm_data: bytes, rate: int, channels: int) -> None:
-        """Play PCM buffer through PyAudio. Runs in a background thread."""
+        """Play PCM buffer via PipeWire. Runs in a background thread."""
         try:
-            # Write acoustic impulse for Reverie cross-modal coupling
             from agents.hapax_daimonion.acoustic_impulse import write_acoustic_impulse
 
             write_acoustic_impulse(pcm_data, sample_rate=rate, channels=channels)
         except Exception:
             pass  # cross-modal signal is best-effort
 
-        try:
-            stream = self._pa.open(
-                format=8,  # pyaudio.paInt16 = 8
-                channels=channels,
-                rate=rate,
-                output=True,
-            )
-            stream.write(pcm_data)
-            stream.stop_stream()
-            stream.close()
-        except Exception as exc:
-            log.warning("TTSExecutor playback failed: %s", exc)
+        from agents.hapax_daimonion.pw_audio_output import play_pcm
+
+        play_pcm(pcm_data, rate=rate, channels=channels)
 
     def available(self) -> bool:
-        return self._pa is not None
+        return True
 
     def close(self) -> None:
-        pass  # PyAudio instance owned by daemon
+        pass

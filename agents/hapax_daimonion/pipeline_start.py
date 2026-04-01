@@ -117,8 +117,16 @@ async def start_conversation_pipeline(daemon: VoiceDaemon) -> None:
     tools, tool_handlers = _resolve_tools(daemon, _exp, get_working_mode)
 
     if not daemon._bridges_presynthesized:
-        daemon._bridge_engine.presynthesize_all(daemon.tts)
-        daemon._bridges_presynthesized = True
+        import threading
+
+        def _presynth() -> None:
+            try:
+                daemon._bridge_engine.presynthesize_all(daemon.tts)
+                daemon._bridges_presynthesized = True
+            except Exception:
+                log.warning("Bridge presynthesis failed (bridges will synthesize on demand)")
+
+        threading.Thread(target=_presynth, daemon=True, name="bridge-presynth").start()
 
     daemon._conversation_pipeline = ConversationPipeline(
         stt=daemon._resident_stt,

@@ -1,6 +1,6 @@
-"""Tests for ChimePlayer non-blocking WAV playback."""
+"""Tests for ChimePlayer non-blocking WAV playback via pw-cat."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -53,48 +53,36 @@ class TestChimePlayerLoad:
 
 
 class TestChimePlayerPlay:
-    @patch("agents.hapax_daimonion.chime_player.pyaudio")
-    def test_play_known_chime(self, mock_pa, chime_dir):
-        mock_stream = MagicMock()
-        mock_pa.PyAudio.return_value.open.return_value = mock_stream
-        mock_pa.paInt16 = 8  # PyAudio paInt16 constant
-
+    @patch("agents.hapax_daimonion.pw_audio_output.play_pcm")
+    def test_play_known_chime(self, mock_play, chime_dir):
         player = ChimePlayer(chime_dir)
         player.load()
         player.play("activation")
-        # play() launches a daemon thread — give it time to complete
         import time
 
         time.sleep(0.1)
-        mock_stream.write.assert_called_once()
+        mock_play.assert_called_once()
 
-    @patch("agents.hapax_daimonion.chime_player.pyaudio")
-    def test_play_unknown_chime_no_error(self, mock_pa, chime_dir):
+    def test_play_unknown_chime_no_error(self, chime_dir):
         player = ChimePlayer(chime_dir)
         player.load()
-        # Should log warning but not raise
         player.play("nonexistent")
 
-    @patch("agents.hapax_daimonion.chime_player.pyaudio")
-    def test_play_before_load_no_error(self, mock_pa, chime_dir):
+    def test_play_before_load_no_error(self, chime_dir):
         player = ChimePlayer(chime_dir)
-        # Should handle gracefully
         player.play("activation")
 
 
 class TestChimePlayerAutoGenerate:
-    @patch("agents.hapax_daimonion.chime_player.pyaudio")
-    def test_auto_generates_if_dir_empty(self, mock_pa, tmp_path):
+    def test_auto_generates_if_dir_empty(self, tmp_path):
         chime_dir = tmp_path / "chimes"
         chime_dir.mkdir()
         player = ChimePlayer(chime_dir, auto_generate=True)
         player.load()
-        # Should have generated and loaded all 4 chimes
         assert len(player._buffers) == 4
         assert (chime_dir / "activation.wav").exists()
 
-    @patch("agents.hapax_daimonion.chime_player.pyaudio")
-    def test_auto_generates_if_dir_missing(self, mock_pa, tmp_path):
+    def test_auto_generates_if_dir_missing(self, tmp_path):
         chime_dir = tmp_path / "chimes_new"
         player = ChimePlayer(chime_dir, auto_generate=True)
         player.load()
@@ -102,10 +90,9 @@ class TestChimePlayerAutoGenerate:
 
 
 class TestChimePlayerClose:
-    @patch("agents.hapax_daimonion.chime_player.pyaudio")
-    def test_close_terminates_pyaudio(self, mock_pa, chime_dir):
-        mock_instance = mock_pa.PyAudio.return_value
+    def test_close_clears_buffers(self, chime_dir):
         player = ChimePlayer(chime_dir)
         player.load()
+        assert len(player._buffers) > 0
         player.close()
-        mock_instance.terminate.assert_called_once()
+        assert len(player._buffers) == 0
