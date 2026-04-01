@@ -120,3 +120,9 @@
     box-shadow: inset 0 0 8px color-mix(in srgb, var(--color-yellow-400) 15%, transparent), 0 0 12px color-mix(in srgb, var(--color-yellow-400) 30%, transparent);
   }
 }
+
+/* Hapax governance: breathing pulse on modulated params */
+@keyframes hapax-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}

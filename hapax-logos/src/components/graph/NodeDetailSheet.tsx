@@ -137,7 +137,16 @@ function ParamRow({ nodeId, paramKey, value, modulation, updateNodes, markDirty 
         <span style={{ color: "var(--color-fg2)" }}>
           {paramKey}
           {hasModulation && (
-            <span style={{ color: "var(--color-yellow)", marginLeft: 4, fontSize: 10 }}>●</span>
+            <span
+              style={{
+                color: "var(--color-yellow)",
+                marginLeft: 4,
+                fontSize: 10,
+                animation: "hapax-pulse 1.5s ease-in-out infinite",
+              }}
+            >
+              ●
+            </span>
           )}
         </span>
         <span style={{ color: "var(--color-fg4)", fontFamily: "monospace" }}>
