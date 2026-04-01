@@ -189,26 +189,27 @@ class CognitiveLoop:
                     log.info("turn_phase: %s → %s", prev_phase.value, self._turn_phase.value)
                     self._on_phase_transition(prev_phase, self._turn_phase)
 
-                # 2. Poll for pending utterances. Only when:
-                # - Not during HAPAX_SPEAKING (let it finish)
-                # - Not already processing (would drop the utterance)
-                # - Pipeline not in SPEAKING state (TTS audio still playing)
-                _pipeline_busy = self._is_processing or self._turn_phase == TurnPhase.HAPAX_SPEAKING
-                if not _pipeline_busy:
-                    utterance = self._buffer.get_utterance()
-                    if utterance is not None:
-                        self._dispatch_utterance(utterance)
-                    elif (
-                        self._turn_phase == TurnPhase.MUTUAL_SILENCE
-                        and hasattr(self, "_speech_capability")
-                        and self._speech_capability is not None
-                        and self._speech_capability.has_pending()
-                        and self._pipeline.turn_count > 0  # operator must speak first
-                    ):
-                        # Spontaneous speech: impingement cascade recruited speech production
-                        imp = self._speech_capability.consume_pending()
-                        if imp is not None:
-                            self._dispatch_spontaneous_speech(imp)
+                # 2. Operator utterances always preempt spontaneous speech.
+                utterance = self._buffer.get_utterance()
+                if utterance is not None:
+                    # Cancel in-flight spontaneous speech for operator utterance
+                    if self._processing_task is not None and not self._processing_task.done():
+                        self._processing_task.cancel()
+                        log.info("Cancelled spontaneous speech for operator utterance")
+                    self._dispatch_utterance(utterance)
+                elif (
+                    not self._is_processing
+                    and self._turn_phase
+                    not in (TurnPhase.HAPAX_SPEAKING, TurnPhase.OPERATOR_SPEAKING)
+                    and self._turn_phase == TurnPhase.MUTUAL_SILENCE
+                    and hasattr(self, "_speech_capability")
+                    and self._speech_capability is not None
+                    and self._speech_capability.has_pending()
+                    and self._pipeline.turn_count > 0
+                ):
+                    imp = self._speech_capability.consume_pending()
+                    if imp is not None:
+                        self._dispatch_spontaneous_speech(imp)
 
                 # 3. Phase-specific cognition
                 if self._turn_phase == TurnPhase.OPERATOR_SPEAKING:
