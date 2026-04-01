@@ -41,14 +41,28 @@ _last_hash: int = 0
 # Path to perception-state labeled trace (for boundary gate checks)
 _PERCEPTION_STATE_PATH = Path.home() / ".cache" / "hapax-daimonion" / "perception-state.json"
 
-# Person-adjacent fields that must be redacted when label is non-bottom
-_PERSON_ADJACENT_PROMPT_FIELDS = {
+# Person-adjacent fields that must be redacted when label is non-bottom.
+# Comprehensive set: covers all biometric, identity, and IR-derived person signals.
+PERSON_ADJACENT_FIELDS = {
     "face_count",
     "speaker_id",
     "gaze_zone",
+    "heart_rate_bpm",
     "heart_rate",
     "top_emotion",
+    "ir_person_detected",
+    "ir_person_count",
+    "ir_hand_activity",
+    "ir_drowsiness_score",
+    "ir_blink_rate",
+    "ir_heart_rate_bpm",
+    "ir_heart_rate_conf",
+    "ir_posture",
+    "ir_head_pose_yaw",
 }
+
+# Legacy alias
+_PERSON_ADJACENT_PROMPT_FIELDS = PERSON_ADJACENT_FIELDS
 
 
 def _perception_label() -> ConsentLabel:
@@ -109,8 +123,15 @@ def serialize_environment(
         if _label.can_flow_to(ConsentLabel.bottom()):
             data["faces"] = state.face_count
         else:
-            # Non-public label: suppress person-adjacent fields from LLM prompt
-            log.debug("Consent gate: redacting face_count from LLM prompt (label non-public)")
+            # Non-public label: enforce consent by stripping ALL person-adjacent fields
+            redacted = 0
+            for field in PERSON_ADJACENT_FIELDS:
+                if data.pop(field, None) is not None:
+                    redacted += 1
+            log.info(
+                "Consent enforcement: redacted %d person-adjacent fields from LLM prompt",
+                redacted,
+            )
 
         # Audio classification (during session)
         if ambient is not None and ambient.top_labels:
