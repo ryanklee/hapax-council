@@ -17,19 +17,22 @@ function useFxPoll(imgRef: React.RefObject<HTMLImageElement | null>, intervalMs:
 
   useEffect(() => {
     let running = true;
+    let pending = false;
     const poll = () => {
-      if (!running || !imgRef.current) return;
+      if (!running || !imgRef.current || pending) return;
+      pending = true;
       const loader = new Image();
       loader.onload = () => {
+        pending = false;
         if (running && imgRef.current) imgRef.current.src = loader.src;
         lastSuccess.current = Date.now();
         setIsStale(false);
       };
-      loader.onerror = () => {};
+      loader.onerror = () => { pending = false; };
       loader.src = `${LOGOS_API_URL}/studio/stream/fx?_t=${Date.now()}`;
     };
     poll();
-    const pollTimer = setInterval(poll, intervalMs);
+    const pollTimer = setInterval(poll, Math.max(intervalMs, 200));
     const staleTimer = setInterval(() => {
       if (Date.now() - lastSuccess.current > 5000) setIsStale(true);
     }, 2000);
