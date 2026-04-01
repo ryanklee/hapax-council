@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Handle, Position, type NodeProps, NodeResizer } from "@xyflow/react";
 import { LOGOS_API_URL } from "../../../config";
 import { api } from "../../../api/client";
@@ -60,13 +61,14 @@ function OutputNodeInner({ data, selected }: NodeProps) {
 
   const handleDoubleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
+    e.preventDefault();
     setIsFullscreen(true);
   }, []);
 
   return (
     <>
       <div
-        onDoubleClick={handleDoubleClick}
+        onDoubleClickCapture={handleDoubleClick}
         style={{
           minWidth: 220,
           minHeight: 140,
@@ -117,13 +119,15 @@ function OutputNodeInner({ data, selected }: NodeProps) {
         />
       </div>
 
-      {isFullscreen && (
-        <FullscreenOverlay
-          label={label}
-          imgRef={fullscreenRef}
-          onClose={() => setIsFullscreen(false)}
-        />
-      )}
+      {isFullscreen &&
+        createPortal(
+          <FullscreenOverlay
+            label={label}
+            imgRef={fullscreenRef}
+            onClose={() => setIsFullscreen(false)}
+          />,
+          document.body,
+        )}
     </>
   );
 }
