@@ -83,7 +83,7 @@ class DaimonionConfig(BaseModel):
     gemini_model: str = "gemini-2.5-flash-preview-native-audio"
     local_stt_model: str = "distil-large-v3"
     voxtral_voice_id: str = "gb_jane_neutral"
-    voxtral_ref_audio: str = "~/.local/share/hapax-daimonion/formant-refs/reed-24k-5s.wav"
+    voxtral_ref_audio: str = "~/.local/share/hapax-daimonion/formant-refs/reed-slow-24k.wav"
 
     # Consent
     consent_debounce_s: float = 5.0  # sustained presence before triggering
