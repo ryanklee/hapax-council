@@ -9,7 +9,7 @@
                 "frequency_x": 3.0,
                 "frequency_y": 2.0,
                 "octaves": 4,
-                "amplitude": 0.5,
+                "amplitude": 0.0,
                 "speed": 0.15
             }
         },
@@ -20,14 +20,14 @@
                 "kill_rate": 0.062,
                 "diffusion_a": 1.0,
                 "diffusion_b": 0.5,
-                "speed": 1.0
+                "speed": 0.0
             }
         },
         "color": {
             "type": "colorgrade",
             "params": {
-                "brightness": 0.3,
-                "saturation": 0.3,
+                "brightness": 0.0,
+                "saturation": 0.0,
                 "contrast": 0.7,
                 "sepia": 0.0,
                 "hue_rotate": 0.0
@@ -36,8 +36,8 @@
         "drift": {
             "type": "drift",
             "params": {
-                "speed": 0.15,
-                "amplitude": 3,
+                "speed": 0.0,
+                "amplitude": 0,
                 "frequency": 0.8,
                 "coherence": 0.6
             }
@@ -45,18 +45,18 @@
         "breath": {
             "type": "breathing",
             "params": {
-                "rate": 0.08,
-                "amplitude": 0.02
+                "rate": 0.0,
+                "amplitude": 0.0
             }
         },
         "fb": {
             "type": "feedback",
             "params": {
                 "decay": 0.05,
-                "zoom": 1.005,
-                "rotate": 0.003,
+                "zoom": 1.0,
+                "rotate": 0.0,
                 "blend_mode": 1.0,
-                "hue_shift": 0.5,
+                "hue_shift": 0.0,
                 "trace_center_x": 0.5,
                 "trace_center_y": 0.5,
                 "trace_radius": 0.0,
