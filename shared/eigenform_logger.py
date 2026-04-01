@@ -27,7 +27,7 @@ def log_state_vector(
     operator_stress: float = 0.0,
     activity: str = "idle",
     e_mesh: float = 1.0,
-    consistency_radius: float = 0.0,
+    restriction_residual_rms: float = 0.0,
     path: Path = EIGENFORM_LOG,
 ) -> None:
     """Append state vector to JSONL log for eigenform analysis."""
@@ -43,7 +43,7 @@ def log_state_vector(
         "operator_stress": operator_stress,
         "activity": activity,
         "e_mesh": e_mesh,
-        "consistency_radius": consistency_radius,
+        "restriction_residual_rms": restriction_residual_rms,
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as f:
