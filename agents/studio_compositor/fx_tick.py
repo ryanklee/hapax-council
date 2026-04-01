@@ -108,7 +108,7 @@ def tick_modulator(compositor: Any, t: float, energy: float, b: float) -> None:
 
 def tick_slot_pipeline(compositor: Any, t: float) -> None:
     """Push time/resolution to active slots."""
-    if not compositor._fx_graph_mode or not compositor._slot_pipeline:
+    if not compositor._slot_pipeline:
         return
 
     time_uniforms = {"time": t, "width": 1920.0, "height": 1080.0}

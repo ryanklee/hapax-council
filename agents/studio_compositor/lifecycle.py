@@ -98,8 +98,7 @@ def start_compositor(compositor: Any) -> None:
     interval_ms = int(compositor.config.status_interval_s * 1000)
     compositor._status_timer_id = GLib.timeout_add(interval_ms, compositor._status_tick)
 
-    if hasattr(compositor, "_slot_pipeline"):
-        GLib.timeout_add(33, lambda: fx_tick_callback(compositor))
+    GLib.timeout_add(33, lambda: fx_tick_callback(compositor))
 
     if compositor.config.overlay_enabled:
         compositor._state_reader_thread = threading.Thread(
