@@ -164,6 +164,18 @@ def read_sensors() -> dict[str, dict]:
     return result
 
 
+SNAPSHOT_PATH = Path("/dev/shm/hapax-sensors/snapshot.json")
+
+
+def publish_snapshot(snapshot: dict, *, path: Path = SNAPSHOT_PATH) -> None:
+    """Write sensor snapshot atomically to /dev/shm for cross-daemon consumption."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    enriched = {**snapshot, "published_at": time.time()}
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(enriched), encoding="utf-8")
+    tmp.rename(path)
+
+
 def read_all(config: SensorConfig | None = None) -> dict:
     """Read all sensor sources. Returns a unified snapshot."""
     return {
