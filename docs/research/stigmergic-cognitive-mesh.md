@@ -403,21 +403,37 @@ Several frameworks partially address SCM concerns but were developed for differe
 
 **Reaction-diffusion systems** provide mathematical models for signal propagation and pattern formation that could formalize the SCM's trace interference patterns. The SCM's discrete-process, discrete-trace architecture differs from continuous reaction-diffusion, but the qualitative dynamics (positive feedback, negative feedback, fluctuation amplification) are isomorphic.
 
-### 6.2 Limitations of This Document
+### 6.2 Implementation Status (Updated 2026-03-31)
 
-**Partial component coverage.** The S1 inventory (§2.1) lists 14 components, but the dynamics (§3) and health (§4) sections analyze only the 7 most interconnected. Contact Mic, Imagination Resolver, Reactive Engine, Studio Compositor, Voice Pipeline, Content Engine, and Temporal Bonds receive structural description but not dynamical or health-metric treatment. This reflects the document's focus on the mesh's coordination properties rather than exhaustive component analysis, but a complete formalization would extend to all 14.
+The following gaps between this specification and the reference implementation have been closed:
+
+**Stigmergic coordination (Property 1).** The DMN monolith has been extracted into 3 independent daemons (pulse/buffer, imagination loop, content resolver) coordinating through `/dev/shm` traces. The TPN active flag has been removed; the fortress feedback path has been separated into a dedicated JSONL file. PRs #507, #512.
+
+**Staleness safety (P3).** All perception backends (IR, vision) now enforce staleness thresholds via `shared/trace_reader.read_trace()`. The imagination daemon skips ticks when observations are stale relative to cadence. Rate-limited staleness impingements prevent flooding. PR #508.
+
+**Consent enforcement (§5).** The consent algebra is now wired into production data flows: calendar sync filters unconsented attendees, gmail sync redacts unconsented sender/recipients, the conversation pipeline applies ConsentGatedReader to tool results, RAG ingestion skips files with unconsented persons, and video processor redacts guest presence metadata. ConsentRegistry has fail-closed behavior and staleness detection. PRs #509, #513.
+
+**Perceptual control (Property 4).** `ControlSignal` model and `publish_health()` utility are operational. IR perception and stimmung publish health signals. `aggregate_mesh_health()` is wired into the health monitor. Stimmung has hysteresis (degrade immediately, recover after 3 sustained readings). PRs #510, #512.
+
+**Stimmung core modulation (§3.1).** DMN pulse rate is now modulated by stimmung stance (nominal=1x, cautious=1.5x, degraded=2x, critical=4x). The imagination daemon pauses on critical stance and doubles cadence on degraded. PR #510.
+
+**Impingement cascades (§3.2).** Cascade depth tracking with 0.7x strength decay per hop (max depth 3). Perception STATISTICAL_DEVIATION impingements map to apperception prediction_error CascadeEvents via the daimonion's impingement consumer loop. Positive feedback: high operator engagement (presence > 0.7 + audio energy > 0.3) accelerates imagination cadence. PRs #511, #513.
+
+**Visual surface silence.** The vocabulary graph attenuates to black when imagination is absent or stale, preventing implementation noise from masquerading as DMN expression. Direct to main.
+
+### 6.3 Remaining Limitations
 
 **Observer-system circularity unformalized.** Property 6 (§1.1) asserts that operator-system circularity is constitutive, but sections 2–5 analyze the system as if the operator were external. Formalizing circularity would require modeling the operator's behavioral responses to system outputs and their effect on system inputs — a feedback loop that crosses the boundary between computational and psychological domains. This remains the deepest open problem in the formalization.
 
-**Emergent state underspecified.** Property 3 (§1.1) defines emergent perceptual state as "the superposition of all traces," but no section formalizes what superposition means operationally — how it would be computed, what its properties are, or how it differs from a simple snapshot of all `/dev/shm` files. The fusion rules in §3.2 are component-specific; a general theory of emergent state in stigmergic systems is needed.
+**Emergent state underspecified.** Property 3 (§1.1) defines emergent perceptual state as "the superposition of all traces," but no section formalizes what superposition means operationally. The fusion rules in §3.2 are component-specific; a general theory of emergent state in stigmergic systems is needed.
 
-**Health metrics not yet instrumented.** The metrics in §4 are theoretical constructs grounded in available data sources but not yet computed by the reference implementation. Aggregate control error (§4.1) requires quantifying reference signals for all components, some of which are context-dependent. Integration depth (§4.2) requires ablation experiments. Free energy (§4.3) has identified proxies but no aggregation formula. These metrics are design targets, not operational tools — yet.
+**Partial ControlSignal coverage.** Only IR perception and stimmung publish ControlSignals. 12 other components lack closed-loop health reporting. The framework (`shared/control_signal.py`, `shared/mesh_health.py`) is operational but needs extension to all S1 units.
 
-**Active Inference framing.** The AIF terminology in §3.1 provides useful vocabulary (prediction error, empirical prior, free energy) but much of the analytical content could be equivalently stated in PCT or cybernetic terms. The AIF framing is most valuable in §4.3 (free energy as health scalar) and least valuable in §3.1's component-level descriptions, where it relabels staleness checks as "negative prediction errors" without adding analytical power. A future revision may tighten the AIF contributions to where they genuinely exceed what PCT provides.
+**Active Inference framing.** The AIF terminology in §3.1 provides useful vocabulary but much of the analytical content could be equivalently stated in PCT or cybernetic terms. The AIF framing is most valuable in §4.3 (free energy as health scalar) and least valuable in §3.1's component-level descriptions.
 
-**Consent gating architecture.** The reference implementation currently audits consent events rather than enforcing runtime gates on component execution (§5.2–5.3). The formalism describes the target architecture. The gap between audit and enforcement is itself a research and engineering problem.
+**Consent label enforcement.** The consent lattice algebra (ConsentLabel, Labeled[T], floating labels) remains algebraically complete but operationally unused at the data-flow level. Current enforcement uses `contract_check()` at boundaries rather than label propagation through transformations. The gap between boundary checking and full IFC enforcement remains.
 
-### 6.3 Open Questions
+### 6.4 Open Questions
 
 **Q1. Formal verification.** The temporal properties in §3.3 are currently verified informally (code inspection, runtime observation). Can they be formalized in a multi-clock temporal logic and verified automatically? This would require extracting a formal model from the codebase — a significant but valuable effort.
 
