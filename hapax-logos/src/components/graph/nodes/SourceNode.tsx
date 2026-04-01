@@ -22,7 +22,7 @@ function SourceNodeInner({ data }: NodeProps) {
     let running = true;
     const poll = () => {
       if (!running || !imgRef.current) return;
-      const url = `${LOGOS_API_URL}/studio/stream/cameras/batch?roles=${role}&_t=${Date.now()}`;
+      const url = `${LOGOS_API_URL}/studio/stream/camera/${role}?_t=${Date.now()}`;
       const loader = new Image();
       loader.onload = () => {
         if (running && imgRef.current) imgRef.current.src = loader.src;

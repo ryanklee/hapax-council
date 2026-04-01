@@ -97,7 +97,7 @@ export function StudioCanvas() {
       {
         id: "camera-1",
         type: "source",
-        position: { x: 50, y: 100 },
+        position: { x: 60, y: 120 },
         data: {
           sourceType: "camera",
           role: "brio-operator",
@@ -107,7 +107,7 @@ export function StudioCanvas() {
       {
         id: "colorgrade-1",
         type: "shader",
-        position: { x: 280, y: 100 },
+        position: { x: 320, y: 140 },
         data: {
           shaderType: "colorgrade",
           label: "Color Grade",
@@ -117,9 +117,9 @@ export function StudioCanvas() {
       {
         id: "output-1",
         type: "output",
-        position: { x: 500, y: 60 },
+        position: { x: 580, y: 60 },
         data: { label: "Output" },
-        style: { width: 320, height: 200 },
+        style: { width: 420, height: 260 },
       },
     ]);
 
@@ -164,7 +164,7 @@ export function StudioCanvas() {
       <PresetLibrary />
       <NodeDetailSheet />
       <HapaxOverlay />
-      <div style={{ width: "100%", height: "100%", paddingTop: 36 }}>
+      <div style={{ width: "100%", height: "100%", paddingTop: 32 }}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -177,9 +177,9 @@ export function StudioCanvas() {
           defaultEdgeOptions={defaultEdgeOptions}
           fitView
           proOptions={{ hideAttribution: true }}
-          style={{ background: "var(--color-bg0)" }}
+          style={{ background: "#1d2021" }}
         >
-          <Background color="var(--color-bg2)" gap={24} size={1} />
+          <Background color="#3c3836" gap={32} size={1} />
           <MiniMap
             nodeColor={() => "var(--color-bg3)"}
             maskColor="rgba(0,0,0,0.5)"

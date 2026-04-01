@@ -41,50 +41,52 @@ function OutputNodeInner({ data, selected }: NodeProps) {
 
   return (
     <div
-      className="rounded-lg overflow-hidden"
       style={{
-        minWidth: 200,
-        minHeight: 130,
+        minWidth: 220,
+        minHeight: 140,
         width: "100%",
         height: "100%",
-        background: "var(--color-bg0)",
-        border: "2px solid var(--color-green)",
+        background: "#1d2021",
+        border: selected ? "1px solid #b8bb26" : "1px solid #3c3836",
+        borderRadius: 4,
         position: "relative",
+        overflow: "hidden",
+        fontFamily: "JetBrains Mono, monospace",
       }}
     >
       <NodeResizer
         isVisible={!!selected}
-        minWidth={200}
-        minHeight={130}
-        lineStyle={{ borderColor: "var(--color-green)" }}
-        handleStyle={{ background: "var(--color-green)", width: 8, height: 8 }}
+        minWidth={220}
+        minHeight={140}
+        lineStyle={{ borderColor: "#b8bb26", borderWidth: 1 }}
+        handleStyle={{ background: "#b8bb26", width: 6, height: 6, borderRadius: 2, border: "none" }}
       />
       <img
         ref={imgRef}
         alt={label}
+        draggable={false}
         style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
       />
       <div
         style={{
           position: "absolute",
-          top: 0,
+          bottom: 0,
           left: 0,
           right: 0,
           padding: "4px 8px",
-          fontSize: 11,
-          color: "var(--color-fg3)",
-          background: "linear-gradient(rgba(0,0,0,0.6), transparent)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          background: "linear-gradient(transparent, rgba(29,32,33,0.85))",
         }}
       >
-        {label}
-        {isStale && (
-          <span style={{ marginLeft: 8, color: "var(--color-red)", fontSize: 10 }}>stale</span>
-        )}
+        <span style={{ fontSize: 10, color: "#bdae93" }}>{label}</span>
+        {isStale && <span style={{ fontSize: 9, color: "#fb4934" }}>stale</span>}
       </div>
       <Handle
         type="target"
         position={Position.Left}
-        style={{ background: "var(--color-green)", width: 10, height: 10 }}
+        style={{ width: 8, height: 8, background: "#3c3836", border: "2px solid #b8bb26", borderRadius: "50%" }}
       />
     </div>
   );

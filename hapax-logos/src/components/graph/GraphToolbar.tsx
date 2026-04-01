@@ -3,6 +3,17 @@ import { useStudioGraph, type StudioGraphState } from "../../stores/studioGraphS
 
 type S = StudioGraphState;
 
+const btn = {
+  background: "none",
+  border: "1px solid #504945",
+  borderRadius: 2,
+  padding: "2px 8px",
+  cursor: "pointer",
+  fontFamily: "JetBrains Mono, monospace",
+  fontSize: 10,
+  lineHeight: 1.4,
+} as const;
+
 export function GraphToolbar() {
   const { fitView, zoomIn, zoomOut } = useReactFlow();
   const graphName = useStudioGraph((s: S) => s.graphName);
@@ -17,67 +28,52 @@ export function GraphToolbar() {
         top: 0,
         left: 0,
         right: 0,
-        height: 36,
-        background: "var(--color-bg1)",
-        borderBottom: "1px solid var(--color-bg3)",
+        height: 32,
+        background: "#282828",
+        borderBottom: "1px solid #3c3836",
         display: "flex",
         alignItems: "center",
         padding: "0 12px",
-        gap: 12,
+        gap: 8,
         zIndex: 10,
-        fontSize: 13,
+        fontFamily: "JetBrains Mono, monospace",
       }}
     >
-      <span style={{ color: "var(--color-fg1)", fontWeight: 600 }}>
+      {/* Graph name */}
+      <span style={{ fontSize: 11, color: "#ebdbb2", fontWeight: 600 }}>
         {graphName}
-        {graphDirty && <span style={{ color: "var(--color-yellow)", marginLeft: 4 }}>*</span>}
       </span>
+      {graphDirty && (
+        <span style={{ fontSize: 11, color: "#fabd2f" }}>*</span>
+      )}
 
       <div style={{ flex: 1 }} />
 
+      {/* Hapax governance toggle */}
       <button
         onClick={toggleHapaxLock}
-        title={
-          hapaxLocked ? "Hapax suppressed — click to allow" : "Hapax active — click to suppress"
-        }
+        title={hapaxLocked ? "Hapax suppressed (Space)" : "Hapax active (Space)"}
         style={{
-          background: "none",
-          border: "1px solid var(--color-bg3)",
-          borderRadius: 4,
-          padding: "2px 8px",
-          color: hapaxLocked ? "var(--color-red)" : "var(--color-green)",
-          cursor: "pointer",
-          fontSize: 12,
+          ...btn,
+          color: hapaxLocked ? "#fb4934" : "#b8bb26",
+          borderColor: hapaxLocked ? "#9d0006" : "#79740e",
         }}
       >
-        {hapaxLocked ? "Hapax locked" : "Hapax active"}
+        {hapaxLocked ? "⊘ locked" : "◉ hapax"}
       </button>
 
-      <button
-        onClick={() => zoomOut()}
-        style={{ background: "none", border: "none", color: "var(--color-fg4)", cursor: "pointer" }}
-      >
-        −
-      </button>
-      <button
-        onClick={() => zoomIn()}
-        style={{ background: "none", border: "none", color: "var(--color-fg4)", cursor: "pointer" }}
-      >
-        +
-      </button>
-      <button
-        onClick={() => fitView({ padding: 0.2 })}
-        style={{
-          background: "none",
-          border: "1px solid var(--color-bg3)",
-          borderRadius: 4,
-          padding: "2px 8px",
-          color: "var(--color-fg4)",
-          cursor: "pointer",
-          fontSize: 12,
-        }}
-      >
-        Fit
+      {/* Zoom */}
+      <div style={{ display: "flex", gap: 2 }}>
+        <button onClick={() => zoomOut()} style={{ ...btn, color: "#928374", border: "none", padding: "2px 4px" }}>
+          −
+        </button>
+        <button onClick={() => zoomIn()} style={{ ...btn, color: "#928374", border: "none", padding: "2px 4px" }}>
+          +
+        </button>
+      </div>
+
+      <button onClick={() => fitView({ padding: 0.15 })} style={{ ...btn, color: "#928374" }}>
+        fit
       </button>
     </div>
   );

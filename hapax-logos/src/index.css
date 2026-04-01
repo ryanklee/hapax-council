@@ -126,3 +126,17 @@
   0%, 100% { opacity: 0.5; }
   50% { opacity: 1; }
 }
+
+/* Graph canvas: suppress React Flow default selected outlines */
+.react-flow__node.selected > div {
+  outline: none !important;
+  box-shadow: none !important;
+}
+.react-flow__node:focus > div {
+  outline: none !important;
+  box-shadow: none !important;
+}
+/* Minimal dot grid */
+.react-flow__background pattern circle {
+  fill: #3c3836;
+}
