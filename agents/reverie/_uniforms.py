@@ -88,13 +88,15 @@ def write_uniforms(
     # expressive but represents nothing — implementation bleeding through
     # as if it were DMN's visual projection.
     IMAGINATION_STALE_S = 60.0
+    SILENCE_FLOOR = 0.15  # vocabulary always has some visual presence
     if imagination is None:
-        silence = 0.0
+        silence = SILENCE_FLOOR
     else:
         frag_age = time.time() - float(imagination.get("timestamp", 0))
         if frag_age > IMAGINATION_STALE_S:
-            # Fade toward silence as fragment ages beyond threshold
-            silence = max(0.0, 1.0 - (frag_age - IMAGINATION_STALE_S) / IMAGINATION_STALE_S)
+            # Fade toward floor as fragment ages beyond threshold
+            raw = 1.0 - (frag_age - IMAGINATION_STALE_S) / IMAGINATION_STALE_S
+            silence = max(SILENCE_FLOOR, raw)
         else:
             silence = 1.0
 
@@ -106,8 +108,15 @@ def write_uniforms(
     }
 
     uniforms["post.master_opacity"] = silence
+    # Only write non-zero chain deltas — zero deltas would overwrite vocabulary
+    # defaults (e.g., noise.amplitude=0.6) with 0.0, blanking the visual output.
     for key, value in chain_params.items():
-        uniforms[key] = value * reduction * silence if isinstance(value, (int, float)) else value
+        if isinstance(value, (int, float)):
+            scaled = value * reduction * silence
+            if abs(scaled) > 1e-6:
+                uniforms[key] = scaled
+        else:
+            uniforms[key] = value
 
     if trace_strength > 0:
         uniforms["fb.trace_center_x"] = trace_center[0]

@@ -190,7 +190,7 @@ def test_compute_deltas_at_nonzero():
     imp = _make_impingement()
     cap.activate_dimension("visual_chain.intensity", imp, 1.0)
     deltas = cap.compute_param_deltas()
-    assert deltas.get("noise.brightness", 0.0) > 0.0
+    assert deltas.get("noise.amplitude", 0.0) > 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -210,7 +210,7 @@ def test_write_state_creates_json(tmp_path: Path):
     assert "params" in data
     assert "timestamp" in data
     assert data["levels"]["visual_chain.intensity"] == 0.7
-    assert data["params"]["noise.brightness"] > 0.0
+    assert data["params"]["noise.amplitude"] > 0.0
 
 
 def test_write_state_atomic(tmp_path: Path):
@@ -268,7 +268,7 @@ def test_full_activation_cycle(tmp_path: Path):
 
 
 def test_tension_produces_rd_feed_rate():
-    """Tension dimension should produce rd.u_feed_rate override."""
+    """Tension dimension should produce rd.feed_rate override."""
     cap = VisualChainCapability()
     imp = Impingement(
         source="test",
@@ -279,12 +279,12 @@ def test_tension_produces_rd_feed_rate():
     )
     cap.activate_dimension("visual_chain.tension", imp, 0.7)
     deltas = cap.compute_param_deltas()
-    assert "rd.u_feed_rate" in deltas
-    assert deltas["rd.u_feed_rate"] > 0.0
+    assert "rd.feed_rate" in deltas
+    assert deltas["rd.feed_rate"] > 0.0
 
 
 def test_diffusion_produces_rd_diffusion_a():
-    """Diffusion dimension should produce rd.u_diffusion_a override."""
+    """Diffusion dimension should produce rd.diffusion_a override."""
     cap = VisualChainCapability()
     imp = Impingement(
         source="test",
@@ -295,12 +295,12 @@ def test_diffusion_produces_rd_diffusion_a():
     )
     cap.activate_dimension("visual_chain.diffusion", imp, 0.5)
     deltas = cap.compute_param_deltas()
-    assert "rd.u_diffusion_a" in deltas
-    assert deltas["rd.u_diffusion_a"] > 0.0
+    assert "rd.diffusion_a" in deltas
+    assert deltas["rd.diffusion_a"] > 0.0
 
 
 def test_coherence_produces_rd_feed_rate_negative():
-    """Coherence dimension should produce negative rd.u_feed_rate (reduces reaction)."""
+    """Coherence dimension should produce negative rd.feed_rate (reduces reaction)."""
     cap = VisualChainCapability()
     imp = Impingement(
         source="test",
@@ -311,5 +311,5 @@ def test_coherence_produces_rd_feed_rate_negative():
     )
     cap.activate_dimension("visual_chain.coherence", imp, 0.8)
     deltas = cap.compute_param_deltas()
-    assert "rd.u_feed_rate" in deltas
-    assert deltas["rd.u_feed_rate"] < 0.0
+    assert "rd.feed_rate" in deltas
+    assert deltas["rd.feed_rate"] < 0.0
