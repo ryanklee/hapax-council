@@ -8,6 +8,7 @@ person data must call contract_check() before persisting state.
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -57,6 +58,22 @@ class ConsentRegistry:
     """
 
     _contracts: dict[str, ConsentContract] = field(default_factory=dict)
+    _fail_closed: bool = field(default=False)
+    _loaded_at: float = field(default=0.0)
+
+    @property
+    def fail_closed(self) -> bool:
+        return self._fail_closed
+
+    def is_stale(self, stale_threshold_s: float = 300.0) -> bool:
+        """Check if the registry was loaded too long ago to trust.
+
+        Returns False if load() was never called (registry may have been
+        populated programmatically via create_contract).
+        """
+        if self._loaded_at == 0.0:
+            return False  # Never loaded from disk — staleness doesn't apply
+        return time.time() - self._loaded_at > stale_threshold_s
 
     def load(self, contracts_dir: Path | None = None) -> int:
         """Load all contract files from the contracts directory.
@@ -64,31 +81,39 @@ class ConsentRegistry:
         Returns the number of active contracts loaded.
         """
         directory = contracts_dir or _CONTRACTS_DIR
-        if not directory.exists():
-            log.info("No contracts directory at %s", directory)
+        try:
+            if not directory.exists():
+                log.info("No contracts directory at %s", directory)
+                self._fail_closed = True
+                return 0
+
+            count = 0
+            for path in sorted(directory.glob("*.yaml")):
+                try:
+                    data = yaml.safe_load(path.read_text())
+                    if data is None:
+                        continue
+                    contract = _parse_contract(data)
+                    self._contracts[contract.id] = contract
+                    if contract.active:
+                        count += 1
+                        log.info(
+                            "Loaded contract %s: %s ↔ %s (scope: %s)",
+                            contract.id,
+                            contract.parties[0],
+                            contract.parties[1],
+                            ", ".join(sorted(contract.scope)),
+                        )
+                except Exception:
+                    log.exception("Failed to load contract from %s", path)
+
+            self._fail_closed = False
+            self._loaded_at = time.time()
+            return count
+        except Exception:
+            log.exception("Failed to load contracts from %s", directory)
+            self._fail_closed = True
             return 0
-
-        count = 0
-        for path in sorted(directory.glob("*.yaml")):
-            try:
-                data = yaml.safe_load(path.read_text())
-                if data is None:
-                    continue
-                contract = _parse_contract(data)
-                self._contracts[contract.id] = contract
-                if contract.active:
-                    count += 1
-                    log.info(
-                        "Loaded contract %s: %s ↔ %s (scope: %s)",
-                        contract.id,
-                        contract.parties[0],
-                        contract.parties[1],
-                        ", ".join(sorted(contract.scope)),
-                    )
-            except Exception:
-                log.exception("Failed to load contract from %s", path)
-
-        return count
 
     def get(self, contract_id: str) -> ConsentContract | None:
         """Return a contract by ID, or None."""
@@ -106,6 +131,8 @@ class ConsentRegistry:
 
         This is the enforcement boundary — call at ingestion, not downstream.
         """
+        if self._fail_closed or self.is_stale():
+            return False
         for contract in self._contracts.values():
             if not contract.active:
                 continue
@@ -254,3 +281,16 @@ def load_contracts(contracts_dir: Path | None = None) -> ConsentRegistry:
     registry = ConsentRegistry()
     registry.load(contracts_dir)
     return registry
+
+
+def check_consent_state_freshness(path: Path, *, stale_threshold_s: float = 300.0) -> bool:
+    """Check if a consent state file on disk is fresh enough to trust.
+
+    Returns False (fail-closed) if the file is missing, unreadable, or older
+    than stale_threshold_s seconds.
+    """
+    try:
+        mtime = path.stat().st_mtime
+        return (time.time() - mtime) < stale_threshold_s
+    except OSError:
+        return False
