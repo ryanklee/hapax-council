@@ -46,7 +46,7 @@ class TestConversationBufferBasic(unittest.TestCase):
             buf.update_vad(0.9)
         # Trigger silence
         for _ in range(SPEECH_END_DEFAULT + 1):
-            buf.update_vad(0.1)
+            buf.update_vad(0.05)
         assert buf.get_utterance() is None
 
 
@@ -58,7 +58,7 @@ class TestSpeechDetection(unittest.TestCase):
         buf.feed_audio(_frame())
         buf.update_vad(0.9)
         buf.feed_audio(_frame())
-        buf.update_vad(0.1)  # breaks the streak
+        buf.update_vad(0.05)  # breaks the streak
         buf.feed_audio(_frame())
         buf.update_vad(0.9)
         # No utterance should be pending
@@ -74,7 +74,7 @@ class TestSpeechDetection(unittest.TestCase):
         # Trigger speech end
         for _ in range(SPEECH_END_DEFAULT + 1):
             buf.feed_audio(_frame())
-            buf.update_vad(0.1)
+            buf.update_vad(0.05)
         utterance = buf.get_utterance()
         assert utterance is not None
         assert len(utterance) > 0
@@ -87,7 +87,7 @@ class TestSpeechDetection(unittest.TestCase):
             buf.update_vad(0.9)
         for _ in range(SPEECH_END_DEFAULT + 1):
             buf.feed_audio(_frame())
-            buf.update_vad(0.1)
+            buf.update_vad(0.05)
         assert buf.get_utterance() is not None
         assert buf.get_utterance() is None  # cleared
 
@@ -97,7 +97,7 @@ class TestSpeechDetection(unittest.TestCase):
         # Feed some frames before speech (pre-roll)
         for _ in range(15):
             buf.feed_audio(_frame())
-            buf.update_vad(0.1)  # silence
+            buf.update_vad(0.05)  # silence
         # Start speech
         for _ in range(SPEECH_START_CONSECUTIVE + 5):
             buf.feed_audio(_frame())
@@ -105,7 +105,7 @@ class TestSpeechDetection(unittest.TestCase):
         # End speech
         for _ in range(SPEECH_END_DEFAULT + 1):
             buf.feed_audio(_frame())
-            buf.update_vad(0.1)
+            buf.update_vad(0.05)
         utterance = buf.get_utterance()
         assert utterance is not None
         # Should be longer than just the speech frames due to pre-roll
