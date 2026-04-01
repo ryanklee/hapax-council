@@ -8,6 +8,7 @@ import time
 from typing import TYPE_CHECKING
 
 from agents.hapax_daimonion._perception_state_writer import write_perception_state
+from agents.hapax_daimonion.consent_filter import filter_behaviors
 from agents.hapax_daimonion.governance import VetoResult
 from shared.control_signal import ControlSignal, publish_health
 
@@ -38,6 +39,19 @@ async def perception_loop(daemon: VoiceDaemon) -> None:
 
             daemon.perception.set_voice_session_active(daemon.session.is_active)
             state = daemon.perception.tick()
+
+            # Apply consent ingestion filter — suppress person-adjacent
+            # behaviors before state is consumed downstream.
+            try:
+                consent_phase = (
+                    daemon.consent_tracker.phase.name
+                    if hasattr(daemon, "consent_tracker")
+                    else "NO_GUEST"
+                )
+                filter_behaviors(daemon.perception.behaviors, consent_phase)
+            except Exception:
+                pass  # consent filter is defensive — never block perception
+
             daemon._check_tap_gesture()
 
             directive = daemon.governor.evaluate(state)
