@@ -47,20 +47,26 @@ export const useStudioGraph = create<StudioGraphState>()(
       leftDrawerOpen: false,
       rightDrawerOpen: false,
 
-      setNodes: (nodes) => set({ nodes }),
-      setEdges: (edges) => set({ edges }),
-      updateNodes: (updater) => set((s) => ({ nodes: updater(s.nodes) })),
-      updateEdges: (updater) => set((s) => ({ edges: updater(s.edges) })),
-      setGraphName: (graphName) => set({ graphName }),
+      setNodes: (nodes: Node[]) => set({ nodes }),
+      setEdges: (edges: Edge[]) => set({ edges }),
+      updateNodes: (updater: (nodes: Node[]) => Node[]) =>
+        set((s: StudioGraphState) => ({ nodes: updater(s.nodes) })),
+      updateEdges: (updater: (edges: Edge[]) => Edge[]) =>
+        set((s: StudioGraphState) => ({ edges: updater(s.edges) })),
+      setGraphName: (graphName: string) => set({ graphName }),
       markDirty: () => set({ graphDirty: true }),
       markClean: () => set({ graphDirty: false }),
-      setCameraStatuses: (cameraStatuses) => set({ cameraStatuses }),
-      selectNode: (selectedNodeId) => set({ selectedNodeId }),
-      toggleHapaxLock: () => set((s) => ({ hapaxLocked: !s.hapaxLocked })),
-      toggleLeftDrawer: () => set((s) => ({ leftDrawerOpen: !s.leftDrawerOpen })),
-      toggleRightDrawer: () => set((s) => ({ rightDrawerOpen: !s.rightDrawerOpen })),
+      setCameraStatuses: (cameraStatuses: Record<string, "active" | "offline" | "starting">) =>
+        set({ cameraStatuses }),
+      selectNode: (selectedNodeId: string | null) => set({ selectedNodeId }),
+      toggleHapaxLock: () =>
+        set((s: StudioGraphState) => ({ hapaxLocked: !s.hapaxLocked })),
+      toggleLeftDrawer: () =>
+        set((s: StudioGraphState) => ({ leftDrawerOpen: !s.leftDrawerOpen })),
+      toggleRightDrawer: () =>
+        set((s: StudioGraphState) => ({ rightDrawerOpen: !s.rightDrawerOpen })),
 
-      loadPreset: (name, nodes, edges) =>
+      loadPreset: (name: string, nodes: Node[], edges: Edge[]) =>
         set({
           graphName: name,
           nodes,
@@ -71,7 +77,7 @@ export const useStudioGraph = create<StudioGraphState>()(
     }),
     {
       name: "hapax-studio-graph",
-      partialize: (state) => ({
+      partialize: (state: StudioGraphState) => ({
         graphName: state.graphName,
         hapaxLocked: state.hapaxLocked,
         leftDrawerOpen: state.leftDrawerOpen,

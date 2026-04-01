@@ -7,7 +7,7 @@ export interface OutputNodeData {
   [key: string]: unknown;
 }
 
-function OutputNodeInner({ id, data, selected }: NodeProps) {
+function OutputNodeInner({ data, selected }: NodeProps) {
   const { label } = data as OutputNodeData;
   const imgRef = useRef<HTMLImageElement>(null);
   const [isStale, setIsStale] = useState(false);
