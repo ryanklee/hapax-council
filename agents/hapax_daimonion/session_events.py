@@ -54,7 +54,6 @@ def acknowledge(daemon: VoiceDaemon, kind: str = "activation") -> None:
 
 def on_engagement_detected(daemon: VoiceDaemon) -> None:
     """Called from audio loop when engagement classifier fires."""
-    daemon.wake_word_event.emit(time.monotonic(), None)
     if not daemon.session.is_active:
         daemon._engagement_signal.set()
 
