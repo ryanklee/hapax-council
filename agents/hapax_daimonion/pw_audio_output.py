@@ -41,6 +41,7 @@ class PwAudioOutput:
                 [
                     "pw-cat",
                     "--playback",
+                    "--raw",
                     "--format",
                     "s16",
                     "--rate",
@@ -113,6 +114,7 @@ def play_pcm(pcm: bytes, rate: int = 24000, channels: int = 1) -> None:
             [
                 "pw-cat",
                 "--playback",
+                "--raw",
                 "--format",
                 "s16",
                 "--rate",
