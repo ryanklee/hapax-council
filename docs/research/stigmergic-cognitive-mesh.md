@@ -16,19 +16,31 @@ This document formalizes the cognitive/perceptual layer of the Hapax system as a
 
 ### 1.1 The System Class
 
-A **stigmergic cognitive mesh** is a distributed system in which:
+A **stigmergic cognitive mesh** is a distributed system characterized by six properties at three maturity levels.
 
-1. **Stigmergic coordination.** Processes coordinate through environmental trace deposition and reading rather than directed message passing. A process writes a structured trace to a shared medium; other processes read that trace at their own cadence. There is no request, no response, no handshake, and no requirement that the writer know who will read. The shared medium is the sole coordination substrate.
+**Verified properties** (structurally confirmed in the reference implementation):
 
-2. **Heterogeneous temporal scales.** Processes operate at independently determined cadences with no global clock and no synchronization protocol. A 3-second perception process and a 22-second rendering process coexist without either adapting to the other's rate. Each process samples the shared medium at its own update frequency, observing a held value between the writer's updates.
+1. **Stigmergic coordination.** Processes coordinate through environmental trace deposition and reading rather than directed message passing. A process writes a structured trace to a shared medium; other processes read that trace at their own cadence. There is no request, no response, no handshake, and no requirement that the writer know who will read. The shared medium is the sole coordination substrate. *Verification status: 73% of inter-process paths are pure stigmergic. The Fortress-Daimonion governance type coupling (VetoChain imports) is the primary remaining violation.*
 
-3. **Emergent perceptual state.** The system has no single source of truth. Its state at any instant is the superposition of all traces currently deposited in the shared medium — a vector of independently updated dimensions with no coordinating transaction. No process holds the complete state; each observes a projection determined by which traces it reads.
+2. **Heterogeneous temporal scales.** Processes operate at independently determined cadences with no global clock and no synchronization protocol. A 3-second perception process and a 22-second rendering process coexist without either adapting to the other's rate. Each process samples the shared medium at its own update frequency, observing a held value between the writer's updates. *Verification status: 100%. No process uses locks, barriers, or events to wait for another's clock. Stimmung provides gain scheduling (cadence modulation), not synchronization.*
 
-4. **Perceptual control.** Processes control their perceptions, not their outputs. Each process maintains an implicit reference signal (what it expects to perceive) and acts to minimize the discrepancy between that reference and its actual perceptual input. A "failure" in this system is not a crashed process but a sustained discrepancy between reference and perception — a miscalibrated sensor, a stale signal treated as fresh, a prediction error that is not resolved.
+3. **Emergent perceptual state.** The system has no single source of truth. Its state at any instant is the superposition of all traces currently deposited in the shared medium — a vector of independently updated dimensions with no coordinating transaction. No process holds the complete state; each observes a projection determined by which traces it reads. *Verification status: 100%. No "ground truth" file. read_all() reads a defined sensor subset, not all traces.*
 
-5. **Consent as propagating constraint.** Data governance is not a boundary check but a system-wide property with propagation dynamics. Consent state changes must reach all processes that handle governed data, subject to the same heterogeneous-cadence propagation as any other signal. The consent constraint is analogous to consistency in distributed databases: it has levels (strong, eventual, causal), partition behavior (fail-closed), and staleness semantics.
+**Design targets** (infrastructure present, control semantics incomplete):
 
-6. **Observer-system circularity.** The operator is both the system's environment and a component of the system. The system's output (visual surface, voice, notifications) changes the operator's behavior, which changes the system's sensory input, which changes the system's output. This circularity is constitutive, not incidental — the system cannot be understood as an external tool acting on a passive user.
+4. **Perceptual health reporting.** Each process publishes a ControlSignal (reference, perception, error) to `/dev/shm`. 10 of 14 components publish live health signals. Aggregate mesh health (E_mesh) and restriction map consistency are computed and exposed via API. *However: no component reads its own error signal and adjusts behavior. All reporting is open-loop. Stimmung modulates cadence (gain scheduling), but this is a system-wide signal, not per-component perceptual control in Powers' (1973) sense. The gap between health observability and genuine closed-loop control requires control law specification for each component.*
+
+5. **Consent governance.** The consent algebra (ConsentLabel join-semilattice, Labeled[T] floating labels) is algebraically proven. Enforcement operates at four layers of decreasing maturity:
+   - *Algebra* (proven): commutative, associative, idempotent join; partial order; hypothesis-tested
+   - *Egress gating* (operational): 14 boundary check sites in sync agents, conversation pipeline, ingest, video processor
+   - *Label embedding* (structural): 8 `/dev/shm` writers embed `_consent` in JSON; JSONL lines carry `_consent` in context
+   - *Label enforcement* (aspirational): 2 readers extract labels, 0 readers deny data flow based on `can_flow_to()`
+
+   *The system performs PII redaction at export boundaries. It does not yet enforce information flow control through the processing pipeline.*
+
+**Research hypothesis** (testable claim, not observed property):
+
+6. **Observer-system circularity.** The operator is both the system's environment and a component of the system. The system's output (visual surface, voice, notifications) changes the operator's behavior, which changes the system's sensory input, which changes the system's output. This circularity is hypothesized to be constitutive (the system IS part of the operator's cognitive process, not just a tool). *Testing infrastructure deployed: eigenform state vector logger captures 11-dimension coupled state at each VLA tick. Convergence analysis (eigenform detection, orbit identification) requires accumulated interaction data. The DEUTS criterion (Kirchhoff & Kiverstein, 2019) provides a testable threshold for constitutive vs incidental coupling. No runtime code currently models the operator as a system component.*
 
 ### 1.2 What an SCM Is Not
 
