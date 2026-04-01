@@ -39,7 +39,7 @@ type TerrainContextValue = TerrainDisplayValue & TerrainActionValue;
 const DEFAULT_DEPTHS: Record<RegionName, Depth> = {
   horizon: "surface",
   field: "surface",
-  ground: "surface",
+  ground: "core",
   watershed: "surface",
   bedrock: "surface",
 };

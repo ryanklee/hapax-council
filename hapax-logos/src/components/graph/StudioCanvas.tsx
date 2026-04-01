@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import {
   ReactFlow,
   Background,
@@ -10,7 +10,7 @@ import {
   applyNodeChanges,
   applyEdgeChanges,
   addEdge,
-  useReactFlow,
+  type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
@@ -53,7 +53,7 @@ export function StudioCanvas() {
   const toggleLeftDrawer = useStudioGraph((s: S) => s.toggleLeftDrawer);
   const toggleRightDrawer = useStudioGraph((s: S) => s.toggleRightDrawer);
   const toggleHapaxLock = useStudioGraph((s: S) => s.toggleHapaxLock);
-  const { fitView: rfFitView } = useReactFlow();
+  const rfRef = useRef<{ fitView: (opts?: { padding?: number }) => void } | null>(null);
 
   useGraphSync();
 
@@ -75,7 +75,7 @@ export function StudioCanvas() {
         toggleHapaxLock();
       } else if (e.key === "f" && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
-        rfFitView({ padding: 0.15 });
+        rfRef.current?.fitView({ padding: 0.15 });
       } else if (e.key === "s" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         const state = useStudioGraph.getState();
@@ -128,11 +128,13 @@ export function StudioCanvas() {
       { id: "e-cam-color", source: "camera-1", target: "colorgrade-1", type: "signal" },
       { id: "e-color-out", source: "colorgrade-1", target: "output-1", type: "signal" },
     ]);
-    // fitView after nodes mount
-    requestAnimationFrame(() => {
-      setTimeout(() => rfFitView({ padding: 0.15 }), 100);
-    });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // fitView once React Flow is initialized
+  const onInit = useCallback((instance: ReactFlowInstance) => {
+    rfRef.current = instance;
+    setTimeout(() => instance.fitView({ padding: 0.15 }), 200);
+  }, []);
 
   const onNodesChange: OnNodesChange = useCallback(
     (changes) => {
@@ -177,10 +179,10 @@ export function StudioCanvas() {
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onPaneClick={onPaneClick}
+          onInit={onInit}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
           defaultEdgeOptions={defaultEdgeOptions}
-          fitView
           proOptions={{ hideAttribution: true }}
           style={{ background: "#1d2021" }}
         >

@@ -21,7 +21,7 @@ export const GroundRegion = memo(function GroundRegion() {
       stimmungStance={stimmungStance}
     >
       {() => (
-        <div className="h-full relative">
+        <div style={{ width: "100%", height: "100%", position: "relative", minHeight: 300 }}>
           <ReactFlowProvider>
             <StudioCanvas />
           </ReactFlowProvider>

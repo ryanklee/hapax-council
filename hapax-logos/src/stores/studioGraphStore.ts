@@ -77,6 +77,7 @@ export const useStudioGraph = create<StudioGraphState>()(
     }),
     {
       name: "hapax-studio-graph",
+      version: 2,
       partialize: (state: StudioGraphState) => ({
         graphName: state.graphName,
         hapaxLocked: state.hapaxLocked,
