@@ -18,6 +18,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field, computed_field
 
+from shared.governance.consent import ConsentRegistry
+
 try:
     from agents import _langfuse_config  # noqa: F401
 except ImportError:
@@ -337,6 +339,10 @@ def _log_change(event: CalendarEvent, change_type: str, extra: dict | None = Non
 
 def _write_upcoming_events(state: CalendarSyncState) -> int:
     """Write upcoming events as markdown to rag-sources/gcalendar/."""
+    # Load consent registry for attendee filtering
+    _consent_registry = ConsentRegistry()
+    _consent_registry.load()
+
     GCALENDAR_DIR.mkdir(parents=True, exist_ok=True)
 
     now = datetime.now(UTC)
@@ -361,6 +367,13 @@ def _write_upcoming_events(state: CalendarSyncState) -> int:
         # Only write events in the upcoming RAG window
         if event_dt < now - timedelta(hours=2) or event_dt > cutoff:
             continue
+
+        # Consent gate: strip unconsented attendees
+        if event.attendees:
+            consented = [
+                a for a in event.attendees if _consent_registry.contract_check(a, "calendar")
+            ]
+            event = event.model_copy(update={"attendees": consented})
 
         md = _format_event_markdown(event)
         safe_name = event.summary.replace("/", "_").replace(" ", "-")[:60]
