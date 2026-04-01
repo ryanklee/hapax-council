@@ -83,7 +83,9 @@ class DaimonionConfig(BaseModel):
     gemini_model: str = "gemini-2.5-flash-preview-native-audio"
     local_stt_model: str = "distil-large-v3"
     voxtral_voice_id: str = "gb_jane_neutral"
-    voxtral_ref_audio: str = "~/.local/share/hapax-daimonion/formant-refs/reed-slow-24k.wav"
+    voxtral_ref_audio: str = (
+        ""  # clean carrier — character comes from Evil Pet + S-4 hardware chain
+    )
 
     # Consent
     consent_debounce_s: float = 5.0  # sustained presence before triggering
