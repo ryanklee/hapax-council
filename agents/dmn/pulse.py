@@ -18,6 +18,7 @@ from agents.dmn.ollama import (
     start_thinking,
 )
 from agents.dmn.sensor import read_all
+from shared.control_signal import ControlSignal, publish_health
 
 log = logging.getLogger("dmn.pulse")
 
@@ -108,11 +109,19 @@ class DMNPulse:
                 observation = ""
         else:
             observation = ""
+        observation_produced = bool(observation)
         if observation:
             self._buffer.add_observation(observation, deltas, raw_sensor=prompt)
             log.debug("Sensory: %s", observation[:80])
         else:
             self._buffer.add_observation(prompt[:100], deltas, raw_sensor=prompt)
+        publish_health(
+            ControlSignal(
+                component="dmn",
+                reference=1.0,
+                perception=1.0 if observation_produced else 0.0,
+            )
+        )
 
     def _recently_acted(self, metric: str) -> bool:
         return time.time() - self._fortress_acted_on.get(metric, 0.0) <= 300
