@@ -9,7 +9,7 @@
                 "frequency_x": 3.0,
                 "frequency_y": 2.0,
                 "octaves": 4,
-                "amplitude": 0.0,
+                "amplitude": 0.6,
                 "speed": 0.15
             }
         },
@@ -26,8 +26,8 @@
         "color": {
             "type": "colorgrade",
             "params": {
-                "brightness": 0.0,
-                "saturation": 0.0,
+                "brightness": 1.0,
+                "saturation": 1.0,
                 "contrast": 0.7,
                 "sepia": 0.0,
                 "hue_rotate": 0.0

@@ -64,14 +64,14 @@ VISUAL_DIMENSIONS: dict[str, VisualDimension] = {
     "visual_chain.intensity": VisualDimension(
         "visual_chain.intensity",
         "Increases visual energy and density — brighter, more saturated, more present.",
-        [_PM("noise", "brightness", _STD), _PM("post", "vignette_strength", _INV)],
+        [_PM("noise", "amplitude", _STD), _PM("post", "vignette_strength", _INV)],
     ),
     "visual_chain.tension": VisualDimension(
         "visual_chain.tension",
         "Constricts visual patterns — tighter, sharper, angular energy.",
         [
-            _PM("rd", "u_feed_rate", [(0.0, 0.0), (0.5, 0.005), (1.0, 0.015)]),
-            _PM("noise", "turbulence", [(0.0, 0.0), (0.5, -0.03), (1.0, -0.06)]),
+            _PM("rd", "feed_rate", [(0.0, 0.0), (0.5, 0.005), (1.0, 0.015)]),
+            _PM("noise", "frequency_x", [(0.0, 0.0), (0.5, 0.5), (1.0, 2.0)]),
         ],
     ),
     "visual_chain.diffusion": VisualDimension(
@@ -79,7 +79,7 @@ VISUAL_DIMENSIONS: dict[str, VisualDimension] = {
         "Scatters visual output — ambient, sourceless, environmental.",
         [
             _PM("physarum", "sensor_dist", [(0.0, 0.0), (0.5, 4.0), (1.0, 12.0)]),
-            _PM("rd", "u_diffusion_a", [(0.0, 0.0), (0.5, 0.05), (1.0, 0.2)]),
+            _PM("rd", "diffusion_a", [(0.0, 0.0), (0.5, 0.05), (1.0, 0.2)]),
         ],
     ),
     "visual_chain.degradation": VisualDimension(
@@ -87,21 +87,21 @@ VISUAL_DIMENSIONS: dict[str, VisualDimension] = {
         "Corrupts visual signal — noise, disruption, broken patterns.",
         [
             _PM("physarum", "deposit_amount", [(0.0, 0.0), (0.5, 2.0), (1.0, 6.0)]),
-            _PM("post", "sediment_height", [(0.0, 0.0), (0.5, 0.02), (1.0, 0.08)]),
+            _PM("post", "sediment_strength", [(0.0, 0.0), (0.5, 0.02), (1.0, 0.08)]),
         ],
     ),
     "visual_chain.depth": VisualDimension(
         "visual_chain.depth",
         "Places visual in recessive space — darkens, recedes, cave-like.",
-        [_PM("noise", "brightness", _INV), _PM("post", "vignette_strength", _STD)],
+        [_PM("noise", "amplitude", _INV), _PM("post", "vignette_strength", _STD)],
     ),
     "visual_chain.pitch_displacement": VisualDimension(
         "visual_chain.pitch_displacement",
         "Shifts visual color — hue rotation, displaced and uncanny.",
         [
-            _PM("noise", "hue_offset", [(0.0, 0.0), (0.5, 25.0), (1.0, 70.0)]),
+            _PM("color", "hue_rotate", [(0.0, 0.0), (0.5, 25.0), (1.0, 70.0)]),
             _PM("fb", "hue_shift", [(0.0, 0.0), (0.5, 1.5), (1.0, 5.0)]),
-            _PM("noise", "chroma_boost", [(0.0, 0.0), (0.5, 0.02), (1.0, 0.05)]),
+            _PM("color", "saturation", [(0.0, 0.0), (0.5, 0.1), (1.0, 0.3)]),
         ],
     ),
     "visual_chain.temporal_distortion": VisualDimension(
@@ -116,16 +116,16 @@ VISUAL_DIMENSIONS: dict[str, VisualDimension] = {
         "visual_chain.spectral_color",
         "Shifts visual warmth and saturation — tonal character changes.",
         [
-            _PM("noise", "color_warmth", [(0.0, 0.0), (0.5, 0.25), (1.0, 0.6)]),
-            _PM("noise", "chroma_boost", [(0.0, 0.0), (0.5, 0.02), (1.0, 0.06)]),
+            _PM("color", "saturation", [(0.0, 0.0), (0.5, 0.25), (1.0, 0.6)]),
+            _PM("color", "brightness", [(0.0, 0.0), (0.5, 0.1), (1.0, 0.3)]),
         ],
     ),
     "visual_chain.coherence": VisualDimension(
         "visual_chain.coherence",
         "Controls pattern regularity — structured to dissolved.",
         [
-            _PM("noise", "turbulence", _STD),
-            _PM("rd", "u_feed_rate", [(0.0, 0.0), (0.5, -0.005), (1.0, -0.015)]),
+            _PM("noise", "frequency_x", [(0.0, 0.0), (0.5, -0.5), (1.0, -1.5)]),
+            _PM("rd", "feed_rate", [(0.0, 0.0), (0.5, -0.005), (1.0, -0.015)]),
             _PM("physarum", "turn_speed", [(0.0, 0.0), (0.5, 0.15), (1.0, 0.5)]),
         ],
     ),
