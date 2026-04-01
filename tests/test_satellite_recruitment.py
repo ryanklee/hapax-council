@@ -104,3 +104,27 @@ class TestSatelliteManager:
         mgr.recruit("bloom", 0.5)
         mgr.recruit("warp", 0.4)
         assert mgr.active_count == 2
+
+    def test_maybe_rebuild_writes_plan(self, tmp_path):
+        """Recruiting a satellite and calling maybe_rebuild should write a new plan.json."""
+        from unittest.mock import patch
+
+        mgr = SatelliteManager(_core_vocab())
+        mgr.recruit("bloom", 0.5)
+        with patch("agents.reverie._satellites.write_wgsl_pipeline") as mock_write:
+            rebuilt = mgr.maybe_rebuild()
+            assert rebuilt is True
+            assert mock_write.called
+
+    def test_maybe_rebuild_error_recovery(self):
+        """Graph rebuild failure should not crash — returns False."""
+        from unittest.mock import patch
+
+        mgr = SatelliteManager(_core_vocab())
+        mgr.recruit("bloom", 0.5)
+        with patch(
+            "agents.reverie._satellites.compile_to_wgsl_plan", side_effect=RuntimeError("boom")
+        ):
+            rebuilt = mgr.maybe_rebuild()
+            assert rebuilt is False
+            assert mgr.active_count == 1  # satellite still tracked
