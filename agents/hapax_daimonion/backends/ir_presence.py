@@ -52,6 +52,19 @@ class IrPresenceBackend:
 
     def __init__(self, state_dir: Path | None = None) -> None:
         self._state_dir = state_dir
+        # Exploration tracking (spec §8, kappa=0.020, T_patience=180s)
+        from shared.exploration_tracker import ExplorationTrackerBundle
+
+        self._exploration = ExplorationTrackerBundle(
+            component="ir_presence",
+            edges=["person_detected", "motion_delta"],
+            traces=["report_freshness", "person_count"],
+            neighbors=["stimmung", "perception"],
+            kappa=0.020,
+            t_patience=180.0,
+        )
+        self._prev_person: float = 0.0
+        self._prev_motion: float = 0.0
         self._behaviors: dict[str, Behavior] = {
             "ir_person_detected": Behavior(False),
             "ir_person_count": Behavior(0),
@@ -101,6 +114,19 @@ class IrPresenceBackend:
         freshness = len(reports) / len(IR_ROLES) if IR_ROLES else 0.0
         signal = ControlSignal(component="ir_perception", reference=1.0, perception=freshness)
         publish_health(signal)
+
+        # Exploration signal: track habituation to IR signals
+        person = float(self._behaviors.get("ir_person_detected", Behavior(False)).value)
+        motion = float(self._behaviors.get("ir_motion_delta", Behavior(0.0)).value)
+        self._exploration.feed_habituation("person_detected", person, self._prev_person, 0.2)
+        self._exploration.feed_habituation("motion_delta", motion, self._prev_motion, 0.1)
+        self._exploration.feed_interest("report_freshness", freshness, 0.3)
+        person_count = int(self._behaviors.get("ir_person_count", Behavior(0)).value)
+        self._exploration.feed_interest("person_count", float(person_count), 0.5)
+        self._exploration.feed_error(1.0 - freshness)
+        self._exploration.compute_and_publish()
+        self._prev_person = person
+        self._prev_motion = motion
 
         # Control law: 0 Pis reporting → safe defaults
         _ir_error = len(reports) == 0
