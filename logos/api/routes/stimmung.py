@@ -7,6 +7,7 @@ from pathlib import Path
 
 from fastapi import APIRouter
 
+from shared.eigenform_analysis import analyze_convergence
 from shared.sheaf_graph import build_scm_graph
 from shared.sheaf_health import compute_sheaf_health
 from shared.topology_health import compute_topological_stability
@@ -75,5 +76,10 @@ async def get_stimmung() -> dict:
         response["topology"] = compute_topological_stability(build_scm_graph())
     except Exception:
         pass
+
+    try:
+        response["eigenform"] = analyze_convergence()
+    except Exception:
+        response["eigenform"] = {"error": "analysis_failed"}
 
     return response
