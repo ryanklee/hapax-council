@@ -73,12 +73,12 @@ async def audio_loop(daemon: VoiceDaemon) -> None:
             and hasattr(daemon, "_engagement")
         ):
             try:
-                behaviors = daemon.perception.latest_behaviors()
+                behaviors = daemon.perception.behaviors
                 ps = behaviors.get("presence_state")
                 if ps is not None and getattr(ps, "value", "") == "PRESENT":
                     daemon._engagement.on_speech_detected(behaviors)
             except Exception as exc:
-                log.debug("Engagement evaluation error: %s", exc)
+                log.warning("Engagement evaluation error: %s", exc)
 
 
 async def actuation_loop(daemon: VoiceDaemon) -> None:
