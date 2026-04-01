@@ -91,6 +91,9 @@ export const api = {
   deleteInsightQuery: (id: string) =>
     invoke<{ deleted: string }>("proxy_delete_insight_query", { id }),
 
+  // Orientation
+  orientation: () => invoke<import("./types").OrientationState>("get_orientation"),
+
   // Fortress
   fortressState: () => invoke<import("./types").FortressState>("proxy_fortress_state"),
   fortressGovernance: () =>

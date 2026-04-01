@@ -300,3 +300,10 @@ pub async fn proxy_fortress_sessions(app: AppHandle) -> Result<Value, String> {
 pub async fn proxy_fortress_chronicle(app: AppHandle) -> Result<Value, String> {
     proxy_get(&app, "/fortress/chronicle").await
 }
+
+// ── Orientation ──────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn get_orientation(app: AppHandle) -> Result<Value, String> {
+    proxy_get(&app, "/orientation").await
+}
