@@ -29,9 +29,9 @@ FRAME_SAMPLES = 480  # 16kHz, 30ms
 SAMPLE_RATE = 16000
 PRE_ROLL_FRAMES = 50  # 1500ms before speech onset — captures full wake word phrase
 
-SPEECH_START_PROB = 0.5
+SPEECH_START_PROB = 0.15
 SPEECH_START_CONSECUTIVE = 3  # ~90ms
-SPEECH_END_PROB = 0.3
+SPEECH_END_PROB = 0.1
 # Adaptive speech-end: calibrated for an operator who "processes voice
 # slowly and has dysfluencies when thinking aloud" — natural mid-thought
 # pauses of 600-1200ms are common and should NOT trigger emission.
