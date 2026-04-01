@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 import subprocess
 import threading
+import time
 
 log = logging.getLogger(__name__)
 
@@ -64,7 +65,18 @@ class PwAudioOutput:
             return None
 
     def write(self, pcm: bytes) -> None:
-        """Write PCM data to the playback stream. Thread-safe, blocking."""
+        """Write PCM data to the playback stream. Thread-safe, blocking.
+
+        Sleeps for the audio duration after writing so callers experience
+        real-time pacing (matching PyAudio's blocking stream.write behavior).
+        Without this, all sentences dump into pw-cat's pipe buffer at once
+        and play back-to-back with no gaps.
+        """
+        # Calculate audio duration before acquiring lock
+        bytes_per_sample = 2  # int16
+        n_samples = len(pcm) // (bytes_per_sample * self._channels)
+        duration_s = n_samples / self._rate if self._rate > 0 else 0.0
+
         with self._lock:
             proc = self._ensure_process()
             if proc is None or proc.stdin is None:
@@ -82,6 +94,11 @@ class PwAudioOutput:
                         proc.stdin.flush()
                     except Exception:
                         log.warning("pw-cat retry failed")
+                        return
+
+        # Block for audio duration — paces sentence delivery
+        if duration_s > 0:
+            time.sleep(duration_s)
 
     def stop_stream(self) -> None:
         """No-op for API compatibility with PyAudio streams."""
