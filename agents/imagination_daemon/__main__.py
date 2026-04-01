@@ -20,7 +20,11 @@ import signal
 import time
 from pathlib import Path
 
-from agents.imagination_loop import ImaginationLoop, observations_are_fresh
+from agents.imagination_loop import (
+    ImaginationLoop,
+    observations_are_fresh,
+    should_accelerate_from_engagement,
+)
 from shared.impingement import Impingement
 
 log = logging.getLogger("imagination-daemon")
@@ -113,6 +117,11 @@ class ImaginationDaemon:
                         pass
 
                     await self._imagination.tick(observations, snapshot)
+
+                    # Positive feedback: high engagement → faster imagination
+                    snapshot_perception = snapshot.get("perception", {})
+                    if should_accelerate_from_engagement(snapshot_perception):
+                        self._imagination.cadence._accelerated = True
 
                     # Drain and emit impingements
                     impingements = self._imagination.drain_impingements()
