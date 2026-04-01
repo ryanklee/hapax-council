@@ -167,12 +167,16 @@ function FullscreenOverlay({
     <div
       style={{
         position: "fixed",
-        inset: 0,
-        zIndex: 9999,
-        background: "#000",
+        top: 0,
+        left: 0,
+        width: "100vw",
+        height: "100vh",
+        zIndex: 2147483647,
+        background: "#000000",
         display: "flex",
         flexDirection: "column",
         fontFamily: "JetBrains Mono, monospace",
+        isolation: "isolate",
       }}
     >
       {/* Video fill */}
