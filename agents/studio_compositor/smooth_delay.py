@@ -42,7 +42,7 @@ def add_smooth_delay_branch(compositor: Any, pipeline: Any, tee: Any) -> None:
     scale_caps.set_property("caps", Gst.Caps.from_string("video/x-raw,width=1920,height=1080"))
     rate = Gst.ElementFactory.make("videorate", "smooth-rate")
     rate_caps = Gst.ElementFactory.make("capsfilter", "smooth-rate-caps")
-    rate_caps.set_property("caps", Gst.Caps.from_string("video/x-raw,framerate=10/1"))
+    rate_caps.set_property("caps", Gst.Caps.from_string("video/x-raw,framerate=2/1"))
 
     jpeg = Gst.ElementFactory.make("jpegenc", "smooth-jpeg")
     jpeg.set_property("quality", 85)

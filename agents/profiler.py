@@ -150,7 +150,7 @@ class SynthesisOutput(BaseModel):
 # ── Agents ───────────────────────────────────────────────────────────────────
 
 extraction_agent = Agent(
-    get_model("balanced"),
+    get_model("fast"),  # classification task — flash is sufficient
     output_type=ChunkExtraction,
     system_prompt=(
         get_system_prompt_fragment("profiler") + "\n\n"
@@ -274,7 +274,7 @@ class DimensionCuration(BaseModel):
 
 
 curator_agent = Agent(
-    get_model("balanced"),
+    get_model("fast"),  # curation is classification — flash is sufficient
     output_type=DimensionCuration,
     system_prompt=(
         "You are a profile quality curator. Given a set of facts for one dimension of a "

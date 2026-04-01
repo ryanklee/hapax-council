@@ -129,7 +129,7 @@ export const useStudio = () =>
 export const useStudioStreamInfo = () =>
   useQuery({ queryKey: ["studioStreamInfo"], queryFn: api.studioStreamInfo, refetchInterval: FAST });
 
-const FAST_POLL = 2_000; // 2s
+const FAST_POLL = 10_000; // 10s — compositor state changes rarely
 
 export const useCompositorLive = () =>
   useQuery({ queryKey: ["compositorLive"], queryFn: api.compositorLive, refetchInterval: FAST_POLL });
@@ -254,13 +254,13 @@ export function useDeleteInsightQuery() {
 
 // --- Fortress ---
 
-const FORTRESS = 5_000; // 5s for fortress state
+const FORTRESS = 30_000; // 30s for fortress state (was 5s — too aggressive)
 
 export const useFortressState = () =>
   useQuery({ queryKey: ["fortressState"], queryFn: api.fortressState, refetchInterval: FORTRESS, retry: false });
 
 export const useFortressGovernance = () =>
-  useQuery({ queryKey: ["fortressGovernance"], queryFn: api.fortressGovernance, refetchInterval: 2_000, retry: false });
+  useQuery({ queryKey: ["fortressGovernance"], queryFn: api.fortressGovernance, refetchInterval: 15_000, retry: false });
 
 export const useFortressGoals = () =>
   useQuery({ queryKey: ["fortressGoals"], queryFn: api.fortressGoals, refetchInterval: FORTRESS, retry: false });
