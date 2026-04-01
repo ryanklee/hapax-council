@@ -91,6 +91,29 @@ def start_compositor(compositor: Any) -> None:
         )
     )
 
+    # Control law: no cameras → skip compositing
+    _comp_errors = getattr(compositor, "_cl_errors", 0)
+    _comp_ok = getattr(compositor, "_cl_ok", 0)
+    _comp_deg = getattr(compositor, "_cl_degraded", False)
+    if cameras_active == 0:
+        _comp_errors += 1
+        _comp_ok = 0
+    else:
+        _comp_errors = 0
+        _comp_ok += 1
+
+    if _comp_errors >= 3 and not _comp_deg:
+        _comp_deg = True
+        log.warning("Control law [compositor]: degrading — no cameras, skipping compositing")
+
+    if _comp_ok >= 5 and _comp_deg:
+        _comp_deg = False
+        log.info("Control law [compositor]: recovered")
+
+    compositor._cl_errors = _comp_errors
+    compositor._cl_ok = _comp_ok
+    compositor._cl_degraded = _comp_deg
+
     _register_purge_handler(compositor)
 
     compositor.loop = GLib.MainLoop()

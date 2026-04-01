@@ -23,7 +23,7 @@ NUMERIC_FIELDS = [
     "heart_rate",
     "operator_stress",
     "e_mesh",
-    "consistency_radius",
+    "restriction_residual_rms",
 ]
 
 STANCE_MAP = {"nominal": 0.0, "cautious": 0.25, "degraded": 0.5, "critical": 1.0}

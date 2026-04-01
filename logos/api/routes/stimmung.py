@@ -9,7 +9,7 @@ from fastapi import APIRouter
 
 from shared.eigenform_analysis import analyze_convergence
 from shared.sheaf_graph import build_scm_graph
-from shared.sheaf_health import compute_sheaf_health
+from shared.sheaf_health import compute_restriction_consistency
 from shared.topology_health import compute_topological_stability
 
 router = APIRouter(prefix="/api/stimmung", tags=["stimmung"])
@@ -72,7 +72,7 @@ async def get_stimmung() -> dict:
     }
 
     try:
-        response["sheaf_health"] = compute_sheaf_health()
+        response["sheaf_health"] = compute_restriction_consistency()
         response["topology"] = compute_topological_stability(build_scm_graph())
     except Exception:
         pass

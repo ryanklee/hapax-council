@@ -102,6 +102,28 @@ class IrPresenceBackend:
         signal = ControlSignal(component="ir_perception", reference=1.0, perception=freshness)
         publish_health(signal)
 
+        # Control law: 0 Pis reporting → safe defaults
+        _ir_error = len(reports) == 0
+        self._cl_errors = getattr(self, "_cl_errors", 0)
+        self._cl_ok = getattr(self, "_cl_ok", 0)
+        self._cl_degraded = getattr(self, "_cl_degraded", False)
+        if _ir_error:
+            self._cl_errors += 1
+            self._cl_ok = 0
+        else:
+            self._cl_errors = 0
+            self._cl_ok += 1
+
+        if self._cl_errors >= 3 and not self._cl_degraded:
+            # Force safe defaults — already handled in _fuse when reports is empty,
+            # but mark degraded to suppress downstream trust
+            self._cl_degraded = True
+            log.warning("Control law [ir_perception]: degrading — all signals to safe defaults")
+
+        if self._cl_ok >= 5 and self._cl_degraded:
+            self._cl_degraded = False
+            log.info("Control law [ir_perception]: recovered")
+
     def _fuse(self, reports: dict[str, dict[str, object]], now: float) -> None:
         """Fuse all Pi reports into behavior values."""
         if not reports:

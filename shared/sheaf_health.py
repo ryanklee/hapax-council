@@ -1,6 +1,6 @@
-"""Sheaf cohomology health monitor for the SCM.
+"""Restriction map consistency health monitor for the SCM.
 
-Reports consistency_radius (how far from consistent) and h1_dimension
+Reports restriction_residual_rms (how far from consistent) and inconsistent_edge_count
 (number of independent inconsistencies). Based on Robinson (2017).
 """
 
@@ -20,7 +20,9 @@ def compute_consistency_radius(residuals: list[float]) -> float:
     return math.sqrt(sum(r * r for r in residuals) / len(residuals))
 
 
-def compute_sheaf_health(traces: dict | None = None, *, shm_root: Path = Path("/dev/shm")) -> dict:
+def compute_restriction_consistency(
+    traces: dict | None = None, *, shm_root: Path = Path("/dev/shm")
+) -> dict:
     if traces is None:
         traces = _read_all_traces(shm_root)
 
@@ -83,12 +85,16 @@ def compute_sheaf_health(traces: dict | None = None, *, shm_root: Path = Path("/
     h1_dim = sum(1 for r in residuals if r > 0.1)
 
     return {
-        "consistency_radius": round(radius, 4),
-        "h1_dimension": h1_dim,
+        "restriction_residual_rms": round(radius, 4),
+        "inconsistent_edge_count": h1_dim,
         "residual_count": len(residuals),
         "residuals": [round(r, 4) for r in residuals],
         "timestamp": time.time(),
     }
+
+
+# Backward-compat alias
+compute_sheaf_health = compute_restriction_consistency
 
 
 def _read_all_traces(shm_root: Path) -> dict:

@@ -613,6 +613,26 @@ class ApperceptionCascade:
                 perception=self.model.coherence,
             )
         )
+        # Control law: coherence below 0.2 → gate sources
+        _ap_error = self.model.coherence < 0.2
+        self._cl_errors = getattr(self, "_cl_errors", 0)
+        self._cl_ok = getattr(self, "_cl_ok", 0)
+        self._cl_degraded = getattr(self, "_cl_degraded", False)
+        if _ap_error:
+            self._cl_errors += 1
+            self._cl_ok = 0
+        else:
+            self._cl_errors = 0
+            self._cl_ok += 1
+
+        if self._cl_errors >= 3 and not self._cl_degraded:
+            self._cl_degraded = True
+            self._cl_saved_sources = None  # all sources were allowed
+            log.warning("Control law [apperception]: degrading — gating to correction-only")
+
+        if self._cl_ok >= 5 and self._cl_degraded:
+            self._cl_degraded = False
+            log.info("Control law [apperception]: recovered — all 7 sources re-enabled")
 
         return apperception
 

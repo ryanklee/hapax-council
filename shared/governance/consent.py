@@ -112,11 +112,35 @@ class ConsentRegistry:
             self._fail_closed = False
             self._loaded_at = time.time()
             publish_health(ControlSignal(component="consent_engine", reference=1.0, perception=1.0))
+            # Control law: successful load
+            self._cl_errors = 0
+            self._cl_ok = getattr(self, "_cl_ok", 0) + 1
+            if self._cl_ok >= 5 and getattr(self, "_cl_degraded", False):
+                self._cl_degraded = False
+                log.info("Control law [consent_engine]: recovered")
             return count
         except Exception:
             log.exception("Failed to load contracts from %s", directory)
             self._fail_closed = True
             publish_health(ControlSignal(component="consent_engine", reference=1.0, perception=0.0))
+            # Control law: fail_closed → emit ntfy notification
+            self._cl_errors = getattr(self, "_cl_errors", 0) + 1
+            self._cl_ok = 0
+            self._cl_degraded = getattr(self, "_cl_degraded", False)
+            if self._cl_errors >= 3 and not self._cl_degraded:
+                self._cl_degraded = True
+                try:
+                    from shared.notify import send_notification
+
+                    send_notification(
+                        "Consent Engine Degraded",
+                        "Contract loading failed 3 times — fail-closed active",
+                        priority="high",
+                        tags=["warning"],
+                    )
+                except Exception:
+                    pass  # notification is best-effort
+                log.warning("Control law [consent_engine]: degrading — fail_closed, ntfy sent")
             return 0
 
     def get(self, contract_id: str) -> ConsentContract | None:

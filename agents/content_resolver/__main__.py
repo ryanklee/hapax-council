@@ -50,6 +50,11 @@ class ContentResolverDaemon:
         self._failures: dict[str, int] = {}
         self._skip_until: dict[str, float] = {}
         self._last_fragment_id = ""
+        # Control law state
+        self._cl_errors = 0
+        self._cl_ok = 0
+        self._cl_degraded = False
+        self._cl_original_poll = POLL_INTERVAL_S
 
     async def run(self) -> None:
         log.info("Content resolver daemon starting")
@@ -76,6 +81,9 @@ class ContentResolverDaemon:
                                     component="content_resolver", reference=1.0, perception=1.0
                                 )
                             )
+                            # Control law: success
+                            self._cl_errors = 0
+                            self._cl_ok += 1
                         except Exception:
                             count = self._failures.get(frag_id, 0) + 1
                             self._failures[frag_id] = count
@@ -96,8 +104,24 @@ class ContentResolverDaemon:
                                     component="content_resolver", reference=1.0, perception=0.0
                                 )
                             )
+                            # Control law: error drives behavior
+                            self._cl_errors += 1
+                            self._cl_ok = 0
             except Exception:
                 log.warning("Resolver tick failed", exc_info=True)
+
+            # Control law: degrade/recover polling interval
+            if self._cl_errors >= 3 and not self._cl_degraded:
+                global POLL_INTERVAL_S
+                self._cl_original_poll = POLL_INTERVAL_S
+                POLL_INTERVAL_S = POLL_INTERVAL_S * 2.0
+                self._cl_degraded = True
+                log.warning("Control law [content_resolver]: degrading — doubling poll interval")
+
+            if self._cl_ok >= 5 and self._cl_degraded:
+                POLL_INTERVAL_S = self._cl_original_poll
+                self._cl_degraded = False
+                log.info("Control law [content_resolver]: recovered")
 
             await asyncio.sleep(POLL_INTERVAL_S)
 
