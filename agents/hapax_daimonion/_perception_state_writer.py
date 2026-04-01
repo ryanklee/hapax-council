@@ -45,6 +45,7 @@ def _safe_float(val: object, default: float = 0.0) -> float:
 
 PERCEPTION_STATE_DIR = Path.home() / ".cache" / "hapax-daimonion"
 PERCEPTION_STATE_FILE = PERCEPTION_STATE_DIR / "perception-state.json"
+CONSENT_STATE_FILE = Path("/dev/shm/hapax-daimonion/consent-state.json")
 _perception_write_failures: int = 0
 
 # ── Supplementary content ring buffer ─────────────────────────────────────
@@ -492,6 +493,20 @@ def write_perception_state(
             )
         elif _perception_write_failures == 4:
             log.error("Perception state write failing persistently — consumers are stale")
+
+    # Write consent-state.json for reverie governance (and any other consumers).
+    # Label is bottom (public): this file contains system metadata only — the consent
+    # phase itself, not the identity of the guest who triggered it.
+    _consent_phase = state.get("consent_phase", "no_guest")
+    _consent_state_data = {
+        "phase": _consent_phase,
+        "persistence_allowed": state.get("persistence_allowed", True),
+        "timestamp": state.get("timestamp", 0.0),
+    }
+    try:
+        write_labeled_trace(CONSENT_STATE_FILE, _consent_state_data, ConsentLabel.bottom())
+    except OSError:
+        log.debug("Failed to write consent-state.json", exc_info=True)
 
 
 # ── Perception Ring Buffer (WS1) ────────────────────────────────────────────

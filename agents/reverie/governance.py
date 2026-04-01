@@ -6,12 +6,12 @@ for full audit trail, axiom linkage, and | composition.
 
 from __future__ import annotations
 
-import json
 import logging
 from pathlib import Path
 
 from agents._capability import SystemContext
 from agents._governance.primitives import Veto, VetoChain
+from shared.labeled_trace import read_labeled_trace
 
 log = logging.getLogger("reverie.governance")
 
@@ -50,12 +50,9 @@ def build_reverie_veto_chain() -> VetoChain[SystemContext]:
 
 def read_consent_phase() -> str:
     """Read current consent phase from SHM."""
-    try:
-        if CONSENT_STATE.exists():
-            data = json.loads(CONSENT_STATE.read_text())
-            return data.get("phase", "no_guest")
-    except (OSError, json.JSONDecodeError):
-        pass
+    data, _label = read_labeled_trace(CONSENT_STATE, stale_s=30.0)
+    if data is not None:
+        return data.get("phase", "no_guest")
     return "no_guest"
 
 

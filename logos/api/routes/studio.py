@@ -326,25 +326,9 @@ async def get_current_effect():
             preset = current_path.read_text().strip() or "clean"
         except OSError:
             pass
-    available = [
-        "ghost",
-        "trails",
-        "screwed",
-        "datamosh",
-        "vhs",
-        "neon",
-        "trap",
-        "diff",
-        "clean",
-        "ambient",
-        "thermal",
-        "halftone",
-        "glitchblocks",
-        "pixsort",
-        "ascii",
-        "feedback",
-        "slitscan",
-    ]
+    from agents.studio_compositor.effects import get_available_preset_names
+
+    available = sorted(get_available_preset_names())
     return {"preset": preset, "available": available}
 
 

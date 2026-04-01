@@ -82,7 +82,11 @@ async def engagement_processor(daemon: VoiceDaemon) -> None:
         log.info("Session opened via engagement detection")
         daemon.event_log.set_session_id(daemon.session.session_id)
         daemon.event_log.emit("session_lifecycle", action="opened", trigger="engagement")
-        await daemon._start_pipeline()
+        try:
+            await daemon._start_pipeline()
+            log.info("Pipeline started successfully")
+        except Exception:
+            log.exception("PIPELINE START FAILED")
 
 
 async def handle_hotkey(daemon: VoiceDaemon, cmd: str) -> None:
@@ -103,7 +107,11 @@ async def handle_hotkey(daemon: VoiceDaemon, cmd: str) -> None:
             daemon.session.set_speaker("operator", confidence=1.0)
             daemon.event_log.set_session_id(daemon.session.session_id)
             daemon.event_log.emit("session_lifecycle", action="opened", trigger="hotkey")
-            await daemon._start_pipeline()
+            try:
+                await daemon._start_pipeline()
+                log.info("Pipeline started successfully")
+            except Exception:
+                log.exception("PIPELINE START FAILED")
     elif cmd == "open":
         state = daemon.perception.tick()
         veto = daemon.governor._veto_chain.evaluate(state)
@@ -116,7 +124,11 @@ async def handle_hotkey(daemon: VoiceDaemon, cmd: str) -> None:
         daemon.session.set_speaker("operator", confidence=1.0)
         daemon.event_log.set_session_id(daemon.session.session_id)
         daemon.event_log.emit("session_lifecycle", action="opened", trigger="hotkey")
-        await daemon._start_pipeline()
+        try:
+            await daemon._start_pipeline()
+            log.info("Pipeline started successfully")
+        except Exception:
+            log.exception("PIPELINE START FAILED")
     elif cmd == "close":
         await close_session(daemon, reason="hotkey")
     elif cmd == "scan":

@@ -7,14 +7,27 @@ Constraints:
 - No mood/emotion/body state — only objective observations
 - Ephemeral — exists only in conversation messages, never logged
 - Consent-aware — face count but no identity when guests present
+
+IFC boundary gate (DD-15):
+    When perception data carries a non-bottom consent label, person-adjacent
+    fields must be redacted before flowing into the LLM prompt. Currently all
+    labels are bottom (single-operator system), so the gate is a no-op, but the
+    structural check must exist for when guest data flows through.
+
+    Gate location: serialize_environment() — before injecting into `data` dict.
+    Gate trigger: read_labeled_trace(PERCEPTION_STATE_FILE) returns non-bottom label.
+    Redacted fields: face_count, speaker_id, gaze_zone, heart_rate, top_emotion.
 """
 
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agents._context_compression import to_toon
+from shared.governance.consent_label import ConsentLabel
+from shared.labeled_trace import read_labeled_trace
 
 if TYPE_CHECKING:
     from agents.hapax_daimonion.ambient_classifier import AmbientResult
@@ -24,6 +37,24 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 _last_hash: int = 0
+
+# Path to perception-state labeled trace (for boundary gate checks)
+_PERCEPTION_STATE_PATH = Path.home() / ".cache" / "hapax-daimonion" / "perception-state.json"
+
+# Person-adjacent fields that must be redacted when label is non-bottom
+_PERSON_ADJACENT_PROMPT_FIELDS = {
+    "face_count",
+    "speaker_id",
+    "gaze_zone",
+    "heart_rate",
+    "top_emotion",
+}
+
+
+def _perception_label() -> ConsentLabel:
+    """Read consent label from current perception trace. Returns bottom on any failure."""
+    _data, label = read_labeled_trace(_PERCEPTION_STATE_PATH, stale_s=30.0)
+    return label if label is not None else ConsentLabel.bottom()
 
 
 def serialize_environment(
@@ -70,7 +101,16 @@ def serialize_environment(
 
         # Operator presence
         data["op"] = "present" if state.operator_present else "absent"
-        data["faces"] = state.face_count
+
+        # IFC boundary gate: only inject face_count when label is bottom (public data).
+        # Non-bottom label means guest data is present — redact to protect consent.
+        # Single-operator system: always bottom currently, gate is structural only.
+        _label = _perception_label()
+        if _label.can_flow_to(ConsentLabel.bottom()):
+            data["faces"] = state.face_count
+        else:
+            # Non-public label: suppress person-adjacent fields from LLM prompt
+            log.debug("Consent gate: redacting face_count from LLM prompt (label non-public)")
 
         # Audio classification (during session)
         if ambient is not None and ambient.top_labels:

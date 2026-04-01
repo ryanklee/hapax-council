@@ -65,7 +65,6 @@ def try_reconnect_camera(compositor: Any, role: str) -> bool:
 
 def state_reader_loop(compositor: Any) -> None:
     """Daemon thread: read perception-state.json every 1s."""
-    from .effects import switch_fx_preset
 
     profile_check_counter = 0
     reconnect_counter = 0
@@ -134,16 +133,8 @@ def state_reader_loop(compositor: Any) -> None:
             try:
                 preset_name = fx_request_path.read_text().strip()
                 fx_request_path.unlink(missing_ok=True)
-                if preset_name:
-                    graph_activated = False
-                    if compositor._graph_runtime is not None:
-                        graph_activated = try_graph_preset(compositor, preset_name)
-
-                    if hasattr(compositor, "_fx_post_proc"):
-                        switch_fx_preset(compositor, preset_name)
-                        if graph_activated:
-                            compositor._fx_graph_mode = True
-
+                if preset_name and compositor._graph_runtime is not None:
+                    try_graph_preset(compositor, preset_name)
                     try:
                         (SNAPSHOT_DIR / "fx-current.txt").write_text(preset_name)
                     except OSError:
