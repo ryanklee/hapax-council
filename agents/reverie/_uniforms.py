@@ -32,6 +32,37 @@ def build_slot_opacities(imagination: dict | None, fallback_salience: float) -> 
     return opacities
 
 
+SLOT_CENTERS = {0: (0.4, 0.4), 1: (0.6, 0.4), 2: (0.4, 0.6), 3: (0.6, 0.6)}
+
+
+def update_trace(
+    imagination: dict | None,
+    last_salience: float,
+    trace_strength: float,
+    trace_radius: float,
+    trace_center: tuple[float, float],
+    trace_decay_rate: float,
+    dt: float,
+) -> tuple[float, float, float, tuple[float, float]]:
+    """Update dwelling trace state. Returns (salience, strength, radius, center)."""
+    current_salience = float(imagination.get("salience", 0.0)) if imagination else 0.0
+    if last_salience > 0.2 and current_salience < last_salience * 0.5:
+        trace_strength = min(1.0, last_salience)
+        trace_radius = 0.3 + last_salience * 0.2
+        slot_idx = 0
+        if imagination:
+            refs = imagination.get("content_references", [])
+            if isinstance(refs, list) and refs:
+                slot_idx = 0
+        trace_center = SLOT_CENTERS.get(slot_idx, (0.5, 0.5))
+        log.info(
+            "Trace: strength=%.2f radius=%.2f center=%s", trace_strength, trace_radius, trace_center
+        )
+    if trace_strength > 0:
+        trace_strength = max(0.0, trace_strength - trace_decay_rate * dt)
+    return current_salience, trace_strength, trace_radius, trace_center
+
+
 def write_uniforms(
     imagination: dict | None,
     stimmung: dict | None,

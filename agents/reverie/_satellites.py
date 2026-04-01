@@ -64,9 +64,13 @@ class SatelliteManager:
         if now - self._last_rebuild < REBUILD_COOLDOWN_S:
             return False
 
-        graph = build_graph(self._core_vocab, self._recruited)
-        plan = compile_to_wgsl_plan(graph)
-        write_wgsl_pipeline(plan)
+        try:
+            graph = build_graph(self._core_vocab, self._recruited)
+            plan = compile_to_wgsl_plan(graph)
+            write_wgsl_pipeline(plan)
+        except Exception:
+            log.exception("Graph rebuild failed — keeping previous graph")
+            return False
 
         pass_count = len(plan.get("passes", []))
         log.info(

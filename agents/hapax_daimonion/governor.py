@@ -90,8 +90,8 @@ class PipelineGovernor:
         self._conversation_first_seen: float | None = None
         self._paused_by_conversation: bool = False
         self._conversation_cleared_at: float | None = None
-        self.wake_word_active: bool = False
-        self._wake_word_grace_remaining: int = 0
+        self.engagement_active: bool = False
+        self._engagement_grace_remaining: int = 0
 
         # Last evaluation results (for observability)
         self.last_veto_result: VetoResult | None = None
@@ -160,19 +160,19 @@ class PipelineGovernor:
             One of "process", "pause", "withdraw".
         """
         # Wake word always overrides — immediate process + grace period
-        if self.wake_word_active:
-            self.wake_word_active = False
-            self._wake_word_grace_remaining = 8  # 8 ticks × ~2.5s = ~20s protection
+        if self.engagement_active:
+            self.engagement_active = False
+            self._engagement_grace_remaining = 8  # 8 ticks × ~2.5s = ~20s protection
             self.last_veto_result = VetoResult(allowed=True)
-            self.last_selected = Selected(action="process", selected_by="wake_word_override")
+            self.last_selected = Selected(action="process", selected_by="engagement_override")
             return "process"
 
         # Grace period: protect session for N ticks after wake word
-        if self._wake_word_grace_remaining > 0:
-            self._wake_word_grace_remaining -= 1
+        if self._engagement_grace_remaining > 0:
+            self._engagement_grace_remaining -= 1
             self._track_state(state)
             self.last_veto_result = VetoResult(allowed=True)
-            self.last_selected = Selected(action="process", selected_by="wake_word_grace")
+            self.last_selected = Selected(action="process", selected_by="engagement_grace")
             return "process"
 
         # Update stateful tracking (side effects, before governance evaluation)

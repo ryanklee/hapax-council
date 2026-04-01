@@ -125,13 +125,13 @@ class TestConsumerFieldNames:
 
     def test_reverie_reads_overall_stance(self):
         """reverie actuation must use 'overall_stance' for stance signal."""
-        from agents.reverie.actuation import ReverieActuationLoop
+        from agents.reverie._uniforms import write_uniforms
+        from agents.visual_chain import VisualChainCapability
 
-        loop = ReverieActuationLoop()
+        vc = VisualChainCapability()
         stimmung_raw = self._make_stimmung_raw()
 
-        # Test _write_uniforms directly
-        loop._write_uniforms(None, stimmung_raw)
+        write_uniforms(None, stimmung_raw, vc, 0.0, (0.5, 0.5), 0.0)
 
         # Read back the written uniforms
         uniforms_path = Path("/dev/shm/hapax-imagination/pipeline/uniforms.json")

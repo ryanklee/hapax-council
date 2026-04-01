@@ -217,7 +217,7 @@ def _start_cognitive_loop(daemon: VoiceDaemon) -> None:
 
     spec_stt = SpeculativeTranscriber(daemon._resident_stt) if daemon._resident_stt else None
     conv_model = ConversationalModel()
-    _speaker_id = daemon._speaker_identifier if daemon.session.trigger != "wake_word" else None
+    _speaker_id = daemon._speaker_identifier if daemon.session.trigger != "engagement" else None
 
     daemon._cognitive_loop = CognitiveLoop(
         buffer=daemon._conversation_buffer,

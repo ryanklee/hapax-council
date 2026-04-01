@@ -17,15 +17,9 @@ from agents.hapax_daimonion.perception_loop import perception_loop  # noqa: F401
 
 
 async def audio_loop(daemon: VoiceDaemon) -> None:
-    """Distribute audio frames to wake word, VAD, and Gemini consumers."""
-    import numpy as np
+    """Distribute audio frames to engagement classifier, VAD, and Gemini consumers."""
 
-    from agents.hapax_daimonion.wake_word_whisper import WhisperWakeWord
-
-    _wake_samples = getattr(daemon.wake_word, "frame_length", 1280)
-    _WAKE_CHUNK = _wake_samples * 2
     _VAD_CHUNK = 512 * 2
-    _wake_buf = bytearray()
     _vad_buf = bytearray()
 
     _recovery_delay = 5.0
@@ -49,8 +43,6 @@ async def audio_loop(daemon: VoiceDaemon) -> None:
             except Exception as exc:
                 log.warning("Gemini audio consumer error: %s", exc)
 
-        _wake_buf.extend(frame)
-
         if daemon._echo_canceller is not None:
             frame = daemon._echo_canceller.process(frame)
         if daemon._noise_reference is not None:
@@ -71,19 +63,22 @@ async def audio_loop(daemon: VoiceDaemon) -> None:
                 vad_prob = daemon.presence._latest_vad_confidence
                 if daemon._conversation_buffer.is_active:
                     daemon._conversation_buffer.update_vad(vad_prob)
-                if isinstance(daemon.wake_word, WhisperWakeWord):
-                    daemon.wake_word.set_vad_probability(vad_prob)
             except Exception as exc:
                 log.warning("Presence consumer error: %s", exc)
 
-        while len(_wake_buf) >= _WAKE_CHUNK:
-            chunk = bytes(_wake_buf[:_WAKE_CHUNK])
-            del _wake_buf[:_WAKE_CHUNK]
+        # Engagement detection: when VAD detects speech and operator is present
+        if (
+            not daemon.session.is_active
+            and daemon.presence._latest_vad_confidence >= 0.5
+            and hasattr(daemon, "_engagement")
+        ):
             try:
-                audio_np = np.frombuffer(chunk, dtype=np.int16)
-                daemon.wake_word.process_audio(audio_np)
+                behaviors = daemon.perception.latest_behaviors()
+                ps = behaviors.get("presence_state")
+                if ps is not None and getattr(ps, "value", "") == "PRESENT":
+                    daemon._engagement.on_speech_detected(behaviors)
             except Exception as exc:
-                log.warning("Wake word consumer error: %s", exc)
+                log.debug("Engagement evaluation error: %s", exc)
 
 
 async def actuation_loop(daemon: VoiceDaemon) -> None:

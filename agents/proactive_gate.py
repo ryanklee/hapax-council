@@ -18,7 +18,7 @@ from agents.imagination import ImaginationFragment
 # ---------------------------------------------------------------------------
 
 GAP_THRESHOLD_S = 30.0
-DEFAULT_COOLDOWN_S = 120.0
+DEFAULT_COOLDOWN_S = 300.0
 ABSENT_ACTIVITIES = {"idle", "away", "unknown"}
 
 
@@ -49,6 +49,12 @@ class ProactiveGate:
         if time.monotonic() - state["last_utterance_time"] < GAP_THRESHOLD_S:
             return False
         if state["tpn_active"]:
+            return False
+        if state.get("presence_state", "AWAY") != "PRESENT":
+            return False
+        if state.get("stimmung_stance", "nominal") == "critical":
+            return False
+        if state.get("session_active", False):
             return False
         return time.monotonic() - self._last_proactive >= self._cooldown_s
 

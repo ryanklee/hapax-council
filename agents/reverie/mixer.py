@@ -176,6 +176,9 @@ class ReverieMixer:
     def dispatch_impingement(self, imp: Impingement) -> None:
         """Route impingement through affordance pipeline. Recruits satellites for node.* matches."""
         candidates = self._pipeline.select(imp)
+        if candidates:
+            t = candidates[0]
+            log.info("match: %s → %s (%.2f)", imp.source[:30], t.capability_name, t.combined)
         for c in candidates:
             name = c.capability_name
             if name.startswith("node."):
@@ -265,30 +268,22 @@ class ReverieMixer:
         except OSError:
             log.debug("Failed to write visual salience", exc_info=True)
 
-    # --- Actuation methods (inherited from ReverieActuationLoop) ---
-
-    _SLOT_CENTERS = {0: (0.4, 0.4), 1: (0.6, 0.4), 2: (0.4, 0.6), 3: (0.6, 0.6)}
+    # --- Actuation methods ---
 
     def _update_trace(self, imagination: dict | None, dt: float) -> None:
-        current_salience = float(imagination.get("salience", 0.0)) if imagination else 0.0
-        if self._last_salience > 0.2 and current_salience < self._last_salience * 0.5:
-            self._trace_strength = min(1.0, self._last_salience)
-            self._trace_radius = 0.3 + self._last_salience * 0.2
-            slot_idx = 0
-            if imagination:
-                refs = imagination.get("content_references", [])
-                if isinstance(refs, list) and refs:
-                    slot_idx = 0
-            self._trace_center = self._SLOT_CENTERS.get(slot_idx, (0.5, 0.5))
-            log.info(
-                "Trace activated: strength=%.2f radius=%.2f center=%s",
+        from agents.reverie._uniforms import update_trace
+
+        self._last_salience, self._trace_strength, self._trace_radius, self._trace_center = (
+            update_trace(
+                imagination,
+                self._last_salience,
                 self._trace_strength,
                 self._trace_radius,
                 self._trace_center,
+                self._trace_decay_rate,
+                dt,
             )
-        if self._trace_strength > 0:
-            self._trace_strength = max(0.0, self._trace_strength - self._trace_decay_rate * dt)
-        self._last_salience = current_salience
+        )
 
     def _apply_shader_impingement(self, imp: Impingement) -> None:
         content = imp.content or {}

@@ -194,7 +194,6 @@ def resolve_references_staged(
 
     resolved = resolve_references(fragment, content_dir=staging)
     write_slot_manifest(fragment, resolved, staging / "slots.json")
-    write_source_protocol(fragment, resolved, sources_dir=SOURCES_DIR)
 
     old = active.with_name("old")
     if active.exists():
@@ -202,6 +201,10 @@ def resolve_references_staged(
     staging.rename(active)
     if old.exists():
         shutil.rmtree(old, ignore_errors=True)
+
+    # Write source protocol AFTER staging→active rename so paths are valid
+    active_resolved = [active / p.name for p in resolved]
+    write_source_protocol(fragment, active_resolved, sources_dir=SOURCES_DIR)
 
     return resolved
 
