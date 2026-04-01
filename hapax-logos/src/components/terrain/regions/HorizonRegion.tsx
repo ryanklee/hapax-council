@@ -1,11 +1,10 @@
 import { memo } from "react";
 import { Region } from "../Region";
 import { useBriefing, useNudges } from "../../../api/hooks";
-import { GoalsPanel } from "../../sidebar/GoalsPanel";
+import { OrientationPanel } from "../../sidebar/OrientationPanel";
 import { NudgeList } from "../../dashboard/NudgeList";
 import { CopilotBanner } from "../../dashboard/CopilotBanner";
 import { EnginePanel } from "../../sidebar/EnginePanel";
-import { BriefingPanel } from "../../sidebar/BriefingPanel";
 import { SignalCluster, densityFromDepth } from "../signals/SignalCluster";
 import { useSignals } from "../../../contexts/ClassificationOverlayContext";
 
@@ -56,7 +55,7 @@ export const HorizonRegion = memo(function HorizonRegion() {
           {depth === "stratum" && (
             <div className="h-full overflow-y-auto p-3">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <GoalsPanel />
+                <OrientationPanel />
                 <div>
                   <CopilotBanner />
                   <NudgeList />
@@ -68,15 +67,12 @@ export const HorizonRegion = memo(function HorizonRegion() {
           {depth === "core" && (
             <div className="h-full overflow-y-auto p-3">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <GoalsPanel />
+                <OrientationPanel />
                 <div>
                   <CopilotBanner />
                   <NudgeList />
                 </div>
                 <EnginePanel />
-                <div className="col-span-1 md:col-span-3">
-                  <BriefingPanel />
-                </div>
               </div>
             </div>
           )}
