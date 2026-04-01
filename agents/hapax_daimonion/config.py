@@ -86,9 +86,7 @@ class DaimonionConfig(BaseModel):
     voxtral_ref_audio: str = (
         ""  # clean carrier — character comes from Evil Pet + S-4 hardware chain
     )
-    use_cpal: bool = (
-        False  # enable CPAL conversation loop (replaces cognitive loop + session model)
-    )
+    use_cpal: bool = True  # enable CPAL conversation loop (replaces cognitive loop + session model)
 
     # Consent
     consent_debounce_s: float = 5.0  # sustained presence before triggering

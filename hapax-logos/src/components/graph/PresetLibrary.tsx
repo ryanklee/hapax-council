@@ -193,17 +193,18 @@ function PresetItem({ name }: { name: string }) {
   const loadPreset = useStudioGraph((s: S) => s.loadPreset);
 
   const handleClick = async () => {
-    // Activate on backend (always works — changes live compositor output)
+    // Activate preset on backend compositor (always — this changes the live output)
     api.post("/studio/effect/select", { preset: name }).catch(() => {});
-    // Load graph onto canvas (best-effort — may fail if API proxy issues)
+    // Try to load graph onto canvas (may fail if API unavailable)
     try {
       const { fetchAndLoadPreset } = await import("./presetLoader");
       const result = await fetchAndLoadPreset(name);
       if (result && result.nodes.length > 0) {
         loadPreset(name, result.nodes, result.edges);
       }
+      // If fetch fails, don't touch the canvas — backend still got the activation
     } catch {
-      // Backend activation already happened, canvas stays as-is
+      // Silent — backend activation already happened
     }
   };
 
