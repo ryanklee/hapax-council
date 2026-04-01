@@ -56,6 +56,28 @@ class DMNPulse:
         self._cl_ok = 0
         self._cl_degraded = False
         self._cl_original_sensory_tick = SENSORY_TICK_S
+        # Exploration escalation state
+        self._exploration_targets: list[str] = []
+        self._boredom_window: list[tuple[float, str]] = []
+
+    def receive_exploration_impingement(self, imp: Impingement) -> None:
+        """Receive boredom/curiosity impingement for escalation processing."""
+        import time as _time
+
+        if imp.type == ImpingementType.BOREDOM:
+            self._exploration_targets.append(imp.source)
+            self._boredom_window.append((_time.time(), imp.source))
+            cutoff = _time.time() - 60.0
+            self._boredom_window = [(t, s) for t, s in self._boredom_window if t > cutoff]
+
+    def exploration_level(self) -> int:
+        """Current escalation: 0=none, 1=single-component, 2=multi-component, 3=sustained."""
+        if not self._boredom_window:
+            return 0
+        unique_sources = {s for _, s in self._boredom_window}
+        if len(unique_sources) >= 3:
+            return 2
+        return 1
 
     def set_tpn_active(self, active: bool) -> None:
         self._tpn_active = active
