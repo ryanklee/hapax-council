@@ -1730,18 +1730,11 @@ class ConversationPipeline:
             log.debug("LLM prewarm failed (non-fatal)", exc_info=True)
 
     def _open_audio_output(self) -> None:
-        """Open PyAudio output stream for TTS playback."""
+        """Open PipeWire audio output for TTS playback."""
         try:
-            import pyaudio
+            from agents.hapax_daimonion.pw_audio_output import PwAudioOutput
 
-            pa = pyaudio.PyAudio()
-            self._audio_output = pa.open(
-                format=pyaudio.paInt16,
-                channels=1,
-                rate=24000,  # Voxtral output rate
-                output=True,
-            )
-            self._pa = pa
+            self._audio_output = PwAudioOutput(sample_rate=24000, channels=1)
         except Exception:
             log.exception("Failed to open audio output")
 
@@ -1749,16 +1742,10 @@ class ConversationPipeline:
         """Close the audio output stream."""
         if self._audio_output:
             try:
-                self._audio_output.stop_stream()
                 self._audio_output.close()
             except Exception:
                 pass
             self._audio_output = None
-        if hasattr(self, "_pa") and self._pa:
-            try:
-                self._pa.terminate()
-            except Exception:
-                pass
 
     def get_session_digest(self) -> dict:
         """Generate a digest of the current conversation for cross-session memory.

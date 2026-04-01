@@ -1,4 +1,4 @@
-"""Tests for TTSExecutor — mocked PyAudio, pre-synthesized PCM playback."""
+"""Tests for TTSExecutor — pw-cat playback, pre-synthesized PCM."""
 
 from __future__ import annotations
 
@@ -13,33 +13,29 @@ from agents.hapax_daimonion.tts_executor import TTSExecutor
 
 class TestTTSExecutor(unittest.TestCase):
     def _make_executor(self):
-        mock_pa = MagicMock()
-        mock_stream = MagicMock()
-        mock_pa.open.return_value = mock_stream
-        return TTSExecutor(pa=mock_pa), mock_pa, mock_stream
+        return TTSExecutor()
 
     def test_satisfies_executor_protocol(self):
-        ex, _, _ = self._make_executor()
+        ex = self._make_executor()
         self.assertIsInstance(ex, Executor)
 
     def test_handles(self):
-        ex, _, _ = self._make_executor()
+        ex = self._make_executor()
         self.assertEqual(ex.handles, frozenset({"tts_announce"}))
 
-    def test_play_pcm_from_params(self):
-        ex, mock_pa, mock_stream = self._make_executor()
+    @patch("agents.hapax_daimonion.pw_audio_output.play_pcm")
+    @patch("agents.hapax_daimonion.tts_executor.write_acoustic_impulse", create=True)
+    def test_play_pcm_calls_pw_cat(self, _mock_impulse, mock_play):
+        ex = self._make_executor()
         pcm = b"\x00\x01" * 100
         ex._play_pcm(pcm, 24000, 1)
-        mock_pa.open.assert_called_once()
-        mock_stream.write.assert_called_once_with(pcm)
-        mock_stream.stop_stream.assert_called_once()
-        mock_stream.close.assert_called_once()
+        mock_play.assert_called_once_with(pcm, rate=24000, channels=1)
 
     @patch("agents.hapax_daimonion.tts_executor.threading.Thread")
     def test_execute_spawns_daemon_thread(self, mock_thread_cls):
         mock_thread = MagicMock()
         mock_thread_cls.return_value = mock_thread
-        ex, _, _ = self._make_executor()
+        ex = self._make_executor()
 
         pcm = b"\x00\x01" * 100
         cmd = Command(action="tts_announce", params={"pcm_data": pcm, "sample_rate": 24000})
@@ -51,58 +47,48 @@ class TestTTSExecutor(unittest.TestCase):
         mock_thread.start.assert_called_once()
 
     def test_missing_pcm_data_handled(self):
-        ex, _, _ = self._make_executor()
+        ex = self._make_executor()
         cmd = Command(action="tts_announce", params={})
-        # Should not raise
         ex.execute(cmd)
 
     def test_non_bytes_pcm_handled(self):
-        ex, _, _ = self._make_executor()
+        ex = self._make_executor()
         cmd = Command(action="tts_announce", params={"pcm_data": "not bytes"})
-        ex.execute(cmd)  # should not raise
+        ex.execute(cmd)
 
-    def test_available_with_pa(self):
-        ex, _, _ = self._make_executor()
+    def test_available(self):
+        ex = self._make_executor()
         self.assertTrue(ex.available())
 
-    def test_unavailable_without_pa(self):
-        ex = TTSExecutor(pa=None)
-        self.assertFalse(ex.available())
-
-    def test_integration_synthesize_enqueue_drain_play(self):
+    @patch("agents.hapax_daimonion.pw_audio_output.play_pcm")
+    def test_integration_synthesize_enqueue_drain_play(self, mock_play):
         """Simulates: synthesize → Command.params → ScheduleQueue → drain → TTSExecutor."""
-        ex, mock_pa, mock_stream = self._make_executor()
+        ex = self._make_executor()
 
-        # Step 1: "synthesize" (in reality Kokoro produces PCM)
         pcm = b"\x00\x01" * 500
-
-        # Step 2: Pack into Command
         cmd = Command(
             action="tts_announce",
             params={"pcm_data": pcm, "sample_rate": 24000},
             trigger_source="tts_governance",
         )
 
-        # Step 3: Create Schedule targeting bar boundary
         now = time.monotonic()
         schedule = Schedule(
             command=cmd,
             domain="beat",
-            target_time=4.0,  # bar boundary
-            wall_time=now + 0.001,  # just ahead of now
+            target_time=4.0,
+            wall_time=now + 0.001,
             tolerance_ms=100.0,
         )
 
-        # Step 4: Enqueue and drain
         queue = ScheduleQueue()
         queue.enqueue(schedule)
 
         ready = queue.drain(now + 0.002)
         self.assertEqual(len(ready), 1)
 
-        # Step 5: Play
         ex._play_pcm(ready[0].command.params["pcm_data"], 24000, 1)
-        mock_stream.write.assert_called_once_with(pcm)
+        mock_play.assert_called_once_with(pcm, rate=24000, channels=1)
 
 
 if __name__ == "__main__":

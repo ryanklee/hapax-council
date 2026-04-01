@@ -1,6 +1,6 @@
 """Integration test: chime synthesis -> ChimePlayer -> daemon lifecycle."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import numpy as np
 
@@ -64,13 +64,9 @@ class TestChimeIntegration:
         assert fft1[g6_bin1] > np.median(fft1) * 5
         assert fft2[d6_bin2] > np.median(fft2) * 3
 
-    @patch("agents.hapax_daimonion.chime_player.pyaudio")
-    def test_auto_generate_and_play(self, mock_pa, tmp_path):
+    @patch("agents.hapax_daimonion.pw_audio_output.play_pcm")
+    def test_auto_generate_and_play(self, mock_play, tmp_path):
         """Auto-generate chimes, then play activation."""
-        mock_stream = MagicMock()
-        mock_pa.PyAudio.return_value.open.return_value = mock_stream
-        mock_pa.paInt16 = 8
-
         chime_dir = tmp_path / "chimes"
         player = ChimePlayer(chime_dir, auto_generate=True)
         player.load()
@@ -84,8 +80,8 @@ class TestChimeIntegration:
 
         time.sleep(0.1)
 
-        # Verify the written audio is non-empty
-        mock_stream.write.assert_called_once()
-        written_data = mock_stream.write.call_args[0][0]
+        # Verify play_pcm was called with non-empty data
+        mock_play.assert_called_once()
+        written_data = mock_play.call_args[0][0]
         assert len(written_data) > 0
         player.close()

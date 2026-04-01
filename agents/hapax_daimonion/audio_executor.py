@@ -1,33 +1,28 @@
-"""AudioExecutor — plays samples via PyAudio in a daemon thread.
+"""AudioExecutor — plays samples via PipeWire in a daemon thread.
 
-Implements the Executor protocol. Receives a shared PyAudio instance
-from the daemon (same one ChimePlayer uses). Sub-50ms latency from
-execute() call to first audio sample hitting PipeWire.
+Implements the Executor protocol. Uses pw-cat for playback instead
+of PyAudio (which triggers assertion failures under PipeWire).
 """
 
 from __future__ import annotations
 
 import logging
 import threading
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from agents.hapax_daimonion.commands import Command
 from agents.hapax_daimonion.sample_bank import SampleBank
-
-if TYPE_CHECKING:
-    import pyaudio
 
 log = logging.getLogger(__name__)
 
 
 class AudioExecutor:
-    """Executor playing MC samples via PyAudio.
+    """Executor playing MC samples via PipeWire.
 
     handles = {"vocal_throw", "ad_lib"}
     """
 
-    def __init__(self, pa: pyaudio.PyAudio | Any, sample_bank: SampleBank) -> None:
-        self._pa = pa
+    def __init__(self, pa: Any = None, sample_bank: SampleBank | None = None) -> None:
         self._sample_bank = sample_bank
 
     @property
@@ -40,6 +35,8 @@ class AudioExecutor:
 
     def execute(self, command: Command) -> None:
         """Play a sample matching the command action. Non-blocking."""
+        if self._sample_bank is None:
+            return
         energy_rms = command.params.get("energy_rms", 0.5)
         entry = self._sample_bank.select(command.action, energy_rms)
         if entry is None:
@@ -53,28 +50,16 @@ class AudioExecutor:
         thread.start()
 
     def _play_pcm(self, pcm_data: bytes, rate: int, channels: int, action: str) -> None:
-        """Play PCM buffer through PyAudio. Runs in a background thread."""
-        stream = None
+        """Play PCM buffer via PipeWire. Runs in a background thread."""
         try:
-            stream = self._pa.open(
-                format=8,  # pyaudio.paInt16 = 8
-                channels=channels,
-                rate=rate,
-                output=True,
-            )
-            stream.write(pcm_data)
+            from agents.hapax_daimonion.pw_audio_output import play_pcm
+
+            play_pcm(pcm_data, rate=rate, channels=channels)
         except Exception as exc:
             log.warning("AudioExecutor playback failed for %s: %s", action, exc)
-        finally:
-            if stream is not None:
-                try:
-                    stream.stop_stream()
-                    stream.close()
-                except Exception:
-                    pass
 
     def available(self) -> bool:
-        return self._pa is not None and self._sample_bank.sample_count > 0
+        return self._sample_bank is not None and self._sample_bank.sample_count > 0
 
     def close(self) -> None:
-        pass  # PyAudio instance owned by daemon, not us
+        pass

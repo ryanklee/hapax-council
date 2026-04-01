@@ -53,14 +53,20 @@ async def run_inner(daemon: VoiceDaemon) -> None:
         on_engaged=lambda: on_engagement_detected(daemon),
     )
 
-    # Bridge presynthesis
+    # Bridge presynthesis — run in background to avoid blocking audio input start
     daemon._bridges_presynthesized = False
-    try:
-        daemon._bridge_engine.presynthesize_all(daemon.tts)
-        daemon._bridges_presynthesized = True
-        log.info("Bridge phrases presynthesized at startup")
-    except Exception:
-        log.warning("Bridge presynthesis at startup failed (will retry on first session)")
+
+    def _presynth_background() -> None:
+        try:
+            daemon._bridge_engine.presynthesize_all(daemon.tts)
+            daemon._bridges_presynthesized = True
+            log.info("Bridge phrases presynthesized (background)")
+        except Exception:
+            log.warning("Bridge presynthesis failed (will retry on first session)")
+
+    import threading
+
+    threading.Thread(target=_presynth_background, daemon=True, name="bridge-presynth").start()
 
     # Warm embedding model
     try:
@@ -206,14 +212,9 @@ async def run_inner(daemon: VoiceDaemon) -> None:
             if failed:
                 log.warning("Resources failed to stop: %s", failed)
 
-        # 7. Close resources (chime, executors, PyAudio)
+        # 7. Close resources (chime, executors)
         daemon.chime_player.close()
         daemon.executor_registry.close_all()
-        if daemon._shared_pa is not None:
-            try:
-                daemon._shared_pa.terminate()
-            except Exception:
-                pass
 
         # 8. Flush telemetry
         daemon.event_log.close()
