@@ -466,6 +466,31 @@ class ContactMicBackend:
                             perception=1.0 if len(energy_buffer) > 0 else 0.0,
                         )
                     )
+                    # Control law: empty audio buffer → skip DSP
+                    _cm_err = getattr(self, "_cl_errors", 0)
+                    _cm_ok = getattr(self, "_cl_ok", 0)
+                    _cm_deg = getattr(self, "_cl_degraded", False)
+                    if len(energy_buffer) == 0:
+                        _cm_err += 1
+                        _cm_ok = 0
+                    else:
+                        _cm_err = 0
+                        _cm_ok += 1
+
+                    if _cm_err >= 3 and not _cm_deg:
+                        self._cache.update(desk_activity="unknown")
+                        _cm_deg = True
+                        log.warning(
+                            "Control law [contact_mic]: degrading — skipping DSP, activity=unknown"
+                        )
+
+                    if _cm_ok >= 5 and _cm_deg:
+                        _cm_deg = False
+                        log.info("Control law [contact_mic]: recovered")
+
+                    self._cl_errors = _cm_err
+                    self._cl_ok = _cm_ok
+                    self._cl_degraded = _cm_deg
 
                 except Exception:
                     if self._stop_event.is_set():

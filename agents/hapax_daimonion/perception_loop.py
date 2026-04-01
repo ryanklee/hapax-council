@@ -121,6 +121,32 @@ async def perception_loop(daemon: VoiceDaemon) -> None:
                     perception=_fresh / max(_total, 1),
                 )
             )
+
+            # Control law [voice_daemon]: <50% fresh backends → skip SLOW tier
+            _vd_cl = getattr(daemon, "_cl_vd_errors", 0)
+            _vd_ok = getattr(daemon, "_cl_vd_ok", 0)
+            _vd_deg = getattr(daemon, "_cl_vd_degraded", False)
+            if _fresh < _total / 2:
+                _vd_cl += 1
+                _vd_ok = 0
+            else:
+                _vd_cl = 0
+                _vd_ok += 1
+
+            if _vd_cl >= 3 and not _vd_deg:
+                daemon._cl_vd_skip_slow = True
+                _vd_deg = True
+                log.warning("Control law [voice_daemon]: degrading — skipping SLOW backends")
+
+            if _vd_ok >= 5 and _vd_deg:
+                daemon._cl_vd_skip_slow = False
+                _vd_deg = False
+                log.info("Control law [voice_daemon]: recovered")
+
+            daemon._cl_vd_errors = _vd_cl
+            daemon._cl_vd_ok = _vd_ok
+            daemon._cl_vd_degraded = _vd_deg
+
             _asr_available = daemon._conversation_pipeline is not None and hasattr(
                 daemon._conversation_pipeline, "is_active"
             )
@@ -131,6 +157,31 @@ async def perception_loop(daemon: VoiceDaemon) -> None:
                     perception=1.0 if _asr_available else 0.0,
                 )
             )
+
+            # Control law [voice_pipeline]: conversation pipeline unavailable
+            _vp_cl = getattr(daemon, "_cl_vp_errors", 0)
+            _vp_ok = getattr(daemon, "_cl_vp_ok", 0)
+            _vp_deg = getattr(daemon, "_cl_vp_degraded", False)
+            if not _asr_available:
+                _vp_cl += 1
+                _vp_ok = 0
+            else:
+                _vp_cl = 0
+                _vp_ok += 1
+
+            if _vp_cl >= 3 and not _vp_deg:
+                daemon._cl_vp_proactive_disabled = True
+                _vp_deg = True
+                log.warning("Control law [voice_pipeline]: degrading — disabling proactive voice")
+
+            if _vp_ok >= 5 and _vp_deg:
+                daemon._cl_vp_proactive_disabled = False
+                _vp_deg = False
+                log.info("Control law [voice_pipeline]: recovered")
+
+            daemon._cl_vp_errors = _vp_cl
+            daemon._cl_vp_ok = _vp_ok
+            daemon._cl_vp_degraded = _vp_deg
         except asyncio.CancelledError:
             break
         except Exception:

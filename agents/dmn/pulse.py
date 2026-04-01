@@ -51,6 +51,11 @@ class DMNPulse:
         self._degradation_emitted = False
         self._starvation_last_emitted: dict[str, float] = {}
         self._fortress_acted_on: dict[str, float] = {}
+        # Control law state
+        self._cl_errors = 0
+        self._cl_ok = 0
+        self._cl_degraded = False
+        self._cl_original_sensory_tick = SENSORY_TICK_S
 
     def set_tpn_active(self, active: bool) -> None:
         self._tpn_active = active
@@ -122,6 +127,26 @@ class DMNPulse:
                 perception=1.0 if observation_produced else 0.0,
             )
         )
+
+        # Control law: error drives behavior
+        if not observation_produced:
+            self._cl_errors += 1
+            self._cl_ok = 0
+        else:
+            self._cl_errors = 0
+            self._cl_ok += 1
+
+        if self._cl_errors >= 3 and not self._cl_degraded:
+            global SENSORY_TICK_S
+            self._cl_original_sensory_tick = SENSORY_TICK_S
+            SENSORY_TICK_S = SENSORY_TICK_S * 2.0
+            self._cl_degraded = True
+            log.warning("Control law [dmn]: degrading — doubling sensory tick interval")
+
+        if self._cl_ok >= 5 and self._cl_degraded:
+            SENSORY_TICK_S = self._cl_original_sensory_tick
+            self._cl_degraded = False
+            log.info("Control law [dmn]: recovered")
 
     def _recently_acted(self, metric: str) -> bool:
         return time.time() - self._fortress_acted_on.get(metric, 0.0) <= 300

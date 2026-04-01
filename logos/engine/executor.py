@@ -102,4 +102,31 @@ class PhasedExecutor:
                 perception=1.0 if not plan.errors else 0.0,
             )
         )
+
+        # Control law: Phase 2 (cloud LLM) failures → disable Phase 2
+        _phase2_failed = (
+            any(action.phase == 2 and action.name in plan.errors for action in plan.all_actions)
+            if hasattr(plan, "all_actions")
+            else bool(plan.errors)
+        )
+        self._cl_errors = getattr(self, "_cl_errors", 0)
+        self._cl_ok = getattr(self, "_cl_ok", 0)
+        self._cl_degraded = getattr(self, "_cl_degraded", False)
+        if _phase2_failed:
+            self._cl_errors += 1
+            self._cl_ok = 0
+        else:
+            self._cl_errors = 0
+            self._cl_ok += 1
+
+        if self._cl_errors >= 3 and not self._cl_degraded:
+            self._cl_degraded = True
+            self._cl_phase2_disabled = True
+            _log.warning("Control law [reactive_engine]: degrading — disabling Phase 2 rules")
+
+        if self._cl_ok >= 5 and self._cl_degraded:
+            self._cl_degraded = False
+            self._cl_phase2_disabled = False
+            _log.info("Control law [reactive_engine]: recovered")
+
         return plan

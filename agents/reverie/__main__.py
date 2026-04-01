@@ -35,6 +35,11 @@ class ReverieDaemon:
     ) -> None:
         self._consumer = ImpingementConsumer(impingement_path)
         self._running = True
+        # Control law state
+        self._cl_errors = 0
+        self._cl_ok = 0
+        self._cl_degraded = False
+        self._cl_original_tick = TICK_INTERVAL_S
 
         if not skip_bootstrap:
             from agents.reverie.bootstrap import write_vocabulary_plan
@@ -78,6 +83,24 @@ class ReverieDaemon:
             except Exception:
                 log.exception("Reverie tick failed")
                 publish_health(ControlSignal(component="reverie", reference=1.0, perception=0.0))
+                # Control law: tick exception → slow down
+                self._cl_errors += 1
+                self._cl_ok = 0
+
+                if self._cl_errors >= 3 and not self._cl_degraded:
+                    global TICK_INTERVAL_S
+                    self._cl_original_tick = TICK_INTERVAL_S
+                    TICK_INTERVAL_S = TICK_INTERVAL_S * 2.0
+                    self._cl_degraded = True
+                    log.warning("Control law [reverie]: degrading — doubling tick interval")
+            else:
+                # Successful tick
+                self._cl_errors = 0
+                self._cl_ok += 1
+                if self._cl_ok >= 5 and self._cl_degraded:
+                    TICK_INTERVAL_S = self._cl_original_tick
+                    self._cl_degraded = False
+                    log.info("Control law [reverie]: recovered")
             await asyncio.sleep(TICK_INTERVAL_S)
         log.info("Reverie daemon stopped")
 

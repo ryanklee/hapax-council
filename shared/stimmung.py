@@ -180,6 +180,10 @@ class StimmungCollector:
         self._last_update: dict[str, float] = {}
         self._recovery_readings: int = 0
         self._last_stance: Stance = Stance.NOMINAL
+        # Control law state
+        self._cl_errors = 0
+        self._cl_ok = 0
+        self._cl_degraded = False
 
     def update_health(
         self, healthy: int, total: int, failed_checks: list[str] | None = None
@@ -386,6 +390,24 @@ class StimmungCollector:
             perception=_stance_error_map.get(stance, 0.5),
         )
         publish_health(sig)
+        # Control law: error drives behavior (>50% stale dimensions)
+        _stale_count = sum(1 for d in dimensions.values() if d.freshness_s > _STALE_THRESHOLD_S)
+        _stale_error = _stale_count > len(dimensions) / 2
+        if _stale_error:
+            self._cl_errors += 1
+            self._cl_ok = 0
+        else:
+            self._cl_errors = 0
+            self._cl_ok += 1
+
+        if self._cl_errors >= 3 and not self._cl_degraded:
+            stance = "degraded"
+            self._cl_degraded = True
+            log.warning("Control law [stimmung]: degrading — forcing degraded stance")
+
+        if self._cl_ok >= 5 and self._cl_degraded:
+            self._cl_degraded = False
+            log.info("Control law [stimmung]: recovered")
 
         return SystemStimmung(
             **dimensions,

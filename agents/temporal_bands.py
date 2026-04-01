@@ -11,7 +11,11 @@ temporal thickness rather than flat snapshots.
 
 from __future__ import annotations
 
+import logging
+
 from agents.hapax_daimonion.perception_ring import PerceptionRing
+
+log = logging.getLogger(__name__)
 from agents.protention_engine import ProtentionEngine
 from agents.temporal_models import (
     CircadianContext,
@@ -61,6 +65,13 @@ class TemporalBandFormatter:
         current = ring.current()
         if current is None:
             publish_health(ControlSignal(component="temporal_bands", reference=1.0, perception=0.0))
+            # Control law: empty perception ring
+            self._cl_errors = getattr(self, "_cl_errors", 0) + 1
+            self._cl_ok = 0
+            self._cl_degraded = getattr(self, "_cl_degraded", False)
+            if self._cl_errors >= 3 and not self._cl_degraded:
+                self._cl_degraded = True
+                log.warning("Control law [temporal_bands]: degrading — returning empty bands")
             return TemporalBands()
 
         now = current.get("ts", 0.0)
@@ -105,6 +116,14 @@ class TemporalBandFormatter:
             day_context=day_context,
         )
         publish_health(ControlSignal(component="temporal_bands", reference=1.0, perception=1.0))
+
+        # Control law: success tracking
+        self._cl_errors = 0
+        self._cl_ok = getattr(self, "_cl_ok", 0) + 1
+        if self._cl_ok >= 5 and getattr(self, "_cl_degraded", False):
+            self._cl_degraded = False
+            log.info("Control law [temporal_bands]: recovered")
+
         return bands
 
     def format_xml(self, bands: TemporalBands) -> str:
