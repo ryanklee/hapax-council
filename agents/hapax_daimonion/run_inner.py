@@ -32,8 +32,7 @@ async def run_inner(daemon: VoiceDaemon) -> None:
         ntfy_callback,
         proactive_delivery_loop,
     )
-    from agents.hapax_daimonion.session_events import close_session, wake_word_processor
-    from agents.hapax_daimonion.wake_word_whisper import WhisperWakeWord
+    from agents.hapax_daimonion.session_events import close_session, engagement_processor
 
     log.info("Hapax Daimonion daemon starting (backend=%s)", daemon.cfg.backend)
     daemon._loop = asyncio.get_running_loop()
@@ -46,10 +45,13 @@ async def run_inner(daemon: VoiceDaemon) -> None:
         daemon._resident_stt.load()
     daemon.tts.preload()
 
-    # Wire STT into wake word detector
-    if isinstance(daemon.wake_word, WhisperWakeWord):
-        daemon.wake_word._resident_stt = daemon._resident_stt
-    daemon.wake_word.load()
+    # Initialize engagement classifier (replaces wake word)
+    from agents.hapax_daimonion.engagement import EngagementClassifier
+    from agents.hapax_daimonion.session_events import on_engagement_detected
+
+    daemon._engagement = EngagementClassifier(
+        on_engaged=lambda: on_engagement_detected(daemon),
+    )
 
     # Bridge presynthesis
     daemon._bridges_presynthesized = False
@@ -115,8 +117,7 @@ async def run_inner(daemon: VoiceDaemon) -> None:
     log.info("  Notifications: %d pending", daemon.notifications.pending_count)
     log.info(
         "  Wake word: %s (engine=%s)",
-        "loaded" if daemon.wake_word.is_loaded else "unavailable",
-        daemon.cfg.wake_word_engine,
+        # Wake word replaced by engagement classifier
     )
     log.info(
         "  Workspace monitor: %s (cameras: %s)",
@@ -138,7 +139,7 @@ async def run_inner(daemon: VoiceDaemon) -> None:
         daemon._background_tasks.append(asyncio.create_task(audio_loop(daemon)))
 
     daemon._background_tasks.append(asyncio.create_task(perception_loop(daemon)))
-    daemon._background_tasks.append(asyncio.create_task(wake_word_processor(daemon)))
+    daemon._background_tasks.append(asyncio.create_task(engagement_processor(daemon)))
     daemon._background_tasks.append(asyncio.create_task(ambient_refresh_loop(daemon)))
     daemon._background_tasks.append(asyncio.create_task(impingement_consumer_loop(daemon)))
 

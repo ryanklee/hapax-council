@@ -52,18 +52,18 @@ def acknowledge(daemon: VoiceDaemon, kind: str = "activation") -> None:
         screen_flash(kind)
 
 
-def on_wake_word(daemon: VoiceDaemon) -> None:
-    """Called synchronously from audio loop when wake word is detected."""
+def on_engagement_detected(daemon: VoiceDaemon) -> None:
+    """Called from audio loop when engagement classifier fires."""
     daemon.wake_word_event.emit(time.monotonic(), None)
     if not daemon.session.is_active:
-        daemon._wake_word_signal.set()
+        daemon._engagement_signal.set()
 
 
-async def wake_word_processor(daemon: VoiceDaemon) -> None:
-    """Await wake word signal, then atomically set up session + pipeline."""
+async def engagement_processor(daemon: VoiceDaemon) -> None:
+    """Await engagement signal, then atomically set up session + pipeline."""
     while daemon._running:
-        await daemon._wake_word_signal.wait()
-        daemon._wake_word_signal.clear()
+        await daemon._engagement_signal.wait()
+        daemon._engagement_signal.clear()
 
         if daemon.session.is_active:
             continue
@@ -76,13 +76,13 @@ async def wake_word_processor(daemon: VoiceDaemon) -> None:
             continue
 
         acknowledge(daemon, "activation")
-        daemon.governor.wake_word_active = True
+        daemon.governor.engagement_active = True
         daemon._frame_gate.set_directive("process")
-        daemon.session.open(trigger="wake_word")
+        daemon.session.open(trigger="engagement")
         daemon.session.set_speaker("operator", confidence=1.0)
-        log.info("Session opened via wake word")
+        log.info("Session opened via engagement detection")
         daemon.event_log.set_session_id(daemon.session.session_id)
-        daemon.event_log.emit("session_lifecycle", action="opened", trigger="wake_word")
+        daemon.event_log.emit("session_lifecycle", action="opened", trigger="engagement")
         await daemon._start_pipeline()
 
 

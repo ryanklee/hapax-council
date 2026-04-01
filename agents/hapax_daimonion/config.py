@@ -179,7 +179,6 @@ class DaimonionConfig(BaseModel):
     vision_refresh_interval: int = 60
 
     # Wake word engine
-    wake_word_engine: str = "whisper"  # "whisper", "porcupine", or "oww"
     porcupine_sensitivity: float = 0.5
 
     # Chime settings

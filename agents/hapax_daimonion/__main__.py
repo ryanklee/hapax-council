@@ -26,8 +26,6 @@ from agents.hapax_daimonion.presence import PresenceDetector  # noqa: F401
 from agents.hapax_daimonion.session import SessionManager  # noqa: F401
 from agents.hapax_daimonion.session_events import screen_flash as _screen_flash  # noqa: F401
 from agents.hapax_daimonion.tts import TTSManager  # noqa: F401
-from agents.hapax_daimonion.wake_word import WakeWordDetector  # noqa: F401
-from agents.hapax_daimonion.wake_word_porcupine import PorcupineWakeWord  # noqa: F401
 from agents.hapax_daimonion.workspace_monitor import WorkspaceMonitor  # noqa: F401
 
 __all__ = ["VoiceDaemon", "main"]

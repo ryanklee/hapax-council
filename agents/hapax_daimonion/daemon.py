@@ -23,9 +23,6 @@ from agents.hapax_daimonion.presence import PresenceDetector
 from agents.hapax_daimonion.primitives import Event
 from agents.hapax_daimonion.session import SessionManager
 from agents.hapax_daimonion.tts import TTSManager
-from agents.hapax_daimonion.wake_word import WakeWordDetector
-from agents.hapax_daimonion.wake_word_porcupine import PorcupineWakeWord
-from agents.hapax_daimonion.wake_word_whisper import WhisperWakeWord
 from agents.hapax_daimonion.workspace_monitor import WorkspaceMonitor
 
 if TYPE_CHECKING:
@@ -90,8 +87,6 @@ class VoiceDaemon:
             socket_path=Path(self.cfg.hotkey_socket),
             on_command=self._handle_hotkey,
         )
-        self.wake_word = self._create_wake_word_detector()
-        self.wake_word.on_wake_word = self._on_wake_word
         self._audio_input = AudioInputStream(source_name=self.cfg.audio_input_source)
         self.tts = TTSManager(
             voice_id=self.cfg.voxtral_voice_id,
@@ -148,7 +143,6 @@ class VoiceDaemon:
         )
         register_perception_backends(self)
         self._setup_tap_governance()
-        self.wake_word_event: Event[None] = Event()
         self.focus_event: Event[FocusEvent] = Event()
         self._wire_hyprland_perception()
         self.governor = PipelineGovernor(
@@ -167,7 +161,7 @@ class VoiceDaemon:
         self._pipeline_task: asyncio.Task | None = None
         self._gemini_session = None
         self._cognitive_loop = None
-        self._wake_word_signal = asyncio.Event()
+        self._engagement_signal = asyncio.Event()
 
         events_dir = Path.home() / ".local" / "share" / "hapax-daimonion"
         self.event_log = EventLog(
@@ -261,14 +255,6 @@ class VoiceDaemon:
             )
         return cameras
 
-    def _create_wake_word_detector(self) -> WakeWordDetector:
-        engine = self.cfg.wake_word_engine
-        if engine == "porcupine":
-            return PorcupineWakeWord(sensitivity=self.cfg.porcupine_sensitivity)
-        if engine == "whisper":
-            return WhisperWakeWord(model_size="tiny")
-        return WakeWordDetector()
-
     def _setup_tap_governance(self) -> None:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._prev_tap_gesture = "none"
@@ -303,11 +289,6 @@ class VoiceDaemon:
 
         listener.on_focus_changed = _focus_with_perception
 
-    def _on_wake_word(self) -> None:
-        from agents.hapax_daimonion.session_events import on_wake_word
-
-        on_wake_word(self)
-
     async def _handle_hotkey(self, cmd: str) -> None:
         from agents.hapax_daimonion.session_events import handle_hotkey
 
@@ -341,11 +322,6 @@ class VoiceDaemon:
         from agents.hapax_daimonion.run_loops import audio_loop
 
         await audio_loop(self)
-
-    async def _wake_word_processor(self) -> None:
-        from agents.hapax_daimonion.session_events import wake_word_processor
-
-        await wake_word_processor(self)
 
     async def _ntfy_callback(self, notification) -> None:
         from agents.hapax_daimonion.run_loops_aux import ntfy_callback
