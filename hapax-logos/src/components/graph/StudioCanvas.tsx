@@ -22,6 +22,7 @@ import { GraphToolbar } from "./GraphToolbar";
 import { NodeDetailSheet } from "./NodeDetailSheet";
 import { NodePalette } from "./NodePalette";
 import { PresetLibrary } from "./PresetLibrary";
+import { HapaxOverlay } from "./HapaxOverlay";
 import { useGraphSync } from "./useGraphSync";
 
 type S = StudioGraphState;
@@ -124,6 +125,7 @@ export function StudioCanvas() {
       <NodePalette />
       <PresetLibrary />
       <NodeDetailSheet />
+      <HapaxOverlay />
       <div style={{ width: "100%", height: "100%", paddingTop: 36 }}>
         <ReactFlow
           nodes={nodes}
