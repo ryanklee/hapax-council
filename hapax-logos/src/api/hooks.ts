@@ -252,6 +252,15 @@ export function useDeleteInsightQuery() {
   });
 }
 
+// --- Orientation ---
+
+export const useOrientation = () =>
+  useQuery({
+    queryKey: ["orientation"],
+    queryFn: api.orientation,
+    refetchInterval: SLOW,
+  });
+
 // --- Fortress ---
 
 const FORTRESS = 30_000; // 30s for fortress state (was 5s — too aggressive)

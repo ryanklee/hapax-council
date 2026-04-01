@@ -1,11 +1,10 @@
 import { useState, useMemo, useCallback, useEffect, type ComponentType } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useHealth, useGpu, useInfrastructure, useBriefing, useDrift, useManagement, useNudges } from "../api/hooks";
+import { useHealth, useGpu, useInfrastructure, useDrift, useManagement, useNudges } from "../api/hooks";
 import { HealthPanel } from "./sidebar/HealthPanel";
 import { VramPanel } from "./sidebar/VramPanel";
 import { ContainersPanel } from "./sidebar/ContainersPanel";
-import { BriefingPanel } from "./sidebar/BriefingPanel";
-import { GoalsPanel } from "./sidebar/GoalsPanel";
+import { OrientationPanel } from "./sidebar/OrientationPanel";
 import { FreshnessPanel } from "./sidebar/FreshnessPanel";
 import { CostPanel } from "./sidebar/CostPanel";
 import { ScoutPanel } from "./sidebar/ScoutPanel";
@@ -33,9 +32,8 @@ const panels: PanelEntry[] = [
   { id: "consent", component: ConsentPanel, defaultOrder: 2 },
   { id: "governance", component: GovernancePanel, defaultOrder: 3 },
   { id: "containers", component: ContainersPanel, defaultOrder: 4 },
-  { id: "briefing", component: BriefingPanel, defaultOrder: 5 },
+  { id: "orientation", component: OrientationPanel, defaultOrder: 5 },
   { id: "readiness", component: FreshnessPanel, defaultOrder: 6 },
-  { id: "goals", component: GoalsPanel, defaultOrder: 7 },
   { id: "cost", component: CostPanel, defaultOrder: 8 },
   { id: "overhead", component: OverheadPanel, defaultOrder: 9 },
   { id: "engine", component: EnginePanel, defaultOrder: 10 },
@@ -54,7 +52,6 @@ export function Sidebar() {
   const { data: health } = useHealth();
   const { data: gpu } = useGpu();
   const { data: infra } = useInfrastructure();
-  const { data: briefing } = useBriefing();
   const { data: drift } = useDrift();
   const { data: mgmt } = useManagement();
   const { data: nudges } = useNudges();
@@ -71,12 +68,8 @@ export function Sidebar() {
     if (nudges?.some((n) => n.priority_label === "critical" || n.priority_label === "high" || n.priority_label === "medium")) return true;
     if (gpu && gpu.usage_pct >= 80) return true;
     if (drift && drift.drift_count > 0) return true;
-    if (briefing?.generated_at) {
-      const hours = (now - new Date(briefing.generated_at).getTime()) / 3_600_000;
-      if (hours > 24) return true;
-    }
     return false;
-  }, [health, gpu, drift, briefing, nudges, now]);
+  }, [health, gpu, drift, nudges, now]);
 
   const isExpanded = manualOverride === "expanded" || (manualOverride === null && needsAttention);
 
@@ -86,15 +79,10 @@ export function Sidebar() {
     dots.health = health?.overall_status === "failed" ? "red" : health?.overall_status === "degraded" ? "yellow" : health ? "green" : "zinc";
     dots.vram = gpu && gpu.usage_pct >= 90 ? "red" : gpu && gpu.usage_pct >= 80 ? "yellow" : gpu ? "green" : "zinc";
     dots.containers = infra?.containers.some((c) => c.health !== "healthy") ? "yellow" : infra ? "green" : "zinc";
-    dots.briefing = (() => {
-      if (!briefing?.generated_at) return "zinc" as const;
-      const h = (now - new Date(briefing.generated_at).getTime()) / 3_600_000;
-      return h > 24 ? "yellow" as const : "green" as const;
-    })();
     dots.drift = drift && drift.drift_count > 0 ? "yellow" : drift ? "green" : "zinc";
     dots.management = mgmt?.people.some((p) => p.stale_1on1) ? "yellow" : mgmt ? "green" : "zinc";
     return dots;
-  }, [health, gpu, infra, briefing, drift, mgmt, now]);
+  }, [health, gpu, infra, drift, mgmt, now]);
 
   const summaries = useMemo(() => {
     const s: Record<string, string> = {};
@@ -120,11 +108,6 @@ export function Sidebar() {
           const unhealthy = infra?.containers.filter((c) => c.health !== "healthy").length ?? 0;
           return unhealthy > 0 ? 40 : 0;
         }
-        case "briefing": {
-          if (!briefing?.generated_at) return 0;
-          const hours = (now - new Date(briefing.generated_at).getTime()) / 3_600_000;
-          return hours > 24 ? 30 : 0;
-        }
         case "drift":
           return drift && drift.drift_count > 0 ? 20 : 0;
         case "management": {
@@ -142,7 +125,7 @@ export function Sidebar() {
       if (pa !== pb) return pb - pa;
       return a.defaultOrder - b.defaultOrder;
     });
-  }, [health, gpu, infra, briefing, drift, mgmt, now]);
+  }, [health, gpu, infra, drift, mgmt, now]);
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleStripClick = useCallback((_id: string) => {

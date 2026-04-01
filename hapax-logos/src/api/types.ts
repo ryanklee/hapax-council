@@ -606,6 +606,64 @@ export interface InsightQueryList {
   queries: InsightQuery[];
 }
 
+// --- Orientation ---
+
+export interface SessionContext {
+  last_active_domain: string;
+  last_active_goal: string | null;
+  last_active_measure: string | null;
+  absence_hours: number;
+  session_boundary: boolean;
+  domain_recency: Record<string, number>;
+  active_signals: string[];
+}
+
+export interface GoalSummary {
+  id: string;
+  title: string;
+  priority: string;
+  status: string;
+  progress: number | null;
+  stale: boolean;
+  file_path: string;
+  obsidian_uri: string;
+  target_date: string | null;
+}
+
+export interface SprintSummary {
+  current_sprint: number;
+  measures_completed: number;
+  measures_total: number;
+  blocking_gate: string | null;
+  next_measure: string | null;
+  next_measure_title: string | null;
+  models: Record<string, number>;
+}
+
+export interface DomainState {
+  domain: string;
+  top_goal: GoalSummary | null;
+  goal_count: number;
+  stale_count: number;
+  recency_hours: number;
+  health: "active" | "stale" | "dormant" | "blocked";
+  sprint_progress: SprintSummary | null;
+  next_action: string | null;
+  next_action_link: string | null;
+}
+
+export interface OrientationState {
+  session: SessionContext;
+  domains: DomainState[];
+  briefing_headline: string | null;
+  briefing_generated_at: string | null;
+  system_health: string;
+  drift_high_count: number;
+  narrative: string | null;
+  narrative_generated_at: string | null;
+  stimmung_stance: string;
+}
+
 // --- Fortress types ---
 
 export interface FortressEvent {

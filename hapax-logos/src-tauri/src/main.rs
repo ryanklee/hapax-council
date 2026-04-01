@@ -105,6 +105,8 @@ fn main() {
             commands::proxy::proxy_fortress_metrics,
             commands::proxy::proxy_fortress_sessions,
             commands::proxy::proxy_fortress_chronicle,
+            // Orientation
+            commands::proxy::get_orientation,
             // Browser (agent-controlled web access)
             browser::commands::browser_navigate,
             browser::commands::browser_eval,
