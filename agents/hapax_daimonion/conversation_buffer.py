@@ -7,14 +7,11 @@ detected. Runs inline — no extra task, no mic ownership.
 Pre-roll: captures 300ms of audio before speech onset so word
 beginnings aren't clipped.
 
-Application-level AEC (echo_canceller.py) reduces echo but the
-Yeti mic still picks up enough TTS bleed-through at close range
-to trigger VAD. The speaking gate in feed_audio() remains as
-primary defense; AEC is supplementary. Barge-in is enabled at a
+PipeWire webrtc AEC handles echo cancellation at the audio server
+level. Energy-ratio classifier (Layer 2) discriminates residual
+echo from real speech in the audio loop. The speaking gate in
+feed_audio() remains as primary defense. Barge-in is enabled at a
 high threshold (0.85) requiring clear operator speech over TTS.
-
-Post-TTS cooldown removed — AEC handles the residual echo tail
-that previously required 500ms of dead time.
 """
 
 from __future__ import annotations

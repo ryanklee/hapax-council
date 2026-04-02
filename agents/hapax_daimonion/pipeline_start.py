@@ -143,7 +143,7 @@ async def start_conversation_pipeline(daemon: VoiceDaemon) -> None:
         ambient_fn=daemon._ambient_fn,
         policy_fn=daemon._policy_fn,
         screen_capturer=getattr(daemon.workspace_monitor, "_screen_capturer", None),
-        echo_canceller=daemon._echo_canceller,
+        tts_energy_tracker=daemon._tts_energy_tracker,
         bridge_engine=daemon._bridge_engine,
         tool_recruitment_gate=tool_recruitment_gate,
     )

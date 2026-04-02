@@ -43,8 +43,6 @@ async def audio_loop(daemon: VoiceDaemon) -> None:
             except Exception as exc:
                 log.warning("Gemini audio consumer error: %s", exc)
 
-        if daemon._echo_canceller is not None:
-            frame = daemon._echo_canceller.process(frame)
         if daemon._noise_reference is not None:
             frame = daemon._noise_reference.subtract(frame)
         if daemon._audio_preprocessor is not None:
@@ -52,7 +50,22 @@ async def audio_loop(daemon: VoiceDaemon) -> None:
 
         _vad_buf.extend(frame)
 
-        if daemon._conversation_buffer.is_active:
+        # Layer 2: skip echo frames for conversation buffer only
+        _is_echo = False
+        if (
+            hasattr(daemon, "_energy_classifier")
+            and daemon._energy_classifier is not None
+            and daemon._conversation_buffer.is_speaking
+        ):
+            _is_echo = (
+                daemon._energy_classifier.classify(
+                    frame,
+                    system_speaking=True,
+                )
+                == "echo"
+            )
+
+        if daemon._conversation_buffer.is_active and not _is_echo:
             daemon._conversation_buffer.feed_audio(frame)
 
         while len(_vad_buf) >= _VAD_CHUNK:
