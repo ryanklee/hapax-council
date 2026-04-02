@@ -64,15 +64,46 @@ def assemble_snapshot(
 
 
 def _read_stimmung(path: Path) -> dict:
-    """Return stance + dimensions from *path*, or {} on any failure."""
+    """Return stance + dimensions from *path*, or {} on any failure.
+
+    The stimmung state file stores dimensions at the top level (not nested)
+    and uses ``overall_stance`` for the stance field.
+    """
+    _DIMENSION_NAMES = {
+        "health",
+        "resource_pressure",
+        "error_rate",
+        "processing_throughput",
+        "perception_confidence",
+        "llm_cost_pressure",
+        "grounding_quality",
+        "exploration_deficit",
+        "operator_stress",
+        "operator_energy",
+        "physiological_coherence",
+    }
     try:
         raw = path.read_text(encoding="utf-8")
         data = json.loads(raw)
         result: dict = {}
-        if "stance" in data:
-            result["stance"] = data["stance"]
+        # Stance: try both field names
+        stance = data.get("overall_stance") or data.get("stance")
+        if stance:
+            result["stance"] = stance
+        # Dimensions: top-level keys or nested under "dimensions"
         if "dimensions" in data:
             result["dimensions"] = data["dimensions"]
+        else:
+            dims = {}
+            for key in _DIMENSION_NAMES:
+                if key in data:
+                    val = data[key]
+                    if isinstance(val, dict):
+                        dims[key] = val.get("value", 0.0)
+                    else:
+                        dims[key] = val
+            if dims:
+                result["dimensions"] = dims
         return result
     except Exception:  # noqa: BLE001
         return {}
