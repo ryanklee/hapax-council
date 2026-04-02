@@ -128,6 +128,8 @@ async def start_conversation_pipeline(daemon: VoiceDaemon) -> None:
 
         threading.Thread(target=_presynth, daemon=True, name="bridge-presynth").start()
 
+    tool_recruitment_gate = getattr(daemon, "_tool_recruitment_gate", None)
+
     daemon._conversation_pipeline = ConversationPipeline(
         stt=daemon._resident_stt,
         tts_manager=daemon.tts,
@@ -144,6 +146,7 @@ async def start_conversation_pipeline(daemon: VoiceDaemon) -> None:
         screen_capturer=getattr(daemon.workspace_monitor, "_screen_capturer", None),
         echo_canceller=daemon._echo_canceller,
         bridge_engine=daemon._bridge_engine,
+        tool_recruitment_gate=tool_recruitment_gate,
     )
 
     # Wire callbacks

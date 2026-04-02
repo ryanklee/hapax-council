@@ -163,7 +163,17 @@ def precompute_pipeline_deps(daemon: VoiceDaemon) -> None:
 
     daemon._expression_coordinator = ExpressionCoordinator()
 
+    # Tool recruitment: register tool affordances and create gate
+    from agents.hapax_daimonion.tool_affordances import TOOL_AFFORDANCES
+    from agents.hapax_daimonion.tool_recruitment import ToolRecruitmentGate
+
+    ToolRecruitmentGate.register_tools(daemon._affordance_pipeline, TOOL_AFFORDANCES)
+    tool_names = {name for name, _ in TOOL_AFFORDANCES}
+    daemon._tool_recruitment_gate = ToolRecruitmentGate(daemon._affordance_pipeline, tool_names)
+
     log.info(
         "Pipeline dependencies precomputed"
-        " (affordance pipeline: speech + 9 vocal chain dims + system_awareness)"
+        " (affordance pipeline: speech + 9 vocal chain dims + system_awareness"
+        " + %d tool affordances)",
+        len(TOOL_AFFORDANCES),
     )

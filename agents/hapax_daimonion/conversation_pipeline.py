@@ -84,6 +84,7 @@ class ConversationPipeline:
         echo_canceller=None,  # EchoCanceller | None
         bridge_engine=None,  # BridgeEngine | None
         experiment_flags: dict[str, bool] | None = None,
+        tool_recruitment_gate=None,  # ToolRecruitmentGate | None
     ) -> None:
         self.stt = stt
         self.tts = tts_manager
@@ -106,6 +107,7 @@ class ConversationPipeline:
         self._echo_canceller = echo_canceller
         self._bridge_engine = bridge_engine
         self._experiment_flags = experiment_flags or {}
+        self._tool_recruitment_gate = tool_recruitment_gate
 
         self.state = ConvState.IDLE
         self.messages: list[dict] = []
@@ -990,8 +992,21 @@ class ConversationPipeline:
                 "api_base": _voice_litellm_base,
                 "api_key": os.environ.get("LITELLM_API_KEY", "not-set"),
             }
-            if self.tools:
-                kwargs["tools"] = self.tools
+            if self.tools and self._tool_recruitment_gate:
+                # Extract last user utterance for recruitment
+                _last_user_text = ""
+                for _m in reversed(self.messages):
+                    if _m.get("role") == "user":
+                        _last_user_text = _m.get("content", "") or ""
+                        break
+                recruited_names = self._tool_recruitment_gate.recruit(_last_user_text)
+                if recruited_names:
+                    kwargs["tools"] = [
+                        t for t in self.tools if t["function"]["name"] in recruited_names
+                    ]
+                # If no tools recruited, don't add tools — LLM sees no tools
+            elif self.tools:
+                kwargs["tools"] = self.tools  # fallback: no gate, use all
 
             kwargs["timeout"] = 15  # seconds — fail fast, don't block conversation
             _t_llm_start = time.monotonic()
@@ -1268,6 +1283,11 @@ class ConversationPipeline:
                     result = self._consent_reader.filter_tool_result(tc["name"], result)
                 except Exception:
                     log.warning("Consent filtering failed for %s", tc["name"], exc_info=True)
+
+            # Record outcome for Thompson sampling in recruitment gate
+            if self._tool_recruitment_gate:
+                _success = not isinstance(result, str) or '"error"' not in result
+                self._tool_recruitment_gate.record_outcome(tc["name"], success=_success)
 
             self.messages.append(
                 {
