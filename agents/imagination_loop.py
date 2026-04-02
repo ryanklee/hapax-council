@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import time
+import uuid
 from pathlib import Path
 
 from agents._impingement import Impingement
@@ -126,6 +127,12 @@ class ImaginationLoop:
 
     def _process_fragment(self, fragment: ImaginationFragment) -> None:
         """Record, publish, update cadence, and maybe escalate a fragment."""
+        # Force real timestamp and ID — LLMs hallucinate these fields with
+        # training-data values (e.g. timestamps from 2024), which makes the
+        # silence factor treat every fragment as stale.
+        fragment = fragment.model_copy(
+            update={"timestamp": time.time(), "id": uuid.uuid4().hex[:12]}
+        )
         self._record_fragment(fragment)
         publish_fragment(fragment, self._current_path, self._stream_path)
         self.cadence.update(fragment)

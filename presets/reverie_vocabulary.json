@@ -9,7 +9,7 @@
                 "frequency_x": 1.5,
                 "frequency_y": 1.0,
                 "octaves": 3,
-                "amplitude": 0.3,
+                "amplitude": 0.7,
                 "speed": 0.08
             }
         },
@@ -20,13 +20,13 @@
                 "kill_rate": 0.062,
                 "diffusion_a": 1.0,
                 "diffusion_b": 0.5,
-                "speed": 0.0
+                "speed": 1.0
             }
         },
         "color": {
             "type": "colorgrade",
             "params": {
-                "brightness": 0.3,
+                "brightness": 1.0,
                 "saturation": 1.0,
                 "contrast": 0.8,
                 "sepia": 0.0,

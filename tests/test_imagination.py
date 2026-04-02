@@ -361,7 +361,7 @@ class TestImaginationLoop:
         frag = _make_fragment(salience=0.2)
         loop._process_fragment(frag)
         assert len(loop.recent_fragments) == 1
-        assert loop.recent_fragments[0] is frag
+        assert loop.recent_fragments[0].narrative == frag.narrative
 
     def test_caps_recent_at_max(self, tmp_path: Path) -> None:
         loop = ImaginationLoop(

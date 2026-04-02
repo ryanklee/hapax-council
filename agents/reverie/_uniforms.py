@@ -12,8 +12,30 @@ from pathlib import Path
 
 log = logging.getLogger("reverie.uniforms")
 
-UNIFORMS_FILE = Path("/dev/shm/hapax-imagination/pipeline/uniforms.json")
+UNIFORMS_FILE = Path("/dev/shm/hapax-imagination/uniforms.json")
+PLAN_FILE = Path("/dev/shm/hapax-imagination/pipeline/plan.json")
 MATERIAL_MAP = {"water": 0, "fire": 1, "earth": 2, "air": 3, "void": 4}
+
+_plan_defaults_cache: dict[str, float] | None = None
+
+
+def _load_plan_defaults() -> dict[str, float]:
+    """Load plan.json defaults as {node_id.param: value} dict. Cached."""
+    global _plan_defaults_cache
+    if _plan_defaults_cache is not None:
+        return _plan_defaults_cache
+    defaults: dict[str, float] = {}
+    try:
+        plan = json.loads(PLAN_FILE.read_text())
+        for p in plan.get("passes", []):
+            node_id = p.get("node_id", "")
+            for k, v in p.get("uniforms", {}).items():
+                if isinstance(v, (int, float)):
+                    defaults[f"{node_id}.{k}"] = float(v)
+    except (OSError, json.JSONDecodeError):
+        log.warning("Failed to load plan defaults", exc_info=True)
+    _plan_defaults_cache = defaults
+    return defaults
 
 
 def build_slot_opacities(imagination: dict | None, fallback_salience: float) -> list[float]:
@@ -62,59 +84,52 @@ def write_uniforms(
     trace_radius: float,
     reduction: float = 1.0,
 ) -> None:
-    """Compute and write merged uniforms to pipeline/uniforms.json."""
-    material = "water"
-    salience = 0.0
-    if imagination:
-        material = str(imagination.get("material", "water"))
-        salience = float(imagination.get("salience", 0.0))
-
-    material_val = float(MATERIAL_MAP.get(material, 0))
+    """Compute and write merged uniforms to uniforms.json."""
     chain_params = visual_chain.compute_param_deltas()
 
+    # Load plan defaults — the Rust pipeline treats uniforms as absolute overrides,
+    # so chain deltas must be added to plan defaults before writing.
+    plan_defaults = _load_plan_defaults()
+
     # Silence factor: attenuate vocabulary graph when imagination is absent or stale.
-    # Without this, the shader pipeline produces visual noise that looks
-    # expressive but represents nothing — implementation bleeding through
-    # as if it were DMN's visual projection.
     IMAGINATION_STALE_S = 60.0
-    SILENCE_FLOOR = 0.15  # vocabulary always has some visual presence
+    SILENCE_FLOOR = 0.15
     if imagination is None:
         silence = SILENCE_FLOOR
     else:
         frag_age = time.time() - float(imagination.get("timestamp", 0))
         if frag_age > IMAGINATION_STALE_S:
-            # Fade toward floor as fragment ages beyond threshold
             raw = 1.0 - (frag_age - IMAGINATION_STALE_S) / IMAGINATION_STALE_S
             silence = max(SILENCE_FLOOR, raw)
         else:
             silence = 1.0
 
-    uniforms: dict[str, object] = {
-        "custom": [material_val],
-        "slot_opacities": build_slot_opacities(imagination, salience)
-        if silence > 0
-        else [0.0, 0.0, 0.0, 0.0],
-    }
+    uniforms: dict[str, float] = {}
 
-    # master_opacity defaults to 1.0 in the vocabulary plan — the base visual is
-    # always visible ("there is no idle state"). Silence modulates chain deltas
-    # (below) but does NOT dim the vocabulary base.
-    #
-    # Only write non-zero chain deltas — zero deltas would overwrite vocabulary
-    # defaults (e.g., noise.amplitude=0.6) with 0.0, blanking the visual output.
-    for key, value in chain_params.items():
-        if isinstance(value, (int, float)):
-            scaled = value * reduction * silence
-            if abs(scaled) > 1e-6:
-                uniforms[key] = scaled
+    # Write EVERY plan-default param every tick: value = base + delta.
+    # When delta is zero, value = base (the plan default). This ensures:
+    #   - Smooth return to vocabulary defaults as chain levels decay
+    #   - No sticky overrides (Rust retains last value when key is absent)
+    #   - Subtle modulations below any threshold still reach the GPU
+    for key, base in plan_defaults.items():
+        delta = chain_params.get(key, 0.0)
+        if isinstance(delta, (int, float)):
+            uniforms[key] = base + delta * reduction * silence
         else:
-            uniforms[key] = value
+            uniforms[key] = base
 
-    if trace_strength > 0:
-        uniforms["fb.trace_center_x"] = trace_center[0]
-        uniforms["fb.trace_center_y"] = trace_center[1]
-        uniforms["fb.trace_radius"] = trace_radius
-        uniforms["fb.trace_strength"] = trace_strength
+    # Content layer: material and salience come from imagination, not chain deltas.
+    if imagination:
+        uniforms["content.material"] = float(
+            MATERIAL_MAP.get(str(imagination.get("material", "water")), 0)
+        )
+        uniforms["content.salience"] = float(imagination.get("salience", 0.0)) * silence
+
+    # Trace params (Amendment 2): always written, zero when inactive.
+    uniforms["fb.trace_center_x"] = trace_center[0] if trace_strength > 0 else 0.5
+    uniforms["fb.trace_center_y"] = trace_center[1] if trace_strength > 0 else 0.5
+    uniforms["fb.trace_radius"] = trace_radius if trace_strength > 0 else 0.0
+    uniforms["fb.trace_strength"] = trace_strength
 
     if stimmung:
         stance = stimmung.get("overall_stance", "nominal")
@@ -134,10 +149,16 @@ def write_uniforms(
                 worst_infra = max(worst_infra, dim_data.get("value", 0.0))
         uniforms["signal.color_warmth"] = worst_infra
 
+    # Write all scalar overrides to uniforms.json. The Rust pipeline parses this
+    # as HashMap<String, f64> — non-scalar values (arrays) must be excluded or
+    # the entire parse fails silently. Per-node overrides (node.param) and signal
+    # overrides (signal.*) both flow through this file.
+    scalar_uniforms = {k: v for k, v in uniforms.items() if isinstance(v, (int, float))}
+
     try:
         UNIFORMS_FILE.parent.mkdir(parents=True, exist_ok=True)
         tmp = UNIFORMS_FILE.with_suffix(".tmp")
-        tmp.write_text(json.dumps(uniforms))
+        tmp.write_text(json.dumps(scalar_uniforms))
         tmp.rename(UNIFORMS_FILE)
     except OSError:
-        log.debug("Failed to write uniforms", exc_info=True)
+        log.warning("Failed to write uniforms", exc_info=True)
