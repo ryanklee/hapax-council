@@ -136,7 +136,7 @@ fn sample_and_blend_slot(
     let gated = content.rgb * materialization(uv_raw, opacity, time);
     let colored = material_color(gated, material_id);
     let weighted = colored * opacity;
-    // Screen blend: result = 1 - (1 - base) * (1 - layer)
+    // Screen blend: adds light to dark base. Content emerges from darkness.
     return 1.0 - (1.0 - base) * (1.0 - weighted);
 }
 

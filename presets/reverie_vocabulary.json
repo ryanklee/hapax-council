@@ -9,7 +9,7 @@
                 "frequency_x": 3.0,
                 "frequency_y": 2.0,
                 "octaves": 4,
-                "amplitude": 0.6,
+                "amplitude": 0.35,
                 "speed": 0.15
             }
         },
@@ -26,9 +26,9 @@
         "color": {
             "type": "colorgrade",
             "params": {
-                "brightness": 1.0,
+                "brightness": 0.25,
                 "saturation": 1.0,
-                "contrast": 0.7,
+                "contrast": 0.9,
                 "sepia": 0.0,
                 "hue_rotate": 0.0
             }
@@ -55,7 +55,7 @@
                 "decay": 0.05,
                 "zoom": 1.0,
                 "rotate": 0.0,
-                "blend_mode": 1.0,
+                "blend_mode": 0.0,
                 "hue_shift": 0.0,
                 "trace_center_x": 0.5,
                 "trace_center_y": 0.5,
