@@ -402,15 +402,25 @@ class PerceptionEngine:
         # Poll registered backends — each gets a view scoped to its declared provides
         # (D5.2: prevents backends from writing to behaviors they don't own)
         # Fusion backends (presence_engine) run last and receive full behaviors dict.
+        _disabled = getattr(self, "_disabled_backends", set())
         fusion_backends = []
         for name, backend in self._backends.items():
             if name == "presence_engine":
                 fusion_backends.append((name, backend))
                 continue
+            if name in _disabled:
+                continue
+            if hasattr(backend, "tier") and backend.tier == PerceptionTier.SLOW:
+                continue
             try:
                 scoped = {k: self.behaviors[k] for k in backend.provides if k in self.behaviors}
+                _t0 = time.monotonic()
                 backend.contribute(scoped)
-                # Sync back any new behaviors created within provides scope
+                _dt = time.monotonic() - _t0
+                if _dt > 2.0:
+                    log.warning("Backend %s took %.1fs — auto-disabling", name, _dt)
+                    _disabled.add(name)
+                    self._disabled_backends = _disabled
                 for k in backend.provides:
                     if k in scoped and k not in self.behaviors:
                         self.behaviors[k] = scoped[k]

@@ -115,7 +115,10 @@ async def perception_loop(daemon: VoiceDaemon) -> None:
                 refresh_concern_graph(daemon)
                 refresh_context_distillation(daemon)
                 # Sync SEEKING stance to salience router
-                _sync_seeking_stance(daemon)
+                try:
+                    _sync_seeking_stance(daemon)
+                except Exception:
+                    pass
 
             _sync_pipeline_state(daemon, state)
 
