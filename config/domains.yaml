@@ -10,7 +10,7 @@ domains:
     telemetry:
       git_repos: [hapax-council, hapax-constitution]
       langfuse_tags: [research, bayesian, sprint]
-      vault_paths: []
+      vault_paths: ["20-projects/hapax-research/"]
 
   management:
     staleness_days: 14
@@ -21,7 +21,7 @@ domains:
     telemetry:
       git_repos: []
       langfuse_tags: []
-      vault_paths: ["30 Areas/management/"]
+      vault_paths: ["30-areas/people/"]
 
   studio:
     staleness_days: 14
@@ -30,7 +30,7 @@ domains:
     telemetry:
       git_repos: []
       langfuse_tags: []
-      vault_paths: ["20 Projects/studio/", "30 Areas/music/"]
+      vault_paths: ["20-personal/creative/"]
       midi_activity: true
 
   personal:
@@ -40,7 +40,7 @@ domains:
     telemetry:
       git_repos: []
       langfuse_tags: []
-      vault_paths: ["30 Areas/", "20-personal/"]
+      vault_paths: ["30-areas/", "20-personal/"]
 
   health:
     staleness_days: 7

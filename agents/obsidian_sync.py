@@ -47,20 +47,13 @@ MIN_FILE_SIZE = 50
 
 INCLUDE_DIRS = {
     "00-inbox",
+    "10-meta",
     "20-personal",
-    "20 Projects",
-    "30 Areas",
-    "31 Fleeting notes",
-    "32 Literature notes",
-    "33 Permanent notes",
-    "34 MOCs",
-    "35 Contacts",
-    "36 People",
-    "37 Meeting notes",
-    "38 Bookmarks",
-    "50 Resources",
-    "Periodic Notes",
-    "Day Planners",
+    "20-projects",
+    "30-areas",
+    "40-calendar",
+    "50-templates",
+    "50-resources",
 }
 
 EXCLUDE_DIRS = {

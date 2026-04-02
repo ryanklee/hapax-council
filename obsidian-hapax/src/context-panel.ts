@@ -56,9 +56,6 @@ export class ContextPanel extends ItemView {
     try {
       await this.render({
         kind: NoteKind.Unknown,
-        path: "",
-        id: null,
-        model: null,
         tags: [],
       });
     } catch {

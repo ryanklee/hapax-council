@@ -245,7 +245,13 @@ def collect_orientation() -> OrientationState:
 
     registry = _load_domain_registry()
     session = infer_session(
-        domains={name: {"telemetry": cfg.get("telemetry", {})} for name, cfg in registry.items()}
+        domains={
+            name: {
+                "repos": cfg.get("telemetry", {}).get("git_repos", []),
+                "vault_paths": cfg.get("telemetry", {}).get("vault_paths", []),
+            }
+            for name, cfg in registry.items()
+        }
     )
     all_goals = collect_vault_goals(sprint_measure_statuses=_sprint_measure_statuses())
     sprint = _get_sprint_summary()

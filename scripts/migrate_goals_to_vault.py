@@ -13,7 +13,7 @@ import yaml
 
 OPERATOR_JSON = Path.home() / ".hapax" / "operator.json"
 FALLBACK = Path(__file__).resolve().parents[1] / "profiles" / "operator-profile.json"
-VAULT_GOALS_DIR = Path.home() / "Documents" / "Personal" / "20 Projects" / "hapax-goals"
+VAULT_GOALS_DIR = Path.home() / "Documents" / "Personal" / "20-projects" / "hapax-goals"
 
 DRY_RUN = "--dry-run" in sys.argv
 
