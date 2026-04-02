@@ -63,6 +63,17 @@ async def audio_loop(daemon: VoiceDaemon) -> None:
                 vad_prob = daemon.presence._latest_vad_confidence
                 if daemon._conversation_buffer.is_active:
                     daemon._conversation_buffer.update_vad(vad_prob)
+                # Inline engagement check (runs in audio loop for CPAL mode
+                # where engagement_processor is not a background task)
+                if (
+                    not daemon.session.is_active
+                    and vad_prob >= 0.3
+                    and hasattr(daemon, "_engagement")
+                ):
+                    behaviors = daemon.perception.behaviors
+                    ps = behaviors.get("presence_state")
+                    if ps is not None and getattr(ps, "value", "") == "PRESENT":
+                        daemon._engagement.on_speech_detected(behaviors)
             except Exception as exc:
                 log.warning("Presence consumer error: %s", exc)
 
