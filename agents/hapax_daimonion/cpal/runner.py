@@ -354,6 +354,10 @@ class CpalRunner:
                 self._evaluator.gain_controller.apply(
                     GainUpdate(delta=0.05, source="response_delivered")
                 )
+
+                # Notify engagement classifier that system spoke (follow-up window)
+                if self._daemon is not None and hasattr(self._daemon, "_engagement"):
+                    self._daemon._engagement.notify_system_spoke()
             else:
                 log.warning("CPAL: no pipeline for T3 — utterance dropped")
 

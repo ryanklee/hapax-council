@@ -178,6 +178,9 @@ async def close_session(daemon: VoiceDaemon, reason: str) -> None:
         )
     daemon.event_log.set_session_id(None)
     daemon.event_log.clear_experiment()
+    # Notify engagement classifier so context/follow-up windows reset
+    if hasattr(daemon, "_engagement"):
+        daemon._engagement.notify_session_closed()
     daemon.session.close(reason=reason)
 
 
