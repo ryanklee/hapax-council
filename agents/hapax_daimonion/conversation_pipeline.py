@@ -199,8 +199,6 @@ class ConversationPipeline:
         # Build source-appropriate prompt
         if source == "imagination":
             narrative = content.get("narrative", "")
-            refs = content.get("content_references", [])
-            ref_summary = ", ".join(r.get("source", "") for r in refs[:3] if isinstance(r, dict))
             prompt = (
                 "You just had a thought worth sharing with the operator. "
                 "Express it naturally and concisely — 1-3 sentences. "
@@ -208,8 +206,6 @@ class ConversationPipeline:
                 "as if continuing a natural conversation.\n\n"
                 f"The thought: {narrative}"
             )
-            if ref_summary:
-                prompt += f"\nRelated context: {ref_summary}"
         else:
             metric = content.get("metric", "")
             prompt = (

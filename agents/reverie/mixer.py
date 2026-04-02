@@ -182,7 +182,7 @@ class ReverieMixer:
 
         # 9. Write cross-modal output
         current_salience = float(imagination.get("salience", 0.0)) if imagination else 0.0
-        content_density = len(imagination.get("content_references", [])) if imagination else 0
+        content_density = 1 if imagination and imagination.get("salience", 0) > 0.1 else 0
         n_sat = self._satellites.active_count
         self._write_visual_salience(
             salience=current_salience, content_density=content_density, satellites_active=n_sat
