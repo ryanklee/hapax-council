@@ -163,6 +163,26 @@ def precompute_pipeline_deps(daemon: VoiceDaemon) -> None:
 
     daemon._expression_coordinator = ExpressionCoordinator()
 
+    # Novel capability discovery: recursive meta-affordance
+    from agents.hapax_daimonion.discovery_affordance import (
+        DISCOVERY_AFFORDANCE,
+        CapabilityDiscoveryHandler,
+    )
+
+    daemon._affordance_pipeline.index_capability(
+        CapabilityRecord(
+            name=DISCOVERY_AFFORDANCE[0],
+            description=DISCOVERY_AFFORDANCE[1],
+            daemon="hapax_daimonion",
+            operational=OperationalProperties(
+                latency_class="slow",
+                requires_network=True,
+                consent_required=True,
+            ),
+        )
+    )
+    daemon._discovery_handler = CapabilityDiscoveryHandler()
+
     # Tool recruitment: register tool affordances and create gate
     from agents.hapax_daimonion.tool_affordances import TOOL_AFFORDANCES
     from agents.hapax_daimonion.tool_recruitment import ToolRecruitmentGate
@@ -174,6 +194,6 @@ def precompute_pipeline_deps(daemon: VoiceDaemon) -> None:
     log.info(
         "Pipeline dependencies precomputed"
         " (affordance pipeline: speech + 9 vocal chain dims + system_awareness"
-        " + %d tool affordances)",
+        " + capability_discovery + %d tool affordances)",
         len(TOOL_AFFORDANCES),
     )
