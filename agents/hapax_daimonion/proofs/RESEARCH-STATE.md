@@ -1,6 +1,6 @@
 # Voice Grounding Research State
 
-**Last updated:** 2026-03-31 (session 21 — temporal bands deep audit + intent gap closure)
+**Last updated:** 2026-04-02 (session 22 — Langfuse telemetry gap discovered + research mode switch)
 **Update convention:** After any session with research decisions or implementation progress, update this file before ending.
 
 ## Position (one paragraph)
@@ -99,7 +99,8 @@ This project implements Clark & Brennan's (1991) conversational grounding theory
 - stats.py needs BEST implementation before Phase B analysis
 - 13 L8-L9 test failures (wake word debounce) — pre-existing, not from grounding changes
 - Verify Shaikh et al. ACL 2025 citation accuracy (23.23% figure, venue)
-- Phase A stability criterion: need 3 consecutive session means within 20% of phase mean. No sessions since Mar 25 — need fresh evening sessions to evaluate
+- Phase A stability criterion: need 3 consecutive session means within 20% of phase mean. Phase A restarted 2026-04-02 due to Langfuse telemetry gap — zero prior data
+- Langfuse startup check: should daimonion hard-fail or ntfy-alert when Langfuse unavailable? Silent degradation caused 12-day data loss
 - Sprint 0 gate: if DMN contradiction rate >15% or salience r < 0.1, must rescope those measures
 - Cycle 3 contingency: if Cycle 2 shows RLHF non-compliance with Traum act directives, approach B (structural injection) needed
 - Grounding acts coverage: system now instructs 5/7 Traum acts via directives; actual model compliance is the measurement target
@@ -204,6 +205,25 @@ R&D work on temporal subsystem (non-frozen paths). No changes to experiment code
 - A/B validation not yet executed (harness ready, run `uv run pytest tests/research/test_temporal_contrast.py -m llm -v`). Scheduled Day 3-4.
 
 **Impact on grounding research:** None. All changes are on non-frozen temporal paths (`agents/temporal_*.py`, `shared/temporal_shm.py`, `shared/apperception_tick.py`). Temporal bands are upstream of phenomenal context (Layer 3-5) but do not affect grounding experiment variables or DVs. The protention engine now trains from live perception, which enriches temporal context quality for voice grounding — but this flows through `phenomenal_context.py` rendering, not through frozen experiment paths.
+
+## Session 22 (2026-04-02): Langfuse Telemetry Gap + Research Mode Switch
+
+Research infrastructure. Critical finding affecting experiment data.
+
+**CRITICAL: Phase A data loss discovered.** Langfuse voice telemetry was silently broken for the entire Phase A period (2026-03-21 to 2026-04-02, 12 days). Root cause: `hapax-daimonion.service` was restarted via a non-systemd path that did not load `EnvironmentFile=/run/user/1000/hapax-secrets.env`, so `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_HOST` were missing from the process environment. The `_get_langfuse()` function in `agents/_telemetry.py` caught the initialization failure but logged it at `DEBUG` level — invisible in production. All `hapax_score()` calls silently returned without writing.
+
+**Result: zero experiment scores in Langfuse.** 21,448 total scores exist but all are from VLA (visual_density, prediction_accuracy) and health monitor (system_health). Zero scores for turn_pair_coherence, activation_score, context_anchor_success, or any experiment DV. Phase A has effectively not started.
+
+**Fixes applied:**
+1. Daimonion restarted via systemd — Langfuse env vars confirmed loaded
+2. `_get_langfuse()` failure escalated from `log.debug` to `log.warning` in both `agents/_telemetry.py` and `shared/telemetry.py` — failure will now be visible in journal
+3. Working mode switched from R&D to RESEARCH — Langfuse env file now tags traces `environment=research`
+
+**Impact on experiment:** Phase A clock resets to zero. Minimum 10 sessions required from first verified voice session. Measure 7.2 (Claim 5 correlation) blocked at N=0 — needs minimum 50 turns (~3 sessions). Gate G2 decision deferred.
+
+**Next steps:** (1) Evening voice session to verify scoring works end-to-end. (2) If scores appear in Langfuse, Phase A collection begins properly. (3) Measure 7.2 executable after ~3 sessions.
+
+**Open question added:** Should the daimonion perform an explicit Langfuse connectivity check at startup (not just lazy init on first score) with a hard fail or prominent ntfy alert?
 
 ## Research Infrastructure (added session 3)
 

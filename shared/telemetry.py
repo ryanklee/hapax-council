@@ -69,7 +69,11 @@ def _get_langfuse():
         return _langfuse
     except Exception:
         _available = False
-        log.debug("Langfuse client not available", exc_info=True)
+        log.warning(
+            "Langfuse client not available — all experiment scores will be lost. "
+            "Check LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY / LANGFUSE_HOST env vars.",
+            exc_info=True,
+        )
         return None
 
 
