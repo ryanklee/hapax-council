@@ -90,6 +90,7 @@ class CpalRunner:
         self._accumulated_silence_s = 0.0
         self._processing_utterance = False
         self._last_stimmung_check = 0.0
+        self._queued_utterance: bytes | None = None
 
     @property
     def is_running(self) -> bool:
@@ -188,9 +189,14 @@ class CpalRunner:
                 log.info("CPAL session timeout: %s", msg)
                 if d._conversation_pipeline and d._conversation_pipeline._audio_output:
                     try:
-                        pcm = d.tts.synthesize(msg, "conversation")
+                        loop = asyncio.get_running_loop()
+                        pcm = await loop.run_in_executor(
+                            None, d.tts.synthesize, msg, "conversation"
+                        )
                         if pcm:
-                            d._conversation_pipeline._audio_output.write(pcm)
+                            await loop.run_in_executor(
+                                None, d._conversation_pipeline._audio_output.write, pcm
+                            )
                     except Exception:
                         log.debug("Goodbye TTS failed", exc_info=True)
                 await close_session(d, reason="silence_timeout")
@@ -199,8 +205,12 @@ class CpalRunner:
         self._apply_gain_drivers(signals, dt)
 
         # 4. Check for utterances — dispatch T3 via pipeline
-        utterance = self._perception.get_utterance()
-        if utterance is not None and not self._processing_utterance:
+        utterance = self._queued_utterance or self._perception.get_utterance()
+        self._queued_utterance = None
+        if utterance is not None and self._processing_utterance:
+            log.info("CPAL: utterance arrived during processing — queued for next tick")
+            self._queued_utterance = utterance
+        elif utterance is not None:
             asyncio.create_task(self._process_utterance(utterance))
 
         # 4b. Mark session activity during production/processing
