@@ -93,7 +93,9 @@ class ReverieMixer:
     def _init_pipeline():
         from agents.reverie._affordances import build_reverie_pipeline
 
-        return build_reverie_pipeline()
+        p = build_reverie_pipeline()
+        p.load_activation_state()
+        return p
 
     @property
     def pipeline(self):

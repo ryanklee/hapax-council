@@ -101,6 +101,13 @@ class ReverieDaemon:
 
     def stop(self) -> None:
         self._running = False
+        # Persist recruitment learning (Thompson sampling + Hebbian associations)
+        if self._mixer is not None:
+            try:
+                self._mixer.pipeline.save_activation_state()
+                log.info("Saved recruitment learning state")
+            except Exception:
+                log.debug("Failed to save activation state", exc_info=True)
 
 
 async def main() -> None:
