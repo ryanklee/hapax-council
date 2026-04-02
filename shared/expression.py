@@ -123,22 +123,14 @@ def map_fragment_to_material_uniform(fragment: dict) -> float:
 
 
 def _infer_modality(name: str, cap: Any) -> str:
-    """Infer modality from capability name or category."""
-    from shared.capability import CapabilityCategory
-
-    if hasattr(cap, "category"):
-        if cap.category == CapabilityCategory.EXPRESSION:
-            if "speech" in name or "voice" in name:
-                return "speech"
-            if "shader" in name or "visual" in name:
-                return "visual"
-            return "expression"
-
-    # Name-based fallback when category is unavailable or non-EXPRESSION
-    if "speech" in name or "voice" in name:
-        return "speech"
-    if "shader" in name or "visual" in name:
-        return "visual"
+    """Determine modality from capability's declared medium."""
+    if hasattr(cap, "operational") and hasattr(cap.operational, "medium"):
+        medium = cap.operational.medium
+        if medium:
+            return medium
+    if hasattr(cap, "medium"):
+        if cap.medium:
+            return cap.medium
     return "unknown"
 
 

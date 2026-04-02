@@ -31,3 +31,13 @@ def test_vocal_chain_has_auditory_medium():
 
     for rec in VOCAL_CHAIN_RECORDS:
         assert rec.operational.medium == "auditory", f"{rec.name} missing auditory medium"
+
+
+def test_expression_coordinator_uses_medium_not_name():
+    from pathlib import Path
+
+    source = Path("shared/expression.py").read_text()
+    assert '"speech" in name' not in source, "Still uses name substring for speech"
+    assert '"voice" in name' not in source, "Still uses name substring for voice"
+    assert '"shader" in name' not in source, "Still uses name substring for shader"
+    assert '"visual" in name' not in source, "Still uses name substring for visual"
