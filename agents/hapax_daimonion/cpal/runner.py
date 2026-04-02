@@ -208,13 +208,18 @@ class CpalRunner:
         self._apply_gain_drivers(signals, dt)
 
         # 4. Check for utterances — dispatch T3 via pipeline
-        utterance = self._queued_utterance or self._perception.get_utterance()
-        self._queued_utterance = None
-        if utterance is not None and self._processing_utterance:
-            log.info("CPAL: utterance arrived during processing — queued for next tick")
-            self._queued_utterance = utterance
-        elif utterance is not None:
-            asyncio.create_task(self._process_utterance(utterance))
+        # Discard utterances during own speech (echo from speakers)
+        if self._production.is_producing or self._buffer.is_speaking:
+            _ = self._perception.get_utterance()  # drain without processing
+            self._queued_utterance = None
+        else:
+            utterance = self._queued_utterance or self._perception.get_utterance()
+            self._queued_utterance = None
+            if utterance is not None and self._processing_utterance:
+                log.info("CPAL: utterance arrived during processing — queued for next tick")
+                self._queued_utterance = utterance
+            elif utterance is not None:
+                asyncio.create_task(self._process_utterance(utterance))
 
         # 4b. Mark session activity during production/processing
         if self._daemon is not None and self._daemon.session.is_active:
@@ -222,7 +227,14 @@ class CpalRunner:
                 self._daemon.session.mark_activity()
 
         # 5. Speculative formulation during operator speech
-        if signals.speech_active and hasattr(self._buffer, "speech_frames_snapshot"):
+        # Guard: no speculation during our own speech or utterance processing
+        if (
+            signals.speech_active
+            and not signals.is_speaking
+            and not self._processing_utterance
+            and not self._production.is_producing
+            and hasattr(self._buffer, "speech_frames_snapshot")
+        ):
             frames = self._buffer.speech_frames_snapshot
             if frames:
                 await self._formulation.speculate(
