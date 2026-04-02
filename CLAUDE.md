@@ -27,6 +27,43 @@ Shared conventions (uv, ruff, testing, git workflow, pydantic-ai) are in the wor
 
 FastAPI on `:8051`. `uv run logos-api` to start. Containers: `docker compose up -d`.
 
+## Orientation Panel
+
+Replaces the old Goals + Briefing sidebar widgets with a unified orientation surface. Reads vault-native goal notes (YAML frontmatter `type: goal`), assembles per-domain state (research, management, studio, personal, health), infers session context from telemetry, and renders with stimmung-responsive density modulation.
+
+**Key files:**
+- `logos/data/vault_goals.py` — Scans Obsidian vault for `type: goal` notes, computes staleness from mtime
+- `logos/data/session_inference.py` — Infers session context from git, IR, stimmung, sprint telemetry
+- `logos/data/orientation.py` — Assembles domain states, conditional LLM narrative gating
+- `logos/api/routes/orientation.py` — `GET /api/orientation` (slow cache tier, 5 min)
+- `logos/api/routes/vault.py` — `GET /api/vault/related` (embedding similarity search)
+- `config/domains.yaml` — Domain registry mapping life domains to data sources and telemetry
+- `hapax-logos/src/components/sidebar/OrientationPanel.tsx` — Frontend component
+
+**Domain ranking:** blocked gates > stale P0 goals > active > stale > dormant. Sprint progress attached to research domain only.
+
+**Spec:** `docs/superpowers/specs/2026-04-01-orientation-panel-design.md`
+
+## Obsidian Integration
+
+Personal vault at `~/Documents/Personal/` (kebab-case dirs, kebab-case filenames). PARA structure: `00-inbox`, `10-meta`, `20-personal`, `20-projects`, `30-areas`, `40-calendar`, `50-templates`, `50-resources`. Syncs to phone via Obsidian Sync.
+
+**obsidian-hapax plugin** (`obsidian-hapax/`): Context panel in right sidebar. Resolves active note to a NoteKind (Measure, Gate, SprintSummary, PosteriorTracker, Research, Concept, Briefing, Nudges, Goal, Daily, Management, Studio, Unknown) and renders domain-appropriate context from Logos API. Mobile support via LAN IP auto-detect (`Platform.isMobile`). 8s request timeout.
+
+**Vault-native goal notes:** `type: goal` frontmatter with `domain`, `status`, `priority`, `sprint_measures`, `depends_on`. Template at `50-templates/tpl-goal.md`. FileClass at `10-meta/fileclass/goal.md`. QuickAdd "New Goal" command creates in `20-projects/hapax-goals/`.
+
+**Agents:**
+- `agents/obsidian_sync.py` — Batch vault → RAG sync (6h timer). Extracts frontmatter, writes to `rag-sources/obsidian/`. Also extracts management cadence from person notes → `~/hapax-state/management/people-cadence.json`.
+- `agents/vault_context_writer.py` — Writes working context (branch, commits, sprint, stimmung) to daily note `## Log` via Obsidian Local REST API (15-min timer).
+- `agents/vault_canvas_writer.py` — Generates JSON Canvas goal dependency map at `20-projects/hapax-goals/goal-map.canvas`.
+- `agents/sprint_tracker.py` — Reads/writes sprint measure vault notes bidirectionally. 5-min timer.
+
+**Plugins (11):** templater-obsidian, obsidian-tasks-plugin, periodic-notes, calendar, quickadd, obsidian-linter, dataview, obsidian-hapax, metadata-menu, obsidian-local-rest-api, obsidian-kanban.
+
+**Linter rules:** yaml-title, yaml-key-sort, yaml-timestamp (ISO), format-yaml-array, add-blank-line-after-yaml, consecutive-blank-lines, heading-blank-lines, line-break-at-document-end, remove-multiple-spaces, space-after-list-markers. Lint-on-save enabled. Ignores `50-templates/` and `sprint/`.
+
+**Mobile:** Plugin uses `http://192.168.68.114:8051` on mobile (LAN IP). Firewall allows LAN (`192.168.68.0/22`) and Tailscale (`100.64.0.0/10`) to port 8051.
+
 ## Command Registry
 
 Centralized automation layer for all Logos UI actions. Every action (focus region, activate preset, toggle overlay) is a registered command with typed args and observable events.
