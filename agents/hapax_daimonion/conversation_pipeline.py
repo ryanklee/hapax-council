@@ -1001,7 +1001,7 @@ class ConversationPipeline:
                 # that formulates speech, not a reasoning engine. Extended thinking
                 # burns the token budget on internal reasoning (1400+ tokens) leaving
                 # nothing for the actual response.
-                "thinking": {"type": "disabled"},
+                "extra_body": {"thinking": {"type": "disabled"}},
             }
             if self.tools and self._tool_recruitment_gate:
                 # Extract last user utterance for recruitment
