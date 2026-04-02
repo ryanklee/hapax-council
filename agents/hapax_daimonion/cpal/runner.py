@@ -302,13 +302,17 @@ class CpalRunner:
         """Apply all gain drivers and dampers beyond basic speech detection."""
         gc = self._evaluator.gain_controller
 
-        # Driver: operator speech
+        # Always apply speech driver + decay (low cost, latency-sensitive)
+        # but throttle filesystem reads (presence, stimmung) to every 10 ticks (~1.5s)
         if signals.speech_active and signals.vad_confidence > 0.3:
             gc.apply(GainUpdate(delta=0.05, source="operator_speech"))
         else:
             gc.decay(dt)
 
-        # Driver: presence from perception engine
+        # Driver: presence from perception engine (throttled — filesystem read)
+        self._gain_driver_tick = getattr(self, "_gain_driver_tick", 0) + 1
+        if self._gain_driver_tick % 10 != 0:
+            return
         try:
             presence_path = Path("/dev/shm/hapax-perception/state.json")
             if presence_path.exists():
