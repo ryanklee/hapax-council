@@ -147,6 +147,12 @@ async def impingement_consumer_loop(daemon: VoiceDaemon) -> None:
                                 score = daemon._system_awareness.can_resolve(imp)
                                 if score > 0:
                                     daemon._system_awareness.activate(imp, score)
+                        elif c.capability_name == "capability_discovery":
+                            if hasattr(daemon, "_discovery_handler"):
+                                intent = daemon._discovery_handler.extract_intent(imp)
+                                results = daemon._discovery_handler.search(intent)
+                                if results:
+                                    daemon._discovery_handler.propose(results)
                     # Vocal chain: modulate voice character via MIDI
                     if hasattr(daemon, "_vocal_chain") and daemon._vocal_chain is not None:
                         vc_score = daemon._vocal_chain.can_resolve(imp)
