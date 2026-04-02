@@ -15,6 +15,7 @@ class OperationalProperties(BaseModel, frozen=True):
     requires_network: bool = False
     latency_class: str = "fast"
     persistence: str = "none"
+    medium: str | None = None
     consent_required: bool = False
     priority_floor: bool = False
 
