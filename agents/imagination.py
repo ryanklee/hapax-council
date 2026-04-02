@@ -1,7 +1,7 @@
 """Imagination bus — fragment publishing and escalation to impingement cascade.
 
-Produces ImaginationFragments: medium-agnostic creative signals with
-content references, expressive dimensions, and salience scoring.
+Produces ImaginationFragments: pure semantic intent with expressive
+dimensions, material quality, and salience scoring.
 High-salience fragments escalate into Impingements for capability recruitment.
 """
 
@@ -41,22 +41,27 @@ REVERBERATION_THRESHOLD = 0.5
 # ---------------------------------------------------------------------------
 
 
-class ContentReference(BaseModel, frozen=True):
-    """A reference to source material feeding an imagination fragment."""
-
-    kind: str  # "qdrant_query", "camera_frame", "text", "url", "file", "audio_clip"
-    source: str
-    query: str | None = None
-    salience: float = Field(ge=0.0, le=1.0)
+CANONICAL_DIMENSIONS = frozenset(
+    {
+        "intensity",
+        "tension",
+        "depth",
+        "coherence",
+        "spectral_color",
+        "temporal_distortion",
+        "degradation",
+        "pitch_displacement",
+        "diffusion",
+    }
+)
 
 
 class ImaginationFragment(BaseModel, frozen=True):
-    """A single imagination output — medium-agnostic creative signal."""
+    """A single imagination output — pure semantic intent."""
 
     id: str = Field(default_factory=lambda: uuid.uuid4().hex[:12])
     timestamp: float = Field(default_factory=time_mod.time)
-    content_references: list[ContentReference]
-    dimensions: dict[str, float]  # 9 expressive dimensions, medium-agnostic
+    dimensions: dict[str, float]  # canonical 9 expressive dimensions
     salience: float = Field(ge=0.0, le=1.0)
     continuation: bool
     narrative: str

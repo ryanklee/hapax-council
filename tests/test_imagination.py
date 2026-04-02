@@ -7,7 +7,6 @@ from pathlib import Path
 
 from agents.imagination import (
     CadenceController,
-    ContentReference,
     ImaginationFragment,
     assemble_context,
     maybe_escalate,
@@ -438,6 +437,21 @@ class TestImaginationLoop:
 
 
 import pytest
+
+
+def test_fragment_has_no_content_references():
+    """ImaginationFragment carries semantic intent only — no content_references."""
+    frag = ImaginationFragment(
+        narrative="The workspace hums with quiet focus",
+        dimensions={"intensity": 0.3, "tension": 0.1, "depth": 0.5},
+        salience=0.4,
+        continuation=False,
+        material="water",
+    )
+    assert not hasattr(frag, "content_references")
+    dumped = frag.model_dump()
+    assert "content_references" not in dumped
+    assert "intensity" in frag.dimensions
 
 
 def test_material_rejects_invalid_values():
