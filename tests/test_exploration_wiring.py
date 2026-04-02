@@ -59,6 +59,32 @@ class TestExplorationTrackerBundle:
         assert bundle.habituation.mean_habituation() <= habituated
 
 
+class TestExplorationGuard:
+    def test_stimmung_collector_default_has_exploration(self) -> None:
+        from shared.stimmung import StimmungCollector
+
+        sc = StimmungCollector()
+        assert sc._exploration is not None
+
+    def test_stimmung_collector_disabled_exploration(self) -> None:
+        from shared.stimmung import StimmungCollector
+
+        sc = StimmungCollector(enable_exploration=False)
+        assert sc._exploration is None
+
+    def test_temporal_formatter_default_has_exploration(self) -> None:
+        from agents.temporal_bands import TemporalBandFormatter
+
+        tf = TemporalBandFormatter()
+        assert tf._exploration is not None
+
+    def test_temporal_formatter_disabled_exploration(self) -> None:
+        from agents.temporal_bands import TemporalBandFormatter
+
+        tf = TemporalBandFormatter(enable_exploration=False)
+        assert tf._exploration is None
+
+
 class TestIrPresenceExplorationInit:
     def test_ir_backend_has_exploration_tracker(self) -> None:
         from agents.hapax_daimonion.backends.ir_presence import IrPresenceBackend
