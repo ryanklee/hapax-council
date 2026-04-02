@@ -1,5 +1,5 @@
 import { App, Modal, Notice, Platform, Plugin, TFile, WorkspaceLeaf, ButtonComponent, TextAreaComponent } from "obsidian";
-import { DEFAULT_SETTINGS, LOCAL_API_URL, TAILSCALE_API_URL } from "./types";
+import { DEFAULT_SETTINGS, LOCAL_API_URL, MOBILE_API_URL_LAN } from "./types";
 import type { HapaxSettings, NoteContext } from "./types";
 import { NoteKind } from "./types";
 import { LogosClient } from "./logos-client";
@@ -71,11 +71,11 @@ export default class HapaxPlugin extends Plugin {
   async onload(): Promise<void> {
     await this.loadSettings();
 
-    // On mobile, auto-switch to Tailscale URL unless the user has set a custom URL.
-    const effectiveUrl =
-      Platform.isMobile && this.settings.logosApiUrl === LOCAL_API_URL
-        ? TAILSCALE_API_URL
-        : this.settings.logosApiUrl;
+    // On mobile, use LAN IP. On desktop, use configured URL (localhost).
+    let effectiveUrl = this.settings.logosApiUrl;
+    if (Platform.isMobile && effectiveUrl === LOCAL_API_URL) {
+      effectiveUrl = MOBILE_API_URL_LAN;
+    }
 
     this.client = new LogosClient(effectiveUrl);
 

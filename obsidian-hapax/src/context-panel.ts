@@ -51,6 +51,19 @@ export class ContextPanel extends ItemView {
   async onOpen(): Promise<void> {
     this.containerEl.addClass("hapax-panel");
     this.renderLoading();
+    // Eager render with Unknown context so the panel shows data immediately
+    // instead of waiting for a leaf change event (which may not fire on mobile).
+    try {
+      await this.render({
+        kind: NoteKind.Unknown,
+        path: "",
+        id: null,
+        model: null,
+        tags: [],
+      });
+    } catch {
+      // renderError handles display
+    }
   }
 
   async onClose(): Promise<void> {

@@ -35,7 +35,7 @@ export class LogosClient {
       return cached.data as T;
     }
     try {
-      const resp = await requestUrl({ url: `${this.baseUrl}${path}` });
+      const resp = await this.timedRequest(`${this.baseUrl}${path}`);
       const data = resp.json as T;
       this.cache.set(path, { data, fetchedAt: Date.now() });
       this.apiAvailable = true;
@@ -44,6 +44,15 @@ export class LogosClient {
       this.apiAvailable = false;
       throw err;
     }
+  }
+
+  private timedRequest(url: string, timeoutMs = 8000): Promise<{ json: unknown }> {
+    return Promise.race([
+      requestUrl({ url }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`Request timeout: ${url}`)), timeoutMs),
+      ),
+    ]);
   }
 
   private invalidatePrefix(prefix: string): void {

@@ -94,8 +94,9 @@ export interface Nudge {
   source_id: string;
 }
 
-/** Tailscale IP for the hapax workstation — stable across networks. */
-export const TAILSCALE_API_URL = "http://100.117.1.83:8051";
+/** Workstation LAN IP for mobile (same WiFi). Tailscale IP as fallback (cellular). */
+export const MOBILE_API_URL_LAN = "http://192.168.68.114:8051";
+export const MOBILE_API_URL_TS = "http://100.117.1.83:8051";
 export const LOCAL_API_URL = "http://localhost:8051";
 
 export interface HapaxSettings {
