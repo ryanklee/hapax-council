@@ -157,10 +157,13 @@ _TIER_MAX_TOKENS: dict[str, int] = {
     "CANNED": 0,
     "LOCAL": 80,
     "FAST": 150,
-    "STRONG": 150,
-    "CAPABLE": 150,
+    "STRONG": 4096,
+    "CAPABLE": 4096,
 }
-_MAX_RESPONSE_TOKENS = 150
+# 4096 accommodates Opus 4 extended thinking (~1500-2000 reasoning tokens)
+# plus actual response. Effort calibration controls spoken output length —
+# max_tokens is just the ceiling to prevent finish_reason=length.
+_MAX_RESPONSE_TOKENS = 4096
 _MAX_SPOKEN_WORDS = 35
 
 _DENSITY_WORD_LIMITS: dict[str, int] = {
