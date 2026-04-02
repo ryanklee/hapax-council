@@ -2,7 +2,7 @@ import struct
 import time
 from unittest.mock import patch
 
-from agents.hapax_daimonion.energy_classifier import TtsEnergyTracker
+from agents.hapax_daimonion.energy_classifier import EnergyClassifier, TtsEnergyTracker
 
 
 def _make_pcm(amplitude: int = 10000, n_samples: int = 480) -> bytes:
@@ -46,3 +46,48 @@ class TestTtsEnergyTracker:
         for _ in range(20):
             t.record(_make_pcm())
         assert len(t._energy_ring) <= 5
+
+
+class TestEnergyClassifier:
+    def test_silence_when_not_speaking(self):
+        tracker = TtsEnergyTracker()
+        c = EnergyClassifier(tracker)
+        result = c.classify(_silence(), system_speaking=False)
+        assert result == "silent"
+
+    def test_speech_when_not_speaking(self):
+        tracker = TtsEnergyTracker()
+        c = EnergyClassifier(tracker)
+        result = c.classify(_make_pcm(amplitude=5000), system_speaking=False)
+        assert result == "speech"
+
+    def test_echo_when_mic_tracks_tts(self):
+        tracker = TtsEnergyTracker()
+        tracker.record(_make_pcm(amplitude=10000))
+        c = EnergyClassifier(tracker)
+        # Mic energy similar to TTS energy = residual echo
+        result = c.classify(_make_pcm(amplitude=800), system_speaking=True)
+        assert result == "echo"
+
+    def test_speech_when_mic_exceeds_tts(self):
+        tracker = TtsEnergyTracker()
+        tracker.record(_make_pcm(amplitude=2000))  # quiet TTS
+        c = EnergyClassifier(tracker)
+        # Mic energy much higher than expected echo = real speech
+        result = c.classify(_make_pcm(amplitude=10000), system_speaking=True)
+        assert result == "speech"
+
+    def test_silent_frame_during_tts(self):
+        tracker = TtsEnergyTracker()
+        tracker.record(_make_pcm(amplitude=10000))
+        c = EnergyClassifier(tracker)
+        result = c.classify(_silence(), system_speaking=True)
+        assert result == "silent"
+
+    def test_not_speaking_always_speech_or_silent(self):
+        """When system is not speaking, never classify as echo."""
+        tracker = TtsEnergyTracker()
+        tracker.record(_make_pcm(amplitude=10000))
+        c = EnergyClassifier(tracker)
+        result = c.classify(_make_pcm(amplitude=8000), system_speaking=False)
+        assert result in ("speech", "silent")

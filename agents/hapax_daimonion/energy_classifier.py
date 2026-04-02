@@ -61,3 +61,57 @@ class TtsEnergyTracker:
         if not recent:
             return 0.0
         return sum(recent) / len(recent)
+
+
+# Silence threshold: below this RMS, frame is silent regardless
+_SILENCE_THRESHOLD = 300.0
+
+# Echo ratio: if mic_rms / expected_tts_rms < this, it's likely echo
+# (mic energy is "explained by" the known playback signal)
+_ECHO_RATIO_CEILING = 1.5
+
+# Speech floor: mic must exceed this RMS to be considered speech during TTS
+_SPEECH_FLOOR_DURING_TTS = 1000.0
+
+
+class EnergyClassifier:
+    """Per-frame classification: speech vs residual echo vs silence.
+
+    During system speech, compares mic frame energy against the known
+    TTS energy envelope. High correlation = residual echo. Low
+    correlation with high energy = real operator speech.
+    """
+
+    def __init__(self, tracker: TtsEnergyTracker) -> None:
+        self._tracker = tracker
+
+    def classify(self, mic_frame: bytes, *, system_speaking: bool) -> str:
+        """Classify a single mic frame.
+
+        Returns:
+            "speech" — real operator speech (pass to VAD/buffer)
+            "echo"   — residual echo of system output (suppress)
+            "silent"  — below energy threshold (pass through, VAD handles)
+        """
+        mic_rms = _rms_int16(mic_frame)
+
+        if mic_rms < _SILENCE_THRESHOLD:
+            return "silent"
+
+        if not system_speaking:
+            return "speech"
+
+        expected = self._tracker.expected_energy()
+        if expected < _SILENCE_THRESHOLD:
+            # Tracker has no recent TTS energy — can't be echo
+            return "speech"
+
+        # During system speech: compare mic energy against expected echo level.
+        # AEC already attenuated ~30dB, so residual echo is much lower than
+        # the original TTS. If mic energy is close to or below expected
+        # residual level, it's echo. If much higher, it's real speech.
+        ratio = mic_rms / expected
+        if ratio < _ECHO_RATIO_CEILING and mic_rms < _SPEECH_FLOOR_DURING_TTS:
+            return "echo"
+
+        return "speech"
