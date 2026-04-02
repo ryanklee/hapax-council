@@ -20,7 +20,7 @@ use crate::uniform_buffer::UniformBuffer;
 
 const PLAN_DIR: &str = "/dev/shm/hapax-imagination/pipeline";
 const PLAN_FILE: &str = "/dev/shm/hapax-imagination/pipeline/plan.json";
-const UNIFORMS_JSON: &str = "/dev/shm/hapax-imagination/pipeline/uniforms.json";
+const UNIFORMS_JSON: &str = "/dev/shm/hapax-imagination/uniforms.json";
 const SHARED_UNIFORMS_WGSL: &str = include_str!("shaders/uniforms.wgsl");
 const SHARED_VERTEX_WGSL: &str = include_str!("shaders/fullscreen_quad.wgsl");
 const TEXTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
@@ -564,56 +564,62 @@ impl DynamicPipeline {
 
         // Apply uniforms.json signal overrides (flat dict from Python modulator)
         // Format: {"signal.key": val, "node.param": val}
-        if let Ok(data) = std::fs::read_to_string(UNIFORMS_JSON) {
-            if let Ok(overrides) = serde_json::from_str::<UniformsOverride>(&data) {
-                for (key, &val) in &overrides {
-                    if let Some(signal) = key.strip_prefix("signal.") {
-                        let v = val as f32;
-                        match signal {
-                            "color_warmth" => uniform_data.color_warmth = v,
-                            "speed" => uniform_data.speed = v,
-                            "turbulence" => uniform_data.turbulence = v,
-                            "brightness" => uniform_data.brightness = v,
-                            "intensity" => uniform_data.intensity = v,
-                            "tension" => uniform_data.tension = v,
-                            "depth" => uniform_data.depth = v,
-                            "coherence" => uniform_data.coherence = v,
-                            "spectral_color" => uniform_data.spectral_color = v,
-                            "temporal_distortion" => uniform_data.temporal_distortion = v,
-                            "degradation" => uniform_data.degradation = v,
-                            "pitch_displacement" => uniform_data.pitch_displacement = v,
-                            "diffusion" => uniform_data.diffusion = v,
-                            _ => {}
+        match std::fs::read_to_string(UNIFORMS_JSON) {
+            Ok(data) => {
+                match serde_json::from_str::<UniformsOverride>(&data) {
+                    Ok(overrides) => {
+                        for (key, &val) in &overrides {
+                            if let Some(signal) = key.strip_prefix("signal.") {
+                                let v = val as f32;
+                                match signal {
+                                    "color_warmth" => uniform_data.color_warmth = v,
+                                    "speed" => uniform_data.speed = v,
+                                    "turbulence" => uniform_data.turbulence = v,
+                                    "brightness" => uniform_data.brightness = v,
+                                    "intensity" => uniform_data.intensity = v,
+                                    "tension" => uniform_data.tension = v,
+                                    "depth" => uniform_data.depth = v,
+                                    "coherence" => uniform_data.coherence = v,
+                                    "spectral_color" => uniform_data.spectral_color = v,
+                                    "temporal_distortion" => uniform_data.temporal_distortion = v,
+                                    "degradation" => uniform_data.degradation = v,
+                                    "pitch_displacement" => uniform_data.pitch_displacement = v,
+                                    "diffusion" => uniform_data.diffusion = v,
+                                    _ => {}
+                                }
+                            }
                         }
-                    }
-                }
 
-                // Apply per-node param overrides from uniforms.json
-                for pass in &mut self.passes {
-                    if pass.params_buffer.is_none() || pass.param_order.is_empty() {
-                        continue;
-                    }
-                    let mut updated = false;
-                    for (i, name) in pass.param_order.iter().enumerate() {
-                        if i >= pass.current_params.len() {
-                            break;
-                        }
-                        let key = format!("{}.{}", pass.node_id, name);
-                        if let Some(&val) = overrides.get(&key) {
-                            let v = val as f32;
-                            if (pass.current_params[i] - v).abs() > f32::EPSILON {
-                                pass.current_params[i] = v;
-                                updated = true;
+                        // Apply per-node param overrides from uniforms.json
+                        for pass in &mut self.passes {
+                            if pass.params_buffer.is_none() || pass.param_order.is_empty() {
+                                continue;
+                            }
+                            let mut updated = false;
+                            for (i, name) in pass.param_order.iter().enumerate() {
+                                if i >= pass.current_params.len() {
+                                    break;
+                                }
+                                let key = format!("{}.{}", pass.node_id, name);
+                                if let Some(&val) = overrides.get(&key) {
+                                    let v = val as f32;
+                                    if (pass.current_params[i] - v).abs() > f32::EPSILON {
+                                        pass.current_params[i] = v;
+                                        updated = true;
+                                    }
+                                }
+                            }
+                            if updated {
+                                if let Some(ref buf) = pass.params_buffer {
+                                    queue.write_buffer(buf, 0, bytemuck::cast_slice(&pass.current_params));
+                                }
                             }
                         }
                     }
-                    if updated {
-                        if let Some(ref buf) = pass.params_buffer {
-                            queue.write_buffer(buf, 0, bytemuck::cast_slice(&pass.current_params));
-                        }
-                    }
+                    Err(_) => {}
                 }
             }
+            Err(_) => {}
         }
 
         self.uniform_buffer.update(queue, &uniform_data);
