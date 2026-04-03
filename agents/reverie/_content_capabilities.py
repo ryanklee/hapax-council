@@ -20,6 +20,9 @@ CAMERA_MAP: dict[str, str] = {
     "content.overhead_perspective": "c920-overhead",
     "content.desk_perspective": "c920-desk",
     "content.operator_perspective": "brio-operator",
+    "space.overhead_perspective": "c920-overhead",
+    "space.desk_perspective": "c920-desk",
+    "space.operator_perspective": "brio-operator",
 }
 
 

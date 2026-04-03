@@ -295,6 +295,21 @@ class ReverieMixer:
                 self._pipeline.record_outcome(name, success=True, context=ctx)
                 self._apply_shader_impingement(imp)
                 break
+            elif name.startswith("knowledge."):
+                narrative = imp.content.get("narrative", "")
+                if self._content_router.activate_content(name, narrative, c.combined):
+                    self._recruited_content_count += 1
+                self._chronicle_technique(name, c.combined)
+                ctx = {"source": imp.source, "metric": imp.content.get("metric", "")}
+                self._pipeline.record_outcome(name, success=True, context=ctx)
+                break
+            elif name.startswith("space."):
+                if self._content_router.camera_for_affordance(name):
+                    self._content_router.activate_camera(name, c.combined)
+                    self._chronicle_technique(name, c.combined)
+                    ctx = {"source": imp.source, "metric": imp.content.get("metric", "")}
+                    self._pipeline.record_outcome(name, success=True, context=ctx)
+                    break
             elif name == "shader_graph":
                 self._shader_cap.activate(imp, imp.strength)
                 self._apply_shader_impingement(imp)
