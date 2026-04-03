@@ -50,12 +50,16 @@ async def audio_loop(daemon: VoiceDaemon) -> None:
 
         _vad_buf.extend(frame)
 
-        # Layer 2: skip echo frames for conversation buffer only
+        # Layer 2: skip echo frames for conversation buffer only.
+        # Runs when system is speaking OR has spoken recently (post-TTS echo window).
+        # TtsEnergyTracker.is_active() covers both — stays active for 1.5s after last TTS.
         _is_echo = False
+        _tts_tracker = getattr(daemon, "_tts_energy_tracker", None)
         if (
             hasattr(daemon, "_energy_classifier")
             and daemon._energy_classifier is not None
-            and daemon._conversation_buffer.is_speaking
+            and _tts_tracker is not None
+            and _tts_tracker.is_active()
         ):
             _is_echo = (
                 daemon._energy_classifier.classify(
