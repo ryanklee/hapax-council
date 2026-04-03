@@ -168,6 +168,18 @@ class PresenceEngine:
         self._b_probability.update(posterior, now)
         self._b_state.update(self._state, now)
 
+        # Diagnostic: log active signals every 30 ticks (~75s)
+        self._diag_counter = getattr(self, "_diag_counter", 0) + 1
+        if self._diag_counter >= 30:
+            self._diag_counter = 0
+            active = {k: v for k, v in signal_observations.items() if v is not None}
+            log.info(
+                "PRESENCE diag: posterior=%.4f state=%s signals=%s",
+                posterior,
+                self._state,
+                active,
+            )
+
         behaviors["presence_probability"] = self._b_probability
         behaviors["presence_state"] = self._b_state
 
@@ -178,27 +190,27 @@ class PresenceEngine:
         obs: dict[str, bool | None] = {}
 
         # Operator face visible (from presence detector via fused detection)
-        # Three states: True (operator matched), False (no face at all), None (face detected
-        # but not matched — ambiguous, could be stale embedding or bad angle)
+        # Positive-only signal: face detection is evidence FOR presence, but
+        # absence of face is NOT evidence AGAINST (operator looks at screen,
+        # is turned away, camera angle wrong, model undertrained).
         op_visible = behaviors.get("operator_visible")
         face_detected = behaviors.get("face_detected")
         if op_visible is not None and op_visible.value:
             obs["operator_face"] = True
         elif face_detected is not None and face_detected.value:
             obs["operator_face"] = None  # face seen but not matched — neutral
-        elif face_detected is not None and not face_detected.value:
-            obs["operator_face"] = False  # no face at all
         else:
-            obs["operator_face"] = None
+            obs["operator_face"] = None  # no face = neutral, not negative
 
         # Keyboard/mouse active
         b = behaviors.get("input_active")
         obs["keyboard_active"] = b.value if b is not None else None
 
-        # VAD speech (convert float confidence to bool)
+        # VAD speech: positive-only. Detected speech = evidence FOR presence.
+        # Silence = neutral (operator typing, reading, thinking).
         b = behaviors.get("vad_confidence")
-        if b is not None:
-            obs["vad_speech"] = b.value > 0.5 if isinstance(b.value, (int, float)) else None
+        if b is not None and isinstance(b.value, (int, float)) and b.value > 0.5:
+            obs["vad_speech"] = True
         else:
             obs["vad_speech"] = None
 
@@ -217,9 +229,13 @@ class PresenceEngine:
         b = behaviors.get("watch_connected")
         obs["watch_connected"] = b.value if b is not None else None
 
-        # Desktop activity (window focus changed recently)
+        # Desktop activity: positive-only. Focus change = evidence FOR presence.
+        # Sustained focus on one window = neutral (deep work, not absence).
         b = behaviors.get("desktop_active")
-        obs["desktop_active"] = b.value if b is not None else None
+        if b is not None and b.value:
+            obs["desktop_active"] = True
+        else:
+            obs["desktop_active"] = None
 
         # Bluetooth phone presence (paired, connected = in room)
         b = behaviors.get("bt_watch_connected")
