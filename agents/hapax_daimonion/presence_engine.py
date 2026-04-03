@@ -210,9 +210,19 @@ class PresenceEngine:
         else:
             obs["operator_face"] = None  # no face = neutral, not negative
 
-        # Keyboard/mouse active
-        b = behaviors.get("input_active")
-        obs["keyboard_active"] = b.value if b is not None else None
+        # Keyboard/mouse active — gated by idle time.
+        # Claude Code sessions keep logind active (tool calls, file writes count as
+        # input events). Raw input_active is unreliable as sole presence signal.
+        # If idle > 300s (5 min), treat as neutral even if logind says active.
+        b_active = behaviors.get("input_active")
+        b_idle = behaviors.get("input_idle_seconds")
+        idle_s = float(b_idle.value) if b_idle is not None and b_idle.value is not None else 0.0
+        if b_active is not None and b_active.value and idle_s < 300:
+            obs["keyboard_active"] = True
+        elif b_active is not None and not b_active.value:
+            obs["keyboard_active"] = False  # logind confirmed idle — real absence
+        else:
+            obs["keyboard_active"] = None  # ambiguous (idle > 5min or no data)
 
         # VAD speech: positive-only. Detected speech = evidence FOR presence.
         # Silence = neutral (operator typing, reading, thinking).
@@ -272,11 +282,21 @@ class PresenceEngine:
         b = behaviors.get("ir_person_detected")
         obs["ir_person_detected"] = b.value if b is not None else None
 
-        # IR hand activity: positive-only. Hands detected on desk = someone working.
-        # The IR fleet reliably detects hands even when person detection is broken
-        # (30-frame YOLO training). Hand activity is the strongest unwired signal.
-        b = behaviors.get("ir_hand_activity")
-        if b is not None and isinstance(b.value, str) and b.value not in ("none", "idle", ""):
+        # IR hand activity: positive-only, gated on motion.
+        # The NIR hand thresholding produces false positives on static objects
+        # (cables, equipment with right reflectivity). Real hands produce motion;
+        # static false positives don't. Gate: hand detected AND motion > 0.05.
+        b_hand = behaviors.get("ir_hand_activity")
+        b_motion = behaviors.get("ir_motion_delta")
+        motion = (
+            float(b_motion.value) if b_motion is not None and b_motion.value is not None else 0.0
+        )
+        hand_active = (
+            b_hand is not None
+            and isinstance(b_hand.value, str)
+            and b_hand.value not in ("none", "idle", "")
+        )
+        if hand_active and motion > 0.05:
             obs["ir_hand_active"] = True
         else:
             obs["ir_hand_active"] = None
