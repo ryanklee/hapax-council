@@ -137,6 +137,14 @@ class ConversationPipeline:
         self._recent_tts_texts: list[tuple[float, str]] = []
         self._max_tts_history: int = 10
 
+    def register_tts_text(self, text: str) -> None:
+        """Register TTS text for echo detection (called by CPAL for T1/backchannel)."""
+        norm = text.lower().strip().rstrip(".,!?")
+        if norm:
+            self._recent_tts_texts.append((time.monotonic(), norm))
+            if len(self._recent_tts_texts) > self._max_tts_history:
+                self._recent_tts_texts.pop(0)
+
         # Observation signal tracking (Batch 4: revealed preferences)
         self._last_assistant_end: float = 0.0  # monotonic time when last response finished
         self._last_user_topic: str = ""  # rough topic tracking for abandonment detection
