@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections import deque as _deque
 from pathlib import Path
 
 from agents.hapax_daimonion.ir_signals import IR_ROLES, read_all_ir_reports
@@ -22,6 +23,15 @@ from agents.hapax_daimonion.primitives import Behavior
 from shared.control_signal import ControlSignal, publish_health
 
 log = logging.getLogger(__name__)
+
+
+def _compute_brightness_delta(history: _deque[float], current: float) -> float:
+    """Compute brightness delta: current vs rolling 30-sample average."""
+    if len(history) < 10:
+        return 0.0
+    avg = sum(history) / len(history)
+    return current - avg
+
 
 _SIGNALS: frozenset[str] = frozenset(
     {
@@ -38,6 +48,7 @@ _SIGNALS: frozenset[str] = frozenset(
         "ir_heart_rate_bpm",
         "ir_heart_rate_conf",
         "ir_brightness",
+        "ir_brightness_delta",
         "ir_hand_zone",
     }
 )
@@ -64,6 +75,8 @@ class IrPresenceBackend:
             t_patience=180.0,
             sigma_explore=0.02,
         )
+        self._brightness_history: _deque[float] = _deque(maxlen=30)
+        self._b_brightness_delta: Behavior[float] = Behavior(0.0)
         self._prev_person: float = 0.0
         self._prev_motion: float = 0.0
         self._behaviors: dict[str, Behavior] = {
@@ -115,6 +128,13 @@ class IrPresenceBackend:
         freshness = len(reports) / len(IR_ROLES) if IR_ROLES else 0.0
         signal = ControlSignal(component="ir_perception", reference=1.0, perception=freshness)
         publish_health(signal)
+
+        # Track IR brightness rolling delta for body-heat proxy
+        brightness = float(self._behaviors.get("ir_brightness", Behavior(0.0)).value or 0.0)
+        self._brightness_history.append(brightness)
+        delta = _compute_brightness_delta(self._brightness_history, brightness)
+        self._b_brightness_delta.update(delta, now)
+        behaviors["ir_brightness_delta"] = self._b_brightness_delta
 
         # Exploration signal: track habituation to IR signals
         _person_val = self._behaviors.get("ir_person_detected", Behavior(False)).value

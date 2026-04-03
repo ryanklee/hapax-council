@@ -210,19 +210,23 @@ class PresenceEngine:
         else:
             obs["operator_face"] = None  # no face = neutral, not negative
 
-        # Keyboard/mouse active — gated by idle time.
-        # Claude Code sessions keep logind active (tool calls, file writes count as
-        # input events). Raw input_active is unreliable as sole presence signal.
-        # If idle > 300s (5 min), treat as neutral even if logind says active.
-        b_active = behaviors.get("input_active")
-        b_idle = behaviors.get("input_idle_seconds")
-        idle_s = float(b_idle.value) if b_idle is not None and b_idle.value is not None else 0.0
-        if b_active is not None and b_active.value and idle_s < 300:
-            obs["keyboard_active"] = True
-        elif b_active is not None and not b_active.value:
-            obs["keyboard_active"] = False  # logind confirmed idle — real absence
+        # Keyboard/mouse active — from raw evdev (physical devices only).
+        # Bypasses logind polluted by virtual input devices (RustDesk UInput,
+        # mouce-library-fake-mouse). Falls back to logind if evdev unavailable.
+        b_real = behaviors.get("real_keyboard_active")
+        b_real_idle = behaviors.get("real_idle_seconds")
+        if b_real is not None:
+            if b_real.value:
+                obs["keyboard_active"] = True
+            else:
+                idle_s = float(b_real_idle.value) if b_real_idle is not None else 9999.0
+                if idle_s > 300:
+                    obs["keyboard_active"] = False
+                else:
+                    obs["keyboard_active"] = None
         else:
-            obs["keyboard_active"] = None  # ambiguous (idle > 5min or no data)
+            b_active = behaviors.get("input_active")
+            obs["keyboard_active"] = b_active.value if b_active is not None else None
 
         # VAD speech: positive-only. Detected speech = evidence FOR presence.
         # Silence = neutral (operator typing, reading, thinking).
@@ -236,12 +240,21 @@ class PresenceEngine:
         b = behaviors.get("speaker_is_operator")
         obs["speaker_is_operator"] = b.value if b is not None else None
 
-        # Watch heart rate > 0 (0 bpm = not connected, treat as missing)
-        b = behaviors.get("heart_rate_bpm")
-        if b is not None and isinstance(b.value, (int, float)) and b.value > 0:
-            obs["watch_hr"] = True
+        # Watch heart rate — bidirectional with staleness decay.
+        b_hr = behaviors.get("heart_rate_bpm")
+        b_stale = behaviors.get("watch_hr_stale_seconds")
+        hr_stale = (
+            float(b_stale.value) if b_stale is not None and b_stale.value is not None else 9999.0
+        )
+        if b_hr is not None and isinstance(b_hr.value, (int, float)) and b_hr.value > 0:
+            if hr_stale < 30:
+                obs["watch_hr"] = True
+            elif hr_stale < 120:
+                obs["watch_hr"] = None
+            else:
+                obs["watch_hr"] = False  # out of BLE range
         else:
-            obs["watch_hr"] = None  # no data = neutral, not negative
+            obs["watch_hr"] = None
 
         # Watch connected: positive-only. Connected = evidence FOR presence.
         # Disconnected = neutral (watch charging, Bluetooth off, battery dead).

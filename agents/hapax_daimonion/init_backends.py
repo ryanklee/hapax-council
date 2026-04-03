@@ -108,6 +108,13 @@ def register_perception_backends(daemon: VoiceDaemon) -> None:
         )
 
     try:
+        from agents.hapax_daimonion.backends.evdev_input import EvdevInputBackend
+
+        daemon.perception.register_backend(EvdevInputBackend())
+    except Exception:
+        daemon.degradation_registry.record("backends", "EvdevInputBackend", "info", "not available")
+
+    try:
         from agents.hapax_daimonion.backends.contact_mic import ContactMicBackend
 
         daemon.perception.register_backend(
@@ -115,6 +122,15 @@ def register_perception_backends(daemon: VoiceDaemon) -> None:
         )
     except Exception:
         daemon.degradation_registry.record("backends", "ContactMicBackend", "info", "not available")
+
+    try:
+        from agents.hapax_daimonion.backends.ambient_audio import AmbientAudioBackend
+
+        daemon.perception.register_backend(AmbientAudioBackend())
+    except Exception:
+        daemon.degradation_registry.record(
+            "backends", "AmbientAudioBackend", "info", "not available"
+        )
 
     try:
         from agents.hapax_daimonion.backends.mixer_input import MixerInputBackend

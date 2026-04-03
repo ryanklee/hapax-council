@@ -72,6 +72,7 @@ class WatchBackend:
         self._b_activity: Behavior[str] = Behavior("unknown")
         self._b_sleep: Behavior[float] = Behavior(1.0)
         self._b_connected: Behavior[bool] = Behavior(False)
+        self._b_hr_stale: Behavior[float] = Behavior(9999.0)
 
     @property
     def name(self) -> str:
@@ -88,6 +89,7 @@ class WatchBackend:
                 "watch_activity_state",
                 "sleep_quality",
                 "watch_connected",
+                "watch_hr_stale_seconds",
             }
         )
 
@@ -165,6 +167,17 @@ class WatchBackend:
         connected = conn_data is not None
         self._b_connected.update(connected, now)
 
+        # Track HR data freshness for presence engine bidirectional signal
+        hr_stale_s = 9999.0
+        hr_path = self._reader._watch_dir / "heartrate.json"
+        if hr_path.exists():
+            try:
+                hr_stale_s = time.time() - hr_path.stat().st_mtime
+            except OSError:
+                pass
+        self._b_hr_stale.update(hr_stale_s, now)
+
+        behaviors["watch_hr_stale_seconds"] = self._b_hr_stale
         behaviors["heart_rate_bpm"] = self._b_heart_rate
         behaviors["hrv_rmssd_ms"] = self._b_hrv_rmssd
         behaviors["stress_elevated"] = self._b_stress
