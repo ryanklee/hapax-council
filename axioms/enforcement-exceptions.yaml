@@ -59,3 +59,42 @@ exceptions:
     approved_at: "2026-03-13"
     review_interval: quarterly
     next_review: "2026-06-13"
+
+  - id: exception-open-meteo
+    component: agents/weather_sync.py
+    axiom_id: corporate_boundary
+    implication_id: cb-network-001
+    reason: >
+      Weather sync agent fetches public meteorological data from Open-Meteo
+      free API (no authentication required). Data grounds imagination context
+      and the env.weather_conditions affordance.
+    compensating_controls:
+      - No API key required (no credential exposure risk)
+      - Data is public meteorological data, no PII sent
+      - Results written to local RAG and /dev/shm only
+      - Runs on hourly systemd timer (not continuous)
+      - Silent degradation when API unreachable
+    approved_by: operator
+    approved_at: "2026-04-03"
+    review_interval: quarterly
+    next_review: "2026-07-03"
+
+  - id: exception-duckduckgo-instant
+    component: agents/reverie/content_injector.py
+    axiom_id: corporate_boundary
+    implication_id: cb-network-001
+    reason: >
+      Content injector and capability discovery use DuckDuckGo Instant
+      Answers API for web search results rendered on the visual surface
+      or surfaced via the discovery meta-affordance. No authentication
+      required. Query is the imagination narrative intent.
+    compensating_controls:
+      - No API key or account required
+      - Query is imagination narrative (no personal data)
+      - Results rendered to local visual surface only
+      - Caller-gated on affordance pipeline recruitment score
+      - consent_required=True on world.* and knowledge.web_search affordances
+    approved_by: operator
+    approved_at: "2026-04-03"
+    review_interval: quarterly
+    next_review: "2026-07-03"

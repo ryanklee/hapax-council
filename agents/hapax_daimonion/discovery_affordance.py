@@ -36,8 +36,45 @@ class CapabilityDiscoveryHandler:
         return f"unresolved intent from {impingement.source}"
 
     def search(self, intent: str) -> list[dict]:
-        log.info("Searching for capability: %s", intent[:80])
-        return []  # stub for Phase 5
+        """Search for capabilities matching the intent via DuckDuckGo Instant Answers.
+
+        Returns a list of {name, description, source} dicts for propose().
+        Uses the DuckDuckGo API (exception-duckduckgo-instant in enforcement-exceptions.yaml).
+        """
+        try:
+            import httpx
+
+            resp = httpx.get(
+                "https://api.duckduckgo.com/",
+                params={"q": intent, "format": "json", "no_html": "1"},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+            results: list[dict] = []
+            abstract = data.get("AbstractText", "")
+            if abstract:
+                results.append(
+                    {
+                        "name": data.get("AbstractSource", "web"),
+                        "description": abstract[:200],
+                        "source": "duckduckgo",
+                    }
+                )
+            for topic in data.get("RelatedTopics", [])[:3]:
+                if isinstance(topic, dict) and topic.get("Text"):
+                    results.append(
+                        {
+                            "name": (topic.get("FirstURL", "") or "related")[-40:],
+                            "description": topic["Text"][:150],
+                            "source": "duckduckgo",
+                        }
+                    )
+            return results
+        except Exception:
+            log.debug("Discovery search failed for: %s", intent[:80], exc_info=True)
+            return []
 
     def propose(self, capabilities: list[dict]) -> None:
         for cap in capabilities:

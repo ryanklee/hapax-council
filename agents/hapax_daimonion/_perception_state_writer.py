@@ -407,6 +407,12 @@ def write_perception_state(
             "llm_activity": str(_bval("llm_activity", "")),
             "llm_flow_hint": str(_bval("llm_flow_hint", "")),
             "llm_confidence": _safe_float(_bval("llm_confidence", 0.0)),
+            # Desktop context (Hyprland + evdev + clipboard)
+            "active_window_class": str(_bval("active_window_class", "")),
+            "desktop_active": bool(_bval("desktop_active", False)),
+            "keyboard_active": bool(_bval("real_keyboard_active", False)),
+            "keyboard_idle_seconds": _safe_int(_bval("real_idle_seconds", 0)),
+            "clipboard_intent": str(_bval("clipboard_intent", "empty")),
             # Contact mic (desk vibration sensing)
             "desk_activity": str(_bval("desk_activity", "")),
             "desk_energy": _safe_float(_bval("desk_energy", 0.0)),
