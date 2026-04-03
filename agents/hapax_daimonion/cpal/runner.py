@@ -55,6 +55,7 @@ class CpalRunner:
         grounding_ledger: object | None = None,
         tts_manager: object | None = None,
         conversation_pipeline: object | None = None,
+        echo_canceller: object | None = None,
         tts_energy_tracker: object | None = None,
         daemon: object | None = None,
         speech_classifier: object | None = None,
@@ -83,6 +84,7 @@ class CpalRunner:
         self._stt = stt
         self._tts_manager = tts_manager
         self._audio_output = audio_output
+        self._echo_canceller = echo_canceller
         self._tts_energy_tracker = tts_energy_tracker
         self._pipeline = conversation_pipeline  # T3 delegate
         self._daemon = daemon
@@ -387,6 +389,8 @@ class CpalRunner:
                     _, pcm = ack
                     if self._audio_output is not None:
                         self._buffer.set_speaking(True)
+                        if self._echo_canceller:
+                            self._echo_canceller.feed_reference(pcm)
                         if self._tts_energy_tracker:
                             self._tts_energy_tracker.record(pcm)
                         loop = asyncio.get_running_loop()
@@ -465,6 +469,8 @@ class CpalRunner:
             signal = self._signal_cache.select(bc.signal_type)
             if signal is not None:
                 _, pcm = signal
+                if self._echo_canceller:
+                    self._echo_canceller.feed_reference(pcm)
                 if self._tts_energy_tracker:
                     self._tts_energy_tracker.record(pcm)
                 self._production.produce_t1(pcm_data=pcm)

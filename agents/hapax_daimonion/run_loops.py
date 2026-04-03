@@ -43,6 +43,9 @@ async def audio_loop(daemon: VoiceDaemon) -> None:
             except Exception as exc:
                 log.warning("Gemini audio consumer error: %s", exc)
 
+        # Layer 1: speexdsp echo attenuation (transforms frame, never drops it)
+        if daemon._echo_canceller is not None:
+            frame = daemon._echo_canceller.process(frame)
         if daemon._noise_reference is not None:
             frame = daemon._noise_reference.subtract(frame)
         if daemon._audio_preprocessor is not None:

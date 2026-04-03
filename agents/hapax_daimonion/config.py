@@ -54,16 +54,16 @@ class DaimonionConfig(BaseModel):
     context_gate_ambient_classification: bool = True
     context_gate_ambient_block_threshold: float = 0.15
 
-    # Audio hardware
-    # PipeWire webrtc AEC module handles echo cancellation at the audio
-    # server level. Application-level speexdsp removed — energy-ratio
-    # classifier (Layer 2) discriminates residual echo from real speech.
-    # Raw mic — PipeWire webrtc AEC module degrades signal quality and
-    # suppresses speech. Layers 2+3 (energy classifier + adaptive VAD)
-    # handle echo discrimination without hardware-level AEC.
+    # Audio hardware — four-layer echo stack:
+    # 1. speexdsp attenuation (transforms frames, never drops)
+    # 2. Energy-ratio classifier (residual echo on attenuated signal)
+    # 3. Adaptive VAD (0.8 during speech, 0.7 post-TTS, 0.15 silent)
+    # 4. Transcript echo detection (safety net)
     audio_input_source: str = (
         "alsa_input.usb-Blue_Microphones_Yeti_Stereo_Microphone_REV8-00.analog-stereo"
     )
+    aec_enabled: bool = True
+    aec_tail_ms: int = 500
 
     # Contact microphone (desk vibration sensing via PipeWire)
     contact_mic_source: str = "Contact Microphone"
