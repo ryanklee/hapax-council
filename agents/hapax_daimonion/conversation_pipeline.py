@@ -1014,7 +1014,9 @@ class ConversationPipeline:
             elif self.tools:
                 kwargs["tools"] = self.tools  # fallback: no gate, use all
 
-            kwargs["timeout"] = 15  # seconds — fail fast, don't block conversation
+            kwargs["timeout"] = (
+                45  # seconds — accommodates Opus extended thinking (~10s) + response
+            )
             _t_llm_start = time.monotonic()
             response = await litellm.acompletion(**kwargs)
 
