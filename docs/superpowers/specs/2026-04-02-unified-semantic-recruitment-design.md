@@ -40,6 +40,14 @@ The AffordancePipeline already implements the correct selection algorithm:
 
 No changes to this algorithm. The work is: register all capabilities, remove all bypass paths, and make this the sole path from intention to expression.
 
+### 3.0.1 Outcome Semantics
+
+Pipeline selection records **success** for Thompson learning. The pipeline's own threshold filter is the quality gate — a candidate that survives suppression, governance veto, and threshold filtering has already proven relevance. The combined score determines response intensity (slot opacity, activation level), not the learning signal. Failure is reserved for **execution errors** (capability crash, timeout, GPU OOM), not for low-confidence recruitment.
+
+Thompson sampling's role is pure exploration: occasionally boosting under-explored capabilities via Beta sampling. The optimistic prior (Beta(2,1)) prevents cold-start negative attractors where untested capabilities accumulate pessimism through structural scoring disadvantages (low base_level, zero Hebbian associations) before they can demonstrate value.
+
+Hebbian associations learn from recruitment context: the impingement source and metric are passed as context cues, strengthening associations between recurring impingement→capability pairings over time. Decay (0.995×/tick) provides passive forgetting. Activation state (Thompson alpha/beta, Hebbian associations, use_count) persists every 5 minutes and on daemon shutdown.
+
 ### 3.1 Stigmergic Coordination
 
 The mechanism is already stigmergic:
