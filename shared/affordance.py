@@ -34,6 +34,14 @@ class ActivationState(BaseModel):
     ts_alpha: float = 2.0
     ts_beta: float = 1.0
 
+    # Cap alpha/beta to prevent Thompson saturation. Without a cap, the
+    # geometric decay formula (alpha * 0.99 + 1.0) converges to 100.0,
+    # producing Beta(100, ~0) which samples ~1.0 deterministically. With
+    # a cap of 10, Beta(10, 1) samples ~0.9 with variance ~0.008 — still
+    # exploitative but occasionally dips low enough for newcomers at
+    # Beta(2, 1) = 0.67 to win a competition.
+    _TS_CAP: float = 10.0
+
     def base_level(self, now: float, decay: float = 0.5) -> float:
         if self.use_count == 0:
             return -10.0
@@ -50,16 +58,16 @@ class ActivationState(BaseModel):
 
     def record_success(self, gamma: float = 0.99) -> None:
         now = time.time()
-        self.ts_alpha = self.ts_alpha * gamma + 1.0
-        self.ts_beta *= gamma
+        self.ts_alpha = min(self._TS_CAP, self.ts_alpha * gamma + 1.0)
+        self.ts_beta = max(0.01, self.ts_beta * gamma)
         self.use_count += 1
         if self.first_use_ts == 0.0:
             self.first_use_ts = now
         self.last_use_ts = now
 
     def record_failure(self, gamma: float = 0.99) -> None:
-        self.ts_alpha *= gamma
-        self.ts_beta = self.ts_beta * gamma + 1.0
+        self.ts_alpha = max(0.01, self.ts_alpha * gamma)
+        self.ts_beta = min(self._TS_CAP, self.ts_beta * gamma + 1.0)
         self.use_count += 1
 
     def to_summary(self) -> dict[str, float]:
