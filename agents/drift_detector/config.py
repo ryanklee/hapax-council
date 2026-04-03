@@ -59,7 +59,7 @@ MODELS: dict[str, str] = {
 # ── Factories ──────────────────────────────────────────────────────────────
 
 
-def get_model(alias_or_id: str = "balanced") -> OpenAIChatModel:
+def get_model(alias_or_id: str = "fast") -> OpenAIChatModel:
     """Create a LiteLLM-backed chat model."""
     model_id = MODELS.get(alias_or_id, alias_or_id)
     return OpenAIChatModel(
