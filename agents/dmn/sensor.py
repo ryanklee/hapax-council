@@ -180,7 +180,7 @@ def publish_snapshot(snapshot: dict, *, path: Path = SNAPSHOT_PATH) -> None:
 
 def read_all(config: SensorConfig | None = None) -> dict:
     """Read all sensor sources. Returns a unified snapshot."""
-    return {
+    result: dict = {
         "timestamp": time.time(),
         "perception": read_perception(config),
         "stimmung": read_stimmung(config),
@@ -189,3 +189,45 @@ def read_all(config: SensorConfig | None = None) -> dict:
         "visual_surface": read_visual_surface(),
         "sensors": read_sensors(),
     }
+
+    # Promote key sensors to top-level for imagination context
+    sensors_dict = result.get("sensors", {})
+    if "weather" in sensors_dict:
+        result["weather"] = sensors_dict["weather"]
+
+    # Time context (always available, no external dependency)
+    now = time.localtime()
+    result["time"] = {
+        "hour": now.tm_hour,
+        "minute": now.tm_min,
+        "period": (
+            "morning"
+            if now.tm_hour < 12
+            else "afternoon"
+            if now.tm_hour < 17
+            else "evening"
+            if now.tm_hour < 21
+            else "night"
+        ),
+        "weekday": time.strftime("%A"),
+        "date": time.strftime("%Y-%m-%d"),
+    }
+
+    # Music context from perception activity
+    perc = result.get("perception", {})
+    if perc.get("activity") in ("making_music", "listening"):
+        result["music"] = {
+            "genre": perc.get("music_genre", "unknown"),
+            "mixer_energy": perc.get("mixer_energy"),
+        }
+
+    # Goals from sprint sensor
+    if "sprint" in sensors_dict:
+        sprint_data = sensors_dict["sprint"]
+        result["goals"] = {
+            "active_count": sprint_data.get("active_measures", 0),
+            "stale_count": sprint_data.get("stale_measures", 0),
+            "top_domain": sprint_data.get("top_domain", "unknown"),
+        }
+
+    return result
