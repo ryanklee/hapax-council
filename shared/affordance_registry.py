@@ -171,6 +171,14 @@ STUDIO_AFFORDANCES = [
         daemon="perception",
         operational=OperationalProperties(latency_class="slow"),
     ),
+    CapabilityRecord(
+        name="studio.ambient_noise",
+        description=(
+            "Sense room-level noise floor from ambient microphone as occupancy and activity proxy"
+        ),
+        daemon="perception",
+        operational=OperationalProperties(latency_class="fast"),
+    ),
 ]
 
 # ---------------------------------------------------------------------------
@@ -240,6 +248,22 @@ SPACE_AFFORDANCES = [
         daemon="perception",
         operational=OperationalProperties(latency_class="slow"),
     ),
+    CapabilityRecord(
+        name="space.presence_probability",
+        description=(
+            "Sense Bayesian posterior probability of operator presence fused from all available signals"
+        ),
+        daemon="perception",
+        operational=OperationalProperties(latency_class="fast"),
+    ),
+    CapabilityRecord(
+        name="space.bt_proximity",
+        description=(
+            "Sense whether the operator's watch is physically nearby via Bluetooth connection state"
+        ),
+        daemon="perception",
+        operational=OperationalProperties(latency_class="slow"),
+    ),
 ]
 
 # ---------------------------------------------------------------------------
@@ -290,6 +314,22 @@ DIGITAL_AFFORDANCES = [
         description=("Sense what kind of content was just copied for workflow context"),
         daemon="perception",
         operational=OperationalProperties(latency_class="fast"),
+    ),
+    CapabilityRecord(
+        name="digital.keyboard_activity",
+        description=(
+            "Sense physical keyboard and mouse engagement from raw HID events for presence grounding"
+        ),
+        daemon="perception",
+        operational=OperationalProperties(latency_class="fast"),
+    ),
+    CapabilityRecord(
+        name="digital.llm_activity_class",
+        description=(
+            "Sense LLM-classified operator activity and flow state from local model inference"
+        ),
+        daemon="perception",
+        operational=OperationalProperties(latency_class="slow"),
     ),
 ]
 
@@ -391,6 +431,12 @@ SOCIAL_AFFORDANCES = [
         description=("Sense the nature of the current or next meeting topic for preparation"),
         daemon="perception",
         operational=OperationalProperties(latency_class="slow"),
+    ),
+    CapabilityRecord(
+        name="social.phone_call",
+        description=("Sense whether a phone call is active or incoming for interruption awareness"),
+        daemon="perception",
+        operational=OperationalProperties(latency_class="fast"),
     ),
 ]
 
