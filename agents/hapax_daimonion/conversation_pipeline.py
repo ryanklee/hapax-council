@@ -24,6 +24,7 @@ from agents.hapax_daimonion.conversation_helpers import (
     _DENSITY_WORD_LIMITS,  # noqa: F401 — re-exported for tests
     _MAX_ACCUMULATION_S,
     _MAX_RESPONSE_TOKENS,
+    _MAX_SPOKEN_WORDS,
     _MAX_TURNS,
     _MIN_CLAUSE_WORDS,
     _MIN_FIRST_CLAUSE_WORDS,
@@ -81,7 +82,6 @@ class ConversationPipeline:
         policy_fn: Callable[[], str] | None = None,
         screen_capturer=None,  # ScreenCapturer | None
         echo_canceller=None,  # EchoCanceller | None
-        tts_energy_tracker=None,  # TtsEnergyTracker | None
         bridge_engine=None,  # BridgeEngine | None
         experiment_flags: dict[str, bool] | None = None,
         tool_recruitment_gate=None,  # ToolRecruitmentGate | None
@@ -105,7 +105,6 @@ class ConversationPipeline:
         self._dmn_fn: Callable[[], str] | None = None
         self._screen_capturer = screen_capturer
         self._echo_canceller = echo_canceller
-        self._tts_energy_tracker = tts_energy_tracker
         self._bridge_engine = bridge_engine
         self._experiment_flags = experiment_flags or {}
         self._tool_recruitment_gate = tool_recruitment_gate
@@ -136,14 +135,6 @@ class ConversationPipeline:
         # Stored as (timestamp, text) tuples for TTL-based pruning
         self._recent_tts_texts: list[tuple[float, str]] = []
         self._max_tts_history: int = 10
-
-    def register_tts_text(self, text: str) -> None:
-        """Register TTS text for echo detection (called by CPAL for T1/backchannel)."""
-        norm = text.lower().strip().rstrip(".,!?")
-        if norm:
-            self._recent_tts_texts.append((time.monotonic(), norm))
-            if len(self._recent_tts_texts) > self._max_tts_history:
-                self._recent_tts_texts.pop(0)
 
         # Observation signal tracking (Batch 4: revealed preferences)
         self._last_assistant_end: float = 0.0  # monotonic time when last response finished
@@ -262,13 +253,11 @@ class ConversationPipeline:
         self._session_start_ts = time.time()
         self._conversation_thread = []
 
-        # Grounding ledger always exists — it provides effort calibration
-        # (dynamic word limits from activation × GQI) and DU state tracking.
-        # The grounding_directive flag controls whether directives are injected
-        # into the prompt, not whether the ledger itself runs.
-        from agents.hapax_daimonion.grounding_ledger import GroundingLedger
+        # Initialize grounding ledger if experiment flags enable it
+        if self._experiment_flags.get("grounding_directive", False):
+            from agents.hapax_daimonion.grounding_ledger import GroundingLedger
 
-        self._grounding_ledger = GroundingLedger()
+            self._grounding_ledger = GroundingLedger()
 
         # Generate sentinel fact for probe question testing
         self._sentinel_number = random.randint(10, 99)
@@ -442,19 +431,14 @@ class ConversationPipeline:
                 log.debug("salience context build failed (non-fatal)", exc_info=True)
 
         # Grounding directive: injected per turn from ledger (Batch 2)
-        # Directive text only injected when grounding_directive flag is set —
-        # this is the IV in the experiment. The ledger still tracks DU state
-        # and computes effort calibration regardless.
         _ledger = getattr(self, "_grounding_ledger", None)
-        if _ledger is not None and self._experiment_flags.get("grounding_directive", False):
+        if _ledger is not None:
             directive = _ledger.grounding_directive()
             if directive:
                 updated += "\n\n" + directive
 
         # Effort level: dynamic word limit from activation × GQI (Batch 2)
-        # Always active when grounding ledger exists — response length is a
-        # dynamic property of salience and grounding state, not a static table.
-        if _ledger is not None:
+        if _ledger is not None and self._experiment_flags.get("effort_modulation", False):
             _activation = 0.5
             if self._salience_router is not None:
                 _bd = self._salience_router.last_breakdown
@@ -705,8 +689,6 @@ class ConversationPipeline:
                     self.buffer.set_speaking(True)
                 if self._echo_canceller:
                     self._echo_canceller.feed_reference(pcm)
-                if self._tts_energy_tracker:
-                    self._tts_energy_tracker.record(pcm)
                 loop = asyncio.get_running_loop()
                 await loop.run_in_executor(None, self._audio_output.write, pcm)
                 if self.buffer:
@@ -1026,9 +1008,7 @@ class ConversationPipeline:
             elif self.tools:
                 kwargs["tools"] = self.tools  # fallback: no gate, use all
 
-            kwargs["timeout"] = (
-                45  # seconds — accommodates Opus extended thinking (~10s) + response
-            )
+            kwargs["timeout"] = 15  # seconds — fail fast, don't block conversation
             _t_llm_start = time.monotonic()
             response = await litellm.acompletion(**kwargs)
 
@@ -1040,14 +1020,17 @@ class ConversationPipeline:
             _t_first_audio = 0.0
             _first_clause_spoken = False
             _spoken_words = 0  # Track words sent to TTS for cutoff
-            # Word limit: effort calibration from grounding ledger (activation × GQI)
-            # is the primary path. Falls back to density-driven only when no ledger.
-            if self._grounding_ledger is not None:
+            # Word limit: effort-driven (Batch 2) > lockdown fixed > density-driven
+            if self._grounding_ledger is not None and self._experiment_flags.get(
+                "effort_modulation", False
+            ):
                 _word_limit = (
                     self.last_word_limit
                 )  # set by effort calibration in _update_system_context
+            elif self._experiment_flags.get("volatile_lockdown", False):
+                _word_limit = _MAX_SPOKEN_WORDS
             else:
-                _word_limit = _density_word_limit()  # fallback: no grounding ledger
+                _word_limit = _density_word_limit()  # Bayesian Tier 1: density-driven
 
             self.state = ConvState.SPEAKING
             # set_speaking(True) already called by process_utterance before bridge
@@ -1253,8 +1236,6 @@ class ConversationPipeline:
                 try:
                     if self._echo_canceller:
                         self._echo_canceller.feed_reference(pcm)
-                    if self._tts_energy_tracker:
-                        self._tts_energy_tracker.record(pcm)
                     loop = asyncio.get_running_loop()
                     await loop.run_in_executor(None, self._audio_output.write, pcm)
                 except Exception:
@@ -1376,8 +1357,6 @@ class ConversationPipeline:
             try:
                 if self._echo_canceller:
                     self._echo_canceller.feed_reference(pcm)
-                if self._tts_energy_tracker:
-                    self._tts_energy_tracker.record(pcm)
                 loop = asyncio.get_running_loop()
                 await loop.run_in_executor(None, self._audio_output.write, pcm)
             except Exception:
@@ -1717,26 +1696,28 @@ class ConversationPipeline:
                 # _audio_executor is single-threaded so writes are ordered.
                 ao = self._audio_output
                 ec = self._echo_canceller
-                tracker = self._tts_energy_tracker
                 loop.run_in_executor(
                     _audio_executor,
                     self._write_audio,
                     ao,
                     ec,
-                    tracker,
                     pcm,
                 )
         except Exception:
             log.debug("TTS/playback failed for: %s", text[:50], exc_info=True)
 
     @staticmethod
-    def _write_audio(audio_output, echo_canceller, tts_energy_tracker, pcm: bytes) -> None:
-        """Write PCM, feed echo canceller reference, record energy for classification."""
+    def _write_audio(audio_output, echo_canceller, pcm: bytes) -> None:
+        """Write PCM to audio output and feed AEC reference. Runs in _audio_executor.
+
+        Reference is fed BEFORE playback so the canceller has the expected
+        signal queued when the echo arrives at the microphone (~5-20ms later).
+        """
         try:
             if echo_canceller:
                 echo_canceller.feed_reference(pcm)
-            if tts_energy_tracker:
-                tts_energy_tracker.record(pcm)
+            else:
+                log.debug("_write_audio: echo_canceller is None!")
             audio_output.write(pcm)
         except Exception:
             pass

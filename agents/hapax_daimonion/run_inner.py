@@ -53,7 +53,6 @@ async def run_inner(daemon: VoiceDaemon) -> None:
         grounding_ledger=getattr(daemon, "_grounding_ledger", None),
         tts_manager=daemon.tts,
         echo_canceller=getattr(daemon, "_echo_canceller", None),
-        tts_energy_tracker=getattr(daemon, "_tts_energy_tracker", None),
         daemon=daemon,
     )
 

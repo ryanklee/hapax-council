@@ -13,8 +13,7 @@ log = logging.getLogger("hapax_daimonion")
 
 
 def init_audio_processing(daemon: VoiceDaemon) -> None:
-    """Initialize echo canceller, energy tracker, preprocessor, noise reference, speaker ID, bridge."""
-    # Layer 1: speexdsp echo attenuation (reduces echo ~20-30dB, does not drop frames)
+    """Initialize echo canceller, preprocessor, noise reference, speaker ID, bridge."""
     daemon._echo_canceller = None
     if daemon.cfg.aec_enabled:
         try:
@@ -23,12 +22,6 @@ def init_audio_processing(daemon: VoiceDaemon) -> None:
             daemon._echo_canceller = EchoCanceller(frame_size=480, tail_ms=daemon.cfg.aec_tail_ms)
         except Exception:
             log.warning("Echo canceller init failed", exc_info=True)
-
-    # Layer 2: energy-ratio echo classification on attenuated signal
-    from agents.hapax_daimonion.energy_classifier import EnergyClassifier, TtsEnergyTracker
-
-    daemon._tts_energy_tracker = TtsEnergyTracker()
-    daemon._energy_classifier = EnergyClassifier(daemon._tts_energy_tracker)
 
     from agents.hapax_daimonion.audio_preprocess import AudioPreprocessor
 

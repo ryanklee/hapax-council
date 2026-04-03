@@ -144,7 +144,6 @@ async def start_conversation_pipeline(daemon: VoiceDaemon) -> None:
         policy_fn=daemon._policy_fn,
         screen_capturer=getattr(daemon.workspace_monitor, "_screen_capturer", None),
         echo_canceller=daemon._echo_canceller,
-        tts_energy_tracker=daemon._tts_energy_tracker,
         bridge_engine=daemon._bridge_engine,
         tool_recruitment_gate=tool_recruitment_gate,
     )
@@ -189,16 +188,6 @@ async def start_conversation_pipeline(daemon: VoiceDaemon) -> None:
         # Wire audio output for T1 acknowledgments + backchannels
         if getattr(daemon._conversation_pipeline, "_audio_output", None) is not None:
             daemon._cpal_runner._audio_output = daemon._conversation_pipeline._audio_output
-
-        # Wire during-production speech classifier (backchannel vs floor claim)
-        from agents.hapax_daimonion.speech_classifier import DuringProductionClassifier
-
-        async def _stt_for_classifier(audio: bytes) -> str:
-            return await daemon._resident_stt.transcribe(audio)
-
-        daemon._cpal_runner.set_speech_classifier(
-            DuringProductionClassifier(stt=_stt_for_classifier)
-        )
 
     # Wake greeting
     _play_wake_greeting(daemon)
@@ -261,10 +250,6 @@ def _play_wake_greeting(daemon: VoiceDaemon) -> None:
 
             def _play() -> None:
                 daemon._conversation_buffer.set_speaking(True)
-                if daemon._echo_canceller:
-                    daemon._echo_canceller.feed_reference(pcm)
-                if daemon._tts_energy_tracker:
-                    daemon._tts_energy_tracker.record(pcm)
                 daemon._conversation_pipeline._audio_output.write(pcm)
                 daemon._conversation_buffer.set_speaking(False)
 

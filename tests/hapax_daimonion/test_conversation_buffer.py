@@ -157,39 +157,25 @@ class TestResidentSTTInterface(unittest.TestCase):
         assert result == ""
 
 
-class TestAdaptiveVad:
-    """Tests for continuous perception — no _speaking gate."""
+class TestSpeakingGate:
+    """Tests for buffer gating during system speech (gates active until calibrated)."""
 
-    def test_vad_updates_during_speaking(self):
-        """VAD must process during system speech (was gated before)."""
+    def test_vad_ignored_during_speaking(self):
+        """VAD must be ignored during system speech (gate active)."""
         buf = ConversationBuffer()
         buf.activate()
         buf.set_speaking(True)
         for _ in range(10):
             buf.update_vad(0.9)
-        assert buf.speech_active
-
-    def test_vad_requires_higher_threshold_during_speaking(self):
-        """During system speech, VAD threshold rises to 0.8."""
-        buf = ConversationBuffer()
-        buf.activate()
-        buf.set_speaking(True)
-        for _ in range(10):
-            buf.update_vad(0.5)
         assert not buf.speech_active
 
-    def test_frames_accumulated_during_speaking(self):
-        """Audio frames must accumulate during system speech."""
+    def test_frames_not_accumulated_during_speaking(self):
+        """Audio frames must not accumulate during system speech (gate active)."""
         buf = ConversationBuffer()
         buf.activate()
         buf.set_speaking(True)
-        for _ in range(10):
-            buf.update_vad(0.9)
+        # Even if speech were somehow active, feed_audio returns early
+        buf._speech_active = True
         for _ in range(5):
             buf.feed_audio(b"\x01\x00" * 480)
-        assert len(buf._speech_frames) >= 5
-
-    def test_no_cooldown_property(self):
-        """Cooldown mechanism must be removed entirely."""
-        buf = ConversationBuffer()
-        assert not hasattr(buf, "_dynamic_cooldown_s")
+        assert len(buf._speech_frames) == 0
