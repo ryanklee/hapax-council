@@ -114,7 +114,7 @@ def sync() -> bool:
     significant = [
         dim
         for dim in reading
-        if dim != "timestamp" and abs(reading.get(dim, 0.0) - last_reading.get(dim, 0.0)) > 0.15
+        if dim in DIMENSION_NAMES and abs(reading.get(dim, 0.0) - last_reading.get(dim, 0.0)) > 0.15
     ]
     if significant or current_stance != last_stance:
         changed = (["overall_stance"] if current_stance != last_stance else []) + significant
