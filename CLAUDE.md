@@ -214,8 +214,16 @@ Destructive command detection strips quoted strings before matching to prevent f
 | Signal | Source | LR (True) | Type |
 |--------|--------|-----------|------|
 | desk_active | Contact mic Cortado MKIII via pw-cat | 18x | positive-only |
-| keyboard_active | systemd-logind IdleHint | 17x | bidirectional |
-| ir_hand_active | Pi NoIR hand detection | 8.5x | positive-only |
+| keyboard_active | evdev raw HID (physical Keychron + Logitech) | 17x | bidirectional |
+| ir_hand_active | Pi NoIR hand detection (motion-gated >0.05) | 8.5x | positive-only |
+
+**Absence signals (drive presence DOWN when operator leaves):**
+
+| Signal | Source | LR (False) | Condition |
+|--------|--------|-----------|-----------|
+| keyboard_active | evdev idle >5min | 5.6x against | No physical keystrokes for 300s |
+| watch_hr | Pixel Watch HR staleness >120s | 3.3x against | Watch out of BLE range |
+| ir_body_heat | IR brightness drop >15 units | 6.7x against | Body left IR camera field |
 
 **Secondary signals:**
 
@@ -224,18 +232,27 @@ Destructive command detection strips quoted strings before matching to prevent f
 | midi_active | OXI One MIDI clock | 45x | bidirectional |
 | operator_face | InsightFace SCRFD face ReID | 9x | positive-only |
 | desktop_active | Hyprland window focus | 7.5x | positive-only |
+| ambient_energy | Blue Yeti room noise floor via pw-cat | 3x | positive-only |
 | room_occupancy | Multi-camera YOLO person | 4.25x | positive-only |
 | vad_speech | Silero VAD | 4x | positive-only |
-| watch_hr | Pixel Watch 4 HR>0 | 2.67x | positive-only |
-| bt_phone_connected | BLE scan | 2.33x | bidirectional |
+| ir_body_heat | IR brightness delta (body-heat proxy) | 4.67x | bidirectional |
+| bt_phone_connected | BT active connection (not paired list) | 2.33x | positive-only |
 | watch_connected | Pixel Watch BLE | — | positive-only |
 | phone_kde_connected | KDE Connect WiFi | 3.2x | bidirectional |
 | ir_person_detected | Pi NoIR YOLOv8n | 9x | positive-only (broken, always None) |
 | speaker_is_operator | pyannote embedding | 47.5x | not wired (no backend) |
 
+**Keyboard input:** `EvdevInputBackend` reads physical devices directly via `/dev/input/event*` (Keychron, Logitech USB Receiver), filtering virtual devices (RustDesk UInput, mouce-library-fake-mouse, ydotoold) by name. Replaces logind-based detection which was polluted by Claude Code subprocess activity. Falls back to logind if evdev unavailable.
+
 **Contact mic:** Cortado MKIII on PreSonus Studio 24c Input 2 (48V phantom). Captured via `pw-cat --record --target "Contact Microphone"` at 16kHz mono int16. DSP pipeline: RMS energy, onset detection, spectral centroid, autocorrelation, gesture classification. Provides `desk_activity` (idle/typing/tapping/drumming/active), `desk_energy`, `desk_onset_rate`, `desk_tap_gesture`.
 
-**Prediction monitor:** `agents/reverie_prediction_monitor.py` (5-min systemd timer) tracks 6 post-fix behavioral predictions. Grafana dashboard at `localhost:3001/d/reverie-predictions/`. Prometheus metrics at `/api/predictions/metrics`.
+**Ambient audio:** Blue Yeti USB microphone captured via `pw-cat --record --target "Yeti Stereo Microphone"` at 16kHz. Smoothed RMS energy as room occupancy proxy — occupied rooms have higher ambient noise floor than empty rooms.
+
+**Watch HR staleness:** Bidirectional signal. Fresh HR (<30s mtime) = presence evidence. Stale 30–120s = neutral (sync gap). Very stale >120s = absence evidence (watch out of BLE range, operator physically far away).
+
+**IR brightness delta:** Rolling 30-sample average of `ir_brightness` from Pi NoIR fleet. Rise >15 units = body arrived (skin reflects 850nm). Drop >15 = body left. Bidirectional body-heat proxy.
+
+**Prediction monitor:** `agents/reverie_prediction_monitor.py` (1-min systemd timer) tracks 6 behavioral predictions + live operational metrics. Grafana dashboard at `localhost:3001/d/reverie-predictions/` (16 panels). Prometheus scrape at 30s. Metrics at `/api/predictions/metrics`.
 
 **Debug/capture tools:**
 - `kill -USR1 $(pgrep -f hapax_ir_edge)` — saves greyscale frame to `/tmp/ir_debug_{role}.jpg`
