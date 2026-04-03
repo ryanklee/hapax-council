@@ -80,6 +80,7 @@ class ConversationPipeline:
         ambient_fn: Callable[[], object | None] | None = None,
         policy_fn: Callable[[], str] | None = None,
         screen_capturer=None,  # ScreenCapturer | None
+        echo_canceller=None,  # EchoCanceller | None
         tts_energy_tracker=None,  # TtsEnergyTracker | None
         bridge_engine=None,  # BridgeEngine | None
         experiment_flags: dict[str, bool] | None = None,
@@ -103,6 +104,7 @@ class ConversationPipeline:
         self._nudges_fn: Callable[[], str] | None = None
         self._dmn_fn: Callable[[], str] | None = None
         self._screen_capturer = screen_capturer
+        self._echo_canceller = echo_canceller
         self._tts_energy_tracker = tts_energy_tracker
         self._bridge_engine = bridge_engine
         self._experiment_flags = experiment_flags or {}
@@ -134,6 +136,14 @@ class ConversationPipeline:
         # Stored as (timestamp, text) tuples for TTL-based pruning
         self._recent_tts_texts: list[tuple[float, str]] = []
         self._max_tts_history: int = 10
+
+    def register_tts_text(self, text: str) -> None:
+        """Register TTS text for echo detection (called by CPAL for T1/backchannel)."""
+        norm = text.lower().strip().rstrip(".,!?")
+        if norm:
+            self._recent_tts_texts.append((time.monotonic(), norm))
+            if len(self._recent_tts_texts) > self._max_tts_history:
+                self._recent_tts_texts.pop(0)
 
         # Observation signal tracking (Batch 4: revealed preferences)
         self._last_assistant_end: float = 0.0  # monotonic time when last response finished
@@ -693,6 +703,8 @@ class ConversationPipeline:
             if pcm and self._audio_output:
                 if self.buffer:
                     self.buffer.set_speaking(True)
+                if self._echo_canceller:
+                    self._echo_canceller.feed_reference(pcm)
                 if self._tts_energy_tracker:
                     self._tts_energy_tracker.record(pcm)
                 loop = asyncio.get_running_loop()
@@ -1239,6 +1251,8 @@ class ConversationPipeline:
             phrase, pcm = self._bridge_engine.select(ctx)
             if pcm and self._audio_output:
                 try:
+                    if self._echo_canceller:
+                        self._echo_canceller.feed_reference(pcm)
                     if self._tts_energy_tracker:
                         self._tts_energy_tracker.record(pcm)
                     loop = asyncio.get_running_loop()
@@ -1360,6 +1374,8 @@ class ConversationPipeline:
         # the first TTS clause to get clipped.
         if pcm and self._audio_output:
             try:
+                if self._echo_canceller:
+                    self._echo_canceller.feed_reference(pcm)
                 if self._tts_energy_tracker:
                     self._tts_energy_tracker.record(pcm)
                 loop = asyncio.get_running_loop()
@@ -1700,11 +1716,13 @@ class ConversationPipeline:
                 # immediately so next clause can start synthesizing.
                 # _audio_executor is single-threaded so writes are ordered.
                 ao = self._audio_output
+                ec = self._echo_canceller
                 tracker = self._tts_energy_tracker
                 loop.run_in_executor(
                     _audio_executor,
                     self._write_audio,
                     ao,
+                    ec,
                     tracker,
                     pcm,
                 )
@@ -1712,9 +1730,11 @@ class ConversationPipeline:
             log.debug("TTS/playback failed for: %s", text[:50], exc_info=True)
 
     @staticmethod
-    def _write_audio(audio_output, tts_energy_tracker, pcm: bytes) -> None:
-        """Write PCM to audio output and record energy for echo classification."""
+    def _write_audio(audio_output, echo_canceller, tts_energy_tracker, pcm: bytes) -> None:
+        """Write PCM, feed echo canceller reference, record energy for classification."""
         try:
+            if echo_canceller:
+                echo_canceller.feed_reference(pcm)
             if tts_energy_tracker:
                 tts_energy_tracker.record(pcm)
             audio_output.write(pcm)
