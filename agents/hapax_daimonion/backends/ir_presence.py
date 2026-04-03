@@ -154,7 +154,10 @@ class IrPresenceBackend:
     def _fuse(self, reports: dict[str, dict[str, object]], now: float) -> None:
         """Fuse all Pi reports into behavior values."""
         if not reports:
-            self._behaviors["ir_person_detected"].update(False, now)
+            # No IR data → neutral (None), not negative (False).  SCM control
+            # law §2.1 Level 3: "set ALL IR signals to defaults."  Defaults must
+            # be neutral so broken/stale IR doesn't drag Bayesian presence down.
+            self._behaviors["ir_person_detected"].update(None, now)
             self._behaviors["ir_person_count"].update(0, now)
             self._behaviors["ir_motion_delta"].update(0.0, now)
             self._behaviors["ir_gaze_zone"].update("unknown", now)
@@ -174,8 +177,14 @@ class IrPresenceBackend:
         all_persons: list[dict[str, object]] = []
         for report in reports.values():
             all_persons.extend(report.get("persons", []))
-        person_detected = len(all_persons) > 0
-        self._behaviors["ir_person_detected"].update(person_detected, now)
+        if all_persons:
+            self._behaviors["ir_person_detected"].update(True, now)
+        else:
+            # No detections = neutral (None), not negative (False).  The YOLOv8n
+            # model is trained on only 30 NIR frames and regularly misses the
+            # operator.  Until retrained (IR remediation Batch 2), "no detection"
+            # means "I don't know," not "nobody is there."
+            self._behaviors["ir_person_detected"].update(None, now)
         self._behaviors["ir_person_count"].update(len(all_persons), now)
 
         # --- Motion: max across all Pis ---

@@ -272,7 +272,11 @@ class ReverieMixer:
             if name.startswith("node."):
                 self._satellites.recruit(name.removeprefix("node."), c.combined)
                 self._chronicle_technique(name, c.combined)
-                self._pipeline.record_outcome(name, success=c.combined > 0.4)
+                # Recruited candidates already survived pipeline threshold (biased
+                # competition). Recording activation as success prevents Thompson
+                # death spiral for cold-start affordances while the combined score
+                # determines response intensity via slot opacity.
+                self._pipeline.record_outcome(name, success=True)
                 self._apply_shader_impingement(imp)
                 break
             elif name.startswith("content."):
@@ -283,9 +287,9 @@ class ReverieMixer:
                     self._content_router.activate_content(name, narrative, c.combined)
                 self._recruited_content_count += 1
                 self._chronicle_technique(name, c.combined)
-                # Learning: high-confidence matches strengthen, weak matches weaken.
-                # Over time, cameras stop winning for tangential exploration impingements.
-                self._pipeline.record_outcome(name, success=c.combined > 0.4)
+                # Same rationale as node.*: pipeline selection IS the quality gate.
+                # Activation level (c.combined) drives opacity, not learning signal.
+                self._pipeline.record_outcome(name, success=True)
                 self._apply_shader_impingement(imp)
                 break
             elif name == "shader_graph":
