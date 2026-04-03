@@ -236,6 +236,36 @@ def assemble_context(
     weather = sensor_snapshot.get("weather", {})
     if weather:
         sections.append(f"- Weather: {weather}")
+
+    # Time
+    time_ctx = sensor_snapshot.get("time", {})
+    if time_ctx:
+        sections.append(
+            f"- Time: {time_ctx.get('period', '?')}, "
+            f"{time_ctx.get('weekday', '?')} {time_ctx.get('date', '?')} "
+            f"{time_ctx.get('hour', '?')}:{time_ctx.get('minute', 0):02d}"
+        )
+
+    # Music
+    music = sensor_snapshot.get("music", {})
+    if music:
+        parts = []
+        if music.get("genre"):
+            parts.append(f"genre={music['genre']}")
+        if music.get("mixer_energy") is not None:
+            parts.append(f"energy={music['mixer_energy']:.1f}")
+        if parts:
+            sections.append(f"- Music: {', '.join(parts)}")
+
+    # Goals
+    goals = sensor_snapshot.get("goals", {})
+    if goals:
+        sections.append(
+            f"- Goals: {goals.get('active_count', 0)} active, "
+            f"{goals.get('stale_count', 0)} stale, "
+            f"focus={goals.get('top_domain', 'unknown')}"
+        )
+
     if not any(sensor_snapshot.get(k) for k in ("stimmung", "perception", "watch", "weather")):
         sections.append("(none)")
 

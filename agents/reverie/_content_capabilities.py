@@ -20,6 +20,9 @@ CAMERA_MAP: dict[str, str] = {
     "content.overhead_perspective": "c920-overhead",
     "content.desk_perspective": "c920-desk",
     "content.operator_perspective": "brio-operator",
+    "space.overhead_perspective": "c920-overhead",
+    "space.desk_perspective": "c920-desk",
+    "space.operator_perspective": "brio-operator",
 }
 
 
@@ -95,14 +98,29 @@ class ContentCapabilityRouter:
         return True
 
     def activate_content(self, affordance_name: str, narrative: str, level: float) -> bool:
-        """Activate a slow content capability (text, knowledge query).
+        """Activate a content capability — dispatches to the appropriate resolver.
 
-        Returns True if activation was dispatched. Resolution is asynchronous.
+        Returns True if content was produced. FAST resolvers run inline;
+        SLOW resolvers (Qdrant queries) may take 50-200ms but still run
+        synchronously within the mixer tick.
         """
-        log.info(
-            "Content recruitment: %s at %.2f (narrative: %s)",
-            affordance_name,
-            level,
-            narrative[:50],
-        )
-        return False
+        from agents.reverie._content_resolvers import CONTENT_RESOLVERS
+
+        resolver = CONTENT_RESOLVERS.get(affordance_name)
+        if resolver is None:
+            log.debug("No resolver for content affordance: %s", affordance_name)
+            return False
+
+        try:
+            result = resolver(narrative, level, sources_dir=self._sources)
+            if result:
+                log.info(
+                    "Content resolved: %s at %.2f (narrative: %s)",
+                    affordance_name,
+                    level,
+                    narrative[:50],
+                )
+            return result
+        except Exception:
+            log.warning("Content resolver failed: %s", affordance_name, exc_info=True)
+            return False
