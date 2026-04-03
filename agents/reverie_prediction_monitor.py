@@ -301,30 +301,69 @@ def p4_winner_take_all(chronicle_events: list[dict]) -> PredictionResult:
     )
 
 
-def p5_content_vocabulary_balance(chronicle_events: list[dict]) -> PredictionResult:
-    """P5: technique.activated vs params.shifted ratio should be 0.3-0.7."""
-    technique_count = sum(
-        1 for e in chronicle_events if e.get("event_type") == "technique.activated"
-    )
-    params_count = sum(1 for e in chronicle_events if e.get("event_type") == "params.shifted")
-    total = technique_count + params_count
+UNIFORMS_FILE = Path("/dev/shm/hapax-imagination/pipeline/uniforms.json")
 
-    if total < 10:
+# Plan defaults for vocabulary-only baseline (no content modulation)
+_VOCABULARY_DEFAULTS = {
+    "color.brightness": 1.0,
+    "color.saturation": 1.0,
+    "color.hue_rotate": 0.0,
+    "noise.amplitude": 0.7,
+    "noise.frequency_x": 1.5,
+    "fb.hue_shift": 0.0,
+    "physarum.sensor_dist": 1.0,
+    "physarum.turn_speed": 0.08,
+    "post.vignette_strength": 0.35,
+}
+
+
+def p5_content_vocabulary_balance(_chronicle_events: list[dict]) -> PredictionResult:
+    """P5: How far are current uniforms from vocabulary defaults?
+
+    Measures mean absolute deviation of live shader params from their
+    vocabulary-only baseline. High deviation = content recruitment is
+    actively modulating the surface. Near zero = running on defaults.
+    Healthy range: 0.05-0.5 (subtle to moderate modulation).
+    """
+    try:
+        uniforms = json.loads(UNIFORMS_FILE.read_text())
+    except (FileNotFoundError, json.JSONDecodeError):
         return PredictionResult(
             name="P5_content_vocabulary_balance",
             expected="insufficient data",
             actual=0.0,
             healthy=True,
-            detail=f"technique={technique_count}, params={params_count}",
+            detail="uniforms.json not found",
         )
 
-    ratio = technique_count / total
+    deviations = []
+    detail_params = {}
+    for param, default in _VOCABULARY_DEFAULTS.items():
+        current = uniforms.get(param)
+        if current is not None and isinstance(current, (int, float)):
+            dev = abs(current - default)
+            deviations.append(dev)
+            if dev > 0.01:
+                detail_params[param] = round(dev, 3)
 
-    if ratio > 0.9:
-        alert = f"Content eclipsing substrate: ratio={ratio:.2f} ({technique_count}/{total})"
+    if not deviations:
+        return PredictionResult(
+            name="P5_content_vocabulary_balance",
+            expected="insufficient data",
+            actual=0.0,
+            healthy=True,
+            detail="no matching params",
+        )
+
+    mean_dev = sum(deviations) / len(deviations)
+
+    if mean_dev > 0.8:
+        alert = (
+            f"Extreme modulation: mean_dev={mean_dev:.3f} — content may be overwhelming substrate"
+        )
         healthy = False
-    elif ratio < 0.1:
-        alert = f"Regression to pre-fix state: ratio={ratio:.2f} ({technique_count}/{total})"
+    elif mean_dev < 0.01:
+        alert = f"No modulation: mean_dev={mean_dev:.3f} — running on vocabulary defaults only"
         healthy = False
     else:
         alert = None
@@ -332,13 +371,11 @@ def p5_content_vocabulary_balance(chronicle_events: list[dict]) -> PredictionRes
 
     return PredictionResult(
         name="P5_content_vocabulary_balance",
-        expected="0.3–0.7 (balanced)",
-        actual=round(ratio, 4),
+        expected="0.05–0.5 (active modulation)",
+        actual=round(mean_dev, 4),
         healthy=healthy,
         alert=alert,
-        detail=json.dumps(
-            {"technique_events": technique_count, "params_events": params_count, "total": total}
-        ),
+        detail=json.dumps({"mean_deviation": round(mean_dev, 4), "active_params": detail_params}),
     )
 
 
