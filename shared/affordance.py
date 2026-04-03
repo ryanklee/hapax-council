@@ -31,7 +31,7 @@ class ActivationState(BaseModel):
     use_count: int = 0
     last_use_ts: float = 0.0
     first_use_ts: float = 0.0
-    ts_alpha: float = 1.0
+    ts_alpha: float = 2.0
     ts_beta: float = 1.0
 
     def base_level(self, now: float, decay: float = 0.5) -> float:
