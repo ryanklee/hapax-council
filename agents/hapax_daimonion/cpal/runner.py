@@ -203,15 +203,22 @@ class CpalRunner:
                 log.info("CPAL session timeout: %s", msg)
                 if d._conversation_pipeline and d._conversation_pipeline._audio_output:
                     try:
+                        self._buffer.set_speaking(True)
                         loop = asyncio.get_running_loop()
                         pcm = await loop.run_in_executor(
                             None, d.tts.synthesize, msg, "conversation"
                         )
                         if pcm:
+                            if self._echo_canceller:
+                                self._echo_canceller.feed_reference(pcm)
+                            if self._tts_energy_tracker:
+                                self._tts_energy_tracker.record(pcm)
                             await loop.run_in_executor(
                                 None, d._conversation_pipeline._audio_output.write, pcm
                             )
+                        self._buffer.set_speaking(False)
                     except Exception:
+                        self._buffer.set_speaking(False)
                         log.debug("Goodbye TTS failed", exc_info=True)
                 await close_session(d, reason="silence_timeout")
 

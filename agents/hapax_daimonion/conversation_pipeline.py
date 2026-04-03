@@ -1243,6 +1243,8 @@ class ConversationPipeline:
             phrase, pcm = self._bridge_engine.select(ctx)
             if pcm and self._audio_output:
                 try:
+                    if self._echo_canceller:
+                        self._echo_canceller.feed_reference(pcm)
                     if self._tts_energy_tracker:
                         self._tts_energy_tracker.record(pcm)
                     loop = asyncio.get_running_loop()

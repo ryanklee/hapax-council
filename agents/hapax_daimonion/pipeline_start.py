@@ -261,6 +261,10 @@ def _play_wake_greeting(daemon: VoiceDaemon) -> None:
 
             def _play() -> None:
                 daemon._conversation_buffer.set_speaking(True)
+                if daemon._echo_canceller:
+                    daemon._echo_canceller.feed_reference(pcm)
+                if daemon._tts_energy_tracker:
+                    daemon._tts_energy_tracker.record(pcm)
                 daemon._conversation_pipeline._audio_output.write(pcm)
                 daemon._conversation_buffer.set_speaking(False)
 
