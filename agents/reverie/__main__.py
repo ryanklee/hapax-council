@@ -73,6 +73,7 @@ class ReverieDaemon:
         """Main loop — never stops unless signalled."""
         global TICK_INTERVAL_S
         log.info("Reverie daemon starting")
+        self._save_counter = 0
         while self._running:
             try:
                 await self.tick()
@@ -96,6 +97,15 @@ class ReverieDaemon:
                     TICK_INTERVAL_S = self._cl_original_tick
                     self._cl_degraded = False
                     log.info("Control law [reverie]: recovered")
+
+                # Periodic state persistence (every ~5 min at 1s tick)
+                self._save_counter += 1
+                if self._save_counter >= 300 and self._mixer is not None:
+                    self._save_counter = 0
+                    try:
+                        self._mixer.pipeline.save_activation_state()
+                    except Exception:
+                        log.debug("Periodic save failed", exc_info=True)
             await asyncio.sleep(TICK_INTERVAL_S)
         log.info("Reverie daemon stopped")
 

@@ -117,8 +117,9 @@ class IrPresenceBackend:
         publish_health(signal)
 
         # Exploration signal: track habituation to IR signals
-        person = float(self._behaviors.get("ir_person_detected", Behavior(False)).value)
-        motion = float(self._behaviors.get("ir_motion_delta", Behavior(0.0)).value)
+        _person_val = self._behaviors.get("ir_person_detected", Behavior(False)).value
+        person = float(_person_val) if _person_val is not None else 0.0
+        motion = float(self._behaviors.get("ir_motion_delta", Behavior(0.0)).value or 0.0)
         self._exploration.feed_habituation("person_detected", person, self._prev_person, 0.2)
         self._exploration.feed_habituation("motion_delta", motion, self._prev_motion, 0.1)
         self._exploration.feed_interest("report_freshness", freshness, 0.3)
