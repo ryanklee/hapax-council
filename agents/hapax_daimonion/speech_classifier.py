@@ -84,8 +84,10 @@ class DuringProductionClassifier:
 
         Returns BackchannelSignal (grounding) or FloorClaim (yield).
         """
-        duration_s = len(speech_frames) * _FRAME_DURATION_S
         utterance_bytes = b"".join(speech_frames)
+        # Compute duration from total byte length, not frame count —
+        # callers may pass a single concatenated blob or individual frames.
+        duration_s = len(utterance_bytes) / (SAMPLE_RATE * 2)  # int16 = 2 bytes/sample
 
         # Try STT classification (primary)
         try:

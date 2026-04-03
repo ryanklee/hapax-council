@@ -68,6 +68,7 @@ class ConversationBuffer:
         self._speaking = False
         self._pending_utterance: bytes | None = None
         self._speaking_started_at: float = 0.0
+        self._speaking_ended_at: float = 0.0
 
         # Adaptive speech-end: track speech duration for threshold adjustment
         self._speech_start_time: float = 0.0
@@ -123,6 +124,9 @@ class ConversationBuffer:
         self._speaking = speaking
         if speaking:
             self._speaking_started_at = time.monotonic()
+            self._speaking_ended_at = 0.0
+        else:
+            self._speaking_ended_at = time.monotonic()
 
     def feed_audio(self, frame: bytes) -> None:
         if not self._active:
@@ -142,9 +146,17 @@ class ConversationBuffer:
 
         # Adaptive threshold: higher during system speech to filter
         # residual echo that passes through PipeWire AEC + energy classifier.
+        # Three states: speaking (0.8), post-TTS 500ms (0.7), silent (0.15).
+        _post_tts_window = 0.5  # seconds
         if self._speaking:
             start_threshold = 0.8
             consecutive_required = 7  # ~210ms sustained
+        elif (
+            self._speaking_ended_at > 0.0
+            and (time.monotonic() - self._speaking_ended_at) < _post_tts_window
+        ):
+            start_threshold = 0.7  # post-TTS: residual echo decay
+            consecutive_required = 5  # ~150ms sustained
         else:
             start_threshold = SPEECH_START_PROB  # 0.15
             consecutive_required = SPEECH_START_CONSECUTIVE  # 3

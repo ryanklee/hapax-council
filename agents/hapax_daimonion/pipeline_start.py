@@ -193,7 +193,7 @@ async def start_conversation_pipeline(daemon: VoiceDaemon) -> None:
         from agents.hapax_daimonion.speech_classifier import DuringProductionClassifier
 
         async def _stt_for_classifier(audio: bytes) -> str:
-            return daemon._resident_stt.transcribe_sync(audio)
+            return await daemon._resident_stt.transcribe(audio)
 
         daemon._cpal_runner.set_speech_classifier(
             DuringProductionClassifier(stt=_stt_for_classifier)

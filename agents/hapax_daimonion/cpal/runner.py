@@ -444,9 +444,13 @@ class CpalRunner:
             elif isinstance(result, FloorClaim):
                 # Yield production, queue utterance for T3
                 self._production.yield_to_operator()
+                self._buffer.set_speaking(False)
                 if self._pipeline and hasattr(self._pipeline, "buffer") and self._pipeline.buffer:
                     self._pipeline.buffer.set_speaking(False)
                 self._queued_utterance = result.utterance_bytes
+                self._evaluator.gain_controller.apply(
+                    GainUpdate(delta=0.1, source="floor_claim"),
+                )
                 log.info("CPAL: floor claim during production: %r", result.transcript[:60])
 
         except Exception:
