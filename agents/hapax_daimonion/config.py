@@ -58,9 +58,7 @@ class DaimonionConfig(BaseModel):
     # PipeWire webrtc AEC module handles echo cancellation at the audio
     # server level. Application-level speexdsp removed — energy-ratio
     # classifier (Layer 2) discriminates residual echo from real speech.
-    audio_input_source: str = (
-        "alsa_input.usb-Blue_Microphones_Yeti_Stereo_Microphone_REV8-00.analog-stereo"
-    )
+    audio_input_source: str = "echo_cancel_capture"
 
     # Contact microphone (desk vibration sensing via PipeWire)
     contact_mic_source: str = "Contact Microphone"
