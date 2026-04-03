@@ -59,21 +59,21 @@ class BTPresenceBackend:
     def contribute(self, behaviors: dict[str, Behavior]) -> None:
         now = time.monotonic()
 
-        # Quick check: is the watch in the device list from previous scans?
+        # Check actual connection state (not just paired list).
+        # "Connected: yes" in bluetoothctl info means active link = proximity.
+        # Paired-but-disconnected is NOT evidence of presence.
+        connected = False
         try:
             result = subprocess.run(
-                ["bluetoothctl", "devices"],
+                ["bluetoothctl", "info", self._watch_mac],
                 capture_output=True,
                 text=True,
                 timeout=3,
             )
-            if self._watch_mac in result.stdout.upper():
-                self._last_seen = now
+            connected = "Connected: yes" in result.stdout
         except Exception:
             pass
 
-        # Watch is "connected" if seen within stale threshold
-        connected = (now - self._last_seen) < _STALE_THRESHOLD_S
         self._b_connected.update(connected, now)
         behaviors["bt_watch_connected"] = self._b_connected
 

@@ -259,12 +259,17 @@ class PresenceEngine:
         else:
             obs["desktop_active"] = None
 
-        # Bluetooth phone presence: DISABLED. The bt_presence backend checks
-        # bluetoothctl's paired device list, not active BLE scan. Paired
-        # devices are ALWAYS listed regardless of proximity. Connected ≠ present.
-        # Needs rewrite to use BLE RSSI-based proximity (scan + distance
-        # calibration) before it can contribute real presence evidence.
-        obs["bt_phone_connected"] = None
+        # Bluetooth phone presence: positive-only. Active BT connection = evidence
+        # FOR presence (requires proximity). Paired-but-not-connected = neutral
+        # (paired list is permanent regardless of distance). Future: BLE RSSI
+        # proximity with distance calibration for in-office vs hallway thresholds.
+        b = behaviors.get("bt_watch_connected")
+        if b is not None and b.value:
+            # Check if actually connected (not just in paired list)
+            # The bt_presence backend sets True when MAC seen in recent scan
+            obs["bt_phone_connected"] = True
+        else:
+            obs["bt_phone_connected"] = None
 
         # KDE Connect phone reachable (WiFi)
         b = behaviors.get("phone_kde_connected")
