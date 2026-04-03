@@ -15,6 +15,7 @@ import { registerStudioCommands, type StudioState } from "../../lib/commands/stu
 import { registerDetectionCommands, type DetectionState } from "../../lib/commands/detection";
 // selectEffect was in deleted effectSources.ts — inline the API call
 import { api } from "../../api/client";
+import { useStudioGraph } from "../../stores/studioGraphStore";
 
 function createMirror<T extends object>(initial: T) {
   let state = { ...initial };
@@ -69,6 +70,14 @@ export function CommandRegistryBridge() {
           // Switch hero source to FX so the camera polls the GPU-processed output
           setEffectSourceId(`fx-${name}`);
           api.post("/studio/effect/select", { preset: name }).catch(() => {});
+          // Load the graph visualization into React Flow (same path as PresetLibrary click)
+          import("../../components/graph/presetLoader").then(({ fetchAndLoadPreset }) => {
+            fetchAndLoadPreset(name).then((result) => {
+              if (result) {
+                useStudioGraph.getState().loadPreset(name, result.nodes, result.edges);
+              }
+            });
+          }).catch(() => {});
         },
         cyclePreset: (direction: "next" | "prev") => {
           api.post(`/studio/presets/cycle?direction=${direction}`).catch(
