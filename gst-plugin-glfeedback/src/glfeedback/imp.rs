@@ -257,27 +257,6 @@ impl GLFilterImpl for GlFeedback {
             }
         }
 
-        // Lazy-recompile shader on GL thread if fragment property changed
-        {
-            let mut props = self.props.lock().unwrap();
-            if props.shader_dirty {
-                props.shader_dirty = false;
-                if let Some(frag_src) = props.fragment.clone() {
-                    drop(props); // release lock before GL calls
-                    if let Some(context) = gst_gl::prelude::GLBaseFilterExt::context(&*filter) {
-                        match self.compile_shader(&context, &frag_src) {
-                            Ok(new_shader) => {
-                                self.state.lock().unwrap().as_mut().unwrap().shader = new_shader;
-                            }
-                            Err(_e) => {
-                                // Keep existing shader on failure — don't crash
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
         // Snapshot what we need from state (minimise lock duration)
         let (prev_tex, next_fbo, next_idx, uniforms) = {
             let guard = self.state.lock().unwrap();
@@ -294,32 +273,51 @@ impl GLFilterImpl for GlFeedback {
             guard.as_ref().unwrap().shader.clone()
         };
 
-        // filter_texture is called with the output FBO already bound by GStreamer.
-        // We just need to: activate shader, bind textures, set uniforms, draw quad.
-        // No render_to_target needed — we ARE already in the render target.
-        shader.use_();
+        // render_to_target binds the output FBO, sets viewport, then calls
+        // our closure.  Without this wrapper filter_texture has NO FBO bound
+        // and draw_fullscreen_quad() renders to framebuffer 0 (black).
+        let prev_tex_copy = prev_tex;
+        let uniforms_copy = uniforms;
+        let shader_copy = shader.clone();
+        filter.render_to_target(input, output, move |filt, in_tex| {
+            shader_copy.use_();
 
-        // tex (current frame) on unit 0
-        unsafe {
-            gl::ActiveTexture(gl::TEXTURE0);
-            gl::BindTexture(gl::TEXTURE_2D, input.texture_id());
-        }
-        shader.set_uniform_1i("tex", 0);
+            // Set attribute locations so draw_fullscreen_quad finds them
+            let pos_loc = shader_copy.attribute_location("a_position");
+            let tex_loc = shader_copy.attribute_location("a_texcoord");
+            unsafe {
+                // Access raw GstGLFilter struct to set attribute locations
+                // that draw_fullscreen_quad reads for its VAO setup.
+                let obj_ptr = filt.as_ptr();
+                let raw = obj_ptr as *mut gst_gl::ffi::GstGLFilter;
+                (*raw).draw_attr_position_loc = pos_loc;
+                (*raw).draw_attr_texture_loc = tex_loc;
+            }
 
-        // tex_accum (previous frame) on unit 1
-        unsafe {
-            gl::ActiveTexture(gl::TEXTURE1);
-            gl::BindTexture(gl::TEXTURE_2D, prev_tex);
-        }
-        shader.set_uniform_1i("tex_accum", 1);
+            // tex (current frame) on unit 0
+            unsafe {
+                gl::ActiveTexture(gl::TEXTURE0);
+                gl::BindTexture(gl::TEXTURE_2D, in_tex.texture_id());
+            }
+            shader_copy.set_uniform_1i("tex", 0);
 
-        // Float uniforms
-        for (name, val) in &uniforms {
-            shader.set_uniform_1f(name, *val);
-        }
+            // tex_accum (previous frame) on unit 1
+            unsafe {
+                gl::ActiveTexture(gl::TEXTURE1);
+                gl::BindTexture(gl::TEXTURE_2D, prev_tex_copy);
+            }
+            shader_copy.set_uniform_1i("tex_accum", 1);
 
-        // Draw fullscreen quad — GStreamer's GLFilter provides the geometry
-        filter.draw_fullscreen_quad();
+            // Float uniforms
+            for (name, val) in &uniforms_copy {
+                shader_copy.set_uniform_1f(name, *val);
+            }
+
+            // Draw fullscreen quad — GStreamer's GLFilter provides the geometry
+            filt.draw_fullscreen_quad();
+
+            true
+        }).map_err(|e| gst::loggable_error!(gst::CAT_RUST, "render_to_target: {e}"))?;
 
         // Pass 2: blit output into next accumulation buffer
         unsafe {
