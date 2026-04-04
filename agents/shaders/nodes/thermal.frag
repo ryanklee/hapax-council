@@ -12,8 +12,10 @@ uniform float u_edge_glow;      // 0-1, Sobel edge brightness
 uniform float u_palette_shift;  // 0-1, cycles palette offset
 
 // --- Pseudo-random hash ---
-float hash(vec2 p) {
-    return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+float hash(vec2 p) {
+    p = fract(p * vec2(0.1031, 0.1030));
+    p += dot(p, p.yx + 33.33);
+    return fract((p.x + p.y) * p.x);
 }
 
 // Ironbow palette: black -> blue -> purple -> red -> orange -> yellow -> white

@@ -14,9 +14,10 @@ uniform float u_time;
 
 // Deterministic hash functions for per-slot randomness
 float hash11(float x) {
-    return fract(sin(x * 127.1) * 43758.547);
+    return fract(sin(mod(x, 289.0) * 127.1) * 43758.547);
 }
 float hash21(vec2 p) {
+    p = mod(p, 289.0);
     return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.547);
 }
 

@@ -12,8 +12,9 @@ uniform float u_noise_band_y;   // normalized y of scrolling noise band
 uniform float u_width;          // texture width in pixels
 uniform float u_height;         // texture height in pixels
 
-// --- Pseudo-random hash ---
+// --- Pseudo-random hash (mod 289 keeps dot product in safe float range) ---
 float hash(vec2 p) {
+    p = mod(p, 289.0);
     return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
 }
 

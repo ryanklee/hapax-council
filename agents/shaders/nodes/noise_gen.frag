@@ -9,8 +9,10 @@ uniform float u_octaves;
 uniform float u_amplitude;
 uniform float u_speed;
 uniform float u_time;
-float hash(vec2 p) {
-    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+float hash(vec2 p) {
+    p = fract(p * vec2(0.1031, 0.1030));
+    p += dot(p, p.yx + 33.33);
+    return fract((p.x + p.y) * p.x);
 }
 float noise(vec2 p) {
     vec2 i = floor(p);

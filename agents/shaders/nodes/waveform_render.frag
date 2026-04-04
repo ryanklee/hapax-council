@@ -11,8 +11,10 @@ uniform float u_color_b;
 uniform float u_color_a;
 uniform float u_scale;
 uniform float u_time;
-float hash(vec2 p) {
-    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+float hash(vec2 p) {
+    p = fract(p * vec2(0.1031, 0.1030));
+    p += dot(p, p.yx + 33.33);
+    return fract((p.x + p.y) * p.x);
 }
 void main() {
     vec2 uv = v_texcoord * 2.0 - 1.0;

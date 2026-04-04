@@ -11,6 +11,7 @@ uniform float u_jitter;
 uniform float u_time;
 
 vec2 hash2(vec2 p) {
+    p = mod(p, 289.0);
     p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
     return fract(sin(p) * 43758.5453);
 }

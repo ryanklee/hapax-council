@@ -12,9 +12,10 @@ uniform float u_block_size;  // block size in pixels (8-64)
 uniform float u_intensity;   // corruption probability (0-1)
 uniform float u_rgb_split;   // chromatic aberration amount (0-1)
 
-// --- Per-block hash ---
+// --- Per-block hash (wrap input to prevent sin overflow) ---
 float blockHash(vec2 blockID, float seed) {
-    return fract(sin(dot(blockID + seed, vec2(12.9898, 78.233))) * 43758.5453);
+    vec2 p = mod(blockID + seed, 289.0);
+    return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
 void main() {

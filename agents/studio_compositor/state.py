@@ -137,7 +137,7 @@ def state_reader_loop(compositor: Any) -> None:
                     try_graph_preset(compositor, preset_name)
                     # Hold governance for 60s so user selection sticks
                     compositor._current_preset_name = preset_name
-                    compositor._user_preset_hold_until = time.monotonic() + 60.0
+                    compositor._user_preset_hold_until = time.monotonic() + 600.0
                     try:
                         (SNAPSHOT_DIR / "fx-current.txt").write_text(preset_name)
                     except OSError:

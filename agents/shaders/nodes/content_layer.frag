@@ -13,8 +13,10 @@ uniform float u_intensity;
 uniform float u_material;
 uniform float u_time;
 
-float hash21(vec2 p) {
-    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.547);
+float hash(vec2 p) {
+    p = fract(p * vec2(0.1031, 0.1030));
+    p += dot(p, p.yx + 33.33);
+    return fract((p.x + p.y) * p.x);
 }
 
 void main() {
