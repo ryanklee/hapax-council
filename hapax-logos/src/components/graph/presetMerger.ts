@@ -15,6 +15,7 @@ const INFRA_TYPES = new Set(["output", "content_layer", "postprocess"]);
 export function mergePresetGraphs(
   presetName: string,
   graphs: EffectGraphJson[],
+  source = "@live",
 ): EffectGraphJson {
   if (graphs.length === 0) {
     return { name: presetName, nodes: { out: { type: "output", params: {} } }, edges: [], modulations: [] };
@@ -51,13 +52,13 @@ export function mergePresetGraphs(
     for (const [src, tgt] of g.edges) {
       const tgtType = g.nodes[tgt]?.type ?? "";
       if (INFRA_TYPES.has(tgtType)) continue;
-      const srcKey = src === "@live" ? "@live" : prefix + src;
+      const srcKey = src === "@live" ? source : prefix + src;
       edgeMap.set(srcKey, prefix + tgt);
     }
 
-    // Topological walk from @live
+    // Topological walk from source
     const orderedIds: string[] = [];
-    let cursor = "@live";
+    let cursor = source;
     while (edgeMap.has(cursor)) {
       const next = edgeMap.get(cursor)!;
       if (effectNodes.includes(next)) orderedIds.push(next);
@@ -68,7 +69,7 @@ export function mergePresetGraphs(
     for (const [src, tgt] of g.edges) {
       const srcType = g.nodes[src]?.type;
       const tgtType = g.nodes[tgt]?.type;
-      if (src === "@live") continue;
+      if (src === "@live") continue; // always skip @live literal in intra-preset edges
       if (INFRA_TYPES.has(srcType ?? "") || INFRA_TYPES.has(tgtType ?? "")) continue;
       merged.edges.push([prefix + src, prefix + tgt]);
     }
@@ -86,9 +87,9 @@ export function mergePresetGraphs(
     }
   }
 
-  // Wire chain: @live -> first preset -> second preset -> ... -> infra -> output
+  // Wire chain: source -> first preset -> second preset -> ... -> infra -> output
   if (chainSegments.length > 0) {
-    merged.edges.push(["@live", chainSegments[0].firstNode]);
+    merged.edges.push([source, chainSegments[0].firstNode]);
 
     for (let i = 1; i < chainSegments.length; i++) {
       merged.edges.push([chainSegments[i - 1].lastNode, chainSegments[i].firstNode]);

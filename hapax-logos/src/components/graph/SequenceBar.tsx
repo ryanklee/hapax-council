@@ -8,6 +8,7 @@ import { api } from "../../api/client";
 export async function activatePresets(
   presets: string[],
   onSlotCount?: (n: number) => void,
+  source = "@live",
 ): Promise<void> {
   if (presets.length === 0) {
     api.post("/studio/effect/select", { preset: "clean" }).catch(() => {});
@@ -28,7 +29,7 @@ export async function activatePresets(
   const slots = countSlots(graphs);
   onSlotCount?.(slots);
   if (slots > MAX_SLOTS) return;
-  const merged = mergePresetGraphs("chain", graphs);
+  const merged = mergePresetGraphs("chain", graphs, source);
   await api.put("/studio/effect/graph", merged);
 }
 
@@ -71,7 +72,8 @@ function SequenceBarInner() {
       if (!chain) return;
       setActivating(true);
       try {
-        await activatePresets(chain.presets, setChainSlotCount);
+        const chainSource = "@" + (chain.source ?? "live");
+        await activatePresets(chain.presets, setChainSlotCount, chainSource);
       } finally {
         setActivating(false);
       }

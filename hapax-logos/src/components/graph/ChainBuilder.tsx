@@ -11,6 +11,7 @@ const allPresetNames = PRESET_CATEGORIES.flatMap((cat) => cat.presets);
 function ChainBuilderInner() {
   const sequence = useStudioGraph((s) => s.sequence);
   const updateChainPresets = useStudioGraph((s) => s.updateChainPresets);
+  const updateChainSource = useStudioGraph((s) => s.updateChainSource);
   const chainSlotCount = useStudioGraph((s) => s.chainSlotCount);
   const setChainSlotCount = useStudioGraph((s) => s.setChainSlotCount);
 
@@ -41,20 +42,21 @@ function ChainBuilderInner() {
   const activeIdx = sequence.activeChainIndex;
   const hasActiveChain = activeIdx >= 0 && activeIdx < sequence.chains.length;
   const chainPresets = hasActiveChain ? (sequence.chains[activeIdx]?.presets ?? []) : [];
+  const chainSource = hasActiveChain ? (sequence.chains[activeIdx]?.source ?? "live") : "live";
 
   // Compute current chain's slot count from cached preset counts
   const currentChainSlots = chainPresets.reduce((sum, p) => sum + (presetSlotCounts[p] ?? 0), 0);
 
   const activate = useCallback(
-    async (presets: string[]) => {
+    async (presets: string[], src?: string) => {
       setActivating(true);
       try {
-        await activatePresets(presets, setChainSlotCount);
+        await activatePresets(presets, setChainSlotCount, src ?? "@" + chainSource);
       } finally {
         setActivating(false);
       }
     },
-    [setChainSlotCount],
+    [setChainSlotCount, chainSource],
   );
 
   const applyPresets = useCallback(
@@ -64,6 +66,16 @@ function ChainBuilderInner() {
       activate(next);
     },
     [activeIdx, hasActiveChain, updateChainPresets, activate],
+  );
+
+  const handleSourceChange = useCallback(
+    (e: React.ChangeEvent<HTMLSelectElement>) => {
+      if (!hasActiveChain) return;
+      const newSource = e.target.value;
+      updateChainSource(activeIdx, newSource);
+      activate(chainPresets, "@" + newSource);
+    },
+    [hasActiveChain, activeIdx, updateChainSource, activate, chainPresets],
   );
 
   const addPreset = useCallback(
@@ -161,6 +173,27 @@ function ChainBuilderInner() {
         </span>
         {hasActiveChain && (
           <>
+            <select
+              value={chainSource}
+              onChange={handleSourceChange}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                fontSize: 9,
+                fontFamily: "JetBrains Mono, monospace",
+                background: "#3c3836",
+                border: "1px solid #504945",
+                color: "#928374",
+                borderRadius: 2,
+                padding: "2px 4px",
+                outline: "none",
+                flexShrink: 0,
+                cursor: "pointer",
+              }}
+            >
+              <option value="live">live</option>
+              <option value="hls">hls</option>
+              <option value="smooth">smooth</option>
+            </select>
             <div
               ref={dropRef}
               onDrop={handleChainDrop}

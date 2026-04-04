@@ -6,6 +6,7 @@ export interface PresetChain {
   id: string;
   presets: string[];
   durationSeconds: number;
+  source: "live" | "hls" | "smooth";
 }
 
 export interface SequenceState {
@@ -75,6 +76,7 @@ export interface StudioGraphState {
   removeChain: (index: number) => void;
   updateChainPresets: (index: number, presets: string[]) => void;
   updateChainDuration: (index: number, durationSeconds: number) => void;
+  updateChainSource: (index: number, source: string) => void;
 }
 
 export const useStudioGraph = create<StudioGraphState>()(
@@ -138,7 +140,7 @@ export const useStudioGraph = create<StudioGraphState>()(
         set((s) => {
           const chains = [
             ...s.sequence.chains,
-            { id: crypto.randomUUID(), presets: [], durationSeconds: 30 },
+            { id: crypto.randomUUID(), presets: [], durationSeconds: 30, source: "live" as const },
           ];
           // If this is the first chain, select it automatically
           const activeChainIndex =
@@ -169,10 +171,17 @@ export const useStudioGraph = create<StudioGraphState>()(
           );
           return { sequence: { ...s.sequence, chains } };
         }),
+      updateChainSource: (index, source) =>
+        set((s) => {
+          const chains = s.sequence.chains.map((c, i) =>
+            i === index ? { ...c, source: source as "live" | "hls" | "smooth" } : c,
+          );
+          return { sequence: { ...s.sequence, chains } };
+        }),
     }),
     {
       name: "hapax-studio-graph",
-      version: 4,
+      version: 5,
       migrate: (persisted: unknown, version: number) => {
         const state = persisted as Partial<StudioGraphState>;
         if (version < 3) {
@@ -183,6 +192,18 @@ export const useStudioGraph = create<StudioGraphState>()(
         if (version < 4) {
           // Migrate: reset to blank sequence (no default chain)
           state.sequence = defaultSequence([]);
+        }
+        if (version < 5) {
+          // Migrate: add source field to existing chains
+          if (state.sequence) {
+            state.sequence = {
+              ...state.sequence,
+              chains: state.sequence.chains.map((c) => ({
+                ...c,
+                source: (c as PresetChain).source ?? "live",
+              })),
+            };
+          }
         }
         return state as StudioGraphState;
       },
