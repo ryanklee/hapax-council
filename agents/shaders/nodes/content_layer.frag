@@ -13,36 +13,30 @@ uniform float u_intensity;
 uniform float u_material;
 uniform float u_time;
 
-float hash(vec2 p) {
-    p = fract(p * vec2(0.1031, 0.1030));
-    p += dot(p, p.yx + 33.33);
-    return fract((p.x + p.y) * p.x);
+float hash(vec2 p) {
+    p = mod(p, 289.0);
+    return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
 void main() {
     vec2 uv = v_texcoord;
 
-    // Corner incubation
-    float corner_offset = (1.0 - u_intensity) * 0.3;
-    uv += (uv - 0.5) * corner_offset;
+    // When no content is recruited (salience=0), pass through unchanged
+    if (u_salience < 0.01) {
+        gl_FragColor = texture2D(tex, uv);
+        return;
+    }
 
-    // Immensity entry
-    float entry_progress = smoothstep(0.0, 0.5, u_salience);
-    uv += vec2(sin(u_time * 0.1 + 2.1), cos(u_time * 0.1 + 1.7)) * (1.0 - entry_progress) * 0.4;
+    vec3 base = texture2D(tex, uv).rgb;
 
-    // Procedural background at original UV
-    vec3 base = texture2D(tex, v_texcoord).rgb;
-
-    // Blend slot 0 (simplified — full version in WGSL)
+    // Blend recruited content from slot 0
     vec4 c0 = texture2D(content_slot_0, uv);
-    float noise = hash21(v_texcoord * 30.0 + u_time * 0.05);
+    float noise = hash(v_texcoord * 30.0 + u_time * 0.05);
     float mat_factor = smoothstep(1.0 - u_salience, 1.0 - u_salience + 0.3, noise);
     vec3 weighted = c0.rgb * mat_factor * u_salience;
-    base = 1.0 - (1.0 - base) * (1.0 - weighted);
 
-    // Dwelling trace boost
-    float trace_boost = 1.0 + (1.0 - smoothstep(0.3, 0.7, u_salience)) * 0.15;
-    base *= trace_boost;
+    // Screen blend for content compositing
+    base = 1.0 - (1.0 - base) * (1.0 - weighted);
 
     gl_FragColor = vec4(base, 1.0);
 }
