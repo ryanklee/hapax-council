@@ -4,6 +4,7 @@ import { Handle, Position, type NodeProps, NodeResizer } from "@xyflow/react";
 import { LOGOS_API_URL } from "../../../config";
 import { api } from "../../../api/client";
 import { PRESET_CATEGORIES } from "../presetData";
+import { useStudioGraph } from "../../../stores/studioGraphStore";
 
 export interface OutputNodeData {
   label: string;
@@ -54,7 +55,8 @@ function useFxPoll(imgRef: React.RefObject<HTMLImageElement | null>, intervalMs:
 function OutputNodeInner({ data, selected }: NodeProps) {
   const { label } = data as OutputNodeData;
   const imgRef = useRef<HTMLImageElement>(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const isFullscreen = useStudioGraph((s) => s.outputFullscreen);
+  const setIsFullscreen = useStudioGraph((s) => s.setOutputFullscreen);
   const isStale = useFxPoll(imgRef, 100);
 
   useEffect(() => {
@@ -67,13 +69,13 @@ function OutputNodeInner({ data, selected }: NodeProps) {
     };
     window.addEventListener("keydown", handler, true);
     return () => window.removeEventListener("keydown", handler, true);
-  }, [isFullscreen]);
+  }, [isFullscreen, setIsFullscreen]);
 
   const handleDoubleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
     setIsFullscreen(true);
-  }, []);
+  }, [setIsFullscreen]);
 
   return (
     <>

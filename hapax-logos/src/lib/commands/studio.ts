@@ -1,4 +1,5 @@
 import type { CommandRegistry, CommandResult } from "../commandRegistry";
+import { useStudioGraph } from "../../stores/studioGraphStore";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -84,6 +85,16 @@ export function registerStudioCommands(
     description: "Toggle recording on/off",
     execute(): CommandResult {
       actions.setRecording(!getState().recording);
+      return { ok: true };
+    },
+  });
+
+  registry.register({
+    path: "studio.output.fullscreen",
+    description: "Toggle output node fullscreen with live preview and preset controls",
+    execute(): CommandResult {
+      const current = useStudioGraph.getState().outputFullscreen;
+      useStudioGraph.getState().setOutputFullscreen(!current);
       return { ok: true };
     },
   });

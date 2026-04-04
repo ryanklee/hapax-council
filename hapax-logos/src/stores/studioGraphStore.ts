@@ -17,6 +17,7 @@ export interface StudioGraphState {
   hapaxLocked: boolean;
   leftDrawerOpen: boolean;
   rightDrawerOpen: boolean;
+  outputFullscreen: boolean;
 
   // Actions
   setNodes: (nodes: Node[]) => void;
@@ -31,6 +32,7 @@ export interface StudioGraphState {
   toggleHapaxLock: () => void;
   toggleLeftDrawer: () => void;
   toggleRightDrawer: () => void;
+  setOutputFullscreen: (value: boolean) => void;
   loadPreset: (name: string, nodes: Node[], edges: Edge[]) => void;
 }
 
@@ -46,6 +48,7 @@ export const useStudioGraph = create<StudioGraphState>()(
       hapaxLocked: false,
       leftDrawerOpen: false,
       rightDrawerOpen: false,
+      outputFullscreen: false,
 
       setNodes: (nodes: Node[]) => set({ nodes }),
       setEdges: (edges: Edge[]) => set({ edges }),
@@ -65,6 +68,7 @@ export const useStudioGraph = create<StudioGraphState>()(
         set((s: StudioGraphState) => ({ leftDrawerOpen: !s.leftDrawerOpen })),
       toggleRightDrawer: () =>
         set((s: StudioGraphState) => ({ rightDrawerOpen: !s.rightDrawerOpen })),
+      setOutputFullscreen: (value: boolean) => set({ outputFullscreen: value }),
 
       loadPreset: (name: string, nodes: Node[], edges: Edge[]) =>
         set({
