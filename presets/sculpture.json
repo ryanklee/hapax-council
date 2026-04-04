@@ -6,9 +6,9 @@
     "rutt_etra": {
       "type": "rutt_etra",
       "params": {
-        "displacement": 200,
-        "line_density": 120,
-        "line_width": 2.5,
+        "displacement": 80,
+        "line_density": 8,
+        "line_width": 2.0,
         "color_mode": 1.0
       }
     },

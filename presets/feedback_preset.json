@@ -6,9 +6,9 @@
     "trail": {
       "type": "trail",
       "params": {
-        "fade": 0.03,
-        "blend_mode": "screen",
-        "opacity": 0.45,
+        "fade": 0.06,
+        "blend_mode": "lighter",
+        "opacity": 0.3,
         "drift_x": 3,
         "drift_y": 2
       }

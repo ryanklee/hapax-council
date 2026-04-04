@@ -20,9 +20,9 @@
     "trail": {
       "type": "trail",
       "params": {
-        "fade": 0.03,
-        "blend_mode": "difference",
-        "opacity": 0.3
+        "fade": 0.05,
+        "blend_mode": "lighter",
+        "opacity": 0.25
       }
     },
     "chroma": {

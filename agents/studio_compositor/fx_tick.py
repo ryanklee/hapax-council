@@ -117,7 +117,7 @@ def tick_slot_pipeline(compositor: Any, t: float) -> None:
     if not compositor._slot_pipeline:
         return
 
-    time_uniforms = {"time": t, "width": 1920.0, "height": 1080.0}
+    time_uniforms = {"time": t % 600.0, "width": 1920.0, "height": 1080.0}
     for i, node_type in enumerate(compositor._slot_pipeline.slot_assignments):
         if node_type is None:
             continue
