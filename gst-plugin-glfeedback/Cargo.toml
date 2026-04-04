@@ -1,0 +1,23 @@
+[package]
+name = "gst-plugin-glfeedback"
+version = "0.1.0"
+edition = "2021"
+description = "GStreamer GL temporal feedback filter with ping-pong FBOs"
+license = "MIT"
+repository = "https://github.com/ryanklee/hapax-council"
+
+[lib]
+name = "gstglfeedback"
+crate-type = ["cdylib"]
+
+[dependencies]
+glib = "0.20"
+gst = { package = "gstreamer", version = "0.23" }
+gst-base = { package = "gstreamer-base", version = "0.23" }
+gst-video = { package = "gstreamer-video", version = "0.23" }
+gst-gl = { package = "gstreamer-gl", version = "0.23", features = ["v1_18"] }
+gl = "0.14"
+once_cell = "1"
+
+[build-dependencies]
+gst-plugin-version-helper = "0.8"
