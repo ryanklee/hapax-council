@@ -133,6 +133,14 @@ export function StudioCanvas() {
     setTimeout(() => instance.fitView({ padding: 0.15 }), 200);
   }, []);
 
+  // fitView when a new preset is loaded (graphName changes)
+  const graphName = useStudioGraph((s: S) => s.graphName);
+  useEffect(() => {
+    if (rfRef.current && nodes.length > 0) {
+      setTimeout(() => rfRef.current?.fitView({ padding: 0.15 }), 100);
+    }
+  }, [graphName]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const onNodesChange: OnNodesChange = useCallback(
     (changes) => {
       const current = useStudioGraph.getState();

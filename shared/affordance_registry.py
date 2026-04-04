@@ -187,6 +187,80 @@ STUDIO_AFFORDANCES = [
         daemon="perception",
         operational=OperationalProperties(latency_class="fast"),
     ),
+    # --- Studio Controls (compositor FX chain) ---
+    CapabilityRecord(
+        name="studio.activate_preset",
+        description="Transform the camera aesthetic by activating a visual effect preset from the library",
+        daemon="compositor",
+        operational=OperationalProperties(latency_class="fast"),
+    ),
+    CapabilityRecord(
+        name="studio.adjust_node_param",
+        description="Fine-tune a specific parameter on a shader effect node in the active graph",
+        daemon="compositor",
+        operational=OperationalProperties(latency_class="fast"),
+    ),
+    CapabilityRecord(
+        name="studio.toggle_layer",
+        description="Enable or disable a compositor output layer for selective visual routing",
+        daemon="compositor",
+        operational=OperationalProperties(latency_class="fast"),
+    ),
+    CapabilityRecord(
+        name="studio.adjust_palette",
+        description="Shift the color palette of a compositor layer adjusting warmth saturation and contrast",
+        daemon="compositor",
+        operational=OperationalProperties(latency_class="fast"),
+    ),
+    CapabilityRecord(
+        name="studio.select_camera",
+        description="Choose which camera perspective dominates the studio composition",
+        daemon="compositor",
+        operational=OperationalProperties(latency_class="fast"),
+    ),
+    CapabilityRecord(
+        name="studio.bind_modulation",
+        description="Connect a live signal source to a shader parameter for reactive visual modulation",
+        daemon="compositor",
+        operational=OperationalProperties(latency_class="fast"),
+    ),
+    CapabilityRecord(
+        name="studio.add_effect_node",
+        description="Insert a new shader effect node into the active compositor graph",
+        daemon="compositor",
+        operational=OperationalProperties(latency_class="slow"),
+    ),
+    CapabilityRecord(
+        name="studio.remove_effect_node",
+        description="Remove a shader effect node from the active compositor graph",
+        daemon="compositor",
+        operational=OperationalProperties(latency_class="fast"),
+    ),
+    CapabilityRecord(
+        name="studio.toggle_recording",
+        description="Start or stop recording the composed visual output to disk",
+        daemon="compositor",
+        operational=OperationalProperties(latency_class="fast"),
+    ),
+    # --- Output Destinations ---
+    CapabilityRecord(
+        name="studio.output_snapshot",
+        description="Capture the current effected frame as a high-quality still image",
+        daemon="compositor",
+        operational=OperationalProperties(latency_class="fast", medium="visual"),
+    ),
+    CapabilityRecord(
+        name="studio.output_fullscreen",
+        description="Display the composed visual fullscreen with overlay controls for monitoring",
+        daemon="compositor",
+        operational=OperationalProperties(latency_class="fast", medium="visual"),
+    ),
+    CapabilityRecord(
+        name="studio.output_record",
+        description="Route the composed visual to persistent disk recording as video segments",
+        daemon="compositor",
+        operational=OperationalProperties(latency_class="fast"),
+    ),
 ]
 
 # ---------------------------------------------------------------------------

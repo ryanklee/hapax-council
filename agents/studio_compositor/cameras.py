@@ -29,9 +29,9 @@ def add_camera_snapshot_branch(
     rate_caps.set_property("caps", Gst.Caps.from_string("video/x-raw,framerate=1/1"))
     scale = Gst.ElementFactory.make("videoscale", f"camsnap-scale-{role}")
     scale_caps = Gst.ElementFactory.make("capsfilter", f"camsnap-scalecaps-{role}")
-    # Scale to thumbnail size — source nodes are 140x80, no consumer needs full res
-    snap_w = min(cam.width, 320)
-    snap_h = min(cam.height, 180)
+    # Scale to preview size — fullscreen output node needs reasonable resolution
+    snap_w = min(cam.width, 640)
+    snap_h = min(cam.height, 360)
     scale_caps.set_property(
         "caps", Gst.Caps.from_string(f"video/x-raw,width={snap_w},height={snap_h}")
     )
