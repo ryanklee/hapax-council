@@ -15,6 +15,7 @@ use std::net::SocketAddr;
 const DEFAULT_PORT: u16 = 8053;
 const FRAME_PATH: &str = "/dev/shm/hapax-visual/frame.jpg";
 const STATE_PATH: &str = "/dev/shm/hapax-visual/state.json";
+const FX_FRAME_PATH: &str = "/dev/shm/hapax-compositor/fx-snapshot.jpg";
 
 async fn serve_frame() -> impl IntoResponse {
     match tokio::fs::read(FRAME_PATH).await {
@@ -46,6 +47,21 @@ async fn serve_stats() -> impl IntoResponse {
     }
 }
 
+async fn serve_fx_frame() -> impl IntoResponse {
+    match tokio::fs::read(FX_FRAME_PATH).await {
+        Ok(bytes) => (
+            StatusCode::OK,
+            [
+                (header::CONTENT_TYPE, "image/jpeg"),
+                (header::CACHE_CONTROL, "no-store"),
+            ],
+            bytes,
+        )
+            .into_response(),
+        Err(_) => (StatusCode::SERVICE_UNAVAILABLE, "no fx frame available").into_response(),
+    }
+}
+
 /// Spawn the frame server as an async task. Call from setup().
 pub fn start_frame_server() {
     let port = std::env::var("HAPAX_VISUAL_HTTP_PORT")
@@ -56,6 +72,7 @@ pub fn start_frame_server() {
     tauri::async_runtime::spawn(async move {
         let app = Router::new()
             .route("/frame", get(serve_frame))
+            .route("/fx", get(serve_fx_frame))
             .route("/stats", get(serve_stats));
 
         let addr = SocketAddr::from(([127, 0, 0, 1], port));

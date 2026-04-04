@@ -1,7 +1,6 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Handle, Position, type NodeProps, NodeResizer } from "@xyflow/react";
-import { LOGOS_API_URL } from "../../../config";
 import { api } from "../../../api/client";
 import { PRESET_CATEGORIES } from "../presetData";
 import { useStudioGraph } from "../../../stores/studioGraphStore";
@@ -36,7 +35,9 @@ function useFxPoll(imgRef: React.RefObject<HTMLImageElement | null>, intervalMs:
       loader.onerror = () => {
         if (running) timer = setTimeout(poll, intervalMs * 2); // back off on error
       };
-      loader.src = `${LOGOS_API_URL}/studio/stream/fx?_t=${Date.now()}`;
+      // Fetch from the Tauri frame server (:8053/fx) — same origin as the visual
+      // surface. Direct Logos API fetch fails in Tauri 2 webview isolation.
+      loader.src = `http://127.0.0.1:8053/fx?_t=${Date.now()}`;
     };
     poll();
     const staleTimer = setInterval(() => {
