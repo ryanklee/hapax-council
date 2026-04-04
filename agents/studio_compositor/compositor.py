@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from .audio_capture import CompositorAudioCapture
 from .config import CACHE_DIR, SNAPSHOT_DIR, STATUS_FILE
 from .effects import init_graph_runtime
 from .models import CompositorConfig, OverlayState, TileRect
@@ -50,6 +51,7 @@ class StudioCompositor:
         self._overlay_cache_timestamp: float = 0.0
         self._overlay_cache_cam_hash: str = ""
         self._overlay_zone_manager = OverlayZoneManager()
+        self._audio_capture = CompositorAudioCapture()
         self._vl_state: dict | None = None
         self._vl_state_lock = threading.Lock()
         self._vl_state_timestamp: float = 0.0

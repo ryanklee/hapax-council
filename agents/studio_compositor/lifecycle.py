@@ -78,6 +78,7 @@ def start_compositor(compositor: Any) -> None:
                 compositor._camera_status[role] = "active"
 
     compositor._running = True
+    compositor._audio_capture.start()
     compositor._write_status("running")
     log_consent_event(compositor, "pipeline_start", allowed=compositor._consent_recording_allowed)
 
@@ -163,6 +164,7 @@ def stop_compositor(compositor: Any) -> None:
     if compositor.loop and compositor.loop.is_running():
         compositor.loop.quit()
 
+    compositor._audio_capture.stop()
     compositor._write_status("stopped")
 
 

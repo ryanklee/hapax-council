@@ -72,11 +72,21 @@ def tick_modulator(compositor: Any, t: float, energy: float, b: float) -> None:
         signals["stimmung_valence"] = data.emotion_valence
     if data.emotion_arousal != 0:
         signals["stimmung_arousal"] = data.emotion_arousal
-    signals["mixer_energy"] = data.mixer_energy
-    signals["mixer_beat"] = data.mixer_beat
-    signals["mixer_bass"] = data.mixer_bass
-    signals["mixer_mid"] = data.mixer_mid
-    signals["mixer_high"] = data.mixer_high
+    # Audio signals from direct capture (<50ms latency)
+    if hasattr(compositor, "_audio_capture"):
+        audio = compositor._audio_capture.get_signals()
+        signals["mixer_energy"] = audio.get("mixer_energy", 0.0)
+        signals["mixer_beat"] = audio.get("mixer_beat", 0.0)
+        signals["mixer_bass"] = audio.get("mixer_bass", 0.0)
+        signals["mixer_mid"] = audio.get("mixer_mid", 0.0)
+        signals["mixer_high"] = audio.get("mixer_high", 0.0)
+        signals["beat_pulse"] = audio.get("beat_pulse", 0.0)
+    else:
+        signals["mixer_energy"] = data.mixer_energy
+        signals["mixer_beat"] = data.mixer_beat
+        signals["mixer_bass"] = data.mixer_bass
+        signals["mixer_mid"] = data.mixer_mid
+        signals["mixer_high"] = data.mixer_high
     signals["desk_energy"] = data.desk_energy
     signals["desk_onset_rate"] = data.desk_onset_rate
     signals["desk_centroid"] = (
@@ -97,7 +107,9 @@ def tick_modulator(compositor: Any, t: float, energy: float, b: float) -> None:
         compositor._beat_pulse = 1.0
     compositor._beat_pulse *= 0.85
     compositor._prev_beat_phase = cur_phase
-    signals["beat_pulse"] = compositor._beat_pulse
+    # Only use beat-phase-derived pulse when direct audio capture is unavailable
+    if not hasattr(compositor, "_audio_capture"):
+        signals["beat_pulse"] = compositor._beat_pulse
 
     if data.heart_rate_bpm > 0:
         signals["heart_rate"] = min(1.0, max(0.0, (data.heart_rate_bpm - 40) / 140.0))
