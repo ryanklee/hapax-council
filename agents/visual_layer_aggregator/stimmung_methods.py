@@ -108,16 +108,14 @@ def update_stimmung_sources(agg: VisualLayerAggregator) -> None:
         reader = ExplorationReader()
         signals = reader.read_all()
         if signals:
-            boredom_vals = [s.get("boredom_index", 0.0) for s in signals.values()]
-            curiosity_vals = [s.get("curiosity_index", 0.0) for s in signals.values()]
-            deficit = max(
-                0.0,
-                min(
-                    1.0,
-                    sum(boredom_vals) / len(boredom_vals)
-                    - sum(curiosity_vals) / len(curiosity_vals),
-                ),
+            boredom_vals = sorted(
+                (s.get("boredom_index", 0.0) for s in signals.values()),
+                reverse=True,
             )
+            # Top-k aggregation: worst-case components drive deficit
+            # (stigmergic: dead-end trail triggers redistribution)
+            k = max(3, len(boredom_vals) // 3)
+            deficit = max(0.0, min(1.0, sum(boredom_vals[:k]) / k))
             agg._stimmung_collector.update_exploration(deficit)
     except Exception:
         log.debug("Exploration deficit read failed", exc_info=True)

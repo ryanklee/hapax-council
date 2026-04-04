@@ -106,11 +106,15 @@ class DMNPulse:
             signals = reader.read_all()
             if not signals:
                 return 0.0
-            boredom = [s.get("boredom_index", 0.0) for s in signals.values()]
-            curiosity = [s.get("curiosity_index", 0.0) for s in signals.values()]
-            agg_boredom = sum(boredom) / len(boredom)
-            agg_curiosity = sum(curiosity) / len(curiosity)
-            return max(0.0, min(1.0, agg_boredom - agg_curiosity))
+            # Top-k aggregation: worst-case components drive deficit
+            # PCT: reorganization pressure = intrinsic error (boredom)
+            # Curiosity modulates exploration MODE, not deficit magnitude
+            boredom = sorted(
+                (s.get("boredom_index", 0.0) for s in signals.values()),
+                reverse=True,
+            )
+            k = max(3, len(boredom) // 3)
+            return max(0.0, min(1.0, sum(boredom[:k]) / k))
         except Exception:
             return 0.0
 
