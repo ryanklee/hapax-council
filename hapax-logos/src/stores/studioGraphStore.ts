@@ -15,12 +15,10 @@ export interface SequenceState {
   looping: boolean;
 }
 
-function defaultSequence(initialPresets: string[]): SequenceState {
+function defaultSequence(_initialPresets: string[]): SequenceState {
   return {
-    chains: [
-      { id: crypto.randomUUID(), presets: initialPresets, durationSeconds: 30 },
-    ],
-    activeChainIndex: 0,
+    chains: [],
+    activeChainIndex: -1,
     playing: false,
     looping: true,
   };
@@ -137,26 +135,25 @@ export const useStudioGraph = create<StudioGraphState>()(
       setSequenceLooping: (looping) =>
         set((s) => ({ sequence: { ...s.sequence, looping } })),
       addChain: () =>
-        set((s) => ({
-          sequence: {
-            ...s.sequence,
-            chains: [
-              ...s.sequence.chains,
-              { id: crypto.randomUUID(), presets: [], durationSeconds: 30 },
-            ],
-          },
-        })),
+        set((s) => {
+          const chains = [
+            ...s.sequence.chains,
+            { id: crypto.randomUUID(), presets: [], durationSeconds: 30 },
+          ];
+          // If this is the first chain, select it automatically
+          const activeChainIndex =
+            s.sequence.activeChainIndex === -1 ? chains.length - 1 : s.sequence.activeChainIndex;
+          return { sequence: { ...s.sequence, chains, activeChainIndex } };
+        }),
       removeChain: (index) =>
         set((s) => {
           const chains = s.sequence.chains.filter((_, i) => i !== index);
-          const safeChains = chains.length > 0 ? chains : [
-            { id: crypto.randomUUID(), presets: [], durationSeconds: 30 },
-          ];
-          const activeChainIndex = Math.min(
-            s.sequence.activeChainIndex,
-            safeChains.length - 1,
-          );
-          return { sequence: { ...s.sequence, chains: safeChains, activeChainIndex } };
+          // If empty, go to -1 (no selection)
+          const activeChainIndex =
+            chains.length === 0
+              ? -1
+              : Math.min(s.sequence.activeChainIndex, chains.length - 1);
+          return { sequence: { ...s.sequence, chains, activeChainIndex } };
         }),
       updateChainPresets: (index, presets) =>
         set((s) => {
@@ -175,13 +172,17 @@ export const useStudioGraph = create<StudioGraphState>()(
     }),
     {
       name: "hapax-studio-graph",
-      version: 3,
+      version: 4,
       migrate: (persisted: unknown, version: number) => {
         const state = persisted as Partial<StudioGraphState>;
         if (version < 3) {
           // Migrate: wrap existing chainPresets into a sequence
           const initialPresets = state.chainPresets ?? [];
           state.sequence = defaultSequence(initialPresets);
+        }
+        if (version < 4) {
+          // Migrate: reset to blank sequence (no default chain)
+          state.sequence = defaultSequence([]);
         }
         return state as StudioGraphState;
       },
