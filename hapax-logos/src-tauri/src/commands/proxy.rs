@@ -53,6 +53,26 @@ async fn proxy_post_json(app: &AppHandle, path: &str, body: Option<Value>) -> Re
         .map_err(|e| format!("proxy POST {} json: {}", path, e))
 }
 
+async fn proxy_patch_json(app: &AppHandle, path: &str, body: Option<Value>) -> Result<Value, String> {
+    let url = format!("{}{}", LOGOS_BASE, path);
+    let c = client(app);
+    let req = if let Some(b) = body {
+        c.patch(&url).json(&b)
+    } else {
+        c.patch(&url)
+    };
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| format!("proxy PATCH {}: {}", path, e))?;
+    if !resp.status().is_success() {
+        return Err(format!("proxy PATCH {} returned {}", path, resp.status()));
+    }
+    resp.json::<Value>()
+        .await
+        .map_err(|e| format!("proxy PATCH {} json: {}", path, e))
+}
+
 async fn proxy_delete_req(app: &AppHandle, path: &str) -> Result<Value, String> {
     let url = format!("{}{}", LOGOS_BASE, path);
     let resp = client(app)
@@ -83,6 +103,11 @@ pub async fn proxy_post(app: AppHandle, path: String, body: Option<Value>) -> Re
 #[tauri::command]
 pub async fn proxy_delete(app: AppHandle, path: String) -> Result<Value, String> {
     proxy_delete_req(&app, &path).await
+}
+
+#[tauri::command]
+pub async fn proxy_patch(app: AppHandle, path: String, body: Option<Value>) -> Result<Value, String> {
+    proxy_patch_json(&app, &path, body).await
 }
 
 // ── Studio ────────────────────────────────────────────────────────────────────
