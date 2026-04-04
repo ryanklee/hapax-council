@@ -191,7 +191,9 @@ class AffordancePipeline:
         hits, miss_indices, miss_texts = disk_cache.bulk_lookup(prefixed_texts)
 
         if miss_texts:
-            fresh = embed_batch_safe(miss_texts, prefix=prefix)
+            # miss_texts are already prefixed ("search_document: ...") for cache keying.
+            # Pass empty prefix so embed_batch() doesn't double-prefix.
+            fresh = embed_batch_safe(miss_texts, prefix="")
             if fresh is None:
                 log.warning("Batch embed failed, falling back to individual indexing")
                 return sum(1 for r in records if self.index_capability(r))
