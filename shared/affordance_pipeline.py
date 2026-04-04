@@ -14,11 +14,13 @@ from typing import Any
 
 from shared.affordance import ActivationState, CapabilityRecord, SelectionCandidate
 from shared.affordance_metrics import AffordanceMetrics
+from shared.embed_cache import DiskEmbeddingCache
 from shared.impingement import Impingement, render_impingement_text
 
 log = logging.getLogger("affordance_pipeline")
 
 ACTIVATION_STATE_PATH = Path("/home/hapax/.cache/hapax/affordance-activation-state.json")
+_DISK_CACHE_PATH = Path.home() / ".cache" / "hapax" / "embed-cache.json"
 COLLECTION_NAME = "affordances"
 DEFAULT_TOP_K = 10
 SUPPRESSION_FACTOR = 0.3
@@ -64,6 +66,17 @@ class InhibitionEntry:
     source: str
     content_hash: str
     inhibited_until: float
+
+
+def embed_batch_safe(texts: list[str], prefix: str = "search_document") -> list[list[float]] | None:
+    """Batch embed with graceful degradation."""
+    try:
+        from shared.config import embed_batch
+
+        return embed_batch(texts, prefix=prefix)
+    except RuntimeError:
+        log.warning("embed_batch_safe: Ollama unavailable")
+        return None
 
 
 class AffordancePipeline:
@@ -155,6 +168,91 @@ class AffordancePipeline:
             self._activation[record.name] = ActivationState()
         log.info("Indexed capability: %s", record.name)
         return True
+
+    def index_capabilities_batch(self, records: list[CapabilityRecord]) -> int:
+        """Index multiple capabilities in a single embed + upsert operation.
+
+        Uses disk cache to avoid re-embedding static descriptions across restarts.
+        Calls embed_batch() once for cache misses. Upserts all points in one Qdrant call.
+        """
+        if not records:
+            return 0
+
+        from shared.config import EMBEDDING_MODEL, EXPECTED_EMBED_DIMENSIONS, get_qdrant
+
+        prefix = "search_document"
+        prefixed_texts = [f"{prefix}: {r.description}" for r in records]
+
+        disk_cache = DiskEmbeddingCache(
+            cache_path=_DISK_CACHE_PATH,
+            model=EMBEDDING_MODEL,
+            dimension=EXPECTED_EMBED_DIMENSIONS,
+        )
+        hits, miss_indices, miss_texts = disk_cache.bulk_lookup(prefixed_texts)
+
+        if miss_texts:
+            fresh = embed_batch_safe(miss_texts, prefix=prefix)
+            if fresh is None:
+                log.warning("Batch embed failed, falling back to individual indexing")
+                return sum(1 for r in records if self.index_capability(r))
+            for idx, vec in zip(miss_indices, fresh, strict=True):
+                hits[idx] = vec
+                disk_cache.put(prefixed_texts[idx], vec)
+            disk_cache.save()
+
+        from qdrant_client.models import PointStruct
+
+        points: list[PointStruct] = []
+        for i, record in enumerate(records):
+            embedding = hits.get(i)
+            if embedding is None:
+                continue
+            point_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, record.name))
+            points.append(
+                PointStruct(
+                    id=point_id,
+                    vector=embedding,
+                    payload={
+                        "capability_name": record.name,
+                        "description": record.description,
+                        "daemon": record.daemon,
+                        "requires_gpu": record.operational.requires_gpu,
+                        "latency_class": record.operational.latency_class,
+                        "consent_required": record.operational.consent_required,
+                        "priority_floor": record.operational.priority_floor,
+                        "medium": record.operational.medium,
+                        "activation_summary": self._activation.get(
+                            record.name, ActivationState()
+                        ).to_summary(),
+                        "available": True,
+                    },
+                )
+            )
+
+        if not points:
+            return 0
+
+        try:
+            client = get_qdrant()
+            self._ensure_collection(client, len(points[0].vector))
+            client.upsert(collection_name=COLLECTION_NAME, points=points)
+            self._index_breaker.record_success()
+        except Exception:
+            self._index_breaker.record_failure()
+            log.warning("Batch Qdrant upsert failed", exc_info=True)
+            return 0
+
+        for record in records:
+            if record.name not in self._activation:
+                self._activation[record.name] = ActivationState()
+
+        log.info(
+            "Batch-indexed %d capabilities (%d cached, %d freshly embedded)",
+            len(points),
+            len(records) - len(miss_texts),
+            len(miss_texts),
+        )
+        return len(points)
 
     def set_seeking(self, seeking: bool) -> None:
         """SEEKING stance: widen retrieval (more candidates, lower threshold)."""
