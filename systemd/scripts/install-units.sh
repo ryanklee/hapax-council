@@ -4,7 +4,16 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/../units" && pwd)"
+PROJECT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 DEST_DIR="${HOME}/.config/systemd/user"
+
+# Ensure all optional dependency groups are installed.
+# Services run via `uv run` which uses the default venv — if optional
+# extras (sync-pipeline, logos-api, audio) aren't installed, agents
+# crash with ModuleNotFoundError at runtime.
+echo "Syncing venv with all extras..."
+(cd "$PROJECT_DIR" && uv sync --all-extras --quiet)
+echo "venv synced"
 
 mkdir -p "$DEST_DIR"
 
