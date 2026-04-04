@@ -40,12 +40,11 @@ class SlotPipeline:
         self._slot_is_temporal: list[bool] = [False] * num_slots
 
     def create_slots(self, Gst: Any, plan: ExecutionPlan | None = None) -> list[Any]:
-        """Create N slot elements using glfeedback (if available) for temporal readiness.
+        """Create N slot elements. Temporal steps get glfeedback; others get glshader.
 
-        glfeedback works for both temporal and non-temporal shaders. When the
-        shader doesn't use tex_accum, the ping-pong FBO is a no-op (copying
-        identical frames). This avoids needing to know the plan at build time.
-        Falls back to glshader if glfeedback is not installed.
+        Hybrid approach: glshader for spatial effects (proven hot-swap),
+        glfeedback only for temporal effects (needs tex_accum ping-pong).
+        Falls back to all-glshader if glfeedback is not installed.
         """
         self._slots = []
         self._slot_base_params = [{} for _ in range(self._num_slots)]
@@ -53,14 +52,26 @@ class SlotPipeline:
         self._slot_is_temporal = [False] * self._num_slots
 
         has_glfeedback = Gst.ElementFactory.find("glfeedback") is not None
-        if has_glfeedback:
-            log.info("glfeedback available — all slots support temporal feedback")
+
+        # Determine which slots need temporal support from the plan
+        temporal_slots: set[int] = set()
+        if plan and has_glfeedback:
+            idx = 0
+            for step in plan.steps:
+                if step.node_type == "output":
+                    continue
+                if idx >= self._num_slots:
+                    break
+                if step.temporal:
+                    temporal_slots.add(idx)
+                idx += 1
 
         for i in range(self._num_slots):
-            if has_glfeedback:
+            if i in temporal_slots:
                 slot = Gst.ElementFactory.make("glfeedback", f"effect-slot-{i}")
                 slot.set_property("fragment", PASSTHROUGH_SHADER)
                 self._slot_is_temporal[i] = True
+                log.info("Slot %d: glfeedback (temporal)", i)
             else:
                 slot = Gst.ElementFactory.make("glshader", f"effect-slot-{i}")
                 slot.set_property("fragment", PASSTHROUGH_SHADER)
