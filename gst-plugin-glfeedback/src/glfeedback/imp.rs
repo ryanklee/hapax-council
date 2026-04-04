@@ -246,34 +246,23 @@ impl GLFilterImpl for GlFeedback {
             guard.as_ref().unwrap().shader.clone()
         };
 
-        // Pass 1: blend current frame + previous accumulation → output FBO
-        filter
-            .render_to_target(input, output, |filt, in_tex| {
-                shader.use_();
+        // Bind tex_accum on unit 1 BEFORE render_to_target_with_shader.
+        // GStreamer's render_to_target_with_shader binds the input texture on unit 0
+        // as "tex", sets up the FBO, draws the fullscreen quad, and returns.
+        // We pre-bind our accumulation texture on unit 1 so the shader can read it.
+        unsafe {
+            gl::ActiveTexture(gl::TEXTURE1);
+            gl::BindTexture(gl::TEXTURE_2D, prev_tex);
+        }
+        shader.set_uniform_1i("tex_accum", 1);
 
-                // tex (current frame) on unit 0
-                unsafe {
-                    gl::ActiveTexture(gl::TEXTURE0);
-                    gl::BindTexture(gl::TEXTURE_2D, in_tex.texture_id());
-                }
-                shader.set_uniform_1i("tex", 0);
+        // Set float uniforms
+        for (name, val) in &uniforms {
+            shader.set_uniform_1f(name, *val);
+        }
 
-                // tex_accum (previous frame) on unit 1
-                unsafe {
-                    gl::ActiveTexture(gl::TEXTURE1);
-                    gl::BindTexture(gl::TEXTURE_2D, prev_tex);
-                }
-                shader.set_uniform_1i("tex_accum", 1);
-
-                // Float uniforms from property
-                for (name, val) in &uniforms {
-                    shader.set_uniform_1f(name, *val);
-                }
-
-                filt.draw_fullscreen_quad();
-                true
-            })
-            .map_err(|e| gst::loggable_error!(gst::CAT_RUST, "render: {e}"))?;
+        // render_to_target_with_shader handles: FBO bind, tex on unit 0, quad draw
+        filter.render_to_target_with_shader(input, output, &shader);
 
         // Pass 2: blit output into next accumulation buffer
         unsafe {
