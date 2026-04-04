@@ -127,6 +127,28 @@ def state_reader_loop(compositor: Any) -> None:
                     except Exception as exc:
                         log.debug("Camera reconnect failed for %s: %s", role, exc)
 
+        # FX graph replacement (from chain builder PUT)
+        graph_mutation_path = SNAPSHOT_DIR / "graph-mutation.json"
+        if graph_mutation_path.exists():
+            try:
+                raw = graph_mutation_path.read_text().strip()
+                graph_mutation_path.unlink(missing_ok=True)
+                if raw and compositor._graph_runtime is not None:
+                    from agents.effect_graph.types import EffectGraph
+
+                    graph = EffectGraph(**json.loads(raw))
+                    compositor._graph_runtime.load_graph(graph)
+                    compositor._current_preset_name = graph.name
+                    compositor._user_preset_hold_until = time.monotonic() + 600.0
+                    try:
+                        (SNAPSHOT_DIR / "fx-current.txt").write_text(graph.name)
+                    except OSError:
+                        pass
+                    log.info("Loaded graph from mutation file: %s", graph.name)
+            except Exception as exc:
+                log.debug("Failed to process graph mutation: %s", exc)
+                graph_mutation_path.unlink(missing_ok=True)
+
         # FX preset switch requests
         fx_request_path = SNAPSHOT_DIR / "fx-request.txt"
         if fx_request_path.exists():
@@ -135,7 +157,6 @@ def state_reader_loop(compositor: Any) -> None:
                 fx_request_path.unlink(missing_ok=True)
                 if preset_name and compositor._graph_runtime is not None:
                     try_graph_preset(compositor, preset_name)
-                    # Hold governance for 60s so user selection sticks
                     compositor._current_preset_name = preset_name
                     compositor._user_preset_hold_until = time.monotonic() + 600.0
                     try:
