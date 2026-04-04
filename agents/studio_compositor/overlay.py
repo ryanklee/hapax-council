@@ -63,6 +63,9 @@ def on_draw(compositor: Any, overlay: Any, cr: Any, timestamp: int, duration: in
 
     render_visual_layer(compositor, cr, canvas_w, canvas_h)
 
+    if hasattr(compositor, "_overlay_zone_manager"):
+        compositor._overlay_zone_manager.render(cr, canvas_w, canvas_h)
+
 
 def _draw_camera_labels(compositor: Any, ctx: Any, state: Any, pad: int) -> None:
     """Draw per-camera role labels and consent badges."""

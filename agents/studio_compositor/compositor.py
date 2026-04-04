@@ -13,6 +13,7 @@ from typing import Any
 from .config import CACHE_DIR, SNAPSHOT_DIR, STATUS_FILE
 from .effects import init_graph_runtime
 from .models import CompositorConfig, OverlayState, TileRect
+from .overlay_zones import OverlayZoneManager
 from .profiles import load_camera_profiles
 
 log = logging.getLogger(__name__)
@@ -48,6 +49,7 @@ class StudioCompositor:
         self._overlay_cache_surface: Any = None
         self._overlay_cache_timestamp: float = 0.0
         self._overlay_cache_cam_hash: str = ""
+        self._overlay_zone_manager = OverlayZoneManager()
         self._vl_state: dict | None = None
         self._vl_state_lock = threading.Lock()
         self._vl_state_timestamp: float = 0.0

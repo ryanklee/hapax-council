@@ -166,4 +166,6 @@ def state_reader_loop(compositor: Any) -> None:
             except Exception as exc:
                 log.debug("Failed to process FX request: %s", exc)
                 fx_request_path.unlink(missing_ok=True)
+        if hasattr(compositor, "_overlay_zone_manager"):
+            compositor._overlay_zone_manager.tick()
         time.sleep(0.1)
