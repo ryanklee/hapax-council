@@ -71,6 +71,7 @@ fn main() {
             // Proxy (HTTP-only endpoints → FastAPI :8051)
             commands::proxy::proxy_get_generic,
             commands::proxy::proxy_post,
+            commands::proxy::proxy_put,
             commands::proxy::proxy_patch,
             commands::proxy::proxy_delete,
             commands::proxy::proxy_compositor_live,

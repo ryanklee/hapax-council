@@ -108,6 +108,8 @@ export const api = {
   get: <T>(path: string) => invoke<T>("proxy_get_generic", { path }),
   post: <T>(path: string, body?: unknown) =>
     invoke<T>("proxy_post", { path, body: body ?? null }),
+  put: <T>(path: string, body?: unknown) =>
+    invoke<T>("proxy_put", { path, body: body ?? null }),
   patch: <T>(path: string, body?: unknown) =>
     invoke<T>("proxy_patch", { path, body: body ?? null }),
   del: <T>(path: string) => invoke<T>("proxy_delete", { path }),

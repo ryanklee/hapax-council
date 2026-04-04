@@ -43,7 +43,7 @@ function ChainBuilderInner() {
         if (slots > MAX_SLOTS) return;
 
         const merged = mergePresetGraphs("chain", graphs);
-        await api.patch("/studio/effect/graph", merged);
+        await api.put("/studio/effect/graph", merged);
       } finally {
         setActivating(false);
       }

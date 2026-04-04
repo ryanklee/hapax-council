@@ -106,6 +106,18 @@ pub async fn proxy_delete(app: AppHandle, path: String) -> Result<Value, String>
 }
 
 #[tauri::command]
+pub async fn proxy_put(app: AppHandle, path: String, body: Option<Value>) -> Result<Value, String> {
+    let url = format!("{}{}", LOGOS_BASE, &path);
+    let c = client(&app);
+    let req = if let Some(b) = body { c.put(&url).json(&b) } else { c.put(&url) };
+    let resp = req.send().await.map_err(|e| format!("proxy PUT {}: {}", path, e))?;
+    if !resp.status().is_success() {
+        return Err(format!("proxy PUT {} returned {}", path, resp.status()));
+    }
+    resp.json::<Value>().await.map_err(|e| format!("proxy PUT {} json: {}", path, e))
+}
+
+#[tauri::command]
 pub async fn proxy_patch(app: AppHandle, path: String, body: Option<Value>) -> Result<Value, String> {
     proxy_patch_json(&app, &path, body).await
 }
