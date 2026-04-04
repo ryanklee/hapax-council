@@ -40,12 +40,11 @@ class SlotPipeline:
         self._slot_is_temporal: list[bool] = [False] * num_slots
 
     def create_slots(self, Gst: Any, plan: ExecutionPlan | None = None) -> list[Any]:
-        """Create N slot elements using glfeedback (if available) for temporal readiness.
+        """Create N slot elements using glfeedback for all slots.
 
-        glfeedback works for both temporal and non-temporal shaders. When the
-        shader doesn't use tex_accum, the ping-pong FBO is a no-op (copying
-        identical frames). This avoids needing to know the plan at build time.
-        Falls back to glshader if glfeedback is not installed.
+        glfeedback provides tex_accum for temporal effects and works as a
+        drop-in replacement for glshader for spatial effects. Falls back
+        to glshader if glfeedback is not installed.
         """
         self._slots = []
         self._slot_base_params = [{} for _ in range(self._num_slots)]
@@ -154,18 +153,20 @@ class SlotPipeline:
                 self._slot_pending_frag[slot_idx] = step.shader_source
                 self._slot_assignments[slot_idx] = step.node_type
                 self._slot_base_params[slot_idx] = dict(step.params)
-                self._set_uniforms(slot_idx, step.params)
                 slot_idx += 1
 
-        # Apply changes: glfeedback uses set_property, glshader uses update-shader
+        # Apply changes to each slot
         for i in range(self._num_slots):
             if self._slot_is_temporal[i]:
-                # glfeedback: set fragment and uniforms via properties
+                # glfeedback: set fragment and uniforms via GObject properties
                 frag = self._slot_pending_frag[i] or PASSTHROUGH_SHADER
+                node = self._slot_assignments[i] or "passthrough"
+                log.info("Slot %d (%s): setting fragment (%d chars)", i, node, len(frag))
                 self._slots[i].set_property("fragment", frag)
                 self._apply_glfeedback_uniforms(i)
             else:
-                # glshader: trigger GL-thread recompilation
+                # glshader: set uniforms via Gst.Structure, trigger GL recompile
+                self._set_uniforms(i, self._slot_base_params[i])
                 self._slots[i].set_property("update-shader", True)
 
         log.info("Activated plan '%s': %d/%d slots used", plan.name, slot_idx, self._num_slots)

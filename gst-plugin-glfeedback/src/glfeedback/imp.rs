@@ -47,6 +47,7 @@ struct State {
 struct Props {
     fragment: Option<String>,
     uniforms: Vec<(String, f32)>,
+    shader_dirty: bool,
 }
 
 pub struct GlFeedback {
@@ -95,11 +96,9 @@ impl ObjectImpl for GlFeedback {
             "fragment" => {
                 let frag = value.get::<Option<String>>().unwrap();
                 self.props.lock().unwrap().fragment = frag;
-                // Mark shader as needing recompile (will happen on next filter_texture)
-                if let Some(state) = self.state.lock().unwrap().as_mut() {
-                    // Drop old shader — recompile on next frame
-                    let _ = &state.shader; // keep for now; lazy recompile TODO
-                }
+                // Mark shader as needing recompile — actual GL compilation
+                // happens in filter_texture on the GL thread
+                self.props.lock().unwrap().shader_dirty = true;
             }
             "uniforms" => {
                 let raw = value.get::<Option<String>>().unwrap().unwrap_or_default();
@@ -156,7 +155,7 @@ impl BaseTransformImpl for GlFeedback {
     const MODE: gst_base::subclass::base_transform::BaseTransformMode =
         gst_base::subclass::base_transform::BaseTransformMode::NeverInPlace;
     const PASSTHROUGH_ON_SAME_CAPS: bool = false;
-    const TRANSFORM_IP_ON_PASSTHROUGH: bool = false;
+    const TRANSFORM_IP_ON_PASSTHROUGH: bool = true;
 }
 
 impl GLBaseFilterImpl for GlFeedback {
@@ -229,6 +228,34 @@ impl GLFilterImpl for GlFeedback {
         output: &gst_gl::GLMemory,
     ) -> Result<(), gst::LoggableError> {
         let filter = self.obj();
+        gst::trace!(gst::CAT_RUST, "filter_texture called");
+
+        // Lazy-recompile shader on GL thread if fragment property changed
+        {
+            let mut props = self.props.lock().unwrap();
+            gst::trace!(gst::CAT_RUST, "shader_dirty={}", props.shader_dirty);
+            if props.shader_dirty {
+                gst::info!(gst::CAT_RUST, "shader_dirty detected — recompiling");
+                props.shader_dirty = false;
+                if let Some(frag_src) = props.fragment.clone() {
+                    drop(props); // release lock before GL calls
+                    if let Some(context) = gst_gl::prelude::GLBaseFilterExt::context(&*filter) {
+                        match self.compile_shader(&context, &frag_src) {
+                            Ok(new_shader) => {
+                                self.state.lock().unwrap().as_mut().unwrap().shader = new_shader;
+                                gst::info!(gst::CAT_RUST, "Shader recompiled OK ({} chars)", frag_src.len());
+                            }
+                            Err(e) => {
+                                gst::error!(gst::CAT_RUST, "Shader recompile FAILED: {:?}", e);
+                                // Log first 200 chars of fragment source for debugging
+                                let preview: String = frag_src.chars().take(200).collect();
+                                gst::error!(gst::CAT_RUST, "Fragment preview: {}", preview);
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         // Snapshot what we need from state (minimise lock duration)
         let (prev_tex, next_fbo, next_idx, uniforms) = {
@@ -246,23 +273,32 @@ impl GLFilterImpl for GlFeedback {
             guard.as_ref().unwrap().shader.clone()
         };
 
-        // Bind tex_accum on unit 1 BEFORE render_to_target_with_shader.
-        // GStreamer's render_to_target_with_shader binds the input texture on unit 0
-        // as "tex", sets up the FBO, draws the fullscreen quad, and returns.
-        // We pre-bind our accumulation texture on unit 1 so the shader can read it.
+        // filter_texture is called with the output FBO already bound by GStreamer.
+        // We just need to: activate shader, bind textures, set uniforms, draw quad.
+        // No render_to_target needed — we ARE already in the render target.
+        shader.use_();
+
+        // tex (current frame) on unit 0
+        unsafe {
+            gl::ActiveTexture(gl::TEXTURE0);
+            gl::BindTexture(gl::TEXTURE_2D, input.texture_id());
+        }
+        shader.set_uniform_1i("tex", 0);
+
+        // tex_accum (previous frame) on unit 1
         unsafe {
             gl::ActiveTexture(gl::TEXTURE1);
             gl::BindTexture(gl::TEXTURE_2D, prev_tex);
         }
         shader.set_uniform_1i("tex_accum", 1);
 
-        // Set float uniforms
+        // Float uniforms
         for (name, val) in &uniforms {
             shader.set_uniform_1f(name, *val);
         }
 
-        // render_to_target_with_shader handles: FBO bind, tex on unit 0, quad draw
-        filter.render_to_target_with_shader(input, output, &shader);
+        // Draw fullscreen quad — GStreamer's GLFilter provides the geometry
+        filter.draw_fullscreen_quad();
 
         // Pass 2: blit output into next accumulation buffer
         unsafe {
@@ -312,7 +348,7 @@ impl GlFeedback {
             context,
             gl::FRAGMENT_SHADER,
             gst_gl::GLSLVersion::None,
-            gst_gl::GLSLProfile::empty(),
+            gst_gl::GLSLProfile::ES | gst_gl::GLSLProfile::COMPATIBILITY,
             frag_src,
         );
         shader
