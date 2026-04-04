@@ -203,3 +203,14 @@ export async function savePreset(
     return false;
   }
 }
+
+/** Fetch a preset's raw EffectGraph JSON (no Flow conversion). */
+export async function fetchPresetGraph(presetName: string): Promise<EffectGraphJson | null> {
+  try {
+    const graph = await api.get<EffectGraphJson>(`/studio/presets/${presetName}`);
+    if (!graph?.nodes) return null;
+    return graph;
+  } catch {
+    return null;
+  }
+}
