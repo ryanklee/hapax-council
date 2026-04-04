@@ -29,11 +29,18 @@ def get_exploration_state() -> dict:
             "timestamp": time.time(),
         }
 
-    boredom_scores = [s.get("boredom_index", 0.0) for s in signals.values()]
+    boredom_scores = sorted(
+        (s.get("boredom_index", 0.0) for s in signals.values()),
+        reverse=True,
+    )
     curiosity_scores = [s.get("curiosity_index", 0.0) for s in signals.values()]
-    agg_boredom = sum(boredom_scores) / len(boredom_scores)
+    # Top-k aggregation: worst-case components drive deficit
+    # PCT: reorganization pressure = intrinsic error (boredom)
+    # Curiosity modulates exploration MODE (via control law), not deficit magnitude
+    k = max(3, len(boredom_scores) // 3)
+    agg_boredom = sum(boredom_scores[:k]) / k
     agg_curiosity = sum(curiosity_scores) / len(curiosity_scores)
-    deficit = max(0.0, min(1.0, agg_boredom - agg_curiosity))
+    deficit = max(0.0, min(1.0, agg_boredom))
 
     return {
         "components": signals,
