@@ -1,8 +1,7 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Handle, Position, type NodeProps, NodeResizer } from "@xyflow/react";
-import { api } from "../../../api/client";
-import { PRESET_CATEGORIES } from "../presetData";
+import { ChainBuilder } from "../ChainBuilder";
 import { useStudioGraph } from "../../../stores/studioGraphStore";
 
 export interface OutputNodeData {
@@ -145,25 +144,9 @@ function OutputNodeInner({ data, selected }: NodeProps) {
 function FullscreenOverlay({ onClose }: { onClose: () => void }) {
   const imgRef = useRef<HTMLImageElement>(null);
   const [showPresets, setShowPresets] = useState(false);
-  const [activePreset, setActivePreset] = useState("");
 
   // Own independent poll — not shared with parent
   useFxPoll(imgRef, 83);
-
-  const allPresets = PRESET_CATEGORIES.flatMap((cat) =>
-    cat.presets.map((p) => ({ name: p, category: cat.label })),
-  );
-
-  const selectPreset = useCallback((name: string) => {
-    api.post("/studio/effect/select", { preset: name }).catch(() => {});
-    setActivePreset(name);
-  }, []);
-
-  useEffect(() => {
-    api.get<{ preset: string }>("/studio/effect/current")
-      .then((r) => { if (r?.preset) setActivePreset(r.preset); })
-      .catch(() => {});
-  }, []);
 
   return (
     <div
@@ -208,7 +191,7 @@ function FullscreenOverlay({ onClose }: { onClose: () => void }) {
           background: "linear-gradient(rgba(0,0,0,0.6), transparent)",
         }}
       >
-        <span style={{ fontSize: 11, color: "#928374" }}>{activePreset || "output"}</span>
+        <span style={{ fontSize: 11, color: "#928374" }}>{"output"}</span>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <button
             onClick={(e) => { e.stopPropagation(); setShowPresets(!showPresets); }}
@@ -228,44 +211,7 @@ function FullscreenOverlay({ onClose }: { onClose: () => void }) {
         </div>
       </div>
 
-      {/* Preset strip */}
-      {showPresets && (
-        <div
-          onClick={(e) => e.stopPropagation()}
-          style={{
-            position: "absolute",
-            bottom: 0,
-            left: 0,
-            right: 0,
-            background: "rgba(29,32,33,0.92)",
-            borderTop: "1px solid #3c3836",
-            padding: "8px 16px",
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 4,
-            maxHeight: 180,
-            overflowY: "auto",
-          }}
-        >
-          {allPresets.map(({ name }) => (
-            <button
-              key={name}
-              onClick={() => selectPreset(name)}
-              style={{
-                background: name === activePreset ? "#3c3836" : "none",
-                border: name === activePreset ? "1px solid #fabd2f" : "1px solid #504945",
-                borderRadius: 2,
-                padding: "3px 8px",
-                fontSize: 10,
-                color: name === activePreset ? "#ebdbb2" : "#928374",
-                cursor: "pointer",
-              }}
-            >
-              {name}
-            </button>
-          ))}
-        </div>
-      )}
+      {showPresets && <ChainBuilder />}
     </div>
   );
 }
