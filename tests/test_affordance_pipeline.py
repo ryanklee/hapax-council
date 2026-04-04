@@ -328,3 +328,30 @@ class TestBatchIndexing:
 
         pipeline = AffordancePipeline()
         assert pipeline.index_capabilities_batch([]) == 0
+
+
+class TestEmbeddingCacheTextKey:
+    def test_same_text_hits_cache(self):
+        from shared.affordance_pipeline import EmbeddingCache
+
+        cache = EmbeddingCache()
+        vec = [0.1, 0.2, 0.3]
+        cache.put_by_text("source: dmn intent: stable", vec)
+        assert cache.get_by_text("source: dmn intent: stable") == vec
+
+    def test_different_text_misses_cache(self):
+        from shared.affordance_pipeline import EmbeddingCache
+
+        cache = EmbeddingCache()
+        cache.put_by_text("source: dmn intent: stable", [0.1, 0.2, 0.3])
+        assert cache.get_by_text("source: dmn intent: degrading") is None
+
+    def test_lru_eviction_by_text(self):
+        from shared.affordance_pipeline import EmbeddingCache
+
+        cache = EmbeddingCache(max_size=2)
+        cache.put_by_text("a", [1.0])
+        cache.put_by_text("b", [2.0])
+        cache.put_by_text("c", [3.0])  # evicts "a"
+        assert cache.get_by_text("a") is None
+        assert cache.get_by_text("b") == [2.0]

@@ -54,6 +54,23 @@ class EmbeddingCache:
         while len(self._cache) > self._max_size:
             self._cache.popitem(last=False)
 
+    def _text_key(self, text: str) -> str:
+        return hashlib.md5(text.encode(), usedforsecurity=False).hexdigest()
+
+    def get_by_text(self, text: str) -> list[float] | None:
+        key = self._text_key(text)
+        if key in self._cache:
+            self._cache.move_to_end(key)
+            return self._cache[key]
+        return None
+
+    def put_by_text(self, text: str, embedding: list[float]) -> None:
+        key = self._text_key(text)
+        self._cache[key] = embedding
+        self._cache.move_to_end(key)
+        while len(self._cache) > self._max_size:
+            self._cache.popitem(last=False)
+
 
 @dataclass
 class InterruptHandler:
@@ -516,15 +533,15 @@ class AffordancePipeline:
     def _get_embedding(self, impingement: Impingement) -> list[float] | None:
         if impingement.embedding is not None:
             return impingement.embedding
-        cached = self._embed_cache.get(impingement.content)
+        text = render_impingement_text(impingement)
+        cached = self._embed_cache.get_by_text(text)
         if cached is not None:
             return cached
         from shared.config import embed_safe
 
-        text = render_impingement_text(impingement)
         embedding = embed_safe(text, prefix="search_query")
         if embedding is not None:
-            self._embed_cache.put(impingement.content, embedding)
+            self._embed_cache.put_by_text(text, embedding)
         return embedding
 
     def _retrieve(self, embedding: list[float], top_k: int) -> list[SelectionCandidate]:
