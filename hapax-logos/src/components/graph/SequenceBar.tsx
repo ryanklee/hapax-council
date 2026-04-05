@@ -42,10 +42,51 @@ export async function activatePresets(
   }
 }
 
-// With chain-safe caps (brightness/contrast ≤1.2) and compounding node
-// neutralization (only last colorgrade/bloom/vignette applies), any
-// preset can chain with any other. Categories are purely for shuffle
-// variety — not safety exclusions.
+// Presets that sufficiently obscure the source for anonymity.
+// Every chain MUST include at least one of these.
+const OBSCURING = new Set([
+  "datamosh", "datamosh_heavy", "glitch_blocks_preset", "trap",
+  "vhs_preset", "screwed", "kaleidodream", "tunnelvision",
+  "mirror_rorschach", "voronoi_crystal", "diff_preset", "slitscan_preset",
+  "fisheye_pulse", "feedback_preset", "ghost", "trails",
+  "ascii_preset", "halftone_preset", "dither_retro", "silhouette",
+  "sculpture", "neon", "pixsort_preset", "nightvision",
+]);
+
+// Chain compatibility tags — every preset can chain, but certain combos conflict.
+// Tags: "pattern" (converts to dots/chars/dither), "sparse" (edge detect, mostly
+// black output), "temporal" (trail/feedback accumulation).
+const TAGS: Record<string, Set<string>> = {
+  ascii_preset: new Set(["pattern"]),
+  halftone_preset: new Set(["pattern"]),
+  dither_retro: new Set(["pattern"]),
+  silhouette: new Set(["sparse"]),
+  sculpture: new Set(["sparse", "temporal"]),
+  neon: new Set(["sparse"]),
+  pixsort_preset: new Set(["pattern"]),
+  nightvision: new Set([]),
+  feedback_preset: new Set(["temporal"]),
+  ghost: new Set(["temporal"]),
+  trails: new Set(["temporal"]),
+};
+// Rule: a chain cannot contain two presets that share the same tag.
+// Also: "sparse" + "temporal" is forbidden (accumulates black).
+function canAdd(chain: string[], candidate: string): boolean {
+  const candidateTags = TAGS[candidate] ?? new Set();
+  for (const existing of chain) {
+    const existingTags = TAGS[existing] ?? new Set();
+    // No two of the same tag
+    for (const t of candidateTags) {
+      if (existingTags.has(t)) return false;
+    }
+    // sparse + temporal forbidden
+    if (
+      (candidateTags.has("sparse") && existingTags.has("temporal")) ||
+      (candidateTags.has("temporal") && existingTags.has("sparse"))
+    ) return false;
+  }
+  return true;
+}
 
 function generateRandomSequence(): PresetChain[] {
   const allPresets = PRESET_CATEGORIES.flatMap((c) => c.presets)
@@ -55,23 +96,36 @@ function generateRandomSequence(): PresetChain[] {
   let lastUsed: string[] = [];
 
   for (let i = 0; i < numChains; i++) {
-    // Shuffle all presets, exclude recently used for variety
-    const pool = allPresets
+    const presets: string[] = [];
+    const pool = [...allPresets]
       .filter((p) => !lastUsed.includes(p))
       .sort(() => Math.random() - 0.5);
-    const fallback = allPresets.sort(() => Math.random() - 0.5);
-    const available = pool.length >= 3 ? pool : fallback;
+    const fallback = [...allPresets].sort(() => Math.random() - 0.5);
+    const available = pool.length >= 5 ? pool : fallback;
 
-    // Pick 2-3 presets (70% chance of 3)
-    const chainSize = Math.random() < 0.7 ? 3 : 2;
-    const presets = available.slice(0, chainSize);
+    // Pick 2-3 compatible presets
+    const chainSize = Math.random() < 0.65 ? 3 : 2;
+    for (const p of available) {
+      if (presets.length >= chainSize) break;
+      if (presets.includes(p)) continue;
+      if (!canAdd(presets, p)) continue;
+      presets.push(p);
+    }
 
+    if (presets.length === 0) continue;
+    // Anonymity: ensure at least one obscuring preset in every chain
+    if (!presets.some((p) => OBSCURING.has(p))) {
+      const obscPool = available.filter(
+        (p) => OBSCURING.has(p) && !presets.includes(p) && canAdd(presets, p),
+      );
+      if (obscPool.length > 0) presets.push(obscPool[0]);
+    }
     lastUsed = [...presets];
 
     chains.push({
       id: crypto.randomUUID(),
       presets,
-      durationSeconds: 25 + Math.floor(Math.random() * 15), // 25-40s
+      durationSeconds: 25 + Math.floor(Math.random() * 15),
       source: "live",
     });
   }
