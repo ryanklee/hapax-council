@@ -140,9 +140,49 @@ def add_fx_snapshot_branch(compositor: Any, pipeline: Any, tee: Any) -> None:
             return None
 
     _fx_frame_count = [0]
+    # Latest frame for background sender — overwritten each frame (drop-newest)
+    _pending_frame: list[bytes | None] = [None]
+    _frame_event = threading.Event()
+
+    def _sender_loop() -> None:
+        """Background thread: sends frames via TCP + writes to shm.
+        Decoupled from the GStreamer streaming thread to prevent stalls."""
+        nonlocal frame_sock
+        while True:
+            _frame_event.wait()
+            _frame_event.clear()
+            data = _pending_frame[0]
+            if data is None:
+                continue
+            # TCP push
+            with sock_lock:
+                s = _ensure_sock()
+                if s is not None:
+                    try:
+                        s.sendall(struct.pack("<I", len(data)) + data)
+                    except OSError:
+                        try:
+                            s.close()
+                        except OSError:
+                            pass
+                        frame_sock = None
+            # File write (atomic rename)
+            try:
+                tmp = SNAPSHOT_DIR / "fx-snapshot.jpg.tmp"
+                final = SNAPSHOT_DIR / "fx-snapshot.jpg"
+                fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
+                try:
+                    os.write(fd, data)
+                finally:
+                    os.close(fd)
+                tmp.rename(final)
+            except OSError:
+                pass
+
+    sender_thread = threading.Thread(target=_sender_loop, daemon=True, name="fx-frame-sender")
+    sender_thread.start()
 
     def _on_fx_sample(sink: Any) -> int:
-        nonlocal frame_sock
         _fx_frame_count[0] += 1
         if _fx_frame_count[0] <= 3 or _fx_frame_count[0] % 300 == 0:
             log.info("FX snapshot: frame %d received", _fx_frame_count[0])
@@ -153,31 +193,9 @@ def add_fx_snapshot_branch(compositor: Any, pipeline: Any, tee: Any) -> None:
         ok, mapinfo = buf.map(compositor._Gst.MapFlags.READ)
         if ok:
             try:
-                data = bytes(mapinfo.data)
-                # Push to TCP relay (non-blocking, drop frame if can't send)
-                with sock_lock:
-                    s = _ensure_sock()
-                    if s is not None:
-                        try:
-                            s.sendall(struct.pack("<I", len(data)) + data)
-                        except OSError:
-                            try:
-                                s.close()
-                            except OSError:
-                                pass
-                            frame_sock = None
-                # Also write to shm for backward compatibility (atomic rename)
-                try:
-                    tmp = SNAPSHOT_DIR / "fx-snapshot.jpg.tmp"
-                    final = SNAPSHOT_DIR / "fx-snapshot.jpg"
-                    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
-                    try:
-                        os.write(fd, data)
-                    finally:
-                        os.close(fd)
-                    tmp.rename(final)
-                except OSError:
-                    pass
+                # Copy bytes and hand off to background sender — return immediately
+                _pending_frame[0] = bytes(mapinfo.data)
+                _frame_event.set()
             finally:
                 buf.unmap(mapinfo)
         return 0

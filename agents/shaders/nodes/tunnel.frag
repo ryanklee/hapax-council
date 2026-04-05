@@ -27,8 +27,10 @@ void main() {
     // map to texture coords
     vec2 tunnelUV = vec2(tunnel_a, fract(tunnel_r));
     tunnelUV = fract(tunnelUV);
-    vec4 color = texture2D(tex, tunnelUV);
-    // fade at edges
-    float fade = smoothstep(0.0, 0.1, r);
-    gl_FragColor = vec4(color.rgb * fade, color.a);
+    vec4 tunnel = texture2D(tex, tunnelUV);
+    vec4 source = texture2D(tex, v_texcoord);
+    // Blend tunnel with source — tunnel dominates edges, source preserved in center.
+    // Prevents black center from poisoning downstream trail/feedback presets.
+    float blend = smoothstep(0.05, 0.4, r);
+    gl_FragColor = vec4(mix(source.rgb, tunnel.rgb, blend), 1.0);
 }
