@@ -66,7 +66,7 @@ function generateRandomSequence(): PresetChain[] {
   const obscuring = allPresets.filter((p) => OBSCURING_PRESETS.has(p));
   const light = allPresets.filter((p) => LIGHT_PRESETS.has(p));
   const destructive = allPresets.filter((p) => DESTRUCTIVE_PRESETS.has(p));
-  const numChains = 6 + Math.floor(Math.random() * 5);
+  const numChains = 8 + Math.floor(Math.random() * 5); // 8-12 chains
   const chains: PresetChain[] = [];
   const usedRecently: string[] = [];
 
@@ -81,18 +81,23 @@ function generateRandomSequence(): PresetChain[] {
     // Always start with an obscuring preset
     presets.push(obsPool[0]);
 
-    // 40% chance: add a light preset for layering
-    // 30% chance: add a destructive preset as finisher
-    // 30% chance: solo obscuring
-    const roll = Math.random();
+    // ALWAYS add a second preset to fill slots
+    const shuffledLight = [...light].sort(() => Math.random() - 0.5);
+    const lightPick = shuffledLight.find((p) => !presets.includes(p));
+    if (lightPick) presets.push(lightPick);
 
-    if (roll < 0.4) {
-      const shuffledLight = [...light].sort(() => Math.random() - 0.5);
-      const pick = shuffledLight.find((p) => !presets.includes(p));
-      if (pick) presets.push(pick);
-    } else if (roll < 0.7) {
-      const shuffledDest = [...destructive].sort(() => Math.random() - 0.5);
-      presets.push(shuffledDest[0]); // destructive LAST
+    // 50% chance: add a third (destructive finisher OR another obscuring)
+    if (Math.random() < 0.5) {
+      if (Math.random() < 0.4) {
+        // Destructive finisher
+        const shuffledDest = [...destructive].sort(() => Math.random() - 0.5);
+        const destPick = shuffledDest.find((p) => !presets.includes(p));
+        if (destPick) presets.push(destPick);
+      } else {
+        // Another obscuring
+        const obsPick2 = obsPool.find((p) => !presets.includes(p));
+        if (obsPick2) presets.push(obsPick2);
+      }
     }
 
     usedRecently.length = 0;
@@ -101,7 +106,7 @@ function generateRandomSequence(): PresetChain[] {
     chains.push({
       id: crypto.randomUUID(),
       presets,
-      durationSeconds: 8 + Math.floor(Math.random() * 8), // 8-15s
+      durationSeconds: 8 + Math.floor(Math.random() * 8), // 8-15s max
       source: (["live", "live", "live", "smooth", "hls"] as const)[Math.floor(Math.random() * 5)],
     });
   }
