@@ -125,6 +125,8 @@ def merge_default_modulations(graph: Any) -> Any:
                     scale=d.get("scale", 1.0),
                     offset=d.get("offset", 0.0),
                     smoothing=d.get("smoothing", 0.85),
+                    attack=d.get("attack"),
+                    decay=d.get("decay"),
                 )
             )
 

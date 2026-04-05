@@ -215,9 +215,9 @@ class CompositorAudioCapture:
         if CHANNELS == 2:
             samples = (samples[0::2] + samples[1::2]) * 0.5
 
-        # RMS energy
+        # RMS energy — fixed multiplier, strong 0-1 swing
         rms = float(np.sqrt(np.mean(samples**2)))
-        energy = self._agc.normalize("energy", rms)
+        energy = min(1.0, rms * 4.0)
 
         # Hann-windowed FFT (reduces spectral leakage for better onset detection)
         windowed = samples * self._window
@@ -248,24 +248,26 @@ class CompositorAudioCapture:
             self._beat_pulse = 1.0
             self._classify_onset(fft, freqs)
 
-        # --- 3-band split with rolling AGC ---
+        # --- 3-band split with fixed normalization ---
+        # Use fixed multipliers (calibrated for typical music levels) instead of
+        # AGC for modulator signals. AGC compressed dynamics too much — the
+        # modulator needs strong 0-1 swings to drive visible effects.
+        # Pipeline clamping prevents overflow.
         bass_mask = freqs < 250
         mid_mask = (freqs >= 250) & (freqs < 2000)
         high_mask = (freqs >= 2000) & (freqs < 8000)
 
-        bass_raw = float(np.mean(fft[bass_mask])) if bass_mask.any() else 0.0
-        mid_raw = float(np.mean(fft[mid_mask])) if mid_mask.any() else 0.0
-        high_raw = float(np.mean(fft[high_mask])) if high_mask.any() else 0.0
+        bass = min(1.0, float(np.mean(fft[bass_mask])) * 0.3) if bass_mask.any() else 0.0
+        mid = min(1.0, float(np.mean(fft[mid_mask])) * 0.5) if mid_mask.any() else 0.0
+        high = min(1.0, float(np.mean(fft[high_mask])) * 1.0) if high_mask.any() else 0.0
 
-        bass = self._agc.normalize("bass", bass_raw)
-        mid = self._agc.normalize("mid", mid_raw)
-        high = self._agc.normalize("high", high_raw)
-
-        # --- 8-band mel decomposition with per-band AGC ---
+        # --- 8-band mel decomposition ---
         mel_energies = self._mel_fb.T @ fft  # (8,)
         mel_signals: dict[str, float] = {}
+        # Fixed multipliers per band (lower bands louder, higher bands need more boost)
+        mel_scales = [0.2, 0.3, 0.5, 0.6, 0.8, 1.0, 1.5, 2.0]
         for i, name in enumerate(MEL_BAND_NAMES):
-            mel_signals[f"mel_{name}"] = self._agc.normalize(f"mel_{name}", float(mel_energies[i]))
+            mel_signals[f"mel_{name}"] = min(1.0, float(mel_energies[i]) * mel_scales[i])
 
         # --- Timbral features ---
         fft_sum = float(np.sum(fft)) + AGC_FLOOR
