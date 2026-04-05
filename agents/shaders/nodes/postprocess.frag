@@ -18,18 +18,13 @@ float hash(vec2 p) {
 void main() {
     vec4 c = texture2D(tex, v_texcoord);
 
-    // Anonymize: destroy facial features while preserving effect character
+    // Anonymize: light safety net — preserves studio detail, softens faces
     if (u_anonymize > 0.5) {
-        // Sample from reduced resolution (160p) — eliminates fine facial detail
-        vec2 loRes = floor(v_texcoord * 160.0) / 160.0;
-        vec4 loC = texture2D(tex, loRes);
-        // Blend 70% low-res — face becomes blocky mosaic
-        c.rgb = mix(c.rgb, loC.rgb, 0.7);
-        // Posterize to 4 levels
-        c.rgb = floor(c.rgb * 4.0 + 0.5) / 4.0;
-        // Noise grain
+        // Light posterize — reduces smooth gradients (skin) without killing textures
+        c.rgb = floor(c.rgb * 6.0 + 0.5) / 6.0;
+        // Subtle noise
         float n = hash(v_texcoord * 200.0 + c.rg * 5.0);
-        c.rgb += (n - 0.5) * 0.15;
+        c.rgb += (n - 0.5) * 0.08;
     }
 
     // Vignette
