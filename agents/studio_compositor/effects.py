@@ -95,15 +95,38 @@ def merge_default_modulations(graph: Any) -> Any:
         return graph
 
     existing = {(m.node, m.param) for m in graph.modulations}
-    graph_nodes = set(graph.nodes.keys())
+
+    # Build type→node_id map for matching default bindings to prefixed nodes
+    type_to_ids: dict[str, list[str]] = {}
+    for nid, node in graph.nodes.items():
+        t = node.type
+        if t not in type_to_ids:
+            type_to_ids[t] = []
+        type_to_ids[t].append(nid)
 
     from agents.effect_graph.types import ModulationBinding
 
     merged = list(graph.modulations)
     for d in defaults:
-        key = (d["node"], d["param"])
-        if key not in existing and d["node"] in graph_nodes:
-            merged.append(ModulationBinding(**d))
+        target_type = d["node"]
+        # Find all nodes matching this type (handles prefixed IDs like p0_bloom)
+        matching_ids = type_to_ids.get(target_type, [])
+        if not matching_ids:
+            continue
+        # Apply to the FIRST matching node
+        node_id = matching_ids[0]
+        key = (node_id, d["param"])
+        if key not in existing:
+            merged.append(
+                ModulationBinding(
+                    node=node_id,
+                    param=d["param"],
+                    source=d["source"],
+                    scale=d.get("scale", 1.0),
+                    offset=d.get("offset", 0.0),
+                    smoothing=d.get("smoothing", 0.85),
+                )
+            )
 
     return graph.model_copy(update={"modulations": merged})
 
