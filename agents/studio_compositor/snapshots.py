@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from typing import Any
 
 from .config import SNAPSHOT_DIR
@@ -90,29 +91,16 @@ def add_fx_snapshot_branch(compositor: Any, pipeline: Any, tee: Any) -> None:
     queue.set_property("leaky", 2)
     queue.set_property("max-size-buffers", 2)
 
-    # Full GPU path: cudaupload → cudaconvertscale(I420) → nvjpegenc
-    # No videorate — just encode every frame that survives the leaky queue.
-    # No downscale — full 1080p, GPU handles it easily.
-    has_cuda = Gst.ElementFactory.find("cudaconvertscale") is not None
-    has_nvjpeg = Gst.ElementFactory.find("nvjpegenc") is not None
-
-    if has_cuda and has_nvjpeg:
-        upload = Gst.ElementFactory.make("cudaupload", "fx-snap-upload")
-        convert_scale = Gst.ElementFactory.make("cudaconvertscale", "fx-snap-cudacs")
-        cs_caps = Gst.ElementFactory.make("capsfilter", "fx-snap-cs-caps")
-        cs_caps.set_property(
-            "caps",
-            Gst.Caps.from_string("video/x-raw(memory:CUDAMemory),format=I420"),
-        )
-        jpeg = Gst.ElementFactory.make("nvjpegenc", "fx-snap-jpeg")
-        log.info("FX snapshot: full GPU path (cudaconvertscale + nvjpegenc) at native res")
-    else:
-        upload = None
-        convert_scale = None
-        cs_caps = None
-        jpeg = Gst.ElementFactory.make("jpegenc", "fx-snap-jpeg")
-        jpeg.set_property("quality", 80)
-        log.info("FX snapshot: CPU fallback (jpegenc) at native res")
+    # Simple CPU path: videoconvert → videoscale(640x360) → jpegenc(q=70)
+    # Small resolution keeps CPU encoding fast enough for 30fps.
+    # The WebSocket relay eliminates file I/O — the bottleneck that caused 1fps.
+    convert = Gst.ElementFactory.make("videoconvert", "fx-snap-convert")
+    scale = Gst.ElementFactory.make("videoscale", "fx-snap-scale")
+    scale_caps = Gst.ElementFactory.make("capsfilter", "fx-snap-scale-caps")
+    scale_caps.set_property("caps", Gst.Caps.from_string("video/x-raw,width=640,height=360"))
+    jpeg = Gst.ElementFactory.make("jpegenc", "fx-snap-jpeg")
+    jpeg.set_property("quality", 70)
+    log.info("FX snapshot: CPU jpegenc at 640x360")
 
     appsink = Gst.ElementFactory.make("appsink", "fx-snapshot-sink")
     appsink.set_property("sync", False)
@@ -151,8 +139,13 @@ def add_fx_snapshot_branch(compositor: Any, pipeline: Any, tee: Any) -> None:
         except OSError:
             return None
 
+    _fx_frame_count = [0]
+
     def _on_fx_sample(sink: Any) -> int:
         nonlocal frame_sock
+        _fx_frame_count[0] += 1
+        if _fx_frame_count[0] <= 3 or _fx_frame_count[0] % 300 == 0:
+            log.info("FX snapshot: frame %d received", _fx_frame_count[0])
         sample = sink.emit("pull-sample")
         if sample is None:
             return 1
@@ -192,14 +185,7 @@ def add_fx_snapshot_branch(compositor: Any, pipeline: Any, tee: Any) -> None:
     appsink.set_property("emit-signals", True)
     appsink.connect("new-sample", _on_fx_sample)
 
-    # Build element chain depending on GPU/CPU path
-    if upload is not None:
-        # GPU path: queue → cudaupload → cudaconvertscale → I420 caps → nvjpegenc → appsink
-        elements = [queue, upload, convert_scale, cs_caps, jpeg, appsink]
-    else:
-        # CPU path: queue → videoconvert → jpegenc → appsink
-        cpu_convert = Gst.ElementFactory.make("videoconvert", "fx-snap-convert")
-        elements = [queue, cpu_convert, jpeg, appsink]
+    elements = [queue, convert, scale, scale_caps, jpeg, appsink]
 
     for el in elements:
         if el is None:

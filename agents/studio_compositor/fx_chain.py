@@ -12,21 +12,13 @@ log = logging.getLogger(__name__)
 def build_inline_fx_chain(
     compositor: Any, pipeline: Any, pre_fx_tee: Any, output_tee: Any, fps: int
 ) -> bool:
-    """Build graph-only GPU effects chain with switchable input source.
+    """Build graph-only GPU effects chain with live input.
 
-    Pipeline: input-selector → queue → videoconvert → capsfilter(RGBA) → glupload
-      → glcolorconvert → [SlotPipeline: 8 glshader slots]
+    Pipeline: pre_fx_tee → queue → videoconvert → capsfilter(RGBA) → glupload
+      → glcolorconvert → [SlotPipeline: 12 glfeedback slots]
       → glcolorconvert → gldownload → videoconvert → output_tee
-
-    Input sources: pre_fx_tee (live), smooth-delay, HLS — switched via input-selector.
     """
     Gst = compositor._Gst
-
-    # Input selector: switchable source for the FX chain
-    input_sel = Gst.ElementFactory.make("input-selector", "fx-input-selector")
-    if input_sel is None:
-        log.warning("input-selector not available — FX chain will use live only")
-        input_sel = None
 
     queue = Gst.ElementFactory.make("queue", "queue-fx")
     queue.set_property("leaky", 2)
@@ -42,7 +34,7 @@ def build_inline_fx_chain(
     from agents.effect_graph.pipeline import SlotPipeline
 
     registry = compositor._graph_runtime._registry if compositor._graph_runtime else None
-    compositor._slot_pipeline = SlotPipeline(registry, num_slots=16)
+    compositor._slot_pipeline = SlotPipeline(registry, num_slots=12)
 
     glcolorconvert_out = Gst.ElementFactory.make("glcolorconvert", "fx-glcc-out")
     gldownload = Gst.ElementFactory.make("gldownload", "fx-gldownload")
@@ -77,30 +69,14 @@ def build_inline_fx_chain(
     gldownload.link(fx_convert)
     fx_convert.link(output_tee)
 
-    if input_sel is not None:
-        pipeline.add(input_sel)
-        # Link input-selector output → queue
-        input_sel.link(queue)
-
-        # Pad 0: live (pre_fx_tee) — default
-        live_pad = input_sel.request_pad(input_sel.get_pad_template("sink_%u"), None, None)
-        tee_pad = pre_fx_tee.request_pad(pre_fx_tee.get_pad_template("src_%u"), None, None)
-        tee_pad.link(live_pad)
-        input_sel.set_property("active-pad", live_pad)
-
-        # Store selector and pad map — smooth connection happens later in pipeline.py
-        compositor._fx_input_selector = input_sel
-        compositor._fx_input_pads = {"@live": live_pad}
-    else:
-        # Fallback: direct link from live
-        tee_pad = pre_fx_tee.request_pad(pre_fx_tee.get_pad_template("src_%u"), None, None)
-        queue_sink = queue.get_static_pad("sink")
-        tee_pad.link(queue_sink)
+    # Direct link: live → queue (zero overhead)
+    tee_pad = pre_fx_tee.request_pad(pre_fx_tee.get_pad_template("src_%u"), None, None)
+    queue_sink = queue.get_static_pad("sink")
+    tee_pad.link(queue_sink)
 
     log.info(
-        "FX chain: graph-only pipeline with %d shader slots, %d input sources",
+        "FX chain: %d shader slots, direct live input",
         compositor._slot_pipeline.num_slots,
-        len(getattr(compositor, "_fx_input_pads", {"@live": None})),
     )
     return True
 
