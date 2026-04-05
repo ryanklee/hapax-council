@@ -137,4 +137,26 @@ def build_pipeline(compositor: Any) -> Any:
     add_fx_snapshot_branch(compositor, pipeline, output_tee)
     add_smooth_delay_branch(compositor, pipeline, output_tee)
 
+    # Connect smooth delay to FX input-selector (must happen AFTER smooth branch is built)
+    if hasattr(compositor, "_fx_input_selector") and compositor._fx_input_selector is not None:
+        smooth_el = pipeline.get_by_name("smooth-out-convert")
+        if smooth_el:
+            input_sel = compositor._fx_input_selector
+            smooth_pad = input_sel.request_pad(input_sel.get_pad_template("sink_%u"), None, None)
+            smooth_tee = Gst.ElementFactory.make("tee", "smooth-fx-tee")
+            smooth_queue = Gst.ElementFactory.make("queue", "queue-smooth-fx")
+            smooth_queue.set_property("leaky", 2)
+            smooth_queue.set_property("max-size-buffers", 1)
+            pipeline.add(smooth_tee)
+            pipeline.add(smooth_queue)
+            smooth_el.link(smooth_tee)
+            smooth_tee_pad = smooth_tee.request_pad(
+                smooth_tee.get_pad_template("src_%u"), None, None
+            )
+            smooth_queue_sink = smooth_queue.get_static_pad("sink")
+            smooth_tee_pad.link(smooth_queue_sink)
+            smooth_queue.link_pads("src", input_sel, smooth_pad.get_name())
+            compositor._fx_input_pads["@smooth"] = smooth_pad
+            log.info("FX input: smooth delay connected to input-selector")
+
     return pipeline
