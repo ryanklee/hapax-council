@@ -42,7 +42,7 @@ def build_inline_fx_chain(
     from agents.effect_graph.pipeline import SlotPipeline
 
     registry = compositor._graph_runtime._registry if compositor._graph_runtime else None
-    compositor._slot_pipeline = SlotPipeline(registry, num_slots=8)
+    compositor._slot_pipeline = SlotPipeline(registry, num_slots=16)
 
     glcolorconvert_out = Gst.ElementFactory.make("glcolorconvert", "fx-glcc-out")
     gldownload = Gst.ElementFactory.make("gldownload", "fx-gldownload")
