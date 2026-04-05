@@ -34,16 +34,19 @@ class UniformModulator:
             raw = signals.get(b.source)
             if raw is None:
                 continue
-            # Compute delta: offset acts as baseline shift, scale amplifies signal.
-            # The caller adds this delta to the preset's base param value.
             target = raw * b.scale + b.offset
             key = (b.node, b.param)
             prev = self._smoothed.get(key)
-            val = (
-                target
-                if prev is None or b.smoothing == 0.0
-                else b.smoothing * prev + (1.0 - b.smoothing) * target
-            )
+            if prev is None:
+                val = target
+            elif b.attack is not None and b.decay is not None:
+                # Asymmetric envelope: fast attack for transients, slow decay
+                coeff = b.attack if target > prev else b.decay
+                val = coeff * prev + (1.0 - coeff) * target
+            elif b.smoothing == 0.0:
+                val = target
+            else:
+                val = b.smoothing * prev + (1.0 - b.smoothing) * target
             self._smoothed[key] = val
             updates[key] = val
 

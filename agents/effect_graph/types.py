@@ -63,6 +63,10 @@ class ModulationBinding(BaseModel):
     scale: float = 1.0
     offset: float = 0.0
     smoothing: float = Field(default=0.85, ge=0.0, le=1.0)
+    # Asymmetric envelope: fast attack for transients, slow decay for smooth falloff.
+    # When set, these override `smoothing`. Leave both at None to use `smoothing`.
+    attack: float | None = Field(default=None, ge=0.0, le=1.0)
+    decay: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 class LayerPalette(BaseModel):

@@ -81,6 +81,27 @@ def tick_modulator(compositor: Any, t: float, energy: float, b: float) -> None:
         signals["mixer_mid"] = audio.get("mixer_mid", 0.0)
         signals["mixer_high"] = audio.get("mixer_high", 0.0)
         signals["beat_pulse"] = audio.get("beat_pulse", 0.0)
+        # Onset classification (kick/snare/hat)
+        signals["onset_kick"] = audio.get("onset_kick", 0.0)
+        signals["onset_snare"] = audio.get("onset_snare", 0.0)
+        signals["onset_hat"] = audio.get("onset_hat", 0.0)
+        # Timbral features
+        signals["spectral_centroid"] = audio.get("spectral_centroid", 0.0)
+        signals["spectral_flatness"] = audio.get("spectral_flatness", 0.0)
+        signals["spectral_rolloff"] = audio.get("spectral_rolloff", 0.0)
+        signals["zero_crossing_rate"] = audio.get("zero_crossing_rate", 0.0)
+        # 8 mel bands (per-band AGC normalized)
+        for band in (
+            "sub_bass",
+            "bass",
+            "low_mid",
+            "mid",
+            "upper_mid",
+            "presence",
+            "brilliance",
+            "air",
+        ):
+            signals[f"mel_{band}"] = audio.get(f"mel_{band}", 0.0)
     else:
         signals["mixer_energy"] = data.mixer_energy
         signals["mixer_beat"] = data.mixer_beat
