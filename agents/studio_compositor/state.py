@@ -136,7 +136,10 @@ def state_reader_loop(compositor: Any) -> None:
                 if raw and compositor._graph_runtime is not None:
                     from agents.effect_graph.types import EffectGraph
 
+                    from .effects import merge_default_modulations
+
                     graph = EffectGraph(**json.loads(raw))
+                    graph = merge_default_modulations(graph)
                     compositor._graph_runtime.load_graph(graph)
                     compositor._current_preset_name = graph.name
                     compositor._user_preset_hold_until = time.monotonic() + 600.0
