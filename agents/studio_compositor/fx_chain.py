@@ -22,7 +22,7 @@ def build_inline_fx_chain(
 
     queue = Gst.ElementFactory.make("queue", "queue-fx")
     queue.set_property("leaky", 2)
-    queue.set_property("max-size-buffers", 2)
+    queue.set_property("max-size-buffers", 1)
 
     convert_rgba = Gst.ElementFactory.make("videoconvert", "fx-convert-rgba")
     rgba_caps = Gst.ElementFactory.make("capsfilter", "fx-rgba-caps")
