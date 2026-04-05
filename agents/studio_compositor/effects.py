@@ -113,8 +113,10 @@ def merge_default_modulations(graph: Any) -> Any:
         matching_ids = type_to_ids.get(target_type, [])
         if not matching_ids:
             continue
-        # Apply to the FIRST matching node
-        node_id = matching_ids[0]
+        # Apply to the LAST matching node — in chains, earlier instances are
+        # neutralized (identity params), so modulations should target the
+        # last instance which retains authored params.
+        node_id = matching_ids[-1]
         key = (node_id, d["param"])
         if key not in existing:
             merged.append(
