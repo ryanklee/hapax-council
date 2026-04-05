@@ -36,12 +36,9 @@ class CompositorAudioCapture:
             "beat_pulse": 0.0,
         }
         # DSP state
-        self._smoothed_rms: float = 0.0
-        self._beat_baseline: float = 0.01
         self._beat_pulse: float = 0.0
-        self._bass_peak: float = 0.01
-        self._mid_peak: float = 0.01
-        self._high_peak: float = 0.01
+        self._prev_fft: np.ndarray | None = None
+        self._flux_baseline: float = 1.0
 
     def start(self) -> None:
         if self._running:
@@ -123,46 +120,48 @@ class CompositorAudioCapture:
         if CHANNELS == 2:
             samples = (samples[0::2] + samples[1::2]) * 0.5
 
-        # RMS energy — fast attack, moderate decay, no multiplier saturation
+        # RAW RMS — no smoothing, no multiplier. Modulator handles temporal shaping.
         rms = float(np.sqrt(np.mean(samples**2)))
-        alpha = 0.5 if rms > self._smoothed_rms else 0.2  # fast attack, moderate decay
-        self._smoothed_rms = alpha * rms + (1 - alpha) * self._smoothed_rms
-        energy = min(1.0, self._smoothed_rms * 3.0)
+        energy = min(1.0, rms * 4.0)
 
-        # Beat detection: spike above baseline
-        self._beat_baseline = 0.995 * self._beat_baseline + 0.005 * rms
-        is_beat = rms > self._beat_baseline * 2.0 and rms > 0.02
-        if is_beat:
-            self._beat_pulse = 1.0
-        # Decay at FRAME RATE via get_signals_and_decay(), not here
-
-        # 3-band FFT split
+        # Onset detection via spectral flux (more musical than RMS spike)
         fft = np.abs(np.fft.rfft(samples))
         freqs = np.fft.rfftfreq(len(samples), 1.0 / RATE)
 
+        # Spectral flux: sum of positive differences from previous frame
+        if not hasattr(self, "_prev_fft") or self._prev_fft is None:
+            self._prev_fft = fft
+            flux = 0.0
+        else:
+            diff = fft - self._prev_fft
+            flux = float(np.sum(np.maximum(diff, 0.0)))
+            self._prev_fft = fft
+
+        # Onset = spectral flux spike above running median
+        self._flux_baseline = (
+            0.99 * self._flux_baseline + 0.01 * flux if hasattr(self, "_flux_baseline") else flux
+        )
+        if not hasattr(self, "_flux_baseline"):
+            self._flux_baseline = flux
+        is_onset = flux > self._flux_baseline * 3.0 and flux > 1.0
+        if is_onset:
+            self._beat_pulse = 1.0
+
+        # 3-band split — RAW values, fixed normalization (no peak tracking)
         bass_mask = freqs < 250
         mid_mask = (freqs >= 250) & (freqs < 2000)
         high_mask = (freqs >= 2000) & (freqs < 8000)
 
-        bass_raw = float(np.mean(fft[bass_mask])) if bass_mask.any() else 0.0
-        mid_raw = float(np.mean(fft[mid_mask])) if mid_mask.any() else 0.0
-        high_raw = float(np.mean(fft[high_mask])) if high_mask.any() else 0.0
-
-        # Peak normalization — faster decay so peaks track real dynamics
-        self._bass_peak = max(self._bass_peak * 0.99, bass_raw, 0.01)
-        self._mid_peak = max(self._mid_peak * 0.99, mid_raw, 0.01)
-        self._high_peak = max(self._high_peak * 0.99, high_raw, 0.01)
-
-        bass = min(1.0, bass_raw / self._bass_peak)
-        mid = min(1.0, mid_raw / self._mid_peak)
-        high = min(1.0, high_raw / self._high_peak)
+        # Normalize to fixed reference level based on actual signal range
+        bass = min(1.0, float(np.mean(fft[bass_mask])) * 0.3) if bass_mask.any() else 0.0
+        mid = min(1.0, float(np.mean(fft[mid_mask])) * 0.5) if mid_mask.any() else 0.0
+        high = min(1.0, float(np.mean(fft[high_mask])) * 1.0) if high_mask.any() else 0.0
 
         with self._lock:
             self._signals["mixer_energy"] = energy
             self._signals["mixer_bass"] = bass
             self._signals["mixer_mid"] = mid
             self._signals["mixer_high"] = high
-            # beat_pulse set to 1.0 on detection, decayed in get_signals() at frame rate
-            if is_beat:
+            if is_onset:
                 self._signals["mixer_beat"] = 1.0
                 self._signals["beat_pulse"] = 1.0
