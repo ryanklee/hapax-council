@@ -79,6 +79,18 @@ def build_inline_fx_chain(
     # Wire input-selector → queue
     input_sel.link(queue)
 
+    # Block RECONFIGURE events from propagating downstream when switching sources.
+    # Without this, v4l2sink tries to re-set its format and errors with "device busy".
+    def _drop_reconfigure(pad: Any, info: Any) -> Any:
+        event = info.get_event()
+        if event and event.type == Gst.EventType.RECONFIGURE:
+            return Gst.PadProbeReturn.DROP
+        return Gst.PadProbeReturn.OK
+
+    input_sel.get_static_pad("src").add_probe(
+        Gst.PadProbeType.EVENT_DOWNSTREAM, _drop_reconfigure
+    )
+
     # Pad 0: tiled composite (default source)
     live_pad = input_sel.request_pad(input_sel.get_pad_template("sink_%u"), None, None)
     tee_pad = pre_fx_tee.request_pad(pre_fx_tee.get_pad_template("src_%u"), None, None)
@@ -114,7 +126,7 @@ def switch_fx_source(compositor: Any, source: str) -> bool:
 
     Gst = compositor._Gst
     input_sel = compositor._fx_input_selector
-    pipeline = compositor._pipeline
+    pipeline = compositor.pipeline
 
     if source == "live":
         # Switch back to tiled composite — just set active pad
@@ -144,15 +156,25 @@ def switch_fx_source(compositor: Any, source: str) -> bool:
             # Tear down previous camera branch if any
             _teardown_camera_branch(compositor, Gst)
 
-            # Build new branch: queue → videoconvert → capsfilter(BGRA)
+            # Build new branch: queue → videoconvert → videoscale → capsfilter
+            # Must match tiled composite caps exactly (BGRA, output res, pipeline fps)
+            out_w = compositor.config.output_width
+            out_h = compositor.config.output_height
+            fps = compositor.config.framerate
             q = Gst.ElementFactory.make("queue", "fxsrc-q")
             q.set_property("leaky", 2)
             q.set_property("max-size-buffers", 1)
             convert = Gst.ElementFactory.make("videoconvert", "fxsrc-convert")
+            scale = Gst.ElementFactory.make("videoscale", "fxsrc-scale")
             caps = Gst.ElementFactory.make("capsfilter", "fxsrc-caps")
-            caps.set_property("caps", Gst.Caps.from_string("video/x-raw,format=BGRA"))
+            caps.set_property(
+                "caps",
+                Gst.Caps.from_string(
+                    f"video/x-raw,format=BGRA,width={out_w},height={out_h},framerate={fps}/1"
+                ),
+            )
 
-            elements = [q, convert, caps]
+            elements = [q, convert, scale, caps]
             for el in elements:
                 pipeline.add(el)
             q.link(convert)
@@ -198,7 +220,7 @@ def _teardown_camera_branch(compositor: Any, Gst: Any) -> None:
     if not elements:
         return
 
-    pipeline = compositor._pipeline
+    pipeline = compositor.pipeline
 
     # Unlink camera tee pad
     tee_pad = getattr(compositor, "_fx_camera_tee_pad", None)

@@ -113,6 +113,16 @@ class StudioCompositor:
                 self._mark_camera_offline(role)
             elif src_name.startswith("fx-v4l2"):
                 log.warning("FX v4l2sink error (non-fatal): %s", err.message)
+            elif src_name == "output" and "busy" in err.message:
+                log.warning("v4l2sink format renegotiation failed (non-fatal): %s", err.message)
+            elif src_name.startswith("fxsrc-"):
+                # Camera FX source branch error — non-fatal, switch back to live
+                log.warning("FX source branch error (switching to live): %s", err.message)
+                try:
+                    from .fx_chain import switch_fx_source
+                    switch_fx_source(self, "live")
+                except Exception:
+                    pass
             else:
                 log.error("Pipeline error from %s: %s (debug: %s)", src_name, err.message, debug)
                 self.stop()

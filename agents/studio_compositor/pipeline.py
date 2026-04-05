@@ -110,9 +110,9 @@ def build_pipeline(compositor: Any) -> Any:
         queue_sink = bypass_queue.get_static_pad("sink")
         tee_pad.link(queue_sink)
 
-    # v4l2sink branch
+    # v4l2sink branch — with caps dedup probe to prevent renegotiation on source switch
     queue_v4l2 = Gst.ElementFactory.make("queue", "queue-v4l2")
-    queue_v4l2.set_property("leaky", 2)  # drop oldest, keep newest for temporal coherence
+    queue_v4l2.set_property("leaky", 2)
     queue_v4l2.set_property("max-size-buffers", 1)
     convert_out = Gst.ElementFactory.make("videoconvert", "convert-out")
     sink_caps = Gst.ElementFactory.make("capsfilter", "sink-caps")
@@ -123,16 +123,46 @@ def build_pipeline(compositor: Any) -> Any:
             f"height={compositor.config.output_height},framerate={fps}/1"
         ),
     )
+    # identity drop-allocation=true: standard v4l2loopback workaround for
+    # allocation query renegotiation (defense-in-depth alongside caps probe)
+    identity = Gst.ElementFactory.make("identity", "v4l2-identity")
+    identity.set_property("drop-allocation", True)
     sink = Gst.ElementFactory.make("v4l2sink", "output")
     sink.set_property("device", compositor.config.output_device)
     sink.set_property("sync", False)
 
-    for el in [queue_v4l2, convert_out, sink_caps, sink]:
+    for el in [queue_v4l2, convert_out, sink_caps, identity, sink]:
         pipeline.add(el)
 
     queue_v4l2.link(convert_out)
     convert_out.link(sink_caps)
-    sink_caps.link(sink)
+    sink_caps.link(identity)
+    identity.link(sink)
+
+    # Caps dedup probe: drop CAPS events with identical content to prevent
+    # v4l2sink renegotiation when input-selector switches between sources.
+    # GStreamer uses pointer comparison for event identity — even identical
+    # caps from a different pad trigger full renegotiation without this.
+    _last_caps: list[Any] = [None]
+
+    def _caps_dedup_probe(pad: Any, info: Any) -> Any:
+        event = info.get_event()
+        if event is None or event.type != Gst.EventType.CAPS:
+            return Gst.PadProbeReturn.OK
+        try:
+            result = event.parse_caps()
+            # GStreamer Python binding returns (bool, Caps) or just Caps depending on version
+            caps = result[1] if isinstance(result, tuple) else result
+        except Exception:
+            return Gst.PadProbeReturn.OK
+        if _last_caps[0] is not None and _last_caps[0].is_equal(caps):
+            return Gst.PadProbeReturn.DROP
+        _last_caps[0] = caps
+        return Gst.PadProbeReturn.OK
+
+    queue_v4l2.get_static_pad("sink").add_probe(
+        Gst.PadProbeType.EVENT_DOWNSTREAM, _caps_dedup_probe
+    )
 
     tee_pad = output_tee.request_pad(output_tee.get_pad_template("src_%u"), None, None)
     queue_sink_pad = queue_v4l2.get_static_pad("sink")
@@ -155,8 +185,6 @@ def _add_camera_fx_sources(compositor: Any, pipeline: Any, Gst: Any, fps: int) -
     is active during playback.
     """
     input_sel = compositor._fx_input_selector
-    out_w = compositor.config.output_width
-    out_h = compositor.config.output_height
 
     for cam in compositor.config.cameras:
         role = cam.role.replace("-", "_")

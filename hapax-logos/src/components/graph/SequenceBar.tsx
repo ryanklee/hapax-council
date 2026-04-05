@@ -17,7 +17,8 @@ export async function activatePresets(
     return;
   }
   if (presets.length === 1) {
-    api.post("/studio/effect/select", { preset: presets[0] }).catch(() => {});
+    const fxSource = source === "@live" ? "live" : source.replace("@", "");
+    api.post("/studio/effect/select", { preset: presets[0], _source: fxSource }).catch(() => {});
     onSlotCount?.(0);
     return;
   }

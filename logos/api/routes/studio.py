@@ -332,6 +332,9 @@ async def get_current_effect():
 
 class EffectSelectRequest(BaseModel):
     preset: str
+    _source: str = "live"
+
+    model_config = {"extra": "allow"}
 
 
 @router.post("/studio/effect/select")
@@ -351,6 +354,10 @@ async def select_effect(req: EffectSelectRequest):
         except Exception:
             pass
         fx_request.write_text(req.preset)
+        # Write source selection for input-selector switching
+        source = getattr(req, "_source", None) or "live"
+        source_path = Path("/dev/shm/hapax-compositor/fx-source.txt")
+        source_path.write_text(source)
         return {"status": "requested", "preset": req.preset}
     except OSError:
         return JSONResponse({"error": "write failed"}, status_code=503)
