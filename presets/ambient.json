@@ -7,7 +7,7 @@
       "type": "colorgrade",
       "params": {
         "brightness": 0.85,
-        "saturation": 0.6,
+        "saturation": 0.7,
         "contrast": 0.7,
         "sepia": 0.2
       }

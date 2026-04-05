@@ -324,19 +324,15 @@ class CompositorAudioCapture:
         else:
             flatness = 0.0
 
-        # Classification thresholds tuned for hip-hop
+        # Classification thresholds tuned for hip-hop (tighter = less false positives)
         # 808 kicks: centroid ~60-80Hz, bass_ratio >0.7
-        # Snares: centroid 200-1500Hz, broadband (flatness >0.3)
+        # Snares: centroid 200-1500Hz, broadband AND noisy (flatness >0.4)
         # Hats: centroid >3kHz, high_ratio >0.5
-        if centroid < 200 and bass_ratio > 0.6:
+        if centroid < 200 and bass_ratio > 0.65:
             self._onset_kick = 1.0
-        elif centroid > 3000 and high_ratio > 0.4:
+        elif centroid > 3500 and high_ratio > 0.5:
             self._onset_hat = 1.0
-        elif flatness > 0.25 and centroid < 2000:
+        elif flatness > 0.4 and 200 < centroid < 1500:
             self._onset_snare = 1.0
-        else:
-            # Ambiguous — attribute to kick if bassy, hat if bright
-            if bass_ratio > high_ratio:
-                self._onset_kick = 0.7
-            else:
-                self._onset_hat = 0.7
+        # Ambiguous onsets: don't attribute — let beat_pulse handle them.
+        # This prevents chromatic aberration from firing on every sound.
