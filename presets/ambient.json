@@ -8,7 +8,7 @@
       "params": {
         "brightness": 0.6,
         "saturation": 0.5,
-        "contrast": 0.5,
+        "contrast": 0.4,
         "sepia": 0.3
       }
     },
@@ -24,9 +24,9 @@
     "bloom": {
       "type": "bloom",
       "params": {
-        "threshold": 0.08,
-        "radius": 30,
-        "alpha": 0.6
+        "threshold": 0.05,
+        "radius": 35,
+        "alpha": 0.7
       }
     },
     "vignette": {

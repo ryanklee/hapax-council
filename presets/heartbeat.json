@@ -51,7 +51,7 @@
     "posterize": {
       "type": "posterize",
       "params": {
-        "levels": 4,
+        "levels": 3,
         "gamma": 1.0
       }
     }

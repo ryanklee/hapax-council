@@ -14,11 +14,11 @@
     "trail": {
       "type": "trail",
       "params": {
-        "fade": 0.04,
+        "fade": 0.02,
         "blend_mode": "lighter",
-        "opacity": 0.5,
-        "drift_x": 1,
-        "drift_y": 0.5
+        "opacity": 0.6,
+        "drift_x": 2,
+        "drift_y": 1
       }
     },
     "bloom": {

@@ -7,14 +7,14 @@
       "type": "fisheye",
       "params": {
         "strength": 0.6,
-        "zoom": 0.5
+        "zoom": 0.4
       }
     },
     "chroma": {
       "type": "chromatic_aberration",
       "params": {
-        "offset_x": 10,
-        "offset_y": 5
+        "offset_x": 15,
+        "offset_y": 8
       }
     },
     "vignette": {

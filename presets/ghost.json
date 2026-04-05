@@ -47,7 +47,7 @@
     "noise": {
       "type": "noise_overlay",
       "params": {
-        "intensity": 0.08
+        "intensity": 0.15
       }
     }
   },

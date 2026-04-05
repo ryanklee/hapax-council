@@ -6,8 +6,8 @@
     "voronoi": {
       "type": "voronoi_overlay",
       "params": {
-        "cell_count": 80,
-        "edge_width": 0.05,
+        "cell_count": 120,
+        "edge_width": 0.04,
         "animation_speed": 0.8
       }
     },

@@ -14,16 +14,16 @@
     "glitch_block": {
       "type": "glitch_block",
       "params": {
-        "intensity": 0.7,
-        "rgb_split": 0.5,
-        "block_size": 16
+        "intensity": 0.8,
+        "rgb_split": 0.6,
+        "block_size": 8
       }
     },
     "stutter": {
       "type": "stutter",
       "params": {
-        "freeze_chance": 0.15,
-        "replay_frames": 3
+        "freeze_chance": 0.25,
+        "replay_frames": 4
       }
     },
     "chroma": {

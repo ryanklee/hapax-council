@@ -14,7 +14,7 @@
       "type": "colorgrade",
       "params": {
         "brightness": 1.2,
-        "contrast": 0.7,
+        "contrast": 0.6,
         "saturation": 0.3
       }
     },
@@ -44,6 +44,14 @@
       "params": {
         "intensity": 0.1
       }
+    },
+    "bloom": {
+      "type": "bloom",
+      "params": {
+        "threshold": 0.1,
+        "radius": 20,
+        "alpha": 0.5
+      }
     }
   },
   "edges": [
@@ -53,6 +61,10 @@
     ],
     [
       "mirror",
+      "bloom"
+    ],
+    [
+      "bloom",
       "noise"
     ],
     [

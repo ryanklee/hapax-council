@@ -15,8 +15,8 @@
       "type": "glitch_block",
       "params": {
         "intensity": 1.0,
-        "rgb_split": 0.8,
-        "block_size": 32
+        "rgb_split": 0.9,
+        "block_size": 8
       }
     },
     "stutter": {

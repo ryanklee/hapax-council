@@ -15,16 +15,16 @@
     "stutter": {
       "type": "stutter",
       "params": {
-        "freeze_chance": 0.35,
-        "replay_frames": 8
+        "freeze_chance": 0.4,
+        "replay_frames": 10
       }
     },
     "warp": {
       "type": "warp",
       "params": {
-        "slice_count": 6,
-        "slice_amplitude": 5,
-        "pan_x": 2,
+        "slice_count": 5,
+        "slice_amplitude": 8,
+        "pan_x": 3,
         "pan_y": 1
       }
     },
