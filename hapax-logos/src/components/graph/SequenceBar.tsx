@@ -190,10 +190,11 @@ function SequenceBarInner() {
   const { chains, activeChainIndex, playing, looping } = sequence;
   const activeChain = activeChainIndex >= 0 ? chains[activeChainIndex] : undefined;
 
-  // Activate a chain by index
+  // Activate a chain by index — reads from store directly to avoid stale closures
   const activateIndex = useCallback(
     async (idx: number) => {
-      const chain = chains[idx];
+      const current = useStudioGraph.getState().sequence.chains;
+      const chain = current[idx];
       if (!chain) return;
       setActivating(true);
       try {
@@ -203,7 +204,7 @@ function SequenceBarInner() {
         setActivating(false);
       }
     },
-    [chains, setChainSlotCount],
+    [setChainSlotCount],
   );
 
   // Select chain (click)
@@ -217,11 +218,14 @@ function SequenceBarInner() {
     [setActiveChainIndex, activateIndex],
   );
 
-  // Advance to next chain
+  // Advance to next chain — reads from store to avoid stale closures
   const advanceChain = useCallback(() => {
-    if (chains.length === 0) return;
-    const nextIdx = activeChainIndex + 1;
-    if (nextIdx >= chains.length) {
+    const state = useStudioGraph.getState().sequence;
+    const currentChains = state.chains;
+    const currentIdx = state.activeChainIndex;
+    if (currentChains.length === 0) return;
+    const nextIdx = currentIdx + 1;
+    if (nextIdx >= currentChains.length) {
       if (looping && shuffleModeRef.current) {
         // Re-randomize only in shuffle mode
         const newChains = generateRandomSequence();
@@ -250,9 +254,9 @@ function SequenceBarInner() {
       elapsedRef.current = 0;
       setElapsed(0);
     }
-  }, [activeChainIndex, chains.length, looping, setActiveChainIndex, activateIndex, setSequencePlaying, setSequenceChains, setChainSlotCount]);
+  }, [looping, setActiveChainIndex, activateIndex, setSequencePlaying, setSequenceChains, setChainSlotCount]);
 
-  // Timer effect
+  // Timer effect — reads from store to avoid stale closure
   useEffect(() => {
     if (!playing) {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -262,7 +266,8 @@ function SequenceBarInner() {
     timerRef.current = setInterval(() => {
       elapsedRef.current += 0.5;
       setElapsed(elapsedRef.current);
-      const duration = chains[activeChainIndex]?.durationSeconds ?? 30;
+      const state = useStudioGraph.getState().sequence;
+      const duration = state.chains[state.activeChainIndex]?.durationSeconds ?? 30;
       if (elapsedRef.current >= duration) {
         elapsedRef.current = 0;
         setElapsed(0);
@@ -272,7 +277,7 @@ function SequenceBarInner() {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [playing, activeChainIndex, chains, advanceChain]);
+  }, [playing, advanceChain]);
 
   // Reset elapsed when chain changes externally
   useEffect(() => {
@@ -281,14 +286,15 @@ function SequenceBarInner() {
   }, [activeChainIndex]);
 
   const handlePlayPause = useCallback(() => {
-    if (chains.length === 0) return;
-    if (!playing) {
-      if (activeChainIndex >= 0) activateIndex(activeChainIndex);
+    const state = useStudioGraph.getState().sequence;
+    if (state.chains.length === 0) return;
+    if (!state.playing) {
+      if (state.activeChainIndex >= 0) activateIndex(state.activeChainIndex);
       elapsedRef.current = 0;
       setElapsed(0);
     }
-    setSequencePlaying(!playing);
-  }, [playing, activeChainIndex, chains.length, activateIndex, setSequencePlaying]);
+    setSequencePlaying(!state.playing);
+  }, [activateIndex, setSequencePlaying]);
 
   const handleShuffle = useCallback(() => {
     shuffleModeRef.current = true;
