@@ -6,19 +6,13 @@
     "threshold": {
       "type": "threshold",
       "params": {
-        "level": 0.3
+        "level": 0.25
       }
     },
     "invert": {
       "type": "invert",
       "params": {
         "strength": 1.0
-      }
-    },
-    "edge": {
-      "type": "edge_detect",
-      "params": {
-        "threshold": 0.1
       }
     },
     "out": {
@@ -39,7 +33,7 @@
     "colorgrade": {
       "type": "colorgrade",
       "params": {
-        "brightness": 2.5,
+        "brightness": 3.0,
         "contrast": 2.0,
         "saturation": 0.0
       }
@@ -48,6 +42,10 @@
   "edges": [
     [
       "@live",
+      "colorgrade"
+    ],
+    [
+      "colorgrade",
       "threshold"
     ],
     [
@@ -56,14 +54,6 @@
     ],
     [
       "invert",
-      "edge"
-    ],
-    [
-      "edge",
-      "colorgrade"
-    ],
-    [
-      "colorgrade",
       "content_layer"
     ],
     [
