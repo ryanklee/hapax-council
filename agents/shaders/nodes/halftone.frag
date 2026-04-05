@@ -19,7 +19,7 @@ float halftone_dot(vec2 pixel, float angle_deg, float ink, float size) {
                        -sa * pixel.x + ca * pixel.y);
     vec2 cell = mod(rotated, size) / size - 0.5;
     float dist = length(cell);
-    float radius = sqrt(ink) * 0.38;  // smaller dots = more white substrate
+    float radius = sqrt(ink) * 0.5;
     return smoothstep(radius + 0.04, radius - 0.04, dist);
 }
 
@@ -38,16 +38,16 @@ void main() {
     } else {
         // --- CMYK + Lichtenstein bold color push ---
 
-        // Step 1: Lichtenstein bold primary push
+        // Step 1: Lichtenstein bold color push
         vec3 col = src.rgb;
-        // Posterize — snap to 6 levels (keeps more object definition)
-        col = floor(col * 6.0 + 0.5) / 6.0;
-        // Hypersaturate toward pure primaries
+        // Posterize first — reduce to ~4 tonal levels (flat Lichtenstein regions)
+        col = floor(col * 4.0 + 0.5) / 4.0;
+        // Hypersaturate — push toward pure primaries
         float gray = dot(col, vec3(0.333));
         col = mix(vec3(gray), col, 4.0);
         col = clamp(col, 0.0, 1.0);
-        // Strong gamma lift — opens up midtones
-        col = pow(col, vec3(0.55));
+        // Gamma lift for more visible dot variation in midtones
+        col = pow(col, vec3(0.5));
 
         // Step 2: RGB to CMYK
         float c_ink = 1.0 - col.r;

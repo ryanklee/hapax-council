@@ -6,7 +6,7 @@
     "halftone": {
       "type": "halftone",
       "params": {
-        "dot_size": 10,
+        "dot_size": 8,
         "color_mode": 1
       }
     },
