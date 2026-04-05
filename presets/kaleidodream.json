@@ -13,9 +13,9 @@
     "colorgrade": {
       "type": "colorgrade",
       "params": {
-        "brightness": 1.8,
+        "brightness": 1.3,
         "contrast": 1.4,
-        "saturation": 2.0
+        "saturation": 1.6
       }
     },
     "bloom": {

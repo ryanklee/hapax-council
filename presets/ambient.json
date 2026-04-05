@@ -6,10 +6,10 @@
     "colorgrade": {
       "type": "colorgrade",
       "params": {
-        "brightness": 0.6,
-        "saturation": 0.5,
-        "contrast": 0.4,
-        "sepia": 0.3
+        "brightness": 0.85,
+        "saturation": 0.6,
+        "contrast": 0.7,
+        "sepia": 0.2
       }
     },
     "drift": {
@@ -24,9 +24,9 @@
     "bloom": {
       "type": "bloom",
       "params": {
-        "threshold": 0.05,
-        "radius": 35,
-        "alpha": 0.7
+        "threshold": 0.3,
+        "radius": 20,
+        "alpha": 0.4
       }
     },
     "vignette": {

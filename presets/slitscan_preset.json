@@ -13,7 +13,7 @@
     "colorgrade": {
       "type": "colorgrade",
       "params": {
-        "brightness": 1.8,
+        "brightness": 1.3,
         "contrast": 1.3,
         "saturation": 1.0
       }
