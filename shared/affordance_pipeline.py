@@ -40,15 +40,16 @@ def _apply_exploration_noise(
 ) -> None:
     """Apply boredom-proportional noise to candidate scores (15th control law).
 
-    When boredom_index > 0.4, inject Gaussian noise scaled by
-    sigma_explore * boredom_index. This disrupts monotonic winners
-    without affecting focused states. Modifies candidates in-place.
+    When boredom_index > 0.7 (aligned with exploration control law threshold),
+    inject Gaussian noise scaled by sigma_explore * boredom_index. This disrupts
+    monotonic winners only during genuine stagnation, not normal operation.
+    Modifies candidates in-place. Scores clamped to >= 0.
     """
-    if signal is None or signal.boredom_index <= 0.4:
+    if signal is None or signal.boredom_index <= 0.7:
         return
     noise_scale = sigma_explore * signal.boredom_index
     for c in candidates:
-        c.combined += random.gauss(0, noise_scale)
+        c.combined = max(0.0, c.combined + random.gauss(0, noise_scale))
 
 
 class EmbeddingCache:

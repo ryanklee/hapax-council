@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 from agents.reverie._satellites import (
     SatelliteManager,
@@ -46,11 +47,16 @@ class TestHabituatingRefresh:
             mgr.decay(dt=1.0)
         assert "bloom" not in mgr.recruited
 
-    def test_no_habituation_after_dismissal(self):
-        """After a satellite is dismissed and re-recruited, habituation resets."""
-        mgr = SatelliteManager(_core_vocab())
-        mgr.recruit("bloom", 0.5)
-        mgr.decay(dt=100.0)  # Force dismissal
-        assert "bloom" not in mgr.recruited
-        mgr.recruit("bloom", 0.5)
-        assert mgr.recruited["bloom"] == 0.5  # Full strength again
+    def test_no_habituation_after_prolonged_absence(self):
+        """After prolonged absence (>15s), re-recruitment starts fresh."""
+        fake_time = [100.0]
+        with patch("agents.reverie._satellites.time") as mock_time:
+            mock_time.monotonic = lambda: fake_time[0]
+            mgr = SatelliteManager(_core_vocab())
+            mgr.recruit("bloom", 0.5)
+            mgr.decay(dt=100.0)  # Force dismissal
+            assert "bloom" not in mgr.recruited
+            # Advance clock past habituation reset window (15s)
+            fake_time[0] = 120.0
+            mgr.recruit("bloom", 0.5)
+            assert mgr.recruited["bloom"] == 0.5  # Full strength again

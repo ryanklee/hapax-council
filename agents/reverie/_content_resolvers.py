@@ -18,7 +18,12 @@ log = logging.getLogger("reverie.content_resolvers")
 SOURCES_DIR = Path("/dev/shm/hapax-imagination/sources")
 
 
-def resolve_narrative_text(narrative: str, level: float, sources_dir: Path = SOURCES_DIR) -> bool:
+def resolve_narrative_text(
+    narrative: str,
+    level: float,
+    sources_dir: Path = SOURCES_DIR,
+    recent_ids: deque | None = None,
+) -> bool:
     """Render imagination narrative as visible text on the visual surface."""
     from agents.reverie.content_injector import inject_text
 
@@ -123,7 +128,12 @@ def resolve_knowledge_recall(
         return _fallback_text("knowledge_recall", f"Searching: {narrative[:80]}", level)
 
 
-def resolve_profile_recall(narrative: str, level: float, sources_dir: Path = SOURCES_DIR) -> bool:
+def resolve_profile_recall(
+    narrative: str,
+    level: float,
+    sources_dir: Path = SOURCES_DIR,
+    recent_ids: deque | None = None,
+) -> bool:
     """Query profile-facts Qdrant collection for operator preferences."""
     try:
         embedding = embed_safe(narrative, prefix="search_query")
@@ -146,7 +156,12 @@ def resolve_profile_recall(narrative: str, level: float, sources_dir: Path = SOU
         return _fallback_text("profile_recall", f"Profile: {narrative[:80]}", level)
 
 
-def resolve_waveform_viz(narrative: str, level: float, sources_dir: Path = SOURCES_DIR) -> bool:
+def resolve_waveform_viz(
+    narrative: str,
+    level: float,
+    sources_dir: Path = SOURCES_DIR,
+    recent_ids: deque | None = None,
+) -> bool:
     """Render current audio energy as a simple visual waveform indicator."""
     try:
         import json as json_mod

@@ -88,9 +88,9 @@ class TestExplorationNoise:
             c_low = [_make_candidate("a", 0.65)]
             c_high = [_make_candidate("a", 0.65)]
             random.seed(seed)
-            _apply_exploration_noise(c_low, _make_signal(boredom=0.45), sigma_explore=0.10)
+            _apply_exploration_noise(c_low, _make_signal(boredom=0.75), sigma_explore=0.10)
             random.seed(seed)
-            _apply_exploration_noise(c_high, _make_signal(boredom=0.9), sigma_explore=0.10)
+            _apply_exploration_noise(c_high, _make_signal(boredom=0.95), sigma_explore=0.10)
             low_deltas.append(abs(c_low[0].combined - 0.65))
             high_deltas.append(abs(c_high[0].combined - 0.65))
 
