@@ -13,7 +13,7 @@ log = logging.getLogger(__name__)
 
 RATE = 48000
 CHANNELS = 2
-CHUNK = 1024
+CHUNK = 512  # 10.7ms chunks for tighter transient response
 BYTES_PER_FRAME = CHANNELS * 2  # int16
 CHUNK_BYTES = CHUNK * BYTES_PER_FRAME
 
@@ -65,8 +65,14 @@ class CompositorAudioCapture:
         log.info("Audio capture stopped")
 
     def get_signals(self) -> dict[str, float]:
+        """Read signals and decay beat_pulse (called once per frame at 24fps)."""
         with self._lock:
-            return dict(self._signals)
+            result = dict(self._signals)
+            # Decay beat pulse at frame rate — sharp attack, smooth decay
+            self._beat_pulse *= 0.7  # ~3 frames to half-life at 24fps
+            self._signals["beat_pulse"] = self._beat_pulse
+            self._signals["mixer_beat"] = self._beat_pulse
+            return result
 
     def _capture_loop(self) -> None:
         while self._running:
@@ -84,7 +90,7 @@ class CompositorAudioCapture:
                         "--format",
                         "s16",
                         "--latency",
-                        "1024",
+                        "512",
                         "-",
                     ],
                     stdout=subprocess.PIPE,
@@ -124,12 +130,11 @@ class CompositorAudioCapture:
         energy = min(1.0, self._smoothed_rms * 3.0)
 
         # Beat detection: spike above baseline
-        self._beat_baseline = 0.995 * self._beat_baseline + 0.005 * rms  # faster baseline adapt
-        is_beat = rms > self._beat_baseline * 2.5 and rms > 0.02  # higher threshold
+        self._beat_baseline = 0.995 * self._beat_baseline + 0.005 * rms
+        is_beat = rms > self._beat_baseline * 2.0 and rms > 0.02
         if is_beat:
             self._beat_pulse = 1.0
-        self._beat_pulse *= 0.85
-        beat = min(1.0, self._beat_pulse)
+        # Decay at FRAME RATE via get_signals_and_decay(), not here
 
         # 3-band FFT split
         fft = np.abs(np.fft.rfft(samples))
@@ -157,5 +162,7 @@ class CompositorAudioCapture:
             self._signals["mixer_bass"] = bass
             self._signals["mixer_mid"] = mid
             self._signals["mixer_high"] = high
-            self._signals["mixer_beat"] = beat
-            self._signals["beat_pulse"] = beat
+            # beat_pulse set to 1.0 on detection, decayed in get_signals() at frame rate
+            if is_beat:
+                self._signals["mixer_beat"] = 1.0
+                self._signals["beat_pulse"] = 1.0
