@@ -6,8 +6,8 @@
     "thermal": {
       "type": "thermal",
       "params": {
-        "edge_glow": 0.8,
-        "palette_shift": 0.0
+        "edge_glow": 0.6,
+        "color_mode": 1
       }
     },
     "colorgrade": {
@@ -35,11 +35,26 @@
     }
   },
   "edges": [
-    ["@live", "thermal"],
-    ["thermal", "colorgrade"],
-    ["colorgrade", "content_layer"],
-    ["content_layer", "postprocess"],
-    ["postprocess", "out"]
+    [
+      "@live",
+      "thermal"
+    ],
+    [
+      "thermal",
+      "colorgrade"
+    ],
+    [
+      "colorgrade",
+      "content_layer"
+    ],
+    [
+      "content_layer",
+      "postprocess"
+    ],
+    [
+      "postprocess",
+      "out"
+    ]
   ],
   "modulations": [],
   "layer_palettes": {}

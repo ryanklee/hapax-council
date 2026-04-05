@@ -12,13 +12,20 @@ log = logging.getLogger(__name__)
 def build_inline_fx_chain(
     compositor: Any, pipeline: Any, pre_fx_tee: Any, output_tee: Any, fps: int
 ) -> bool:
-    """Build graph-only GPU effects chain with live input.
+    """Build GPU effects chain with switchable camera input.
 
-    Pipeline: pre_fx_tee → queue → videoconvert → capsfilter(RGBA) → glupload
-      → glcolorconvert → [SlotPipeline: 12 glfeedback slots]
+    Pipeline: input-selector → queue → videoconvert → capsfilter(RGBA) → glupload
+      → glcolorconvert → [SlotPipeline: 24 glfeedback slots]
       → glcolorconvert → gldownload → videoconvert → output_tee
+
+    Input sources: tiled composite (default) + individual cameras.
     """
     Gst = compositor._Gst
+
+    # Input selector: switch between tiled composite and individual cameras
+    input_sel = Gst.ElementFactory.make("input-selector", "fx-input-selector")
+    input_sel.set_property("sync-streams", False)
+    pipeline.add(input_sel)
 
     queue = Gst.ElementFactory.make("queue", "queue-fx")
     queue.set_property("leaky", 2)
@@ -69,16 +76,150 @@ def build_inline_fx_chain(
     gldownload.link(fx_convert)
     fx_convert.link(output_tee)
 
-    # Direct link: live → queue (zero overhead)
+    # Wire input-selector → queue
+    input_sel.link(queue)
+
+    # Pad 0: tiled composite (default source)
+    live_pad = input_sel.request_pad(input_sel.get_pad_template("sink_%u"), None, None)
     tee_pad = pre_fx_tee.request_pad(pre_fx_tee.get_pad_template("src_%u"), None, None)
-    queue_sink = queue.get_static_pad("sink")
-    tee_pad.link(queue_sink)
+    tee_pad.link(live_pad)
+    input_sel.set_property("active-pad", live_pad)
+
+    # Store selector and pad map for runtime source switching
+    compositor._fx_input_selector = input_sel
+    compositor._fx_input_pads = {"live": live_pad}
+    compositor._fx_active_source = "live"
+    compositor._fx_camera_branch: list[Any] = []  # elements to tear down on switch
+    compositor._fx_switching = False
 
     log.info(
-        "FX chain: %d shader slots, direct live input",
+        "FX chain: %d shader slots, input-selector with tiled composite",
         compositor._slot_pipeline.num_slots,
     )
     return True
+
+
+def switch_fx_source(compositor: Any, source: str) -> bool:
+    """Switch FX chain input to a different camera or back to tiled composite.
+
+    Uses IDLE pad probe to safely modify the pipeline while PLAYING.
+    Creates camera branch on-demand (lazy), tears down old one.
+    """
+    if not hasattr(compositor, "_fx_input_selector"):
+        return False
+    if source == getattr(compositor, "_fx_active_source", "live"):
+        return True  # already active
+    if getattr(compositor, "_fx_switching", False):
+        return False  # switch in progress
+
+    Gst = compositor._Gst
+    input_sel = compositor._fx_input_selector
+    pipeline = compositor._pipeline
+
+    if source == "live":
+        # Switch back to tiled composite — just set active pad
+        live_pad = compositor._fx_input_pads.get("live")
+        if live_pad is None:
+            return False
+        input_sel.set_property("active-pad", live_pad)
+        _teardown_camera_branch(compositor, Gst)
+        compositor._fx_active_source = "live"
+        log.info("FX source: switched to live (tiled composite)")
+        return True
+
+    # Switch to individual camera — need to create branch on-demand
+    role = source.replace("-", "_")
+    cam_tee = pipeline.get_by_name(f"tee_{role}")
+    if cam_tee is None:
+        log.warning("FX source: camera tee for %s not found", source)
+        return False
+
+    compositor._fx_switching = True
+
+    # Use IDLE probe on input-selector src pad for safe modification
+    src_pad = input_sel.get_static_pad("src")
+
+    def _probe_callback(pad: Any, info: Any) -> Any:
+        try:
+            # Tear down previous camera branch if any
+            _teardown_camera_branch(compositor, Gst)
+
+            # Build new branch: queue → videoconvert → capsfilter(BGRA)
+            q = Gst.ElementFactory.make("queue", "fxsrc-q")
+            q.set_property("leaky", 2)
+            q.set_property("max-size-buffers", 1)
+            convert = Gst.ElementFactory.make("videoconvert", "fxsrc-convert")
+            caps = Gst.ElementFactory.make("capsfilter", "fxsrc-caps")
+            caps.set_property("caps", Gst.Caps.from_string("video/x-raw,format=BGRA"))
+
+            elements = [q, convert, caps]
+            for el in elements:
+                pipeline.add(el)
+            q.link(convert)
+            convert.link(caps)
+
+            # Sync state with parent (transitions NULL→PLAYING)
+            for el in elements:
+                el.sync_state_with_parent()
+
+            # Link camera tee → queue
+            tee_pad = cam_tee.request_pad(cam_tee.get_pad_template("src_%u"), None, None)
+            q_sink = q.get_static_pad("sink")
+            tee_pad.link(q_sink)
+
+            # Link caps → new input-selector pad
+            sel_pad = input_sel.request_pad(input_sel.get_pad_template("sink_%u"), None, None)
+            caps.link_pads("src", input_sel, sel_pad.get_name())
+
+            # Switch active pad
+            input_sel.set_property("active-pad", sel_pad)
+
+            # Store for teardown
+            compositor._fx_camera_branch = elements
+            compositor._fx_camera_tee_pad = tee_pad
+            compositor._fx_camera_sel_pad = sel_pad
+            compositor._fx_active_source = source
+            compositor._fx_switching = False
+
+            log.info("FX source: switched to %s (lazy branch created)", source)
+        except Exception:
+            log.exception("FX source switch failed")
+            compositor._fx_switching = False
+
+        return Gst.PadProbeReturn.REMOVE
+
+    src_pad.add_probe(Gst.PadProbeType.IDLE, _probe_callback)
+    return True
+
+
+def _teardown_camera_branch(compositor: Any, Gst: Any) -> None:
+    """Remove the previous camera-specific FX source branch."""
+    elements = getattr(compositor, "_fx_camera_branch", [])
+    if not elements:
+        return
+
+    pipeline = compositor._pipeline
+
+    # Unlink camera tee pad
+    tee_pad = getattr(compositor, "_fx_camera_tee_pad", None)
+    if tee_pad is not None:
+        peer = tee_pad.get_peer()
+        if peer is not None:
+            tee_pad.unlink(peer)
+
+    # Release input-selector pad
+    sel_pad = getattr(compositor, "_fx_camera_sel_pad", None)
+    if sel_pad is not None:
+        compositor._fx_input_selector.release_request_pad(sel_pad)
+
+    # Stop and remove elements
+    for el in reversed(elements):
+        el.set_state(Gst.State.NULL)
+        pipeline.remove(el)
+
+    compositor._fx_camera_branch = []
+    compositor._fx_camera_tee_pad = None
+    compositor._fx_camera_sel_pad = None
 
 
 def fx_tick_callback(compositor: Any) -> bool:

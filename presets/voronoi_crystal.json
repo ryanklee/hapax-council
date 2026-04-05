@@ -6,9 +6,9 @@
     "voronoi": {
       "type": "voronoi_overlay",
       "params": {
-        "cell_count": 120,
-        "edge_width": 0.04,
-        "animation_speed": 0.8
+        "cell_count": 50,
+        "edge_width": 0.06,
+        "animation_speed": 1.2
       }
     },
     "colorgrade": {
@@ -22,9 +22,9 @@
     "bloom": {
       "type": "bloom",
       "params": {
-        "threshold": 0.5,
-        "radius": 6,
-        "alpha": 0.2
+        "threshold": 0.3,
+        "radius": 10,
+        "alpha": 0.35
       }
     },
     "out": {

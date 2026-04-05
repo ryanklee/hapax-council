@@ -57,6 +57,8 @@ async def replace_effect_graph(request: dict[str, object]):
     rt = _get_runtime()
     if not rt:
         raise HTTPException(503, "Compositor not available")
+    # Extract source before validating as EffectGraph (source is not a graph field)
+    source = str(request.pop("_source", "live"))
     try:
         graph = EffectGraph(**request)
         rt.load_graph(graph)
@@ -66,6 +68,9 @@ async def replace_effect_graph(request: dict[str, object]):
         mutation_path = Path("/dev/shm/hapax-compositor/graph-mutation.json")
         mutation_path.parent.mkdir(parents=True, exist_ok=True)
         mutation_path.write_text(_json_mod.dumps(graph.model_dump()))
+        # Write source selection alongside graph mutation
+        source_path = Path("/dev/shm/hapax-compositor/fx-source.txt")
+        source_path.write_text(source)
     except OSError:
         pass
     return {"status": "ok"}

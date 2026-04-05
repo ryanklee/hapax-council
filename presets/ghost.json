@@ -14,19 +14,19 @@
     "trail": {
       "type": "trail",
       "params": {
-        "fade": 0.05,
+        "fade": 0.04,
         "blend_mode": "lighter",
-        "opacity": 0.15,
-        "drift_x": 0,
-        "drift_y": 0
+        "opacity": 0.25,
+        "drift_x": 3,
+        "drift_y": 2
       }
     },
     "bloom": {
       "type": "bloom",
       "params": {
-        "threshold": 0.3,
-        "radius": 10,
-        "alpha": 0.2
+        "threshold": 0.2,
+        "radius": 14,
+        "alpha": 0.35
       }
     },
     "out": {

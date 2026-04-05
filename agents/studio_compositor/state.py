@@ -148,6 +148,18 @@ def state_reader_loop(compositor: Any) -> None:
                     except OSError:
                         pass
                     log.info("Loaded graph from mutation file: %s", graph.name)
+                    # Switch FX input source if specified (lazy pad probe)
+                    source_path = SNAPSHOT_DIR / "fx-source.txt"
+                    if source_path.exists() and hasattr(compositor, "_fx_input_selector"):
+                        try:
+                            source = source_path.read_text().strip()
+                            from .fx_chain import switch_fx_source
+
+                            switch_fx_source(compositor, source)
+                        except Exception:
+                            pass
+                        finally:
+                            source_path.unlink(missing_ok=True)
             except Exception as exc:
                 log.debug("Failed to process graph mutation: %s", exc)
                 graph_mutation_path.unlink(missing_ok=True)

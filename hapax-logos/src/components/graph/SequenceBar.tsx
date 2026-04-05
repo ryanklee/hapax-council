@@ -34,7 +34,9 @@ export async function activatePresets(
       onSlotCount?.(slots);
       if (slots > MAX_SLOTS) return;
       const merged = mergePresetGraphs("chain", graphs, source);
-      await api.put("/studio/effect/graph", merged);
+      // Pass _source alongside graph for input-selector switching
+      const fxSource = source === "@live" ? "live" : source.replace("@", "");
+      await api.put("/studio/effect/graph", { ...merged, _source: fxSource });
       return; // success
     } catch {
       if (attempt === 0) await new Promise((r) => setTimeout(r, 500)); // retry after 500ms
@@ -44,11 +46,14 @@ export async function activatePresets(
 
 // Presets that sufficiently obscure the source for anonymity.
 // Every chain MUST include at least one of these.
+// All presets now have boosted intensities — most qualify.
+// Only clean/heartbeat are excluded (too recognizable even boosted).
 const OBSCURING = new Set([
   "datamosh", "datamosh_heavy", "glitch_blocks_preset", "trap",
   "vhs_preset", "screwed", "kaleidodream", "tunnelvision",
-  "mirror_rorschach", "voronoi_crystal", "diff_preset", "slitscan_preset",
-  "fisheye_pulse", "feedback_preset", "ghost", "trails",
+  "mirror_rorschach", "voronoi_crystal", "slitscan_preset",
+  "fisheye_pulse", "diff_preset", "ambient",
+  "feedback_preset", "ghost", "trails", "thermal_preset",
   "ascii_preset", "halftone_preset", "dither_retro", "silhouette",
   "sculpture", "neon", "pixsort_preset", "nightvision",
 ]);
@@ -88,12 +93,20 @@ function canAdd(chain: string[], candidate: string): boolean {
   return true;
 }
 
+// Available FX input sources: tiled composite + individual cameras
+const FX_SOURCES = [
+  "live", // tiled composite (all cameras)
+  "brio-operator", "brio-room", "brio-synths",
+  "c920-desk", "c920-room", "c920-overhead",
+];
+
 function generateRandomSequence(): PresetChain[] {
   const allPresets = PRESET_CATEGORIES.flatMap((c) => c.presets)
     .filter((p) => p !== "clean" && p !== "echo" && p !== "reverie_vocabulary");
   const numChains = 8 + Math.floor(Math.random() * 5); // 8-12 chains
   const chains: PresetChain[] = [];
   let lastUsed: string[] = [];
+  let lastSource = "";
 
   for (let i = 0; i < numChains; i++) {
     const presets: string[] = [];
@@ -122,11 +135,16 @@ function generateRandomSequence(): PresetChain[] {
     }
     lastUsed = [...presets];
 
+    // Pick a random camera source, avoid repeating consecutively
+    const srcPool = FX_SOURCES.filter((s) => s !== lastSource);
+    const source = srcPool[Math.floor(Math.random() * srcPool.length)];
+    lastSource = source;
+
     chains.push({
       id: crypto.randomUUID(),
       presets,
       durationSeconds: 25 + Math.floor(Math.random() * 15),
-      source: "live",
+      source,
     });
   }
   return chains;

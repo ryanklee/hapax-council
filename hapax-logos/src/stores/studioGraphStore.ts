@@ -6,7 +6,7 @@ export interface PresetChain {
   id: string;
   presets: string[];
   durationSeconds: number;
-  source: "live" | "hls" | "smooth";
+  source: string; // "live" (tiled), or camera role: "brio-operator", "c920-desk", etc.
 }
 
 export interface SequenceState {
@@ -186,7 +186,7 @@ export const useStudioGraph = create<StudioGraphState>()(
         set((s) => {
           const chains = [
             ...s.sequence.chains,
-            { id: crypto.randomUUID(), presets: [], durationSeconds: 30, source: "live" as const },
+            { id: crypto.randomUUID(), presets: [], durationSeconds: 30, source: "live" },
           ];
           // If this is the first chain, select it automatically
           const activeChainIndex =

@@ -6,8 +6,8 @@
     "slitscan": {
       "type": "slitscan",
       "params": {
-        "direction": 0,
-        "speed": 1.5
+        "delay": 0.4,
+        "direction": 0
       }
     },
     "colorgrade": {
