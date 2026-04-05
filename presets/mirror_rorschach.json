@@ -35,7 +35,7 @@
     "postprocess": {
       "type": "postprocess",
       "params": {
-        "vignette_strength": 0.3,
+        "vignette_strength": 0.0,
         "sediment_strength": 0.1
       }
     },
@@ -48,9 +48,9 @@
     "bloom": {
       "type": "bloom",
       "params": {
-        "threshold": 0.1,
-        "radius": 20,
-        "alpha": 0.5
+        "threshold": 0.2,
+        "radius": 15,
+        "alpha": 0.35
       }
     }
   },

@@ -23,9 +23,9 @@
     "bloom": {
       "type": "bloom",
       "params": {
-        "threshold": 0.05,
-        "radius": 8,
-        "alpha": 0.5
+        "threshold": 0.15,
+        "radius": 12,
+        "alpha": 0.4
       }
     },
     "out": {

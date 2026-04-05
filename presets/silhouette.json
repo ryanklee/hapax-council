@@ -33,9 +33,9 @@
     "colorgrade": {
       "type": "colorgrade",
       "params": {
-        "brightness": 1.3,
-        "contrast": 1.4,
-        "saturation": 0.0
+        "brightness": 1.0,
+        "contrast": 1.1,
+        "saturation": 0.3
       }
     }
   },
