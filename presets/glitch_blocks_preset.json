@@ -6,15 +6,16 @@
     "glitch_block": {
       "type": "glitch_block",
       "params": {
-        "block_size": 16,
-        "intensity": 0.5,
-        "rgb_split": 0.6
+        "intensity": 0.8,
+        "rgb_split": 0.7,
+        "block_size": 20
       }
     },
     "chroma": {
       "type": "chromatic_aberration",
       "params": {
-        "offset_x": 6
+        "offset_x": 8,
+        "offset_y": 4
       }
     },
     "stutter": {
@@ -41,11 +42,9 @@
     "colorgrade": {
       "type": "colorgrade",
       "params": {
-        "saturation": 1.0,
-        "brightness": 1.0,
-        "contrast": 1.0,
-        "sepia": 0.0,
-        "hue_rotate": 0.0
+        "brightness": 1.5,
+        "contrast": 1.4,
+        "saturation": 1.3
       }
     }
   },

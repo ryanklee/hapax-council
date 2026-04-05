@@ -6,8 +6,8 @@
     "breathing": {
       "type": "breathing",
       "params": {
-        "rate": 1.2,
-        "amplitude": 0.08
+        "amplitude": 0.12,
+        "rate": 1.2
       }
     },
     "drift": {

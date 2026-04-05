@@ -21,15 +21,18 @@
     "trail": {
       "type": "trail",
       "params": {
-        "fade": 0.02,
-        "blend_mode": "lighter",
-        "opacity": 0.4
+        "fade": 0.015,
+        "blend_mode": "screen",
+        "opacity": 0.6
       }
     },
     "syrup": {
       "type": "syrup",
       "params": {
-        "bottom_alpha": 0.3
+        "bottom_alpha": 0.4,
+        "color_r": 0.15,
+        "color_g": 0.05,
+        "color_b": 0.2
       }
     },
     "scanlines": {

@@ -6,15 +6,15 @@
     "colorgrade": {
       "type": "colorgrade",
       "params": {
-        "saturation": 1.4,
-        "brightness": 1.2,
-        "contrast": 1.5
+        "brightness": 1.5,
+        "contrast": 1.6,
+        "saturation": 1.5
       }
     },
     "glitch_block": {
       "type": "glitch_block",
       "params": {
-        "intensity": 0.7,
+        "intensity": 0.8,
         "rgb_split": 0.6,
         "block_size": 16
       }
@@ -29,9 +29,9 @@
     "trail": {
       "type": "trail",
       "params": {
-        "fade": 0.08,
+        "fade": 0.06,
         "blend_mode": "lighter",
-        "opacity": 0.3
+        "opacity": 0.4
       }
     },
     "noise": {
@@ -57,14 +57,38 @@
     }
   },
   "edges": [
-    ["@live", "colorgrade"],
-    ["colorgrade", "glitch_block"],
-    ["glitch_block", "chroma"],
-    ["chroma", "trail"],
-    ["trail", "noise"],
-    ["noise", "content_layer"],
-    ["content_layer", "postprocess"],
-    ["postprocess", "out"]
+    [
+      "@live",
+      "colorgrade"
+    ],
+    [
+      "colorgrade",
+      "glitch_block"
+    ],
+    [
+      "glitch_block",
+      "chroma"
+    ],
+    [
+      "chroma",
+      "trail"
+    ],
+    [
+      "trail",
+      "noise"
+    ],
+    [
+      "noise",
+      "content_layer"
+    ],
+    [
+      "content_layer",
+      "postprocess"
+    ],
+    [
+      "postprocess",
+      "out"
+    ]
   ],
   "modulations": [],
   "layer_palettes": {}
