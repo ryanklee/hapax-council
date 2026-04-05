@@ -53,6 +53,12 @@ function SequenceBarInner() {
   const removeChain = useStudioGraph((s) => s.removeChain);
   const updateChainDuration = useStudioGraph((s) => s.updateChainDuration);
   const setChainSlotCount = useStudioGraph((s) => s.setChainSlotCount);
+  const savedSequences = useStudioGraph((s) => s.savedSequences);
+  const sequenceName = useStudioGraph((s) => s.sequenceName);
+  const saveSequence = useStudioGraph((s) => s.saveSequence);
+  const loadSequence = useStudioGraph((s) => s.loadSequence);
+  const deleteSequence = useStudioGraph((s) => s.deleteSequence);
+  const setSequenceName = useStudioGraph((s) => s.setSequenceName);
 
   const [editingDurationIdx, setEditingDurationIdx] = useState<number | null>(null);
   const [draftDuration, setDraftDuration] = useState("");
@@ -427,6 +433,109 @@ function SequenceBarInner() {
         >
           ↺
         </button>
+
+        {/* Sequence save/load controls */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 3,
+            flexShrink: 0,
+            borderLeft: "1px solid #3c3836",
+            paddingLeft: 6,
+          }}
+        >
+          {/* Name input */}
+          <input
+            value={sequenceName}
+            onChange={(e) => setSequenceName(e.target.value)}
+            placeholder="sequence name"
+            style={{
+              width: 88,
+              fontSize: 9,
+              fontFamily: "JetBrains Mono, monospace",
+              background: "#3c3836",
+              border: "1px solid #504945",
+              borderRadius: 2,
+              color: "#928374",
+              padding: "1px 4px",
+              outline: "none",
+            }}
+          />
+          {/* Save button */}
+          <button
+            onClick={() => {
+              if (sequenceName.trim()) saveSequence(sequenceName.trim());
+            }}
+            title="Save sequence"
+            disabled={!sequenceName.trim()}
+            style={{
+              background: "none",
+              border: "1px solid #504945",
+              borderRadius: 2,
+              padding: "1px 5px",
+              fontSize: 9,
+              fontFamily: "JetBrains Mono, monospace",
+              color: sequenceName.trim() ? "#928374" : "#3c3836",
+              cursor: sequenceName.trim() ? "pointer" : "not-allowed",
+              flexShrink: 0,
+            }}
+          >
+            💾
+          </button>
+          {/* Load dropdown */}
+          {Object.keys(savedSequences).length > 0 && (
+            <>
+              <select
+                value=""
+                onChange={(e) => {
+                  if (e.target.value) loadSequence(e.target.value);
+                }}
+                title="Load saved sequence"
+                style={{
+                  fontSize: 9,
+                  fontFamily: "JetBrains Mono, monospace",
+                  background: "#3c3836",
+                  border: "1px solid #504945",
+                  borderRadius: 2,
+                  color: "#928374",
+                  padding: "1px 2px",
+                  cursor: "pointer",
+                  maxWidth: 96,
+                }}
+              >
+                <option value="" disabled>
+                  load…
+                </option>
+                {Object.keys(savedSequences).map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+              {/* Delete button for currently loaded sequence */}
+              {sequenceName && savedSequences[sequenceName] && (
+                <button
+                  onClick={() => deleteSequence(sequenceName)}
+                  title={`Delete "${sequenceName}"`}
+                  style={{
+                    background: "none",
+                    border: "1px solid #504945",
+                    borderRadius: 2,
+                    padding: "1px 4px",
+                    fontSize: 9,
+                    fontFamily: "JetBrains Mono, monospace",
+                    color: "#665c54",
+                    cursor: "pointer",
+                    flexShrink: 0,
+                  }}
+                >
+                  ×
+                </button>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       {/* Visual connector: downward arrow from active chain to ChainBuilder */}
