@@ -225,10 +225,10 @@ class OverlayZone:
         surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, sw, sh)
         scr = cairo.Context(surface)
 
-        # Semi-transparent background (60% opacity)
-        scr.set_source_rgba(0.0, 0.0, 0.0, 0.7)
-        scr.rectangle(0, 0, sw, sh)
-        scr.fill()
+        # No background rectangle — it creates visible edge artifacts when
+        # processed through shaders (thermal, halftone, mirror produce
+        # vertical stripe patterns from the rectangle borders).
+        # Text legibility comes from the thick 3px dark outline below.
         # Dark outline: 8 offsets at 3px for thick readable border
         scr.set_source_rgba(0.0, 0.0, 0.0, 0.9)
         for dx, dy in ((-3, 0), (3, 0), (0, -3), (0, 3), (-2, -2), (2, -2), (-2, 2), (2, 2)):
