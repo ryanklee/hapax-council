@@ -188,12 +188,13 @@ def get_status() -> dict:
 # --- Auto-advance thread ---
 def auto_advance_loop() -> None:
     """Watch for ffmpeg exit and advance to next in queue."""
+    global current_process
     while True:
         time.sleep(1)
         with lock:
             if current_process is not None and current_process.poll() is not None:
                 log.info("Video ended (exit %d)", current_process.returncode)
-                current_process = None  # noqa: F841 — cleared for skip_to_next
+                current_process = None
                 skip_to_next()
 
 
