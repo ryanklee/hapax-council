@@ -18,7 +18,7 @@ export async function activatePresets(
   }
   if (presets.length === 1) {
     const fxSource = source === "@live" ? "live" : source.replace("@", "");
-    api.post("/studio/effect/select", { preset: presets[0], _source: fxSource }).catch(() => {});
+    api.post("/studio/effect/select", { preset: presets[0], fx_source: fxSource }).catch(() => {});
     onSlotCount?.(0);
     return;
   }
@@ -43,7 +43,7 @@ export async function activatePresets(
       }
       const merged = mergePresetGraphs("chain", graphs, source);
       const fxSource = source === "@live" ? "live" : source.replace("@", "");
-      const payload = { ...merged, _source: fxSource };
+      const payload = { ...merged, fx_source: fxSource };
       try {
         await api.put("/studio/effect/graph", payload);
       } catch (putErr) {

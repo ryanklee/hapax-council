@@ -58,7 +58,7 @@ async def replace_effect_graph(request: dict[str, object]):
     if not rt:
         raise HTTPException(503, "Compositor not available")
     # Extract source before validating as EffectGraph (source is not a graph field)
-    source = str(request.pop("_source", "live"))
+    source = str(request.pop("fx_source", request.pop("_source", "live")))
     try:
         graph = EffectGraph(**request)
         rt.load_graph(graph)
