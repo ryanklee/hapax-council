@@ -36,7 +36,15 @@
       "params": {
         "brightness": 1.2,
         "contrast": 1.2,
-        "saturation": 0.3
+        "saturation": 0.5
+      }
+    },
+    "bloom": {
+      "type": "bloom",
+      "params": {
+        "threshold": 0.2,
+        "radius": 8,
+        "alpha": 0.4
       }
     }
   },
@@ -55,6 +63,10 @@
     ],
     [
       "colorgrade",
+      "bloom"
+    ],
+    [
+      "bloom",
       "content_layer"
     ],
     [

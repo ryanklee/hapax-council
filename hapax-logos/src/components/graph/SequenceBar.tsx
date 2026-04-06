@@ -80,13 +80,16 @@ const OBSCURING = new Set([
 // black output), "temporal" (trail/feedback accumulation), "mono" (desaturates/B&W).
 const TAGS: Record<string, Set<string>> = {
   ascii_preset: new Set(["pattern", "mono"]),
-  halftone_preset: new Set(["pattern", "mono"]),
+  halftone_preset: new Set(["pattern", "mono", "scanline"]),
   dither_retro: new Set(["pattern", "mono"]),
   silhouette: new Set(["sparse", "mono"]),
   sculpture: new Set(["sparse", "temporal", "mono"]),
   neon: new Set(["sparse"]),
   pixsort_preset: new Set(["pattern"]),
   nightvision: new Set(["mono"]),
+  vhs_preset: new Set(["scanline"]),
+  diff_preset: new Set(["mono"]),
+  ambient: new Set(["mono"]),
   thermal_preset: new Set(["sparse"]),
   feedback_preset: new Set(["temporal"]),
   ghost: new Set(["temporal"]),

@@ -22,9 +22,9 @@ ZONES: list[dict[str, Any]] = [
         "cycle_seconds": 15,
         "x": 40,
         "y": 200,
-        "max_width": 900,
-        "font": "JetBrains Mono 16",
-        "color": (0.92, 0.86, 0.70, 0.95),
+        "max_width": 1000,
+        "font": "JetBrains Mono Bold 20",
+        "color": (1.0, 0.97, 0.90, 1.0),
         "randomize_position": True,
     },
 ]
@@ -226,12 +226,12 @@ class OverlayZone:
         scr = cairo.Context(surface)
 
         # Semi-transparent background (60% opacity)
-        scr.set_source_rgba(0.0, 0.0, 0.0, 0.6)
+        scr.set_source_rgba(0.0, 0.0, 0.0, 0.7)
         scr.rectangle(0, 0, sw, sh)
         scr.fill()
-        # Dark outline: 4 offsets
-        scr.set_source_rgba(0.0, 0.0, 0.0, 0.8)
-        for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+        # Dark outline: 8 offsets at 3px for thick readable border
+        scr.set_source_rgba(0.0, 0.0, 0.0, 0.9)
+        for dx, dy in ((-3, 0), (3, 0), (0, -3), (0, 3), (-2, -2), (2, -2), (-2, 2), (2, 2)):
             scr.move_to(pad + dx, pad + dy)
             PangoCairo.show_layout(scr, layout)
         # Foreground

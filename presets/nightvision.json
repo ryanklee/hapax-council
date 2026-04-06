@@ -26,13 +26,6 @@
         "animated": 1
       }
     },
-    "mask": {
-      "type": "circular_mask",
-      "params": {
-        "radius": 0.35,
-        "softness": 0.04
-      }
-    },
     "out": {
       "type": "output",
       "params": {}
@@ -44,7 +37,7 @@
     "postprocess": {
       "type": "postprocess",
       "params": {
-        "vignette_strength": 0.4,
+        "vignette_strength": 0.2,
         "sediment_strength": 0.05
       }
     }
@@ -64,10 +57,6 @@
     ],
     [
       "noise",
-      "mask"
-    ],
-    [
-      "mask",
       "content_layer"
     ],
     [
