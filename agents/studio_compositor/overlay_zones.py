@@ -90,7 +90,13 @@ class OverlayZone:
         if self._cycle_start == 0:
             self._cycle_start = now
         elif now - self._cycle_start >= self.cycle_seconds:
-            self._folder_index = (self._folder_index + 1) % len(self._folder_files)
+            import random
+
+            # Random file each cycle, avoid repeating the same one
+            old_idx = self._folder_index
+            self._folder_index = random.randrange(len(self._folder_files))
+            if self._folder_index == old_idx and len(self._folder_files) > 1:
+                self._folder_index = (self._folder_index + 1) % len(self._folder_files)
             self._cycle_start = now
             # Randomize position on each cycle
             if self.randomize_position:
