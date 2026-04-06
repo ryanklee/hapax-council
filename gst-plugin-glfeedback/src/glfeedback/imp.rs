@@ -98,7 +98,13 @@ impl ObjectImpl for GlFeedback {
         match pspec.name() {
             "fragment" => {
                 let frag = value.get::<Option<String>>().unwrap();
-                let is_pt = frag.as_ref().map_or(true, |f| f.trim() == DEFAULT_FRAGMENT.trim());
+                // A shader is passthrough (skip accum blit) if it does NOT
+                // reference tex_accum.  Previous exact-string comparison broke
+                // when the Python PASSTHROUGH_SHADER diverged in whitespace /
+                // #version from DEFAULT_FRAGMENT, leaving is_passthrough=false
+                // for all 24 slots and causing a 24-blit cascade whose RGBA8
+                // rounding errors produced the sawtooth/stripe artifact.
+                let is_pt = frag.as_ref().map_or(true, |f| !f.contains("tex_accum"));
                 let mut props = self.props.lock().unwrap();
                 props.fragment = frag;
                 props.is_passthrough = is_pt;

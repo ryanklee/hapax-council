@@ -116,6 +116,7 @@ def build_inline_fx_chain(
     overlay.connect("caps-changed", lambda o, caps: on_overlay_caps_changed(compositor, o, caps))
 
     convert_base = Gst.ElementFactory.make("videoconvert", "fx-convert-base")
+    convert_base.set_property("dither", 0)  # none — Bayer default creates sawtooth columns
     glupload_base = Gst.ElementFactory.make("glupload", "fx-glupload-base")
     glcc_base = Gst.ElementFactory.make("glcolorconvert", "fx-glcc-base")
 
@@ -124,6 +125,7 @@ def build_inline_fx_chain(
     queue_flash.set_property("leaky", 2)
     queue_flash.set_property("max-size-buffers", 2)
     convert_flash = Gst.ElementFactory.make("videoconvert", "fx-convert-flash")
+    convert_flash.set_property("dither", 0)  # none — Bayer default creates sawtooth columns
     glupload_flash = Gst.ElementFactory.make("glupload", "fx-glupload-flash")
     glcc_flash = Gst.ElementFactory.make("glcolorconvert", "fx-glcc-flash")
 
@@ -140,6 +142,7 @@ def build_inline_fx_chain(
     glcolorconvert_out = Gst.ElementFactory.make("glcolorconvert", "fx-glcc-out")
     gldownload = Gst.ElementFactory.make("gldownload", "fx-gldownload")
     fx_convert = Gst.ElementFactory.make("videoconvert", "fx-out-convert")
+    fx_convert.set_property("dither", 0)  # none — Bayer default creates sawtooth columns
 
     all_elements = [
         input_sel, queue_base, overlay, convert_base, glupload_base, glcc_base,

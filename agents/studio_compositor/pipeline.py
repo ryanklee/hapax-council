@@ -61,6 +61,7 @@ def build_pipeline(compositor: Any) -> Any:
     # Output chain: compositor -> cudadownload -> BGRA -> pre_fx_tee
     download = Gst.ElementFactory.make("cudadownload", "download")
     convert_bgra = Gst.ElementFactory.make("videoconvert", "convert-bgra")
+    convert_bgra.set_property("dither", 0)  # none — Bayer default creates sawtooth columns
     bgra_caps = Gst.ElementFactory.make("capsfilter", "bgra-caps")
     bgra_caps.set_property(
         "caps",
@@ -115,6 +116,7 @@ def build_pipeline(compositor: Any) -> Any:
     queue_v4l2.set_property("leaky", 2)
     queue_v4l2.set_property("max-size-buffers", 1)
     convert_out = Gst.ElementFactory.make("videoconvert", "convert-out")
+    convert_out.set_property("dither", 0)  # none — Bayer default creates sawtooth columns
     sink_caps = Gst.ElementFactory.make("capsfilter", "sink-caps")
     sink_caps.set_property(
         "caps",
