@@ -77,16 +77,17 @@ const OBSCURING = new Set([
 
 // Chain compatibility tags — every preset can chain, but certain combos conflict.
 // Tags: "pattern" (converts to dots/chars/dither), "sparse" (edge detect, mostly
-// black output), "temporal" (trail/feedback accumulation).
+// black output), "temporal" (trail/feedback accumulation), "mono" (desaturates/B&W).
 const TAGS: Record<string, Set<string>> = {
-  ascii_preset: new Set(["pattern"]),
-  halftone_preset: new Set(["pattern"]),
-  dither_retro: new Set(["pattern"]),
-  silhouette: new Set(["sparse"]),
-  sculpture: new Set(["sparse", "temporal"]),
+  ascii_preset: new Set(["pattern", "mono"]),
+  halftone_preset: new Set(["pattern", "mono"]),
+  dither_retro: new Set(["pattern", "mono"]),
+  silhouette: new Set(["sparse", "mono"]),
+  sculpture: new Set(["sparse", "temporal", "mono"]),
   neon: new Set(["sparse"]),
   pixsort_preset: new Set(["pattern"]),
-  nightvision: new Set([]),
+  nightvision: new Set(["mono"]),
+  thermal_preset: new Set(["sparse"]),
   feedback_preset: new Set(["temporal"]),
   ghost: new Set(["temporal"]),
   trails: new Set(["temporal"]),
@@ -161,7 +162,7 @@ function generateRandomSequence(): PresetChain[] {
     chains.push({
       id: crypto.randomUUID(),
       presets,
-      durationSeconds: 25 + Math.floor(Math.random() * 15),
+      durationSeconds: 15 + Math.floor(Math.random() * 10), // 15-25s, capped at 25
       source,
     });
   }
