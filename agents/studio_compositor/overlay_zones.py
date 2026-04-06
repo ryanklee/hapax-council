@@ -45,6 +45,7 @@ class OverlayZone:
         self.font_desc = config.get("font", "JetBrains Mono 11")
         self.color = config.get("color", (0.92, 0.86, 0.70, 0.9))
         self.randomize_position = config.get("randomize_position", False)
+        self._attribution_format = config.get("attribution_format", False)
         self._is_image = False
         self._image_surface: Any = None
         self._layout: Any = None
@@ -184,6 +185,23 @@ class OverlayZone:
         except Exception:
             log.warning("Overlay zone '%s' failed to load image %s", self.id, path.name)
 
+    def _format_attribution(self, raw: str) -> str:
+        """Format yt-attribution.txt (title\\nchannel\\nurl) as Pango markup."""
+        lines = raw.strip().split("\n")
+        title = lines[0] if lines else "Unknown"
+        channel = lines[1] if len(lines) > 1 else ""
+        url = lines[2] if len(lines) > 2 else ""
+        # Escape for Pango
+        title = title.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        channel = channel.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        url = url.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        parts = [f"<b>{title}</b>"]
+        if channel:
+            parts.append(channel)
+        if url:
+            parts.append(f'<span size="small">{url}</span>')
+        return "\n".join(parts)
+
     def _load_text(self, path: Path) -> None:
         try:
             raw = path.read_text(encoding="utf-8", errors="replace")
@@ -192,8 +210,11 @@ class OverlayZone:
         content_hash = hash(raw)
         if content_hash == self._content_hash:
             return
-        is_ansi = path.suffix == ".ansi"
-        self._pango_markup = parse_overlay_content(raw, is_ansi=is_ansi)
+        if self._attribution_format:
+            self._pango_markup = self._format_attribution(raw)
+        else:
+            is_ansi = path.suffix == ".ansi"
+            self._pango_markup = parse_overlay_content(raw, is_ansi=is_ansi)
         self._content_hash = content_hash
         self._layout = None
         self._cached_surface = None

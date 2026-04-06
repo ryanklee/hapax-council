@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import random
+import threading
 import time
 from typing import Any
 
@@ -11,43 +12,56 @@ log = logging.getLogger(__name__)
 
 
 class YouTubeOverlay:
-    """Floating YouTube video overlay — bounces around the screen like Pango.
+    """Floating YouTube PiP with its own contained effects layer.
 
-    Reads from /dev/video50 (v4l2loopback fed by youtube-player daemon).
-    Creates a glvideomixer pad on-demand when video starts, removes on stop.
+    Composited AFTER the main shader chain via a post-FX cairooverlay.
+    Avoids glvideomixer deadlock by decoupling PiP frame capture from
+    the main GStreamer pipeline. Frames read via ffmpeg subprocess,
+    effects applied in Cairo (vignette, scanlines, tint, grain).
+
+    Architecture:
+      ffmpeg subprocess → raw BGRA frames → background thread → cairo surface
+      Main pipeline → ... → shader chain → cairooverlay (paints PiP) → output
     """
 
     WIDTH = 640
     HEIGHT = 360
-    ALPHA = 0.65
+    FRAME_SIZE = 640 * 360 * 4  # BGRA
+    ALPHA = 0.75
     V4L2_DEVICE = "/dev/video50"
     STATUS_URL = "http://127.0.0.1:8055/status"
+    ATTRIB_FILE = "/dev/shm/hapax-compositor/yt-attribution.txt"
 
     def __init__(self) -> None:
-        self._pad: Any = None
-        self._elements: list[Any] = []
         self._active = False
         self._x = 100.0
         self._y = 100.0
         self._vx = 1.2
         self._vy = 0.8
         self._last_check = 0.0
+        self._ffmpeg_proc: Any = None
+        self._reader_thread: Any = None
+        self._surface: Any = None
+        self._surface_lock = threading.Lock()
+        self._fx_name = ""
+        self._fx_func: Any = None
+        self._attrib_text = ""
+        self._attrib_mtime = 0.0
+        self._attrib_layout: Any = None
 
     def tick(self, compositor: Any, Gst: Any) -> None:
         """Called every frame tick. Checks status, bounces position."""
         now = time.monotonic()
 
-        # Check youtube-player status every 2 seconds
         if now - self._last_check > 2.0:
             self._last_check = now
             playing = self._check_playing()
             if playing and not self._active:
-                self._create_pad(compositor, Gst)
+                self._start_capture()
             elif not playing and self._active:
-                self._remove_pad(compositor, Gst)
+                self._stop_capture()
 
-        # Bounce animation
-        if self._active and self._pad is not None:
+        if self._active:
             self._x += self._vx
             self._y += self._vy
             if self._x <= 20:
@@ -62,8 +76,6 @@ class YouTubeOverlay:
             elif self._y + self.HEIGHT >= 1080 - 20:
                 self._y = 1080 - self.HEIGHT - 20
                 self._vy = -abs(self._vy)
-            self._pad.set_property("xpos", int(self._x))
-            self._pad.set_property("ypos", int(self._y))
 
     def _check_playing(self) -> bool:
         try:
@@ -77,78 +89,331 @@ class YouTubeOverlay:
         except Exception:
             return False
 
-    def _create_pad(self, compositor: Any, Gst: Any) -> None:
-        """Create v4l2src → glupload → glcolorconvert → glvideomixer pad."""
+    def _start_capture(self) -> None:
+        """Start ffmpeg subprocess reading from v4l2loopback, piping BGRA frames."""
         import os
+        import subprocess as _sp
 
         if not os.path.exists(self.V4L2_DEVICE):
             return
 
-        pipeline = compositor.pipeline
-        glmixer = getattr(compositor, "_fx_glmixer", None)
-        if glmixer is None:
-            return
+        # Pick random PiP effect
+        self._fx_name, self._fx_func = random.choice(list(PIP_EFFECTS.items()))
+        self._attrib_layout = None
 
         try:
-            src = Gst.ElementFactory.make("v4l2src", "yt-overlay-src")
-            src.set_property("device", self.V4L2_DEVICE)
-            src.set_property("do-timestamp", True)
-            q = Gst.ElementFactory.make("queue", "yt-overlay-q")
-            q.set_property("leaky", 2)
-            q.set_property("max-size-buffers", 1)
-            convert = Gst.ElementFactory.make("videoconvert", "yt-overlay-convert")
-            convert.set_property("dither", 0)
-            upload = Gst.ElementFactory.make("glupload", "yt-overlay-upload")
-            glcc = Gst.ElementFactory.make("glcolorconvert", "yt-overlay-glcc")
-
-            self._elements = [src, q, convert, upload, glcc]
-            for el in self._elements:
-                pipeline.add(el)
-            src.link(q)
-            q.link(convert)
-            convert.link(upload)
-            upload.link(glcc)
-
-            for el in self._elements:
-                el.sync_state_with_parent()
-
-            self._pad = glmixer.request_pad(glmixer.get_pad_template("sink_%u"), None, None)
-            self._pad.set_property("zorder", 2)
-            self._pad.set_property("alpha", self.ALPHA)
-            self._pad.set_property("width", self.WIDTH)
-            self._pad.set_property("height", self.HEIGHT)
-            self._pad.set_property("xpos", int(self._x))
-            self._pad.set_property("ypos", int(self._y))
-            glcc.link_pads("src", glmixer, self._pad.get_name())
-
+            self._ffmpeg_proc = _sp.Popen(
+                [
+                    "ffmpeg",
+                    "-f",
+                    "v4l2",
+                    "-video_size",
+                    "1920x1080",
+                    "-input_format",
+                    "yuyv422",
+                    "-i",
+                    self.V4L2_DEVICE,
+                    "-vf",
+                    f"scale={self.WIDTH}:{self.HEIGHT}",
+                    "-f",
+                    "rawvideo",
+                    "-pix_fmt",
+                    "bgra",
+                    "-an",
+                    "-v",
+                    "error",
+                    "pipe:1",
+                ],
+                stdout=_sp.PIPE,
+                stderr=_sp.DEVNULL,
+            )
+            self._reader_thread = threading.Thread(target=self._read_frames, daemon=True)
+            self._reader_thread.start()
             self._active = True
-            log.info("YouTube overlay created (%dx%d, alpha=%.2f)", self.WIDTH, self.HEIGHT, self.ALPHA)
+            log.info("YouTube PiP capture started (effect=%s)", self._fx_name)
         except Exception:
-            log.exception("YouTube overlay creation failed")
-            self._cleanup(compositor, Gst)
+            log.exception("YouTube PiP capture failed to start")
 
-    def _remove_pad(self, compositor: Any, Gst: Any) -> None:
-        """Remove the YouTube overlay pad and elements."""
-        self._cleanup(compositor, Gst)
+    def _stop_capture(self) -> None:
+        """Stop ffmpeg subprocess and clear state."""
+        if self._ffmpeg_proc is not None:
+            try:
+                self._ffmpeg_proc.kill()
+                self._ffmpeg_proc.wait(timeout=2)
+            except Exception:
+                pass
+            self._ffmpeg_proc = None
+        with self._surface_lock:
+            self._surface = None
         self._active = False
-        log.info("YouTube overlay removed")
+        self._attrib_layout = None
+        log.info("YouTube PiP capture stopped")
 
-    def _cleanup(self, compositor: Any, Gst: Any) -> None:
-        pipeline = compositor.pipeline
-        glmixer = getattr(compositor, "_fx_glmixer", None)
-        if self._pad and glmixer:
+    def _read_frames(self) -> None:
+        """Background thread: read raw BGRA frames from ffmpeg stdout."""
+        import cairo
+
+        proc = self._ffmpeg_proc
+        if proc is None or proc.stdout is None:
+            return
+        while proc.poll() is None:
             try:
-                glmixer.release_request_pad(self._pad)
+                data = proc.stdout.read(self.FRAME_SIZE)
+                if len(data) != self.FRAME_SIZE:
+                    break
+                # Create cairo surface from raw BGRA data
+                surface = cairo.ImageSurface.create_for_data(
+                    bytearray(data),
+                    cairo.FORMAT_ARGB32,
+                    self.WIDTH,
+                    self.HEIGHT,
+                )
+                with self._surface_lock:
+                    self._surface = surface
             except Exception:
-                pass
-            self._pad = None
-        for el in reversed(self._elements):
-            try:
-                el.set_state(Gst.State.NULL)
-                pipeline.remove(el)
-            except Exception:
-                pass
-        self._elements = []
+                break
+
+    def draw(self, cr: Any) -> None:
+        """Called from post-FX cairooverlay. Paints PiP + effects + attribution."""
+        if not self._active:
+            return
+
+        with self._surface_lock:
+            surface = self._surface
+        if surface is None:
+            return
+
+        cr.save()
+        x, y = int(self._x), int(self._y)
+        cr.translate(x, y)
+
+        # Paint the video frame
+        cr.set_source_surface(surface, 0, 0)
+        cr.paint_with_alpha(self.ALPHA)
+
+        # Apply the randomly selected PiP effect
+        if self._fx_func is not None:
+            self._fx_func(cr, self.WIDTH, self.HEIGHT)
+
+        # Attribution text
+        self._draw_attribution(cr)
+
+        cr.restore()
+
+    def _draw_attribution(self, cr: Any) -> None:
+        """Draw attribution text at bottom of PiP."""
+        import os
+        from pathlib import Path
+
+        path = Path(self.ATTRIB_FILE)
+        try:
+            if path.exists():
+                mtime = os.path.getmtime(path)
+                if mtime != self._attrib_mtime:
+                    self._attrib_text = path.read_text().strip()
+                    self._attrib_mtime = mtime
+                    self._attrib_layout = None
+            elif self._attrib_text:
+                self._attrib_text = ""
+                self._attrib_layout = None
+        except OSError:
+            pass
+
+        if not self._attrib_text:
+            return
+
+        import gi
+
+        gi.require_version("Pango", "1.0")
+        gi.require_version("PangoCairo", "1.0")
+        from gi.repository import Pango, PangoCairo
+
+        if self._attrib_layout is None:
+            layout = PangoCairo.create_layout(cr)
+            font = Pango.FontDescription.from_string("JetBrains Mono Bold 11")
+            layout.set_font_description(font)
+            layout.set_width(int((self.WIDTH - 20) * Pango.SCALE))
+            layout.set_wrap(Pango.WrapMode.WORD_CHAR)
+            lines = self._attrib_text.split("\n")
+            title = (lines[0] if lines else "").replace("&", "&amp;").replace("<", "&lt;")
+            channel = (
+                (lines[1] if len(lines) > 1 else "").replace("&", "&amp;").replace("<", "&lt;")
+            )
+            markup = f"<b>{title}</b>"
+            if channel:
+                markup += f"\n{channel}"
+            layout.set_markup(markup, -1)
+            self._attrib_layout = layout
+
+        _w, _h = self._attrib_layout.get_pixel_size()
+        tx, ty = 10, self.HEIGHT - _h - 8
+
+        cr.set_source_rgba(0.0, 0.0, 0.0, 0.85)
+        for dx, dy in ((-2, 0), (2, 0), (0, -2), (0, 2)):
+            cr.move_to(tx + dx, ty + dy)
+            PangoCairo.show_layout(cr, self._attrib_layout)
+        cr.set_source_rgba(1.0, 0.97, 0.90, 1.0)
+        cr.move_to(tx, ty)
+        PangoCairo.show_layout(cr, self._attrib_layout)
+
+
+# --- PiP Cairo effects: content-preserving, randomly selected per video ---
+
+
+def _pip_fx_vintage(cr: Any, w: int, h: int) -> None:
+    """Warm vignette + dense scanlines + sepia wash."""
+    import cairo
+
+    cx, cy = w / 2, h / 2
+    r = max(w, h) * 0.6
+    pat = cairo.RadialGradient(cx, cy, r * 0.2, cx, cy, r)
+    pat.add_color_stop_rgba(0, 0, 0, 0, 0)
+    pat.add_color_stop_rgba(1, 0, 0, 0, 0.75)
+    cr.set_source(pat)
+    cr.rectangle(0, 0, w, h)
+    cr.fill()
+    # Heavy warm tint
+    cr.set_source_rgba(0.2, 0.1, 0.0, 0.25)
+    cr.rectangle(0, 0, w, h)
+    cr.fill()
+    # Dense scanlines
+    cr.set_source_rgba(0, 0, 0, 0.18)
+    for y in range(0, h, 3):
+        cr.rectangle(0, y, w, 1)
+    cr.fill()
+    # Contrast border
+    cr.set_source_rgba(0.6, 0.4, 0.1, 0.4)
+    cr.set_line_width(2)
+    cr.rectangle(1, 1, w - 2, h - 2)
+    cr.stroke()
+
+
+def _pip_fx_cold(cr: Any, w: int, h: int) -> None:
+    """Cold blue tint + heavy vignette + thick horizontal lines."""
+    import cairo
+
+    cx, cy = w / 2, h / 2
+    r = max(w, h) * 0.55
+    pat = cairo.RadialGradient(cx, cy, r * 0.15, cx, cy, r)
+    pat.add_color_stop_rgba(0, 0, 0, 0, 0)
+    pat.add_color_stop_rgba(1, 0, 0, 0.05, 0.8)
+    cr.set_source(pat)
+    cr.rectangle(0, 0, w, h)
+    cr.fill()
+    # Strong blue wash
+    cr.set_source_rgba(0.0, 0.08, 0.25, 0.3)
+    cr.rectangle(0, 0, w, h)
+    cr.fill()
+    # Thick alternating lines
+    cr.set_source_rgba(0, 0, 0, 0.2)
+    for y in range(0, h, 4):
+        cr.rectangle(0, y, w, 2)
+    cr.fill()
+    # Cold border
+    cr.set_source_rgba(0.3, 0.5, 0.8, 0.5)
+    cr.set_line_width(2)
+    cr.rectangle(1, 1, w - 2, h - 2)
+    cr.stroke()
+
+
+def _pip_fx_neon(cr: Any, w: int, h: int) -> None:
+    """Neon glow border + vignette + color wash."""
+    import cairo
+
+    cx, cy = w / 2, h / 2
+    r = max(w, h) * 0.65
+    pat = cairo.RadialGradient(cx, cy, r * 0.3, cx, cy, r)
+    pat.add_color_stop_rgba(0, 0, 0, 0, 0)
+    pat.add_color_stop_rgba(1, 0, 0, 0, 0.6)
+    cr.set_source(pat)
+    cr.rectangle(0, 0, w, h)
+    cr.fill()
+    # Neon glow: multi-layer border
+    for width, alpha in [(12, 0.08), (6, 0.15), (3, 0.35), (1.5, 0.6)]:
+        cr.set_source_rgba(0.1, 0.7, 1.0, alpha)
+        cr.set_line_width(width)
+        cr.rectangle(2, 2, w - 4, h - 4)
+        cr.stroke()
+    # Subtle magenta wash
+    cr.set_source_rgba(0.15, 0.0, 0.1, 0.12)
+    cr.rectangle(0, 0, w, h)
+    cr.fill()
+    # Light scanlines
+    cr.set_source_rgba(0, 0, 0, 0.1)
+    for y in range(0, h, 3):
+        cr.rectangle(0, y, w, 1)
+    cr.fill()
+
+
+def _pip_fx_film(cr: Any, w: int, h: int) -> None:
+    """Film print: amber wash + heavy vignette + border scratches."""
+    import cairo
+
+    cx, cy = w / 2, h / 2
+    r = max(w, h) * 0.6
+    pat = cairo.RadialGradient(cx, cy, r * 0.25, cx, cy, r)
+    pat.add_color_stop_rgba(0, 0, 0, 0, 0)
+    pat.add_color_stop_rgba(1, 0, 0, 0, 0.65)
+    cr.set_source(pat)
+    cr.rectangle(0, 0, w, h)
+    cr.fill()
+    # Amber film tint
+    cr.set_source_rgba(0.15, 0.08, 0.0, 0.2)
+    cr.rectangle(0, 0, w, h)
+    cr.fill()
+    # Desaturation overlay
+    cr.set_source_rgba(0.12, 0.12, 0.12, 0.15)
+    cr.rectangle(0, 0, w, h)
+    cr.fill()
+    # Film border
+    cr.set_source_rgba(0.8, 0.6, 0.2, 0.4)
+    cr.set_line_width(3)
+    cr.rectangle(1, 1, w - 2, h - 2)
+    cr.stroke()
+
+
+def _pip_fx_phosphor(cr: Any, w: int, h: int) -> None:
+    """CRT phosphor: green tint + heavy scanlines + deep vignette + flicker."""
+    import cairo
+
+    cx, cy = w / 2, h / 2
+    r = max(w, h) * 0.55
+    pat = cairo.RadialGradient(cx, cy, r * 0.15, cx, cy, r)
+    pat.add_color_stop_rgba(0, 0, 0, 0, 0)
+    pat.add_color_stop_rgba(1, 0, 0, 0, 0.75)
+    cr.set_source(pat)
+    cr.rectangle(0, 0, w, h)
+    cr.fill()
+    # Strong green phosphor tint
+    cr.set_source_rgba(0.0, 0.18, 0.05, 0.25)
+    cr.rectangle(0, 0, w, h)
+    cr.fill()
+    # Heavy scanlines (every 2px)
+    cr.set_source_rgba(0, 0, 0, 0.22)
+    for y in range(0, h, 3):
+        cr.rectangle(0, y, w, 1)
+    cr.fill()
+    # Phosphor border glow
+    cr.set_source_rgba(0.1, 0.8, 0.2, 0.35)
+    cr.set_line_width(2)
+    cr.rectangle(1, 1, w - 2, h - 2)
+    cr.stroke()
+
+
+PIP_EFFECTS = {
+    "vintage": _pip_fx_vintage,
+    "cold_surveillance": _pip_fx_cold,
+    "neon": _pip_fx_neon,
+    "film_print": _pip_fx_film,
+    "phosphor": _pip_fx_phosphor,
+}
+
+
+def _pip_draw(compositor: Any, cr: Any) -> None:
+    """Post-FX cairooverlay callback: draws YouTube PiP on the final output."""
+    yt = getattr(compositor, "_yt_overlay", None)
+    if yt is not None:
+        yt.draw(cr)
 
 
 class FlashScheduler:
@@ -178,7 +443,9 @@ class FlashScheduler:
 
     def kick(self, t: float, bass_energy: float) -> None:
         """Called when a kick onset is detected. Triggers a flash."""
-        cooldown = self.KICK_COOLDOWN_VINYL if getattr(self, '_vinyl_mode', False) else self.KICK_COOLDOWN
+        cooldown = (
+            self.KICK_COOLDOWN_VINYL if getattr(self, "_vinyl_mode", False) else self.KICK_COOLDOWN
+        )
         if t - self._last_kick_at < cooldown:
             return  # cooldown
         self._last_kick_at = t
@@ -288,9 +555,20 @@ def build_inline_fx_chain(
     fx_convert.set_property("dither", 0)  # none — Bayer default creates sawtooth columns
 
     all_elements = [
-        input_sel, queue_base, overlay, convert_base, glupload_base, glcc_base,
-        queue_flash, convert_flash, glupload_flash, glcc_flash,
-        glmixer, glcolorconvert_out, gldownload, fx_convert,
+        input_sel,
+        queue_base,
+        overlay,
+        convert_base,
+        glupload_base,
+        glcc_base,
+        queue_flash,
+        convert_flash,
+        glupload_flash,
+        glcc_flash,
+        glmixer,
+        glcolorconvert_out,
+        gldownload,
+        fx_convert,
     ]
     for el in all_elements:
         if el is None:
@@ -323,7 +601,7 @@ def build_inline_fx_chain(
     flash_pad.set_property("alpha", 0.0)  # hidden until flash
     glcc_flash.link_pads("src", glmixer, flash_pad.get_name())
 
-    # --- Store glmixer ref for YouTube overlay pad (created on-demand) ---
+    # --- Store glmixer ref ---
     compositor._fx_glmixer = glmixer
 
     # --- Shader chain after mixer ---
@@ -331,7 +609,15 @@ def build_inline_fx_chain(
 
     glcolorconvert_out.link(gldownload)
     gldownload.link(fx_convert)
-    fx_convert.link(output_tee)
+
+    # --- Post-FX cairooverlay: composites YouTube PiP AFTER shader chain ---
+    # Uses CPU compositing (640x360 PiP on 1920x1080 output = trivial).
+    # Avoids glvideomixer deadlock from dynamic pad addition.
+    pip_overlay = Gst.ElementFactory.make("cairooverlay", "pip-overlay")
+    pip_overlay.connect("draw", lambda o, cr, ts, dur: _pip_draw(compositor, cr))
+    pipeline.add(pip_overlay)
+    fx_convert.link(pip_overlay)
+    pip_overlay.link(output_tee)
 
     # --- Input-selector: default to live (tiled composite) ---
     live_pad = input_sel.request_pad(input_sel.get_pad_template("sink_%u"), None, None)
@@ -423,9 +709,7 @@ def switch_fx_source(compositor: Any, source: str) -> bool:
                 caps = Gst.ElementFactory.make("capsfilter", "fxsrc-caps")
                 caps.set_property(
                     "caps",
-                    Gst.Caps.from_string(
-                        f"video/x-raw,format=BGRA,width={out_w},height={out_h}"
-                    ),
+                    Gst.Caps.from_string(f"video/x-raw,format=BGRA,width={out_w},height={out_h}"),
                 )
                 elements = [v4l2, q, convert, scale, caps]
                 for el in elements:
@@ -475,13 +759,17 @@ def switch_fx_source(compositor: Any, source: str) -> bool:
 
             # Store for teardown
             if is_youtube:
-                elements = [el for el in [
-                    pipeline.get_by_name("fxsrc-yt"),
-                    pipeline.get_by_name("fxsrc-q"),
-                    pipeline.get_by_name("fxsrc-convert"),
-                    pipeline.get_by_name("fxsrc-scale"),
-                    pipeline.get_by_name("fxsrc-caps"),
-                ] if el is not None]
+                elements = [
+                    el
+                    for el in [
+                        pipeline.get_by_name("fxsrc-yt"),
+                        pipeline.get_by_name("fxsrc-q"),
+                        pipeline.get_by_name("fxsrc-convert"),
+                        pipeline.get_by_name("fxsrc-scale"),
+                        pipeline.get_by_name("fxsrc-caps"),
+                    ]
+                    if el is not None
+                ]
             compositor._fx_camera_branch = elements
             compositor._fx_camera_tee_pad = None if is_youtube else tee_pad
             compositor._fx_camera_sel_pad = sel_pad

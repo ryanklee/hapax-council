@@ -73,6 +73,9 @@ class IrEdgeDaemon:
             limits=httpx.Limits(max_connections=2, max_keepalive_connections=1),
         )
 
+        self._latest_jpeg: bytes = b""
+        self._latest_jpeg_lock = __import__("threading").Lock()
+
     def request_debug_frame(self) -> None:
         """Flag the daemon to save the next frame for debugging."""
         self._save_debug_frame = True
@@ -197,6 +200,11 @@ class IrEdgeDaemon:
         return float(np.mean(diff)) / 255.0
 
     def _handle_frame_saves(self, grey: np.ndarray) -> None:
+        # Always cache latest frame as JPEG for HTTP serving
+        _, buf = cv2.imencode(".jpg", grey, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        with self._latest_jpeg_lock:
+            self._latest_jpeg = buf.tobytes()
+
         if self._save_debug_frame:
             cv2.imwrite(f"/tmp/ir_debug_{self._role}.jpg", grey)
             log.info("Debug frame saved to /tmp/ir_debug_%s.jpg", self._role)
@@ -259,6 +267,56 @@ class IrEdgeDaemon:
         self._running = False
 
 
+FRAME_SERVER_PORT = 8090
+
+
+class _FrameHandler:
+    """HTTP handler that serves the latest IR frame as JPEG."""
+
+    def __init__(self, daemon: IrEdgeDaemon) -> None:
+        self._daemon = daemon
+
+    def __call__(self, environ, start_response):
+        if environ["PATH_INFO"] == "/frame.jpg":
+            with self._daemon._latest_jpeg_lock:
+                data = self._daemon._latest_jpeg
+            if data:
+                start_response(
+                    "200 OK",
+                    [
+                        ("Content-Type", "image/jpeg"),
+                        ("Content-Length", str(len(data))),
+                        ("Cache-Control", "no-cache"),
+                    ],
+                )
+                return [data]
+            start_response("503 No Frame", [("Content-Type", "text/plain")])
+            return [b"no frame yet"]
+        start_response("404 Not Found", [("Content-Type", "text/plain")])
+        return [b"not found"]
+
+
+def _start_frame_server(daemon: IrEdgeDaemon) -> None:
+    """Start a minimal WSGI HTTP server for on-demand frame access."""
+    import threading
+    from wsgiref.simple_server import WSGIServer, make_server
+
+    class _QuietServer(WSGIServer):
+        def handle_error(self, request, client_address):
+            pass  # suppress tracebacks from client disconnects
+
+    try:
+        server = make_server(
+            "0.0.0.0", FRAME_SERVER_PORT, _FrameHandler(daemon), server_class=_QuietServer
+        )
+        server.timeout = 1
+        log.info("Frame server on :%d/frame.jpg", FRAME_SERVER_PORT)
+        t = threading.Thread(target=server.serve_forever, daemon=True)
+        t.start()
+    except Exception:
+        log.warning("Frame server failed to start", exc_info=True)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Hapax IR Edge Inference Daemon")
     parser.add_argument("--role", required=True, choices=["desk", "room", "overhead"])
@@ -285,6 +343,7 @@ def main() -> None:
     signal.signal(signal.SIGTERM, _sigterm)
     signal.signal(signal.SIGINT, _sigterm)
     signal.signal(signal.SIGUSR1, _sigusr1)
+    _start_frame_server(daemon)
     daemon.start()
 
 

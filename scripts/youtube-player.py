@@ -24,8 +24,11 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from collections import deque
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -44,80 +47,364 @@ paused = False
 lock = threading.Lock()
 
 
-def extract_urls(youtube_url: str) -> tuple[str, str, str]:
-    """Extract direct video URL, audio URL, and title via yt-dlp."""
+def extract_urls(youtube_url: str) -> tuple[str, str, str, str]:
+    """Extract direct video URL, audio URL, title, and channel via yt-dlp."""
     log.info("Extracting URLs for: %s", youtube_url)
-    # Get title
-    title_proc = subprocess.run(
-        ["yt-dlp", "--get-title", youtube_url],
-        capture_output=True, text=True, timeout=15,
+    # Get metadata (title + channel) — use --print for both to get deterministic output order
+    meta_proc = subprocess.run(
+        ["yt-dlp", "--print", "%(title)s", "--print", "%(channel)s", youtube_url],
+        capture_output=True,
+        text=True,
+        timeout=15,
     )
-    title = title_proc.stdout.strip() or "Unknown"
+    lines = meta_proc.stdout.strip().split("\n")
+    title = lines[0] if lines else "Unknown"
+    channel = lines[1] if len(lines) > 1 else "Unknown"
 
     # Get video URL
     video_proc = subprocess.run(
-        ["yt-dlp", "-f", "bestvideo[height<=1080][ext=mp4]/bestvideo[height<=1080]",
-         "-g", youtube_url],
-        capture_output=True, text=True, timeout=15,
+        [
+            "yt-dlp",
+            "-f",
+            "bestvideo[height<=1080][ext=mp4]/bestvideo[height<=1080]",
+            "-g",
+            youtube_url,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=15,
     )
     video_url = video_proc.stdout.strip()
 
     # Get audio URL
     audio_proc = subprocess.run(
         ["yt-dlp", "-f", "bestaudio[ext=m4a]/bestaudio", "-g", youtube_url],
-        capture_output=True, text=True, timeout=15,
+        capture_output=True,
+        text=True,
+        timeout=15,
     )
     audio_url = audio_proc.stdout.strip()
 
     if not video_url or not audio_url:
-        raise RuntimeError(f"Failed to extract URLs: video={bool(video_url)}, audio={bool(audio_url)}")
+        raise RuntimeError(
+            f"Failed to extract URLs: video={bool(video_url)}, audio={bool(audio_url)}"
+        )
 
-    return video_url, audio_url, title
+    return video_url, audio_url, title, channel
+
+
+ATTRIBUTION_FILE = Path("/dev/shm/hapax-compositor/yt-attribution.txt")
+ATTRIBUTION_LOG = Path(
+    os.path.expanduser("~/Documents/Personal/30-areas/legomena-live/attribution-log.md")
+)
+current_channel: str = ""
+
+
+# --- YouTube Data API description updater ---
+class LivestreamDescriptionUpdater:
+    """Updates YouTube livestream description with attribution links.
+
+    Reads OAuth2 credentials from `pass show google/youtube-token`.
+    Automatically refreshes access tokens when expired.
+    """
+
+    TOKEN_URI = "https://oauth2.googleapis.com/token"
+    API_BASE = "https://www.googleapis.com/youtube/v3"
+
+    def __init__(self) -> None:
+        self._credentials: dict | None = None
+        self._access_token: str = ""
+        self._broadcast_id: str = ""
+        self._video_id: str = ""
+        self._base_description: str = ""
+        self._enabled = False
+        self._load_credentials()
+
+    def _load_credentials(self) -> None:
+        try:
+            result = subprocess.run(
+                ["pass", "show", "google/token"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode != 0:
+                log.info(
+                    "YouTube API: no credentials in google/token (re-run Google OAuth consent)"
+                )
+                return
+            self._credentials = json.loads(result.stdout.strip())
+            scopes = self._credentials.get("scopes", [])
+            if "https://www.googleapis.com/auth/youtube.force-ssl" not in scopes:
+                log.info(
+                    "YouTube API: token missing youtube.force-ssl scope — re-run OAuth consent"
+                )
+                return
+            self._access_token = self._credentials.get("token", "")
+            self._enabled = True
+            log.info("YouTube API: credentials loaded, description updates enabled")
+        except Exception as e:
+            log.info("YouTube API: credentials unavailable (%s)", e)
+
+    def _refresh_token(self) -> bool:
+        if not self._credentials:
+            return False
+        data = urllib.parse.urlencode(
+            {
+                "client_id": self._credentials["client_id"],
+                "client_secret": self._credentials["client_secret"],
+                "refresh_token": self._credentials["refresh_token"],
+                "grant_type": "refresh_token",
+            }
+        ).encode()
+        try:
+            req = urllib.request.Request(
+                self.TOKEN_URI,
+                data,
+                {"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            resp = urllib.request.urlopen(req, timeout=10)
+            tokens = json.loads(resp.read())
+            self._access_token = tokens["access_token"]
+            return True
+        except Exception as e:
+            log.warning("YouTube API: token refresh failed: %s", e)
+            return False
+
+    def _api_get(self, path: str, params: dict) -> dict | None:
+        qs = urllib.parse.urlencode(params)
+        url = f"{self.API_BASE}/{path}?{qs}"
+        for attempt in range(2):
+            try:
+                req = urllib.request.Request(
+                    url,
+                    headers={
+                        "Authorization": f"Bearer {self._access_token}",
+                    },
+                )
+                resp = urllib.request.urlopen(req, timeout=10)
+                return json.loads(resp.read())
+            except urllib.error.HTTPError as e:
+                if e.code == 401 and attempt == 0:
+                    self._refresh_token()
+                    continue
+                log.warning("YouTube API GET %s: %s", path, e)
+                return None
+            except Exception as e:
+                log.warning("YouTube API GET %s: %s", path, e)
+                return None
+        return None
+
+    def _api_put(self, path: str, params: dict, body: dict) -> dict | None:
+        qs = urllib.parse.urlencode(params)
+        url = f"{self.API_BASE}/{path}?{qs}"
+        data = json.dumps(body).encode()
+        for attempt in range(2):
+            try:
+                req = urllib.request.Request(
+                    url,
+                    data,
+                    method="PUT",
+                    headers={
+                        "Authorization": f"Bearer {self._access_token}",
+                        "Content-Type": "application/json",
+                    },
+                )
+                resp = urllib.request.urlopen(req, timeout=10)
+                return json.loads(resp.read())
+            except urllib.error.HTTPError as e:
+                if e.code == 401 and attempt == 0:
+                    self._refresh_token()
+                    continue
+                log.warning("YouTube API PUT %s: %s", path, e)
+                return None
+            except Exception as e:
+                log.warning("YouTube API PUT %s: %s", path, e)
+                return None
+        return None
+
+    def _find_active_broadcast(self) -> bool:
+        """Find the currently active livestream broadcast."""
+        data = self._api_get(
+            "liveBroadcasts",
+            {
+                "broadcastStatus": "active",
+                "part": "snippet",
+                "mine": "true",
+            },
+        )
+        if not data or not data.get("items"):
+            # Try upcoming (stream may be in preview)
+            data = self._api_get(
+                "liveBroadcasts",
+                {
+                    "broadcastStatus": "upcoming",
+                    "part": "snippet",
+                    "mine": "true",
+                },
+            )
+        if not data or not data.get("items"):
+            log.debug("YouTube API: no active/upcoming broadcast found")
+            return False
+        broadcast = data["items"][0]
+        self._broadcast_id = broadcast["id"]
+        # The video ID for a broadcast is the same as the broadcast ID
+        self._video_id = broadcast["id"]
+        self._base_description = broadcast["snippet"].get("description", "")
+        log.info("YouTube API: found broadcast %s", self._broadcast_id)
+        return True
+
+    def update_description(self) -> None:
+        """Update the livestream description with current attribution log."""
+        if not self._enabled:
+            return
+        if not self._video_id and not self._find_active_broadcast():
+            return
+
+        # Read attribution log
+        try:
+            if not ATTRIBUTION_LOG.exists():
+                return
+            attribution_text = ATTRIBUTION_LOG.read_text().strip()
+            if not attribution_text:
+                return
+        except OSError:
+            return
+
+        # Build description: base + attribution section
+        separator = "\n\n---\n\n"
+        attr_section = "🎵 React content played during this stream:\n" + attribution_text
+
+        # Check if we already have an attribution section
+        if "React content played during this stream:" in self._base_description:
+            # Replace existing section
+            parts = self._base_description.split("React content played during this stream:")
+            new_desc = parts[0].rstrip() + separator + attr_section
+        else:
+            new_desc = self._base_description + separator + attr_section
+
+        # Get current video snippet to preserve required fields
+        video_data = self._api_get(
+            "videos",
+            {
+                "id": self._video_id,
+                "part": "snippet",
+            },
+        )
+        if not video_data or not video_data.get("items"):
+            # Broadcast may have ended, try to find new one
+            self._video_id = ""
+            return
+
+        snippet = video_data["items"][0]["snippet"]
+        snippet["description"] = new_desc
+        # categoryId is required for update
+        if "categoryId" not in snippet:
+            snippet["categoryId"] = "20"  # Gaming (closest to creative coding)
+
+        result = self._api_put(
+            "videos",
+            {"part": "snippet"},
+            {
+                "id": self._video_id,
+                "snippet": snippet,
+            },
+        )
+        if result:
+            log.info(
+                "YouTube API: description updated with %d attribution entries",
+                attribution_text.count("\n") + 1,
+            )
+
+
+_yt_updater: LivestreamDescriptionUpdater | None = None
 
 
 def play_video(youtube_url: str) -> None:
     """Start ffmpeg decoding video to v4l2loopback + audio to PipeWire."""
-    global current_process, current_url, current_title, paused
+    global current_process, current_url, current_title, current_channel, paused
 
     stop_current()
 
     try:
-        video_url, audio_url, title = extract_urls(youtube_url)
+        video_url, audio_url, title, channel = extract_urls(youtube_url)
     except Exception as e:
         log.error("URL extraction failed: %s", e)
         return
 
-    log.info("Playing: %s", title)
+    log.info("Playing: %s by %s", title, channel)
     current_url = youtube_url
     current_title = title
+    current_channel = channel
     paused = False
+
+    # Write attribution for Pango overlay
+    try:
+        ATTRIBUTION_FILE.write_text(f"{title}\n{channel}\n{youtube_url}")
+    except OSError:
+        pass
+
+    # Append to persistent attribution log (for livestream description)
+    try:
+        ATTRIBUTION_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with open(ATTRIBUTION_LOG, "a") as f:
+            from datetime import datetime
+
+            f.write(
+                f"- [{title}]({youtube_url}) — {channel} ({datetime.now().strftime('%H:%M')})\n"
+            )
+    except OSError:
+        pass
+
+    # Update livestream description with attribution (non-blocking)
+    if _yt_updater:
+        threading.Thread(target=_yt_updater.update_description, daemon=True).start()
 
     # ffmpeg: video → v4l2loopback, audio → PipeWire
     cmd = [
-        "ffmpeg", "-y",
-        "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5",
-        "-i", video_url,
-        "-i", audio_url,
-        "-map", "0:v", "-vf", "scale=1920:1080",
-        "-pix_fmt", "yuyv422", "-f", "v4l2", V4L2_DEVICE,
-        "-map", "1:a", "-f", "pulse", "-ac", "2", "youtube-audio",
+        "ffmpeg",
+        "-y",
+        "-reconnect",
+        "1",
+        "-reconnect_streamed",
+        "1",
+        "-reconnect_delay_max",
+        "5",
+        "-i",
+        video_url,
+        "-i",
+        audio_url,
+        "-map",
+        "0:v",
+        "-vf",
+        "scale=1920:1080",
+        "-pix_fmt",
+        "yuyv422",
+        "-f",
+        "v4l2",
+        V4L2_DEVICE,
+        "-map",
+        "1:a",
+        "-f",
+        "pulse",
+        "-ac",
+        "2",
+        "youtube-audio",
     ]
 
     current_process = subprocess.Popen(
-        cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+        cmd,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
     )
     log.info("ffmpeg started (PID %d)", current_process.pid)
-
-    # Notify compositor to switch source
-    try:
-        Path("/dev/shm/hapax-compositor/fx-source.txt").write_text("youtube")
-    except OSError:
-        pass
+    # YouTubeOverlay PiP detects playing state via HTTP poll — no fx-source.txt needed
 
 
 def stop_current() -> None:
     """Stop the currently playing video."""
-    global current_process, current_url, current_title, paused
+    global current_process, current_url, current_title, current_channel, paused
+    ATTRIBUTION_FILE.unlink(missing_ok=True)
     if current_process is not None:
         try:
             current_process.send_signal(signal.SIGTERM)
@@ -130,6 +417,7 @@ def stop_current() -> None:
         current_process = None
         current_url = ""
         current_title = ""
+        current_channel = ""
         paused = False
         log.info("Playback stopped")
 
@@ -158,10 +446,6 @@ def skip_to_next() -> None:
         play_video(item["url"])
     else:
         log.info("Queue empty")
-        try:
-            Path("/dev/shm/hapax-compositor/fx-source.txt").write_text("live")
-        except OSError:
-            pass
 
 
 def add_to_queue(url: str) -> None:
@@ -180,6 +464,7 @@ def get_status() -> dict:
         "paused": paused,
         "url": current_url,
         "title": current_title,
+        "channel": current_channel,
         "queue_length": len(queue),
         "queue": [q["url"] for q in queue],
     }
@@ -241,10 +526,6 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/stop":
             with lock:
                 stop_current()
-            try:
-                Path("/dev/shm/hapax-compositor/fx-source.txt").write_text("live")
-            except OSError:
-                pass
             self._json({"status": "stopped"})
 
         else:
@@ -318,8 +599,13 @@ def main() -> None:
         cli_main()
         return
 
+    global _yt_updater
+
     log.info("YouTube player daemon starting on :%d", LISTEN_PORT)
     log.info("v4l2 output: %s", V4L2_DEVICE)
+
+    # YouTube livestream description updater
+    _yt_updater = LivestreamDescriptionUpdater()
 
     # Auto-advance thread
     threading.Thread(target=auto_advance_loop, daemon=True).start()
