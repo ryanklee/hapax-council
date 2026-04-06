@@ -52,7 +52,7 @@ def build_pipeline(compositor: Any) -> Any:
             continue
         add_camera_branch(compositor, pipeline, comp_element, cam, tile, fps)
 
-    # Output chain: compositor -> cudadownload -> BGRA -> cairooverlay -> pre_fx_tee
+    # Output chain: compositor -> cudadownload -> BGRA -> pre_fx_tee
     download = Gst.ElementFactory.make("cudadownload", "download")
     convert_bgra = Gst.ElementFactory.make("videoconvert", "convert-bgra")
     bgra_caps = Gst.ElementFactory.make("capsfilter", "bgra-caps")
@@ -64,15 +64,9 @@ def build_pipeline(compositor: Any) -> Any:
         ),
     )
 
-    from .overlay import on_draw, on_overlay_caps_changed
-
-    overlay = Gst.ElementFactory.make("cairooverlay", "overlay")
-    overlay.connect("draw", lambda o, cr, ts, dur: on_draw(compositor, o, cr, ts, dur))
-    overlay.connect("caps-changed", lambda o, caps: on_overlay_caps_changed(compositor, o, caps))
-
     pre_fx_tee = Gst.ElementFactory.make("tee", "pre-fx-tee")
 
-    elements_pre = [download, convert_bgra, bgra_caps, overlay, pre_fx_tee]
+    elements_pre = [download, convert_bgra, bgra_caps, pre_fx_tee]
     for el in elements_pre:
         if el is None:
             raise RuntimeError("Failed to create GStreamer element")

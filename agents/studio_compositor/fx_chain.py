@@ -47,28 +47,22 @@ class FlashScheduler:
 def build_inline_fx_chain(
     compositor: Any, pipeline: Any, pre_fx_tee: Any, output_tee: Any, fps: int
 ) -> bool:
-    """Build GPU effects chain with camera base + live overlay flash.
+    """Build GPU effects chain with camera base + live flash via input-selector.
 
-    Pipeline:
-      input-selector (camera) ─┐
-                                ├─ fx-blender (compositor) → queue → videoconvert
-      pre_fx_tee (live overlay) ┘     → capsfilter(RGBA) → glupload → glcolorconvert
-        → [SlotPipeline: 24 glfeedback slots] → glcolorconvert → gldownload → output_tee
+    Pipeline: input-selector → queue → videoconvert → capsfilter(RGBA) → glupload
+      → glcolorconvert → [SlotPipeline: 24 glfeedback slots]
+      → glcolorconvert → gldownload → videoconvert → output_tee
 
     Base source: individual camera (selected via input-selector).
-    Live overlay: tiled composite flashes at 60% opacity on random schedule.
-    Both go through the full shader FX chain together.
+    Live flash: FlashScheduler rapidly switches input-selector between
+    camera and live pads on a random schedule (300ms-3s).
     """
     Gst = compositor._Gst
 
-    # Input selector: switch between individual cameras (base source)
+    # Input selector: switches between camera (base) and live (flash)
     input_sel = Gst.ElementFactory.make("input-selector", "fx-input-selector")
     input_sel.set_property("sync-streams", False)
     pipeline.add(input_sel)
-
-    # Blender: composites camera (base, alpha=1) + live (overlay, alpha=0→0.6)
-    blender = Gst.ElementFactory.make("compositor", "fx-blender")
-    pipeline.add(blender)
 
     queue = Gst.ElementFactory.make("queue", "queue-fx")
     queue.set_property("leaky", 2)
@@ -119,63 +113,47 @@ def build_inline_fx_chain(
     gldownload.link(fx_convert)
     fx_convert.link(output_tee)
 
-    # --- Wire blender → queue (blender output feeds the FX chain) ---
-    blender.link(queue)
+    # Pango text overlay inside the FX chain — applied to whatever source
+    # is active (camera or live), then goes through all shader effects.
+    from .overlay import on_draw, on_overlay_caps_changed
 
-    # Block RECONFIGURE events from propagating downstream when switching sources.
+    overlay = Gst.ElementFactory.make("cairooverlay", "overlay")
+    overlay.connect("draw", lambda o, cr, ts, dur: on_draw(compositor, o, cr, ts, dur))
+    overlay.connect("caps-changed", lambda o, caps: on_overlay_caps_changed(compositor, o, caps))
+    pipeline.add(overlay)
+
+    # Wire input-selector → cairooverlay → queue
+    input_sel.link(overlay)
+    overlay.link(queue)
+
+    # Block RECONFIGURE events from propagating downstream.
     def _drop_reconfigure(pad: Any, info: Any) -> Any:
         event = info.get_event()
         if event and event.type == Gst.EventType.RECONFIGURE:
             return Gst.PadProbeReturn.DROP
         return Gst.PadProbeReturn.OK
 
-    blender.get_static_pad("src").add_probe(
+    input_sel.get_static_pad("src").add_probe(
         Gst.PadProbeType.EVENT_DOWNSTREAM, _drop_reconfigure
     )
 
-    # --- Blender pad 0: camera base (from input-selector, alpha=1.0) ---
-    out_w = compositor.config.output_width
-    out_h = compositor.config.output_height
-    base_pad = blender.request_pad(blender.get_pad_template("sink_%u"), None, None)
-    base_pad.set_property("zorder", 0)
-    base_pad.set_property("width", out_w)
-    base_pad.set_property("height", out_h)
-    # Wire input-selector → blender base pad
-    input_sel.link_pads("src", blender, base_pad.get_name())
+    # Pad 0: tiled composite (live) — used for flash overlay
+    live_pad = input_sel.request_pad(input_sel.get_pad_template("sink_%u"), None, None)
+    tee_pad = pre_fx_tee.request_pad(pre_fx_tee.get_pad_template("src_%u"), None, None)
+    tee_pad.link(live_pad)
+    input_sel.set_property("active-pad", live_pad)
 
-    # Input-selector pad 0: tiled composite as default camera source
-    live_sel_pad = input_sel.request_pad(input_sel.get_pad_template("sink_%u"), None, None)
-    tee_pad_sel = pre_fx_tee.request_pad(pre_fx_tee.get_pad_template("src_%u"), None, None)
-    tee_pad_sel.link(live_sel_pad)
-    input_sel.set_property("active-pad", live_sel_pad)
-
-    # --- Blender pad 1: live overlay (from pre_fx_tee, alpha=0.0 default) ---
-    overlay_queue = Gst.ElementFactory.make("queue", "queue-fx-overlay")
-    overlay_queue.set_property("leaky", 2)
-    overlay_queue.set_property("max-size-buffers", 1)
-    pipeline.add(overlay_queue)
-
-    overlay_pad = blender.request_pad(blender.get_pad_template("sink_%u"), None, None)
-    overlay_pad.set_property("zorder", 1)
-    overlay_pad.set_property("width", out_w)
-    overlay_pad.set_property("height", out_h)
-    overlay_pad.set_property("alpha", 0.0)  # hidden until flash
-
-    tee_pad_overlay = pre_fx_tee.request_pad(pre_fx_tee.get_pad_template("src_%u"), None, None)
-    tee_pad_overlay.link(overlay_queue.get_static_pad("sink"))
-    overlay_queue.link_pads("src", blender, overlay_pad.get_name())
-
-    # Store selector, blender, and overlay pad for runtime control
+    # Store for runtime switching
     compositor._fx_input_selector = input_sel
-    compositor._fx_input_pads = {"live": live_sel_pad}
+    compositor._fx_input_pads = {"live": live_pad}
+    compositor._fx_live_pad = live_pad  # for flash scheduler
     compositor._fx_active_source = "live"
     compositor._fx_camera_branch: list[Any] = []
     compositor._fx_switching = False
-    compositor._fx_overlay_pad = overlay_pad
     compositor._fx_flash_scheduler = FlashScheduler()
 
     log.info(
-        "FX chain: %d shader slots, camera base + live overlay (60%% flash)",
+        "FX chain: %d shader slots, input-selector with live flash",
         compositor._slot_pipeline.num_slots,
     )
     return True
@@ -339,12 +317,8 @@ def fx_tick_callback(compositor: Any) -> bool:
     tick_modulator(compositor, t, energy, b)
     tick_slot_pipeline(compositor, t)
 
-    # Flash scheduler: pulse live overlay alpha on random schedule
-    scheduler = getattr(compositor, "_fx_flash_scheduler", None)
-    overlay_pad = getattr(compositor, "_fx_overlay_pad", None)
-    if scheduler and overlay_pad:
-        alpha = scheduler.tick(time.monotonic())
-        if alpha is not None:
-            overlay_pad.set_property("alpha", alpha)
+    # Flash scheduler disabled — compositor blending produced garbage,
+    # rapid input-selector switching causes glitches. Needs a different
+    # approach (glvideomixer or pre-blend via appsrc). Research pending.
 
     return True
