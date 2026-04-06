@@ -7,22 +7,22 @@
       "type": "nightvision_tint",
       "params": {
         "green_intensity": 0.95,
-        "brightness": 3.0,
+        "brightness": 2.0,
         "contrast": 1.8
       }
     },
     "bloom": {
       "type": "bloom",
       "params": {
-        "threshold": 0.05,
+        "threshold": 0.1,
         "radius": 15,
-        "alpha": 0.7
+        "alpha": 0.5
       }
     },
     "noise": {
       "type": "noise_overlay",
       "params": {
-        "intensity": 0.3,
+        "intensity": 0.2,
         "animated": 1
       }
     },

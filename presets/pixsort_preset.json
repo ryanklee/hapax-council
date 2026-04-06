@@ -8,7 +8,7 @@
       "params": {
         "threshold_low": 0.02,
         "threshold_high": 0.95,
-        "sort_length": 600,
+        "sort_length": 500,
         "direction": 0.0
       }
     },
