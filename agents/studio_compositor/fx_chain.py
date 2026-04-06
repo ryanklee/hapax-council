@@ -409,11 +409,161 @@ PIP_EFFECTS = {
 }
 
 
+class AlbumOverlay:
+    """Floating album cover + splattribution text overlay.
+
+    Reads the IR album cover image from /dev/shm/hapax-compositor/album-cover.jpg
+    and the splattribution text from music-attribution.txt. Bounces independently
+    from the YouTube PiP.
+    """
+
+    SIZE = 300  # display size (square, album covers are square)
+    ALPHA = 0.85
+    COVER_PATH = "/dev/shm/hapax-compositor/album-cover.png"
+    ATTRIB_PATH = "/dev/shm/hapax-compositor/music-attribution.txt"
+
+    def __init__(self) -> None:
+        self._x = 1200.0
+        self._y = 600.0
+        self._vx = -0.9
+        self._vy = 1.1
+        self._surface: Any = None
+        self._surface_mtime: float = 0
+        self._attrib_text: str = ""
+        self._attrib_mtime: float = 0
+        self._attrib_layout: Any = None
+        self._fx_func: Any = None
+        self._fx_name: str = ""
+
+    def tick(self) -> None:
+        """Bounce position. Called every frame from the FX tick."""
+        self._x += self._vx
+        self._y += self._vy
+        total_h = self.SIZE + 100  # cover + text below
+        if self._x <= 20:
+            self._x = 20
+            self._vx = abs(self._vx)
+        elif self._x + self.SIZE >= 1920 - 20:
+            self._x = 1920 - self.SIZE - 20
+            self._vx = -abs(self._vx)
+        if self._y <= 20:
+            self._y = 20
+            self._vy = abs(self._vy)
+        elif self._y + total_h >= 1080 - 20:
+            self._y = 1080 - total_h - 20
+            self._vy = -abs(self._vy)
+
+    def draw(self, cr: Any) -> None:
+        """Paint album cover + splattribution on the cairooverlay."""
+        import os
+
+        # Reload cover image if changed
+        try:
+            if os.path.exists(self.COVER_PATH):
+                mtime = os.path.getmtime(self.COVER_PATH)
+                if mtime != self._surface_mtime:
+                    self._load_cover()
+                    self._surface_mtime = mtime
+                    # Pick new random effect on album change
+                    self._fx_name, self._fx_func = random.choice(list(PIP_EFFECTS.items()))
+        except OSError:
+            pass
+
+        # Reload attribution text if changed
+        try:
+            if os.path.exists(self.ATTRIB_PATH):
+                mtime = os.path.getmtime(self.ATTRIB_PATH)
+                if mtime != self._attrib_mtime:
+                    from pathlib import Path
+
+                    self._attrib_text = Path(self.ATTRIB_PATH).read_text().strip()
+                    self._attrib_mtime = mtime
+                    self._attrib_layout = None
+        except OSError:
+            pass
+
+        if self._surface is None:
+            return
+
+        cr.save()
+        x, y = int(self._x), int(self._y)
+        cr.translate(x, y)
+
+        # Paint album cover scaled to SIZE x SIZE
+
+        sw = self._surface.get_width()
+        sh = self._surface.get_height()
+        if sw > 0 and sh > 0:
+            scale = self.SIZE / max(sw, sh)
+            cr.save()
+            cr.scale(scale, scale)
+            cr.set_source_surface(self._surface, 0, 0)
+            cr.paint_with_alpha(self.ALPHA)
+            cr.restore()
+
+            # Apply PiP effect on the cover area
+            if self._fx_func is not None:
+                self._fx_func(cr, self.SIZE, self.SIZE)
+
+        # Draw splattribution text below the cover
+        if self._attrib_text:
+            self._draw_attrib(cr)
+
+        cr.restore()
+
+    def _load_cover(self) -> None:
+        """Load album cover PNG as a cairo surface."""
+        try:
+            import cairo
+
+            self._surface = cairo.ImageSurface.create_from_png(self.COVER_PATH)
+            log.info(
+                "Album cover loaded (%dx%d)", self._surface.get_width(), self._surface.get_height()
+            )
+        except Exception:
+            log.warning("Album cover load failed", exc_info=True)
+            self._surface = None
+
+    def _draw_attrib(self, cr: Any) -> None:
+        """Draw splattribution text below the album cover."""
+        import gi
+
+        gi.require_version("Pango", "1.0")
+        gi.require_version("PangoCairo", "1.0")
+        from gi.repository import Pango, PangoCairo
+
+        if self._attrib_layout is None:
+            layout = PangoCairo.create_layout(cr)
+            font = Pango.FontDescription.from_string("JetBrains Mono Bold 10")
+            layout.set_font_description(font)
+            layout.set_width(int(self.SIZE * Pango.SCALE))
+            layout.set_wrap(Pango.WrapMode.WORD_CHAR)
+            text = self._attrib_text.replace("&", "&amp;").replace("<", "&lt;")
+            layout.set_markup(text, -1)
+            self._attrib_layout = layout
+
+        _w, _h = self._attrib_layout.get_pixel_size()
+        tx, ty = 0, self.SIZE + 5
+
+        # Dark outline
+        cr.set_source_rgba(0.0, 0.0, 0.0, 0.85)
+        for dx, dy in ((-2, 0), (2, 0), (0, -2), (0, 2)):
+            cr.move_to(tx + dx, ty + dy)
+            PangoCairo.show_layout(cr, self._attrib_layout)
+        # Foreground
+        cr.set_source_rgba(1.0, 0.97, 0.90, 1.0)
+        cr.move_to(tx, ty)
+        PangoCairo.show_layout(cr, self._attrib_layout)
+
+
 def _pip_draw(compositor: Any, cr: Any) -> None:
-    """Post-FX cairooverlay callback: draws YouTube PiP on the final output."""
+    """Post-FX cairooverlay callback: draws YouTube PiP and album overlay."""
     yt = getattr(compositor, "_yt_overlay", None)
     if yt is not None:
         yt.draw(cr)
+    album = getattr(compositor, "_album_overlay", None)
+    if album is not None:
+        album.draw(cr)
 
 
 class FlashScheduler:
@@ -634,6 +784,7 @@ def build_inline_fx_chain(
     compositor._fx_flash_pad = flash_pad
     compositor._fx_flash_scheduler = FlashScheduler()
     compositor._yt_overlay = YouTubeOverlay()
+    compositor._album_overlay = AlbumOverlay()
 
     log.info(
         "FX chain: %d shader slots, glvideomixer (camera base + live flash 60%%)",
@@ -866,5 +1017,10 @@ def fx_tick_callback(compositor: Any) -> bool:
     yt_overlay = getattr(compositor, "_yt_overlay", None)
     if yt_overlay:
         yt_overlay.tick(compositor, compositor._Gst)
+
+    # Album overlay: floating cover + splattribution
+    album_overlay = getattr(compositor, "_album_overlay", None)
+    if album_overlay:
+        album_overlay.tick()
 
     return True

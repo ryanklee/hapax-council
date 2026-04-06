@@ -38,21 +38,14 @@ log = logging.getLogger("album-identifier")
 PI6_IP = os.environ.get("PI6_IP", "192.168.68.81")
 IR_FRAME_URL = f"http://{PI6_IP}:8090/frame.jpg"
 
-# Album cover crop zone with 10% margin (album fills most of the 640x480 frame)
-# These define the core album area; 10% margin means we crop slightly inside
-MARGIN = 0.10
-FRAME_W, FRAME_H = 640, 480
-CROP_X = int(FRAME_W * MARGIN)
-CROP_Y = int(FRAME_H * MARGIN)
-CROP_W = int(FRAME_W * (1 - 2 * MARGIN))
-CROP_H = int(FRAME_H * (1 - 2 * MARGIN))
+# Album cover detection — vision model finds the album bounding box in the 1080p IR frame
 
 POLL_INTERVAL = 10  # seconds between album change checks
 TRACK_ID_INTERVAL = 30  # seconds between track identification attempts
 AUDIO_CAPTURE_SECONDS = 12  # seconds of audio to capture for fingerprinting
 
 SHM_DIR = Path("/dev/shm/hapax-compositor")
-ALBUM_COVER_FILE = SHM_DIR / "album-cover.jpg"
+ALBUM_COVER_FILE = SHM_DIR / "album-cover.png"
 MUSIC_ATTRIBUTION_FILE = SHM_DIR / "music-attribution.txt"
 ALBUM_STATE_FILE = SHM_DIR / "album-state.json"
 ATTRIBUTION_LOG = Path(
@@ -98,19 +91,80 @@ def fetch_ir_frame() -> bytes | None:
         return None
 
 
-def crop_album_zone(frame_data: bytes) -> bytes | None:
-    """Crop the album zone from the IR frame. Returns JPEG bytes."""
-    try:
-        from PIL import Image
+def detect_and_crop_album(frame_data: bytes) -> bytes | None:
+    """Use vision model to detect album cover bounding box, then crop. Returns JPEG bytes."""
+    from PIL import Image
 
-        img = Image.open(io.BytesIO(frame_data))
-        cropped = img.crop((CROP_X, CROP_Y, CROP_X + CROP_W, CROP_Y + CROP_H))
+    key = _get_litellm_key()
+    if not key:
+        return None
+
+    img = Image.open(io.BytesIO(frame_data))
+    w, h = img.size
+
+    b64 = base64.b64encode(frame_data).decode()
+    body = json.dumps(
+        {
+            "model": "fast",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
+                        },
+                        {
+                            "type": "text",
+                            "text": (
+                                f"This {w}x{h} infrared image shows a vinyl album cover on a desk. "
+                                "Find the bounding box of the album cover (the square cardboard sleeve). "
+                                f'Return ONLY: {{"x1":int,"y1":int,"x2":int,"y2":int}}'
+                            ),
+                        },
+                    ],
+                }
+            ],
+        }
+    ).encode()
+
+    try:
+        req = urllib.request.Request(
+            LITELLM_URL,
+            body,
+            {"Content-Type": "application/json", "Authorization": f"Bearer {key}"},
+        )
+        resp = urllib.request.urlopen(req, timeout=20)
+        raw = json.loads(resp.read())["choices"][0]["message"]["content"].strip()
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[1] if "\n" in raw else raw[3:]
+            if raw.endswith("```"):
+                raw = raw[:-3]
+            raw = raw.strip()
+        box = json.loads(raw)
+        x1, y1 = max(0, box["x1"]), max(0, box["y1"])
+        x2, y2 = min(w, box["x2"]), min(h, box["y2"])
+
+        cropped = img.crop((x1, y1, x2, y2))
+        # Force square (album covers are always square)
+        cw, ch = cropped.size
+        size = max(cw, ch)
+        square = Image.new("RGB", (size, size), (0, 0, 0))
+        square.paste(cropped, ((size - cw) // 2, (size - ch) // 2))
+
+        buf = io.BytesIO()
+        square.save(buf, format="JPEG", quality=90)
+        log.info("Album detected: (%d,%d)-(%d,%d) -> %dx%d", x1, y1, x2, y2, size, size)
+        return buf.getvalue()
+    except Exception as e:
+        log.warning("Album detection failed: %s", e)
+        # Fallback: center square crop
+        size = min(w, h)
+        cx, cy = w // 2, h // 2
+        cropped = img.crop((cx - size // 2, cy - size // 2, cx + size // 2, cy + size // 2))
         buf = io.BytesIO()
         cropped.save(buf, format="JPEG", quality=90)
         return buf.getvalue()
-    except Exception as e:
-        log.debug("Crop failed: %s", e)
-        return None
 
 
 def image_hash(data: bytes) -> str:
@@ -635,8 +689,8 @@ def main() -> None:
         if frame_data is None:
             continue
 
-        # Crop album zone
-        cropped = crop_album_zone(frame_data)
+        # Detect and crop album cover via vision
+        cropped = detect_and_crop_album(frame_data)
         if cropped is None:
             continue
 
@@ -650,10 +704,27 @@ def main() -> None:
         log.info("Album zone changed (distance=%d), identifying...", dist)
         _last_hash = h
 
-        # Save cropped cover for compositor overlay
+        # Save cropped cover as PNG with random cheesy color tint (IR is monochrome)
         try:
-            ALBUM_COVER_FILE.write_bytes(cropped)
-        except OSError:
+            from PIL import Image, ImageOps
+
+            img = Image.open(io.BytesIO(cropped)).convert("L")
+            # Random cheesy duotone colorization
+            tints = [
+                ((20, 0, 40), (255, 100, 50)),  # purple → orange
+                ((0, 20, 40), (50, 255, 200)),  # dark teal → mint
+                ((40, 0, 0), (255, 200, 50)),  # dark red → gold
+                ((0, 0, 30), (100, 200, 255)),  # navy → sky blue
+                ((30, 10, 0), (255, 80, 120)),  # brown → hot pink
+                ((0, 30, 20), (200, 255, 100)),  # forest → lime
+                ((20, 0, 20), (255, 150, 255)),  # plum → lavender
+                ((10, 20, 0), (255, 255, 100)),  # olive → yellow
+            ]
+            dark, light = random.choice(tints)
+            colored = ImageOps.colorize(img, dark, light)
+            colored.save(str(ALBUM_COVER_FILE), format="PNG")
+            log.info("Album cover saved with color tint")
+        except Exception:
             pass
 
         # Combined vision + audio identification
