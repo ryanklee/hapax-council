@@ -89,13 +89,14 @@ const TAGS: Record<string, Set<string>> = {
   nightvision: new Set(["mono"]),
   voronoi_crystal: new Set(["sparse"]),
   vhs_preset: new Set(["scanline"]),
-  diff_preset: new Set(["mono"]),
+  diff_preset: new Set(["mono", "sparse"]),
   ambient: new Set(["mono"]),
   thermal_preset: new Set(["sparse"]),
   trap: new Set(["glitch"]),
   datamosh: new Set(["glitch"]),
   datamosh_heavy: new Set(["glitch"]),
   glitch_blocks_preset: new Set(["glitch"]),
+  screwed: new Set(["glitch"]),
   feedback_preset: new Set(["temporal"]),
   ghost: new Set(["temporal"]),
   trails: new Set(["temporal"]),
@@ -115,6 +116,10 @@ function canAdd(chain: string[], candidate: string): boolean {
     if (
       (candidateTags.has("glitch") && existingTags.has("temporal")) ||
       (candidateTags.has("temporal") && existingTags.has("glitch")) ||
+      (candidateTags.has("glitch") && existingTags.has("sparse")) ||
+      (candidateTags.has("sparse") && existingTags.has("glitch")) ||
+      (candidateTags.has("pattern") && existingTags.has("temporal")) ||
+      (candidateTags.has("temporal") && existingTags.has("pattern")) ||
       (candidateTags.has("sparse") && existingTags.has("temporal")) ||
       (candidateTags.has("temporal") && existingTags.has("sparse"))
     ) return false;
