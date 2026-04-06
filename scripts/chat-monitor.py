@@ -1,0 +1,357 @@
+#!/usr/bin/env python3
+"""chat-monitor.py — YouTube Live chat structural analysis for Legomena Live.
+
+Reads chat via chat-downloader, computes structural metrics (no sentiment,
+no quality judgment), periodically batches to LLM for deeper analysis.
+Feeds the token ledger to drive the token pole.
+
+Metrics (all structural, none judgmental):
+  - Unique participants per window
+  - Response chain depth (thread detection via embedding similarity)
+  - Lexical diversity (MATTR)
+  - Novel bigram rate (information density)
+  - Conversation rhythm (burst detection)
+  - Batch LLM structural observations (every 120s)
+
+No individual message is ever scored as good or bad.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+import re
+import subprocess
+import sys
+import threading
+import time
+import urllib.request
+from collections import deque
+from pathlib import Path
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+log = logging.getLogger("chat-monitor")
+
+# --- Config ---
+POLL_INTERVAL = 2  # seconds between chat reads
+BATCH_INTERVAL = 120  # seconds between LLM batch analysis
+WINDOW_SIZE = 100  # messages in sliding window
+EMBED_WINDOW = 20  # recent messages for embedding similarity
+THREAD_SIMILARITY_THRESHOLD = 0.6
+
+LITELLM_URL = "http://localhost:4000/v1/chat/completions"
+LITELLM_KEY = ""
+
+SHM_DIR = Path("/dev/shm/hapax-compositor")
+CHAT_STATE_FILE = SHM_DIR / "chat-state.json"
+
+
+def _get_litellm_key() -> str:
+    global LITELLM_KEY
+    if not LITELLM_KEY:
+        try:
+            result = subprocess.run(
+                ["pass", "show", "litellm/master-key"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            LITELLM_KEY = result.stdout.strip()
+        except Exception:
+            pass
+    return LITELLM_KEY
+
+
+# --- Simple tokenizer for chat text ---
+_EMOJI_RE = re.compile(
+    "[\U0001f600-\U0001f64f\U0001f300-\U0001f5ff\U0001f680-\U0001f6ff"
+    "\U0001f1e0-\U0001f1ff\U00002702-\U000027b0\U0001fa00-\U0001fa6f"
+    "\U0001fa70-\U0001faff\U00002600-\U000026ff\U0000fe0f]+",
+    flags=re.UNICODE,
+)
+
+
+def tokenize_chat(text: str) -> list[str]:
+    """Simple whitespace tokenizer for chat. Strips emoji, lowercases, normalizes."""
+    text = _EMOJI_RE.sub("", text)
+    text = re.sub(r"(.)\1{3,}", r"\1\1", text)  # collapse repeated chars (lmaooooo → lmao)
+    text = text.lower().strip()
+    return [w for w in text.split() if len(w) > 1]
+
+
+def compute_mattr(tokens: list[str], window: int = 50) -> float:
+    """Moving-Average Type-Token Ratio — length-independent lexical diversity."""
+    if len(tokens) < window:
+        return len(set(tokens)) / max(len(tokens), 1)
+    ratios = []
+    for i in range(len(tokens) - window + 1):
+        w = tokens[i : i + window]
+        ratios.append(len(set(w)) / window)
+    return sum(ratios) / len(ratios) if ratios else 0.0
+
+
+def compute_hapax_ratio(tokens: list[str]) -> float:
+    """Ratio of words appearing exactly once (hapax legomena)."""
+    if not tokens:
+        return 0.0
+    from collections import Counter
+
+    counts = Counter(tokens)
+    hapax = sum(1 for c in counts.values() if c == 1)
+    return hapax / len(counts) if counts else 0.0
+
+
+def compute_novel_bigrams(tokens: list[str], seen_bigrams: set) -> float:
+    """Rate of bigrams not seen in the existing window."""
+    if len(tokens) < 2:
+        return 0.0
+    bigrams = [(tokens[i], tokens[i + 1]) for i in range(len(tokens) - 1)]
+    novel = sum(1 for b in bigrams if b not in seen_bigrams)
+    rate = novel / len(bigrams) if bigrams else 0.0
+    seen_bigrams.update(bigrams)
+    return rate
+
+
+def get_embedding(text: str) -> list[float] | None:
+    """Get embedding from nomic-embed via Ollama on localhost."""
+    try:
+        body = json.dumps({"model": "nomic-embed-text", "prompt": text}).encode()
+        req = urllib.request.Request(
+            "http://localhost:11434/api/embeddings",
+            body,
+            {"Content-Type": "application/json"},
+        )
+        resp = urllib.request.urlopen(req, timeout=2)
+        data = json.loads(resp.read())
+        return data.get("embedding")
+    except Exception:
+        return None
+
+
+def cosine_similarity(a: list[float], b: list[float]) -> float:
+    """Cosine similarity between two vectors."""
+    dot = sum(x * y for x, y in zip(a, b, strict=False))
+    na = sum(x * x for x in a) ** 0.5
+    nb = sum(x * x for x in b) ** 0.5
+    return dot / (na * nb) if na > 0 and nb > 0 else 0.0
+
+
+class ChatMonitor:
+    """Monitors YouTube Live chat and computes structural metrics."""
+
+    def __init__(self, video_id: str) -> None:
+        self.video_id = video_id
+        self.messages: deque = deque(maxlen=WINDOW_SIZE)
+        self.all_tokens: list[str] = []
+        self.seen_bigrams: set = set()
+        self.embeddings: deque = deque(maxlen=EMBED_WINDOW)
+        self.authors: set = set()
+        self.author_window: deque = deque(maxlen=WINDOW_SIZE)
+        self._last_batch = 0.0
+        self._running = False
+
+    def start(self) -> None:
+        """Start monitoring chat."""
+        self._running = True
+        log.info("Chat monitor starting for video %s", self.video_id)
+
+        # Start batch analysis thread
+        threading.Thread(target=self._batch_loop, daemon=True).start()
+
+        # Main chat reading loop
+        try:
+            from chat_downloader import ChatDownloader
+
+            downloader = ChatDownloader()
+            chat = downloader.get_chat(
+                f"https://www.youtube.com/watch?v={self.video_id}",
+                output=None,
+            )
+            for message in chat:
+                if not self._running:
+                    break
+                self._process_message(message)
+        except KeyboardInterrupt:
+            self._running = False
+        except Exception:
+            log.exception("Chat downloader error")
+            self._running = False
+
+    def _process_message(self, msg: dict) -> None:
+        """Process a single chat message — structural metrics only."""
+        text = msg.get("message", "")
+        author = msg.get("author", {}).get("name", "")
+        author_id = msg.get("author", {}).get("id", "")
+        timestamp = msg.get("timestamp", time.time())
+        msg_type = msg.get("message_type", "text_message")
+        amount = msg.get("money", {}).get("amount", 0) if msg.get("money") else 0
+
+        # Record message
+        self.messages.append(
+            {
+                "text": text,
+                "author": author,
+                "author_id": author_id,
+                "timestamp": timestamp,
+                "type": msg_type,
+                "amount": amount,
+            }
+        )
+
+        self.authors.add(author_id)
+        self.author_window.append(author_id)
+
+        # Tokenize and accumulate
+        tokens = tokenize_chat(text)
+        self.all_tokens.extend(tokens)
+        if len(self.all_tokens) > 5000:
+            self.all_tokens = self.all_tokens[-2000:]
+
+        # Compute per-message novelty
+        novel_rate = compute_novel_bigrams(tokens, self.seen_bigrams)
+
+        # Embedding for thread detection (skip if too short)
+        if len(text) > 10:
+            emb = get_embedding(text)
+            if emb:
+                # Check thread similarity
+                thread_hits = 0
+                for prev_emb in self.embeddings:
+                    if cosine_similarity(emb, prev_emb) > THREAD_SIMILARITY_THRESHOLD:
+                        thread_hits += 1
+                self.embeddings.append(emb)
+
+        # Superchat/membership boost — recorded as direct token pole contribution
+        if amount > 0:
+            from token_ledger import record_spend
+
+            # Scale superchat to token equivalent (rough: $1 = 500 tokens of "gratitude")
+            token_equiv = int(amount * 500)
+            record_spend("superchat", token_equiv, 0, cost=0.0)
+            log.info("Superchat: %s from %s (token equiv: %d)", amount, author, token_equiv)
+
+        if msg_type in ("membership_item", "paid_message"):
+            from token_ledger import record_spend
+
+            record_spend("membership", 1000, 0, cost=0.0)
+
+        # Update viewer count
+        unique_recent = len(set(self.author_window))
+        from token_ledger import set_active_viewers
+
+        set_active_viewers(unique_recent)
+
+        # Write chat state for overlay
+        self._write_state(unique_recent, novel_rate)
+
+    def _write_state(self, unique_authors: int, novel_rate: float) -> None:
+        """Write current chat metrics to shm."""
+        # Lexical diversity of the full window
+        mattr = compute_mattr(self.all_tokens[-500:])
+        hapax = compute_hapax_ratio(self.all_tokens[-200:])
+
+        state = {
+            "unique_authors": unique_authors,
+            "total_messages": len(self.messages),
+            "mattr": round(mattr, 3),
+            "hapax_ratio": round(hapax, 3),
+            "novel_rate": round(novel_rate, 3),
+            "updated": time.time(),
+        }
+        try:
+            SHM_DIR.mkdir(parents=True, exist_ok=True)
+            CHAT_STATE_FILE.write_text(json.dumps(state))
+        except OSError:
+            pass
+
+        from token_ledger import record_chat_metrics
+
+        record_chat_metrics(unique_authors, mattr, novel_rate)
+
+    def _batch_loop(self) -> None:
+        """Periodic LLM batch analysis of chat structure."""
+        while self._running:
+            time.sleep(BATCH_INTERVAL)
+            if len(self.messages) < 5:
+                continue
+            self._run_batch_analysis()
+
+    def _run_batch_analysis(self) -> None:
+        """Send recent chat window to LLM for structural analysis."""
+        key = _get_litellm_key()
+        if not key:
+            return
+
+        # Format recent messages (anonymized — no names)
+        recent = list(self.messages)[-50:]
+        chat_text = "\n".join(f"[{m['type']}] {m['text']}" for m in recent if m["text"])
+
+        body = json.dumps(
+            {
+                "model": "fast",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": (
+                            "Analyze the STRUCTURE of this live chat excerpt. "
+                            "Do NOT judge quality or sentiment. Describe:\n"
+                            "1. How many distinct conversation threads are active?\n"
+                            "2. Are participants building on each other's ideas or talking past each other?\n"
+                            "3. Is the conversation deepening (follow-ups, elaboration) or surface-level?\n"
+                            "4. Describe the rhythm: sustained dialogue, sporadic bursts, or monologue?\n\n"
+                            f"Chat:\n{chat_text}\n\n"
+                            'Return JSON: {"thread_count": int, "threading_ratio": float, '
+                            '"depth_signal": float, "novelty_rate": float, '
+                            '"rhythm": string}'
+                        ),
+                    }
+                ],
+            }
+        ).encode()
+
+        try:
+            req = urllib.request.Request(
+                LITELLM_URL,
+                body,
+                {"Content-Type": "application/json", "Authorization": f"Bearer {key}"},
+            )
+            resp = urllib.request.urlopen(req, timeout=30)
+            data = json.loads(resp.read())
+
+            # Record the token spend — THIS drives the pole
+            usage = data.get("usage", {})
+            prompt_tok = usage.get("prompt_tokens", 0)
+            completion_tok = usage.get("completion_tokens", 0)
+
+            from token_ledger import record_spend
+
+            record_spend("chat_analysis", prompt_tok, completion_tok)
+
+            content = data["choices"][0]["message"]["content"]
+            log.info("Batch analysis (%d+%d tokens): %s", prompt_tok, completion_tok, content[:200])
+
+        except Exception:
+            log.warning("Batch analysis failed", exc_info=True)
+
+
+def main() -> None:
+    video_id = os.environ.get("YOUTUBE_VIDEO_ID", "")
+    if not video_id:
+        # Try to read from a file
+        vid_path = SHM_DIR / "youtube-video-id.txt"
+        if vid_path.exists():
+            video_id = vid_path.read_text().strip()
+
+    if not video_id:
+        log.error(
+            "No video ID. Set YOUTUBE_VIDEO_ID or write to %s", SHM_DIR / "youtube-video-id.txt"
+        )
+        sys.exit(1)
+
+    monitor = ChatMonitor(video_id)
+    monitor.start()
+
+
+if __name__ == "__main__":
+    main()

@@ -708,6 +708,17 @@ def main() -> None:
             from PIL import Image, ImageOps
 
             img = Image.open(io.BytesIO(cropped)).convert("L")
+            # Crop to center square with 15% zoom (cut desk edges)
+            w, h = img.size
+            size = min(w, h)
+            margin = int(size * 0.15)
+            left = (w - size) // 2 + margin
+            top = (h - size) // 2 + margin
+            img = img.crop((left, top, left + size - 2 * margin, top + size - 2 * margin))
+            # Rotate 90° CW (album is sideways in the IR camera frame)
+            img = img.rotate(-90, expand=True)
+            # Downscale for overlay (no need for 1080p on a 300px bouncing tile)
+            img = img.resize((512, 512), Image.LANCZOS)
             # Random cheesy duotone colorization
             tints = [
                 ((20, 0, 40), (255, 100, 50)),  # purple → orange

@@ -668,6 +668,22 @@ wheels = [
 ]
 
 [[package]]
+name = "chat-downloader"
+version = "0.2.8"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "colorlog" },
+    { name = "docstring-parser" },
+    { name = "isodate" },
+    { name = "requests" },
+    { name = "websocket-client" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c0/28/b6df5c84e271e1b51a1da23a0f3c728cc1fce6aee66913d9e4c130f23318/chat-downloader-0.2.8.tar.gz", hash = "sha256:5816ac06179f81190e74c773d8afda82f4be718ea6dffdf7c22bbe265e1dd428", size = 108702, upload-time = "2023-09-03T23:43:33.266Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/28/af/019d012893ab913e2e9ded64c061c920c6b41c7ec068da3c609672a00abc/chat_downloader-0.2.8-py2.py3-none-any.whl", hash = "sha256:2d9bbddc0a85371ba44814c3686ee6e5f70c0531d1f5ecc236eae5a5bbb90465", size = 77598, upload-time = "2023-09-03T23:43:31.425Z" },
+]
+
+[[package]]
 name = "click"
 version = "8.3.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1862,6 +1878,7 @@ name = "hapax-council"
 version = "0.3.7"
 source = { editable = "." }
 dependencies = [
+    { name = "chat-downloader" },
     { name = "evdev" },
     { name = "fastapi" },
     { name = "httpx" },
@@ -1994,6 +2011,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "chat-downloader", specifier = ">=0.2.8" },
     { name = "evdev", specifier = ">=1.9.3" },
     { name = "fastapi", specifier = ">=0.135.1" },
     { name = "fastapi", marker = "extra == 'logos-api'", specifier = ">=0.115.0" },

@@ -557,13 +557,16 @@ class AlbumOverlay:
 
 
 def _pip_draw(compositor: Any, cr: Any) -> None:
-    """Post-FX cairooverlay callback: draws YouTube PiP and album overlay."""
+    """Post-FX cairooverlay callback: draws YouTube PiP, album overlay, and token pole."""
     yt = getattr(compositor, "_yt_overlay", None)
     if yt is not None:
         yt.draw(cr)
     album = getattr(compositor, "_album_overlay", None)
     if album is not None:
         album.draw(cr)
+    token_pole = getattr(compositor, "_token_pole", None)
+    if token_pole is not None:
+        token_pole.draw(cr)
 
 
 class FlashScheduler:
@@ -785,6 +788,10 @@ def build_inline_fx_chain(
     compositor._fx_flash_scheduler = FlashScheduler()
     compositor._yt_overlay = YouTubeOverlay()
     compositor._album_overlay = AlbumOverlay()
+
+    from .token_pole import TokenPole
+
+    compositor._token_pole = TokenPole()
 
     log.info(
         "FX chain: %d shader slots, glvideomixer (camera base + live flash 60%%)",
@@ -1022,5 +1029,10 @@ def fx_tick_callback(compositor: Any) -> bool:
     album_overlay = getattr(compositor, "_album_overlay", None)
     if album_overlay:
         album_overlay.tick()
+
+    # Token pole: vertical progress bar + particles
+    token_pole = getattr(compositor, "_token_pole", None)
+    if token_pole:
+        token_pole.tick()
 
     return True

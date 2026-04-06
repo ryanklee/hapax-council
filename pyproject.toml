@@ -44,6 +44,7 @@ dependencies = [
     "pyte>=0.8.2",
     "fastapi>=0.135.1",
     "opencv-python-headless>=4.13.0.92",
+    "chat-downloader>=0.2.8",
 ]
 
 [project.optional-dependencies]
