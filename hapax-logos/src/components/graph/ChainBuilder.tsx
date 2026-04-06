@@ -48,10 +48,10 @@ function ChainBuilderInner() {
   const currentChainSlots = chainPresets.reduce((sum, p) => sum + (presetSlotCounts[p] ?? 0), 0);
 
   const activate = useCallback(
-    async (presets: string[], src?: string) => {
+    async (presets: string[]) => {
       setActivating(true);
       try {
-        await activatePresets(presets, setChainSlotCount, src ?? "@" + chainSource);
+        await activatePresets(presets, setChainSlotCount, "@live", chainSource);
       } finally {
         setActivating(false);
       }
@@ -73,7 +73,7 @@ function ChainBuilderInner() {
       if (!hasActiveChain) return;
       const newSource = e.target.value;
       updateChainSource(activeIdx, newSource);
-      activate(chainPresets, "@" + newSource);
+      activate(chainPresets);
     },
     [hasActiveChain, activeIdx, updateChainSource, activate, chainPresets],
   );

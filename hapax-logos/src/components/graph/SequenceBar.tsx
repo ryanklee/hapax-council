@@ -10,6 +10,7 @@ export async function activatePresets(
   presets: string[],
   onSlotCount?: (n: number) => void,
   source = "@live",
+  cameraSource = "live",
 ): Promise<void> {
   if (presets.length === 0) {
     api.post("/studio/effect/select", { preset: "clean" }).catch(() => {});
@@ -17,8 +18,7 @@ export async function activatePresets(
     return;
   }
   if (presets.length === 1) {
-    const fxSource = source === "@live" ? "live" : source.replace("@", "");
-    api.post("/studio/effect/select", { preset: presets[0], fx_source: fxSource }).catch(() => {});
+    api.post("/studio/effect/select", { preset: presets[0], fx_source: cameraSource }).catch(() => {});
     onSlotCount?.(0);
     return;
   }
@@ -42,8 +42,7 @@ export async function activatePresets(
         return;
       }
       const merged = mergePresetGraphs("chain", graphs, source);
-      const fxSource = source === "@live" ? "live" : source.replace("@", "");
-      const payload = { ...merged, fx_source: fxSource };
+      const payload = { ...merged, fx_source: cameraSource };
       try {
         await api.put("/studio/effect/graph", payload);
       } catch (putErr) {
@@ -216,8 +215,7 @@ function SequenceBarInner() {
       if (!chain) return;
       setActivating(true);
       try {
-        const chainSource = "@" + (chain.source ?? "live");
-        await activatePresets(chain.presets, setChainSlotCount, chainSource);
+        await activatePresets(chain.presets, setChainSlotCount, "@live", chain.source ?? "live");
       } finally {
         setActivating(false);
       }
@@ -250,11 +248,9 @@ function SequenceBarInner() {
         const newChains = generateRandomSequence();
         setSequenceChains(newChains);
         setActiveChainIndex(0);
-        // activateIndex uses the stale chains closure, so call activatePresets directly
         const firstChain = newChains[0];
         if (firstChain) {
-          const chainSource = "@" + (firstChain.source ?? "live");
-          activatePresets(firstChain.presets, setChainSlotCount, chainSource).catch(() => {});
+          activatePresets(firstChain.presets, setChainSlotCount, "@live", firstChain.source ?? "live").catch(() => {});
         }
         elapsedRef.current = 0;
         setElapsed(0);
@@ -326,8 +322,7 @@ function SequenceBarInner() {
     setElapsed(0);
     const firstChain = newChains[0];
     if (firstChain) {
-      const chainSource = "@" + (firstChain.source ?? "live");
-      activatePresets(firstChain.presets, setChainSlotCount, chainSource).catch(() => {});
+      activatePresets(firstChain.presets, setChainSlotCount, "@live", firstChain.source ?? "live").catch(() => {});
     }
   }, [setSequenceChains, setActiveChainIndex, setSequenceLooping, setSequencePlaying, setChainSlotCount]);
 
