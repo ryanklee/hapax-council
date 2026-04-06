@@ -87,6 +87,7 @@ const TAGS: Record<string, Set<string>> = {
   neon: new Set(["sparse"]),
   pixsort_preset: new Set(["pattern"]),
   nightvision: new Set(["mono"]),
+  voronoi_crystal: new Set(["sparse"]),
   vhs_preset: new Set(["scanline"]),
   diff_preset: new Set(["mono"]),
   ambient: new Set(["mono"]),
