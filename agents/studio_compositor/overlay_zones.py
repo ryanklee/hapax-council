@@ -64,17 +64,47 @@ class OverlayZone:
             self._tick_folder(now)
         elif self.file:
             self._tick_file()
+        # Float/bounce every tick regardless of content source
+        if self.randomize_position:
+            self._tick_float()
 
-    def _randomize_xy(self, canvas_w: int = 1920, canvas_h: int = 1080) -> None:
-        """Randomize position within safe margins on each cycle."""
+    def _init_float(self) -> None:
+        """Initialize DVD-screensaver-style floating motion."""
         import random
 
-        margin_x, margin_y = 40, 120
+        self._vx = random.choice([-1, 1]) * random.uniform(0.8, 2.0)  # pixels per tick
+        self._vy = random.choice([-1, 1]) * random.uniform(0.5, 1.5)
+        self._float_x = float(self.base_x)
+        self._float_y = float(self.base_y)
+
+    def _tick_float(self, canvas_w: int = 1920, canvas_h: int = 1080) -> None:
+        """Move position and bounce off screen edges."""
+        if not hasattr(self, "_vx"):
+            self._init_float()
+
         sw, sh = self._cached_surface_size if self._cached_surface_size[0] else (400, 200)
-        max_x = max(margin_x, canvas_w - sw - margin_x)
-        max_y = max(margin_y, canvas_h - sh - margin_y)
-        self.x = random.randint(margin_x, max_x)
-        self.y = random.randint(margin_y, max_y)
+        margin = 20
+
+        self._float_x += self._vx
+        self._float_y += self._vy
+
+        # Bounce off edges
+        if self._float_x <= margin:
+            self._float_x = margin
+            self._vx = abs(self._vx)
+        elif self._float_x + sw >= canvas_w - margin:
+            self._float_x = canvas_w - sw - margin
+            self._vx = -abs(self._vx)
+
+        if self._float_y <= margin:
+            self._float_y = margin
+            self._vy = abs(self._vy)
+        elif self._float_y + sh >= canvas_h - margin:
+            self._float_y = canvas_h - sh - margin
+            self._vy = -abs(self._vy)
+
+        self.x = int(self._float_x)
+        self.y = int(self._float_y)
 
     def _tick_folder(self, now: float) -> None:
         folder = Path(self.folder).expanduser()
@@ -98,9 +128,6 @@ class OverlayZone:
             if self._folder_index == old_idx and len(self._folder_files) > 1:
                 self._folder_index = (self._folder_index + 1) % len(self._folder_files)
             self._cycle_start = now
-            # Randomize position on each cycle
-            if self.randomize_position:
-                self._randomize_xy()
         if self._folder_files:
             idx = self._folder_index % len(self._folder_files)
             self._load_content(self._folder_files[idx])
