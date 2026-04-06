@@ -41,6 +41,12 @@ def build_pipeline(compositor: Any) -> Any:
         raise RuntimeError(
             "cudacompositor plugin not available -- install gst-plugins-bad with CUDA"
         )
+    # Black background, not checker — checker bleeds through when cameras
+    # have frame gaps, producing the sawtooth/oval pattern in the FX output.
+    try:
+        comp_element.set_property("background", 1)  # 1=black
+    except Exception:
+        pass  # property may not exist on all versions
     pipeline.add(comp_element)
 
     fps = compositor.config.framerate
