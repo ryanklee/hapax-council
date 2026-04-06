@@ -61,18 +61,16 @@ export async function activatePresets(
   }
 }
 
-// Presets that sufficiently obscure the source for anonymity.
+// Presets that genuinely destroy source recognizability.
 // Every chain MUST include at least one of these.
-// All presets now have boosted intensities — most qualify.
-// Only clean/heartbeat are excluded (too recognizable even boosted).
+// Excluded: mirror_rorschach, feedback, ghost, trails, diff, fisheye_pulse,
+// screwed, voronoi — these transform but don't obscure identity.
 const OBSCURING = new Set([
   "datamosh", "datamosh_heavy", "glitch_blocks_preset", "trap",
-  "vhs_preset", "screwed", "kaleidodream", "tunnelvision",
-  "mirror_rorschach", "voronoi_crystal", "slitscan_preset",
-  "fisheye_pulse", "diff_preset", "ambient",
-  "feedback_preset", "ghost", "trails", "thermal_preset",
+  "vhs_preset", "kaleidodream", "tunnelvision", "slitscan_preset",
+  "thermal_preset", "nightvision",
   "ascii_preset", "halftone_preset", "dither_retro", "silhouette",
-  "sculpture", "neon", "pixsort_preset", "nightvision",
+  "sculpture", "neon", "pixsort_preset",
 ]);
 
 // Chain compatibility tags — every preset can chain, but certain combos conflict.
@@ -139,7 +137,7 @@ const FX_SOURCES = [
 
 function generateRandomSequence(): PresetChain[] {
   const allPresets = PRESET_CATEGORIES.flatMap((c) => c.presets)
-    .filter((p) => p !== "clean" && p !== "echo" && p !== "reverie_vocabulary");
+    .filter((p) => !["clean", "echo", "reverie_vocabulary", "ambient", "heartbeat"].includes(p));
   const numChains = 8 + Math.floor(Math.random() * 5); // 8-12 chains
   const chains: PresetChain[] = [];
   let lastUsed: string[] = [];
