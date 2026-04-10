@@ -6,7 +6,7 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist', 'src-tauri']),
+  globalIgnores(['dist', 'src-tauri', 'target', '**/target/**', 'crates/**/target/**']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
@@ -28,6 +28,17 @@ export default defineConfig([
       // Pre-existing across codebase — fix incrementally
       '@typescript-eslint/no-explicit-any': 'warn',
       'react-refresh/only-export-components': 'warn',
+      // Allow intentionally-unused args/vars with underscore prefix
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+          destructuredArrayIgnorePattern: '^_',
+          ignoreRestSiblings: true,
+        },
+      ],
     },
   },
 ])
