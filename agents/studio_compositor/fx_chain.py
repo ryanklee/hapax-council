@@ -557,10 +557,10 @@ class AlbumOverlay:
 
 
 def _pip_draw(compositor: Any, cr: Any) -> None:
-    """Post-FX cairooverlay callback: draws YouTube PiP, album overlay, and token pole."""
-    yt = getattr(compositor, "_yt_overlay", None)
-    if yt is not None:
-        yt.draw(cr)
+    """Post-FX cairooverlay callback: draws all overlays."""
+    spiro = getattr(compositor, "_spirograph_reactor", None)
+    if spiro is not None:
+        spiro.draw(cr)
     album = getattr(compositor, "_album_overlay", None)
     if album is not None:
         album.draw(cr)
@@ -786,12 +786,22 @@ def build_inline_fx_chain(
     compositor._fx_switching = False
     compositor._fx_flash_pad = flash_pad
     compositor._fx_flash_scheduler = FlashScheduler()
-    compositor._yt_overlay = YouTubeOverlay()
     compositor._album_overlay = AlbumOverlay()
 
     from .token_pole import TokenPole
 
     compositor._token_pole = TokenPole()
+
+    try:
+        from .spirograph_reactor import SpirographReactor
+
+        compositor._spirograph_reactor = SpirographReactor()
+        compositor._yt_overlay = None
+        log.info("SpirographReactor created")
+    except Exception:
+        log.exception("SpirographReactor failed, falling back to YouTubeOverlay")
+        compositor._spirograph_reactor = None
+        compositor._yt_overlay = YouTubeOverlay()
 
     log.info(
         "FX chain: %d shader slots, glvideomixer (camera base + live flash 60%%)",
@@ -1020,11 +1030,6 @@ def fx_tick_callback(compositor: Any) -> bool:
         if alpha is not None:
             flash_pad.set_property("alpha", alpha)
 
-    # YouTube overlay: floating PiP that bounces around
-    yt_overlay = getattr(compositor, "_yt_overlay", None)
-    if yt_overlay:
-        yt_overlay.tick(compositor, compositor._Gst)
-
     # Album overlay: floating cover + splattribution
     album_overlay = getattr(compositor, "_album_overlay", None)
     if album_overlay:
@@ -1034,5 +1039,10 @@ def fx_tick_callback(compositor: Any) -> bool:
     token_pole = getattr(compositor, "_token_pole", None)
     if token_pole:
         token_pole.tick()
+
+    # Spirograph reactor
+    spiro = getattr(compositor, "_spirograph_reactor", None)
+    if spiro:
+        spiro.tick()
 
     return True
