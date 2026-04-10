@@ -782,7 +782,7 @@ def build_inline_fx_chain(
     compositor._fx_input_selector = input_sel
     compositor._fx_input_pads = {"live": live_pad}
     compositor._fx_active_source = "live"
-    compositor._fx_camera_branch: list[Any] = []
+    compositor._fx_camera_branch = []  # list[Any] — camera branch elements for teardown
     compositor._fx_switching = False
     compositor._fx_flash_pad = flash_pad
     compositor._fx_flash_scheduler = FlashScheduler()

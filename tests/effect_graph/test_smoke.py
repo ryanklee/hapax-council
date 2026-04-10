@@ -291,7 +291,7 @@ class TestGraphPatch:
 
 class TestRegistryLoading:
     def test_loads_all_nodes(self, registry: ShaderRegistry):
-        assert len(registry.node_types) == 56
+        assert len(registry.node_types) == 57
 
     def test_sorted(self, registry: ShaderRegistry):
         types = registry.node_types
@@ -423,7 +423,7 @@ class TestRegistrySchemaExport:
 
     def test_all_schemas(self, registry: ShaderRegistry):
         schemas = registry.all_schemas()
-        assert len(schemas) == 56
+        assert len(schemas) == 57
 
     def test_schema_params_are_serializable(self, registry: ShaderRegistry):
         """Ensure all schemas can be JSON-serialized (for API)."""
@@ -431,7 +431,7 @@ class TestRegistrySchemaExport:
         serialized = json.dumps(schemas)
         assert len(serialized) > 0
         roundtrip = json.loads(serialized)
-        assert len(roundtrip) == 56
+        assert len(roundtrip) == 57
 
 
 class TestRegistryParamCompleteness:
