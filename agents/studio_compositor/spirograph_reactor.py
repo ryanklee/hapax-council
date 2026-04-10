@@ -416,6 +416,7 @@ class ReactorOverlay:
         self._speaking: bool = False
         self._pcm_samples: list[float] = []
         self._border_pulse: float = 0.0
+        self._header: str = "REACT"
         self._x: float = 960.0
         self._y: float = 750.0
         self._target_x: float = 960.0
@@ -434,6 +435,9 @@ class ReactorOverlay:
         # Use a simple approach: move a fixed fraction of remaining distance
         # that matches the orbit's apparent speed (~5-8 pixels/frame)
         return 0.02  # easing factor — arrives in ~50 frames (~1.7s)
+
+    def set_header(self, header: str) -> None:
+        self._header = header
 
     def set_text(self, text: str) -> None:
         self._text = text
@@ -497,7 +501,7 @@ class ReactorOverlay:
         cr.set_source_rgba(0.7, 0.5, 1.0, 0.9)
         layout = PangoCairo.create_layout(cr)
         layout.set_font_description(Pango.FontDescription.from_string("JetBrains Mono Bold 10"))
-        layout.set_text("REACTOR", -1)
+        layout.set_text(self._header, -1)
         cr.move_to(bx + 12, by + 8)
         PangoCairo.show_layout(cr, layout)
 

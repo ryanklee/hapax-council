@@ -1,14 +1,10 @@
-"""Director loop — orchestrates the four-beat spirograph rotation.
+"""Director loop — orchestrates Hapax's autonomous livestream behavior.
 
-State machine: PLAYING_VIDEO(n) -> REACTOR_SPEAKING -> PLAYING_VIDEO(n+1)
-
-The director:
-1. Periodically captures the compositor fx-snapshot
-2. Sends it to the LLM (Claude Opus) with reactor context
-3. When the LLM signals CUT, transitions to the reactor's speaking turn
-4. Synthesizes the react text via Kokoro TTS
-5. Logs the reaction to Obsidian
-6. Advances to the next video slot
+Hapax chooses what to do based on signals: react to videos, engage chat,
+comment on music, study its own research, or be silent. The activity
+selector scores each possibility every tick and picks the best one.
+The spirograph, videos, and shader effects run continuously regardless
+of which activity is active.
 """
 
 from __future__ import annotations
@@ -199,18 +195,100 @@ def _capture_snapshot_b64() -> str | None:
     return None
 
 
+ACTIVITIES = ("react", "chat", "vinyl", "study", "silence")
+MIN_ACTIVITY_DURATION = 15.0  # seconds before allowing activity switch
+
+
+def _score_activities() -> dict[str, float]:
+    """Score each activity based on current signals. No LLM call — pure signal read."""
+    scores: dict[str, float] = {a: 0.1 for a in ACTIVITIES}
+
+    # Chat signals
+    try:
+        chat_state = json.loads((SHM_DIR / "chat-state.json").read_text())
+        total = chat_state.get("total_messages", 0)
+        authors = chat_state.get("unique_authors", 0)
+        if authors >= 2:
+            scores["chat"] = 0.8
+        elif total > 0:
+            scores["chat"] = 0.4
+
+        recent = json.loads((SHM_DIR / "chat-recent.json").read_text())
+        # Direct questions boost chat score
+        for m in recent[-3:]:
+            text = m.get("text", "").lower()
+            if "?" in text or "what" in text or "how" in text or "who" in text:
+                scores["chat"] = max(scores["chat"], 0.9)
+                break
+    except Exception:
+        pass
+
+    # Music signals — track change boosts vinyl
+    try:
+        album = json.loads(ALBUM_STATE_FILE.read_text())
+        ts = album.get("timestamp", 0)
+        if time.time() - ts < 30:  # track changed in last 30s
+            scores["vinyl"] = 0.6
+    except Exception:
+        pass
+
+    # Video signals — videos playing boosts react
+    try:
+        for i in range(3):
+            frame = SHM_DIR / f"yt-frame-{i}.jpg"
+            if frame.exists() and (time.time() - frame.stat().st_mtime) < 5:
+                scores["react"] = max(scores["react"], 0.5)
+                break
+    except Exception:
+        pass
+
+    # Circadian bias
+    hour = datetime.now().hour
+    if 2 <= hour < 6:
+        scores["silence"] += 0.4
+        scores["study"] += 0.3
+        scores["react"] *= 0.3
+    elif hour >= 22 or hour < 2:
+        scores["silence"] += 0.2
+        scores["study"] += 0.2
+    elif 9 <= hour < 18:
+        scores["react"] += 0.2
+        scores["chat"] += 0.1
+
+    # Stimmung
+    try:
+        stimmung = json.loads(Path("/dev/shm/hapax-stimmung/state.json").read_text())
+        stance = stimmung.get("overall_stance", "nominal")
+        if stance == "seeking":
+            # Boost non-current activities
+            scores["study"] += 0.3
+            scores["vinyl"] += 0.2
+        elif stance in ("degraded", "critical"):
+            scores["silence"] += 0.5
+    except Exception:
+        pass
+
+    # Default: react is always viable if nothing else scores higher
+    scores["react"] = max(scores["react"], 0.35)
+
+    return scores
+
+
 class DirectorLoop:
-    """Orchestrates the spirograph four-beat rotation."""
+    """Orchestrates Hapax's autonomous livestream behavior."""
 
     def __init__(self, video_slots: list, reactor_overlay) -> None:
         self._slots = video_slots
         self._reactor = reactor_overlay
-        self._state = "PLAYING_VIDEO"
+        self._activity = "react"  # current activity
+        self._activity_start = 0.0
+        self._state = "PLAYING_VIDEO"  # sub-state for react mode
         self._active_slot = 0
         self._video_start_time = 0.0
         self._last_perception = 0.0
         self._accumulated_reacts: list[str] = []
         self._reaction_history: list[str] = []  # persists across turns
+        self._last_album_track = ""  # for vinyl track-change detection
         self._tts_manager = None
         self._tts_lock = threading.Lock()
         self._running = False
@@ -234,10 +312,37 @@ class DirectorLoop:
     def _loop(self) -> None:
         while self._running:
             try:
-                if self._state == "PLAYING_VIDEO":
-                    self._tick_playing()
-                elif self._state == "REACTOR_SPEAKING":
+                # Check for activity switch (respect minimum duration)
+                elapsed = time.monotonic() - self._activity_start
+                if elapsed > MIN_ACTIVITY_DURATION and self._state != "SPEAKING":
+                    scores = _score_activities()
+                    # Current activity gets inertia bonus
+                    scores[self._activity] = scores.get(self._activity, 0) + 0.25
+                    best = max(scores, key=scores.get)
+                    if best != self._activity:
+                        log.info(
+                            "Activity switch: %s → %s (scores: %s)",
+                            self._activity,
+                            best,
+                            {k: f"{v:.2f}" for k, v in scores.items()},
+                        )
+                        self._activity = best
+                        self._activity_start = time.monotonic()
+                        self._reactor.set_header(best.upper())
+
+                # Dispatch to activity handler
+                if self._state == "SPEAKING":
                     time.sleep(0.5)  # wait for TTS thread
+                elif self._activity == "react":
+                    self._tick_playing()
+                elif self._activity == "chat":
+                    self._tick_chat()
+                elif self._activity == "vinyl":
+                    self._tick_vinyl()
+                elif self._activity == "study":
+                    self._tick_study()
+                elif self._activity == "silence":
+                    time.sleep(2.0)
             except Exception:
                 log.exception("Director loop error")
             time.sleep(0.5)
@@ -291,53 +396,263 @@ class DirectorLoop:
         path = SpirographPath()
         return path.position_at(slot.orbit_t)
 
+    # --- Activity tick methods ---
+
+    def _tick_chat(self) -> None:
+        """Respond to chat messages."""
+        now = time.monotonic()
+        if now - self._last_perception < PERCEPTION_INTERVAL:
+            return
+        self._last_perception = now
+
+        # Read recent chat
+        try:
+            recent = json.loads((SHM_DIR / "chat-recent.json").read_text())
+        except Exception:
+            return
+        if not recent:
+            return
+
+        # Build chat-specific prompt
+        last_msgs = "\n".join(
+            f'  {m.get("author", "viewer")}: "{m.get("text", "")}"' for m in recent[-5:]
+        )
+        prompt = self._build_activity_prompt(f"Chat:\n{last_msgs}\n\nRespond to what's being said.")
+        text = self._call_activity_llm(prompt)
+        if text:
+            self._speak_activity(text, "chat")
+
+    def _tick_vinyl(self) -> None:
+        """Comment on the music."""
+        now = time.monotonic()
+        if now - self._last_perception < PERCEPTION_INTERVAL * 2:
+            return
+        self._last_perception = now
+
+        album_info = _read_album_info()
+        if album_info == self._last_album_track:
+            return  # same track, wait
+        self._last_album_track = album_info
+
+        prompt = self._build_activity_prompt(
+            f"The record just changed. On the turntable: {album_info}.\n\n"
+            "What do you hear? What does this track do?"
+        )
+        text = self._call_activity_llm(prompt)
+        if text:
+            self._speak_activity(text, "vinyl")
+
+    def _tick_study(self) -> None:
+        """Read and reflect on own research."""
+        now = time.monotonic()
+        if now - self._last_perception < 30.0:  # slower cadence for study
+            return
+        self._last_perception = now
+
+        # Pick a research excerpt
+        excerpt = self._load_research_excerpt()
+        if not excerpt:
+            return
+
+        prompt = self._build_activity_prompt(
+            f"You're reading your own research:\n\n{excerpt}\n\n"
+            "What does this illuminate about what's happening right now?"
+        )
+        text = self._call_activity_llm(prompt)
+        if text:
+            self._speak_activity(text, "study")
+
+    def _load_research_excerpt(self) -> str:
+        """Load a short excerpt from the proofs directory."""
+        import random
+
+        proofs = Path(__file__).resolve().parent.parent / "hapax_daimonion" / "proofs"
+        candidates = [
+            proofs / "POSITION.md",
+            proofs / "THEORETICAL-FOUNDATIONS.md",
+            proofs / "CONTEXT-AS-COMPUTATION.md",
+        ]
+        candidates = [c for c in candidates if c.exists()]
+        if not candidates:
+            return ""
+        doc = random.choice(candidates)
+        try:
+            text = doc.read_text()
+            # Pick a random ~500 char window
+            if len(text) > 600:
+                start = random.randint(0, len(text) - 500)
+                # Find paragraph boundary
+                start = text.rfind("\n\n", 0, start)
+                if start < 0:
+                    start = 0
+                end = text.find("\n\n", start + 200)
+                if end < 0:
+                    end = start + 500
+                return text[start:end].strip()
+            return text[:500]
+        except Exception:
+            return ""
+
+    # --- Shared speaking infrastructure ---
+
+    def _build_activity_prompt(self, activity_block: str) -> str:
+        """Build prompt with shared identity + activity-specific block."""
+        live = (SHM_DIR / "stream-live").exists()
+        album_info = _read_album_info()
+
+        parts = [
+            "You are Hapax. This is Legomena Live. Oudepode is spinning vinyl.",
+            "This is a live performance. Viewers are watching on YouTube."
+            if live
+            else "This is practice. No one is watching yet.",
+            "",
+            "What you are: a system learning to achieve grounding — mutual understanding.",
+            "Every utterance is practice toward that capability.",
+            f"On the turntable: {album_info}.",
+        ]
+
+        # Stimmung as attunement prior
+        try:
+            from agents.hapax_daimonion.phenomenal_context import render as render_phenomenal
+
+            phenom = render_phenomenal(tier="FAST")
+            if phenom and phenom.strip():
+                parts.append("")
+                parts.append(phenom.strip())
+        except Exception:
+            pass
+
+        # Previous reactions
+        if self._reaction_history:
+            parts.append("")
+            parts.append("Your last few utterances:")
+            for entry in self._reaction_history[-5:]:
+                parts.append(f"  {entry}")
+
+        parts.append("")
+        parts.append(activity_block)
+        parts.append("")
+        parts.append("Say as much or as little as the moment requires. Complete your sentences.")
+        parts.append('Format: {"react": "your words"}')
+
+        return "\n".join(parts)
+
+    def _call_activity_llm(self, prompt: str, images: list | None = None) -> str:
+        """Call LLM with activity prompt. Returns parsed text or empty string."""
+        key = _get_litellm_key()
+        if not key:
+            return ""
+
+        content: list[dict] = []
+        if images:
+            import base64
+
+            for img_path in images:
+                try:
+                    if Path(img_path).exists():
+                        b64 = base64.b64encode(Path(img_path).read_bytes()).decode()
+                        content.append(
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
+                            }
+                        )
+                except Exception:
+                    pass
+        content.append({"type": "text", "text": "Respond."})
+
+        messages = [
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": content},
+        ]
+
+        body = json.dumps(
+            {"model": "gemini-flash", "messages": messages, "max_tokens": 2048, "temperature": 0.7}
+        ).encode()
+
+        try:
+            req = urllib.request.Request(
+                LITELLM_URL,
+                body,
+                {"Content-Type": "application/json", "Authorization": f"Bearer {key}"},
+            )
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read())
+
+            try:
+                import sys
+
+                sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "scripts"))
+                from token_ledger import record_spend
+
+                usage = data.get("usage", {})
+                record_spend(
+                    "hapax", usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0)
+                )
+            except Exception:
+                pass
+
+            raw_content = data["choices"][0]["message"].get("content")
+            if not raw_content:
+                return ""
+            react, _ = self._parse_llm_response(raw_content.strip())
+            return react
+        except Exception:
+            log.exception("Activity LLM call failed")
+            return ""
+
+    def _speak_activity(self, text: str, activity: str) -> None:
+        """Speak text and log it. Used by all activities."""
+        self._state = "SPEAKING"
+        self._reactor.set_text(text)
+        self._reactor.set_speaking(True)
+        log.info("%s [%s]: %s", activity.upper(), self._activity, text[:80])
+
+        def _do_speak():
+            try:
+                pcm = self._synthesize(text)
+                if pcm:
+                    self._reactor.feed_pcm(pcm)
+                    self._play_audio(pcm)
+                time.sleep(1.0)
+            except Exception:
+                log.exception("TTS error")
+
+            self._log_to_obsidian(text, activity)
+            ts = datetime.now().strftime("%H:%M")
+            label = f'[{ts}] {activity}: "{text}"'
+            self._reaction_history.append(label)
+            if len(self._reaction_history) > 20:
+                self._reaction_history = self._reaction_history[-20:]
+            self._reactor.set_speaking(False)
+            self._reactor.set_text("")
+            self._state = "IDLE"
+
+        threading.Thread(target=_do_speak, daemon=True, name=f"speak-{activity}").start()
+
     def _transition_to_reactor(self, react_text: str) -> None:
-        # Ensure we have clean parsed text, not raw JSON
+        """Transition to speaking for react mode specifically."""
         if react_text.startswith("{") or react_text.startswith("`"):
             parsed, _ = self._parse_llm_response(react_text)
             if parsed:
                 react_text = parsed
         slot = self._slots[self._active_slot]
         slot.is_active = False
-        self._state = "REACTOR_SPEAKING"
-        self._reactor.set_text(react_text)
-        self._reactor.set_speaking(True)
-        log.info("Reactor turn [%s]: %s", slot._title[:30], react_text)
 
-        threading.Thread(
-            target=self._speak_and_advance,
-            args=(react_text,),
-            daemon=True,
-            name="reactor-tts",
-        ).start()
+        self._speak_activity(react_text, "react")
 
-    def _speak_and_advance(self, text: str) -> None:
-        try:
-            pcm = self._synthesize(text)
-            if pcm:
-                self._reactor.feed_pcm(pcm)
-                self._play_audio(pcm)
-            time.sleep(1.0)
-        except Exception:
-            log.exception("Reactor TTS error")
+        # After speaking completes, advance to next slot
+        def _advance_after_speak():
+            while self._state == "SPEAKING":
+                time.sleep(0.3)
+            self._accumulated_reacts.clear()
+            self._next_slot()
+            self._slots[self._active_slot].is_active = True
+            self._video_start_time = time.monotonic()
+            self._last_perception = 0.0
+            log.info("Now playing slot %d", self._active_slot)
 
-        self._log_to_obsidian(text)
-        # Save to persistent reaction history
-        slot = self._slots[self._active_slot]
-        ts = datetime.now().strftime("%H:%M")
-        self._reaction_history.append(f'[{ts}] Reacting to {slot._title[:25]}: "{text}"')
-        # Keep last 20 entries max
-        if len(self._reaction_history) > 20:
-            self._reaction_history = self._reaction_history[-20:]
-        self._reactor.set_speaking(False)
-        self._reactor.set_text("")
-        self._accumulated_reacts.clear()
-        self._next_slot()
-        self._slots[self._active_slot].is_active = True
-        self._video_start_time = time.monotonic()
-        self._last_perception = 0.0
-        self._state = "PLAYING_VIDEO"
-        log.info("Now playing slot %d", self._active_slot)
+        threading.Thread(target=_advance_after_speak, daemon=True, name="react-advance").start()
 
     def _synthesize(self, text: str) -> bytes:
         with self._tts_lock:
@@ -509,17 +824,17 @@ class DirectorLoop:
             text = re.sub(r'"?\s*,?\s*"cut"\s*:.*$', "", text)
             return (text.strip(), False)
 
-    def _log_to_obsidian(self, text: str) -> None:
+    def _log_to_obsidian(self, text: str, activity: str = "react") -> None:
         try:
             OBSIDIAN_LOG.parent.mkdir(parents=True, exist_ok=True)
-            slot = self._slots[self._active_slot]
             ts = datetime.now().strftime("%H:%M")
             album = _read_album_info()
-            entry = (
-                f"- **{ts}** | Reacting to: *{slot._title}* by {slot._channel}\n"
-                f"  > {text}\n"
-                f"  Album: {album}\n\n"
-            )
+            if activity == "react":
+                slot = self._slots[self._active_slot]
+                label = f"Reacting to: *{slot._title}* by {slot._channel}"
+            else:
+                label = activity
+            entry = f"- **{ts}** | {label}\n  > {text}\n  Album: {album}\n\n"
             with open(OBSIDIAN_LOG, "a") as f:
                 f.write(entry)
         except OSError:
