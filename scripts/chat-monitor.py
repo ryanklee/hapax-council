@@ -262,6 +262,9 @@ class ChatMonitor:
         try:
             SHM_DIR.mkdir(parents=True, exist_ok=True)
             CHAT_STATE_FILE.write_text(json.dumps(state))
+            # Write recent messages for reactor (last 5, author + text only)
+            recent = [{"author": m["author"], "text": m["text"]} for m in list(self.messages)[-5:]]
+            (SHM_DIR / "chat-recent.json").write_text(json.dumps(recent))
         except OSError:
             pass
 

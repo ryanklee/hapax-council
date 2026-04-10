@@ -88,6 +88,40 @@ def _build_reactor_context(
     except Exception:
         pass
 
+    # The room — what chat looks like right now
+    try:
+        chat_recent_path = SHM_DIR / "chat-recent.json"
+        chat_state_path = SHM_DIR / "chat-state.json"
+        if chat_state_path.exists():
+            chat_state = json.loads(chat_state_path.read_text())
+            total = chat_state.get("total_messages", 0)
+            authors = chat_state.get("unique_authors", 0)
+            if total == 0:
+                parts.append("")
+                parts.append("Chat is silent.")
+            elif authors <= 2:
+                parts.append("")
+                parts.append("Chat is quiet.")
+            else:
+                parts.append("")
+                parts.append(f"Chat is active ({authors} people).")
+        if chat_recent_path.exists():
+            recent_msgs = json.loads(chat_recent_path.read_text())
+            if recent_msgs:
+                parts.append("")
+                for m in recent_msgs[-3:]:
+                    author = m.get("author", "")
+                    text = m.get("text", "")
+                    if not text:
+                        continue
+                    # Oudepode's messages surfaced distinctly
+                    if "oudepode" in author.lower() or "hapax" in author.lower():
+                        parts.append(f'Oudepode: "{text}"')
+                    else:
+                        parts.append(f'Someone in chat: "{text}"')
+    except Exception:
+        pass
+
     # What Hapax said in previous turns
     if reaction_history:
         parts.append("")
