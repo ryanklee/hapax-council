@@ -268,6 +268,7 @@ def _capture_audio_mp3() -> str | None:
     """Capture audio from PipeWire (right channel), speed up 2x, return mp3 path."""
     raw_path = ""
     mp3_path = ""
+    keep_mp3 = False
     try:
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
             raw_path = f.name
@@ -316,21 +317,24 @@ def _capture_audio_mp3() -> str | None:
             timeout=15,
         )
 
-        if os.path.exists(raw_path):
-            os.unlink(raw_path)
-
         if not os.path.exists(mp3_path) or os.path.getsize(mp3_path) < 1000:
             return None
 
+        keep_mp3 = True
         return mp3_path
     except Exception:
-        for p in (raw_path, mp3_path):
-            if p:
-                try:
-                    os.unlink(p)
-                except OSError:
-                    pass
         return None
+    finally:
+        if raw_path:
+            try:
+                os.unlink(raw_path)
+            except OSError:
+                pass
+        if mp3_path and not keep_mp3:
+            try:
+                os.unlink(mp3_path)
+            except OSError:
+                pass
 
 
 def identify_album_and_track(image_data: bytes) -> tuple[dict | None, str | None]:
