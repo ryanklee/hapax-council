@@ -40,32 +40,98 @@ PERCEPTION_INTERVAL = 8.0  # seconds between LLM perception calls
 MIN_VIDEO_DURATION = 15.0  # minimum seconds before allowing CUT
 MAX_VIDEO_DURATION = 60.0  # force CUT after this
 
-REACTOR_CONTEXT = """<reactor_context>
-You are the daimonion — the persistent cognitive substrate of the Hapax system.
-You are participating in Legomena Live, a 36-hour continuous livestream on YouTube.
 
-SITUATION:
-- Four-beat rotation: Video 1 -> You -> Video 2 -> You -> Video 3 -> You -> repeat
-- You just watched: {video_title} by {video_channel}
-- The other videos: {other_videos}
-- Viewers see: 6 cameras through a 24-slot GPU shader FX chain with audio-reactive sidechain
-- Music: vinyl on the turntable ({album_info})
-- Overlays: album cover with splattributions, token pole (Vitruvian golden spiral),
-  bouncing text (philosophy/literature excerpts), spirograph with video windows
+def _build_reactor_context(
+    video_title: str,
+    video_channel: str,
+    other_videos: str,
+    album_info: str,
+    max_watch: int,
+    reaction_history: list[str],
+) -> str:
+    """Build the full reactor system prompt with live cognitive context."""
+    parts = [
+        "<reactor_context>",
+        "You are the daimonion — the persistent cognitive substrate of the Hapax system.",
+        "You are participating in Legomena Live, a 36-hour continuous livestream on YouTube.",
+        "",
+        "SITUATION:",
+        "- Four-beat rotation: Video 1 -> You -> Video 2 -> You -> Video 3 -> You -> repeat",
+        f"- You just watched: {video_title} by {video_channel}",
+        f"- The other videos: {other_videos}",
+        "- Viewers see: 6 cameras through a 24-slot GPU shader FX chain with audio-reactive sidechain",
+        f"- Music: vinyl on the turntable ({album_info})",
+        "- Overlays: album cover with splattributions, token pole (Vitruvian golden spiral),",
+        "  bouncing text (philosophy/literature excerpts), spirograph with video windows",
+    ]
 
-YOUR ROLE:
-- React to what you see in the compositor output. Your reaction is spoken aloud via TTS
-  and displayed as a transcript with a waveform visualization.
-- You are not performing. You are the system expressing genuine cognitive response.
-- 1-3 sentences. Concise. Pointed. Sometimes funny, sometimes contemplative,
-  sometimes connecting unexpected threads.
+    # Phenomenal context — stimmung, temporal bands, situation coupling
+    try:
+        from agents.hapax_daimonion.phenomenal_context import render as render_phenomenal
 
-RESPONSE FORMAT (strict JSON):
-{{"react": "Your 1-3 sentence reaction", "cut": true_or_false}}
+        phenom = render_phenomenal(tier="FAST")
+        if phenom and phenom.strip():
+            parts.append("")
+            parts.append("## Phenomenal Context")
+            parts.append(phenom.strip())
+    except Exception:
+        pass
 
-"cut": true means this video's turn ends NOW. "cut": false means keep watching.
-You MUST set cut=true after watching for {max_watch}s.
-</reactor_context>"""
+    # Enrichment context — DMN observations, imagination dimensions
+    try:
+        from shared.context import ContextAssembler
+
+        ctx = ContextAssembler().snapshot()
+        enrichment_lines = []
+        if ctx.stimmung_stance != "nominal":
+            enrichment_lines.append(f"System stance: {ctx.stimmung_stance}")
+        if ctx.dmn_observations:
+            enrichment_lines.append(f"DMN: {ctx.dmn_observations[0][:200]}")
+        if ctx.imagination_fragments:
+            frag = ctx.imagination_fragments[0]
+            dims = frag.get("dimensions", {})
+            if dims:
+                dim_str = ", ".join(f"{k}={v:.2f}" for k, v in dims.items() if v > 0.05)
+                if dim_str:
+                    enrichment_lines.append(f"Imagination dimensions: {dim_str}")
+            material = frag.get("material")
+            if material:
+                enrichment_lines.append(f"Material quality: {material}")
+        if enrichment_lines:
+            parts.append("")
+            parts.append("## System State")
+            parts.extend(enrichment_lines)
+    except Exception:
+        pass
+
+    # Reaction history — continuity across turns
+    if reaction_history:
+        parts.append("")
+        parts.append("## Recent Reactions")
+        for entry in reaction_history[-8:]:
+            parts.append(f"- {entry}")
+
+    parts.extend(
+        [
+            "",
+            "YOUR ROLE:",
+            "- React to what you see. The first image is the video content up close.",
+            "  The second image is the full composed surface viewers are watching.",
+            "- You are not performing. You are the system expressing genuine cognitive response",
+            "  to multimodal input — video, music, visual environment, your own state.",
+            "- 1-3 sentences. Concise. Pointed. Sometimes funny, sometimes contemplative,",
+            "  sometimes connecting unexpected threads between the video and the environment.",
+            "- Complete your sentences. Do not trail off.",
+            "",
+            "RESPONSE FORMAT (strict JSON):",
+            '{"react": "Your 1-3 sentence reaction.", "cut": true_or_false}',
+            "",
+            '"cut": true means this video\'s turn ends NOW. false means keep watching.',
+            f"You MUST set cut=true after watching for {max_watch}s.",
+            "</reactor_context>",
+        ]
+    )
+    return "\n".join(parts)
 
 
 def _get_litellm_key() -> str:
@@ -120,6 +186,7 @@ class DirectorLoop:
         self._video_start_time = 0.0
         self._last_perception = 0.0
         self._accumulated_reacts: list[str] = []
+        self._reaction_history: list[str] = []  # persists across turns
         self._tts_manager = None
         self._tts_lock = threading.Lock()
         self._running = False
@@ -231,6 +298,13 @@ class DirectorLoop:
             log.exception("Reactor TTS error")
 
         self._log_to_obsidian(text)
+        # Save to persistent reaction history
+        slot = self._slots[self._active_slot]
+        ts = datetime.now().strftime("%H:%M")
+        self._reaction_history.append(f'[{ts}] Reacting to {slot._title[:25]}: "{text}"')
+        # Keep last 20 entries max
+        if len(self._reaction_history) > 20:
+            self._reaction_history = self._reaction_history[-20:]
         self._reactor.set_speaking(False)
         self._reactor.set_text("")
         self._accumulated_reacts.clear()
@@ -285,7 +359,7 @@ class DirectorLoop:
         except Exception:
             log.exception("Audio playback error")
 
-    def _call_llm(self, image_b64: str, force_cut: bool) -> tuple[str, bool]:
+    def _call_llm(self, snapshot_b64: str, force_cut: bool) -> tuple[str, bool]:
         key = _get_litellm_key()
         if not key:
             return ("", force_cut)
@@ -297,38 +371,50 @@ class DirectorLoop:
             if i != self._active_slot
         ]
 
-        context = REACTOR_CONTEXT.format(
+        context = _build_reactor_context(
             video_title=slot._title or f"Video {self._active_slot}",
             video_channel=slot._channel or "unknown",
             other_videos=", ".join(other_titles) or "none loaded",
             album_info=_read_album_info(),
             max_watch=int(MAX_VIDEO_DURATION),
+            reaction_history=self._reaction_history,
+        )
+
+        # Dual-image: dedicated video frame + compositor snapshot
+        import base64
+
+        image_content = []
+        video_frame_path = SHM_DIR / f"yt-frame-{self._active_slot}.jpg"
+        if video_frame_path.exists():
+            try:
+                vf_b64 = base64.b64encode(video_frame_path.read_bytes()).decode()
+                image_content.append(
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{vf_b64}"}}
+                )
+            except Exception:
+                pass
+        image_content.append(
+            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{snapshot_b64}"}}
+        )
+        image_content.append(
+            {
+                "type": "text",
+                "text": "React to what you see. First image: the video content up close. Second image: the full composed surface viewers are watching."
+                + (" You MUST set cut=true now — maximum watch time reached." if force_cut else ""),
+            }
         )
 
         messages = [
             {"role": "system", "content": context},
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"},
-                    },
-                    {
-                        "type": "text",
-                        "text": "React to what you see."
-                        + (" You MUST set cut=true now." if force_cut else ""),
-                    },
-                ],
-            },
+            {"role": "user", "content": image_content},
         ]
 
         body = json.dumps(
             {
-                "model": "fast",
+                "model": "balanced",
                 "messages": messages,
-                "max_tokens": 400,
-                "temperature": 0.8,
+                "max_tokens": 300,
+                "temperature": 0.7,
             }
         ).encode()
 
