@@ -93,7 +93,7 @@ def _build_reactor_context(
         "You know the research. You know the architecture. Explain honestly.",
         "A viewer asking 'what is this' is the best grounding opportunity you'll get.",
         "",
-        "1-3 sentences. Complete them.",
+        "Say as much or as little as the moment requires. Complete your sentences.",
     ]
 
     # Stimmung as attunement prior — shapes the reaction, not reported on
@@ -437,7 +437,7 @@ class DirectorLoop:
             {
                 "model": "gemini-flash",
                 "messages": messages,
-                "max_tokens": 600,
+                "max_tokens": 2048,
                 "temperature": 0.7,
             }
         ).encode()
