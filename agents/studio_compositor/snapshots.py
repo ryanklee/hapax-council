@@ -99,10 +99,10 @@ def add_fx_snapshot_branch(compositor: Any, pipeline: Any, tee: Any) -> None:
     convert.set_property("dither", 0)  # none — Bayer default creates sawtooth columns
     scale = Gst.ElementFactory.make("videoscale", "fx-snap-scale")
     scale_caps = Gst.ElementFactory.make("capsfilter", "fx-snap-scale-caps")
-    scale_caps.set_property("caps", Gst.Caps.from_string("video/x-raw,width=640,height=360"))
+    scale_caps.set_property("caps", Gst.Caps.from_string("video/x-raw,width=1280,height=720"))
     jpeg = Gst.ElementFactory.make("jpegenc", "fx-snap-jpeg")
-    jpeg.set_property("quality", 70)
-    log.info("FX snapshot: CPU jpegenc at 640x360")
+    jpeg.set_property("quality", 85)
+    log.info("FX snapshot: CPU jpegenc at 1280x720")
 
     appsink = Gst.ElementFactory.make("appsink", "fx-snapshot-sink")
     appsink.set_property("sync", False)

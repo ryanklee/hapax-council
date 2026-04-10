@@ -1,10 +1,10 @@
 [Unit]
-Description=Sync gdrive:drop every 30s
+Description=Sync gdrive:drop every 5s
 
 [Timer]
-OnBootSec=10s
-OnUnitActiveSec=30s
-AccuracySec=5s
+OnBootSec=5s
+OnUnitActiveSec=5s
+AccuracySec=1s
 
 [Install]
 WantedBy=timers.target
