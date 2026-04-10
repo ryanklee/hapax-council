@@ -413,7 +413,7 @@ class DirectorLoop:
             {
                 "model": "gemini-flash",
                 "messages": messages,
-                "max_tokens": 400,
+                "max_tokens": 600,
                 "temperature": 0.7,
             }
         ).encode()
