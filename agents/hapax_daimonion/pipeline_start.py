@@ -85,26 +85,8 @@ async def start_conversation_pipeline(daemon: VoiceDaemon) -> None:
         if screen_ctx:
             prompt += screen_ctx
 
-    # Stimmung-aware directive — modulate voice behavior under system stress
-    try:
-        import json as _json
-
-        _stimmung_shm = Path("/dev/shm/hapax-stimmung/state.json")
-        if _stimmung_shm.exists():
-            _stance = _json.loads(_stimmung_shm.read_text()).get("overall_stance", "nominal")
-            if _stance == "degraded":
-                prompt += (
-                    "\n\n[SYSTEM STATE: DEGRADED] The system is under resource pressure. "
-                    "Be concise and direct. Prioritize actionable information."
-                )
-            elif _stance == "critical":
-                prompt += (
-                    "\n\n[SYSTEM STATE: CRITICAL] The system is in crisis. "
-                    "Keep responses to one sentence. Only essential information. "
-                    "Suggest the operator check system health."
-                )
-    except Exception:
-        pass
+    # Stimmung directives handled by phenomenal_context.render_stimmung() in the
+    # per-turn VOLATILE band rebuild. No startup injection needed — ~111 tokens saved.
 
     # Cross-session memory
     from agents.hapax_daimonion.session_memory import load_recent_memory, load_seed_entries
