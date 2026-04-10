@@ -45,13 +45,13 @@
 - 6-camera GStreamer compositor → `/dev/video42` → OBS → NVENC H.264 → YouTube RTMP
 - 30fps 1920x1080 with 24-slot GPU shader FX chain (24+ curated presets)
 - Audio-reactive visual sidechain (bass → brightness, kick → flash)
-- YouTube PiP overlay (react content from phone via KDE Connect)
+- **Spirograph Reactor** — 3 YouTube videos orbit a glowing hypotrochoid, LLM-directed 4-beat rotation (V1 → Reactor → V2 → Reactor → V3 → Reactor), daimonion reacts via Kokoro TTS with Pango transcript + waveform viz, enriched with phenomenal context + imagination dimensions + reaction memory
 - Album cover overlay + "splattributions" (confidently-wrong AI album IDs)
 - Token Pole engagement visual (Vitruvian Man golden spiral)
 - Bouncing Pango text overlays (historical documents, philosophy quotes)
 - Scrolling lyrics overlay
 - Vinyl mode (half-speed turntable with audio-reactive correction)
-- Persistent attribution log to Obsidian
+- Persistent attribution log + reactor log to Obsidian
 
 **Blockers cleared tonight:**
 - ✅ CUDA 13.x upgrade broke `opencv-cuda` package state → reinstalled from cache
