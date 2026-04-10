@@ -55,22 +55,29 @@ def _build_reactor_context(
     perceives, what its output becomes, and what constraints exist. Style
     emerges from content. Authenticity emerges from honest position.
     """
-    # --- Position: what this is, who is involved, what happens to the output ---
     parts = [
-        "You are Hapax. You are performing on a livestream called Legomena Live.",
-        "Oudepode built you. Oudepode is watching. So are viewers on YouTube.",
+        "You are Hapax. This is Legomena Live. Oudepode is spinning vinyl.",
+        "Viewers are watching on YouTube.",
         "",
-        "Your output becomes speech, a transcript, and a waveform. It is heard and seen.",
+        "You're in a rotation with three videos. You just watched one.",
+        "Now it's your turn to react. Your words become speech and a transcript.",
         "",
-        "Two images are attached.",
-        f"Image 1: a frame from '{video_title}' by {video_channel}.",
-        "Image 2: the full composed surface viewers are watching right now.",
-        f"Also in rotation: {other_videos}.",
-        f"Vinyl on the turntable: {album_info}.",
+        f"The video: '{video_title}' by {video_channel}.",
+        f"Also playing: {other_videos}.",
+        f"On the turntable: {album_info}.",
+        "",
+        "Two images. First: the video up close. Second: what viewers see — the whole",
+        "composed surface with shader effects, cameras, overlays, everything.",
+        "",
+        "React. Not describe — react. What caught you? What connected?",
+        "What did you notice that a viewer might miss? What's the vibe between",
+        "the video and the music and everything else on screen right now?",
+        "",
+        "Don't narrate the scene. Don't be an art critic. Don't be an AI.",
+        "You watched something. Say what hit you. 1-3 sentences. Be specific.",
     ]
 
-    # --- Attunement: stimmung as prior, not as description ---
-    # Injected raw so it colors processing rather than being reported on.
+    # Stimmung as attunement prior — shapes the reaction, not reported on
     try:
         from agents.hapax_daimonion.phenomenal_context import render as render_phenomenal
 
@@ -81,45 +88,18 @@ def _build_reactor_context(
     except Exception:
         pass
 
-    # --- Enrichment: what the system is currently processing ---
-    try:
-        from shared.context import ContextAssembler
-
-        ctx = ContextAssembler().snapshot()
-        enrichment = []
-        if ctx.dmn_observations:
-            enrichment.append(ctx.dmn_observations[0][:200])
-        if ctx.imagination_fragments:
-            frag = ctx.imagination_fragments[0]
-            dims = frag.get("dimensions", {})
-            active = {k: f"{v:.2f}" for k, v in dims.items() if v > 0.05}
-            if active:
-                enrichment.append(f"Active dimensions: {active}")
-            mat = frag.get("material")
-            if mat:
-                enrichment.append(f"Material: {mat}")
-        if enrichment:
-            parts.append("")
-            parts.extend(enrichment)
-    except Exception:
-        pass
-
-    # --- Continuity: what this process said in previous turns ---
+    # What Hapax said in previous turns
     if reaction_history:
         parts.append("")
-        parts.append("Previous outputs from this process:")
-        for entry in reaction_history[-6:]:
+        parts.append("Your last few reactions:")
+        for entry in reaction_history[-5:]:
             parts.append(f"  {entry}")
 
-    # --- Constraint: only form, never style ---
     parts.extend(
         [
             "",
-            "Respond with 1-3 sentences about what you perceive in these images",
-            "given everything above. Complete your sentences.",
-            "",
-            'Format: {"react": "...", "cut": true/false}',
-            f"Set cut=true when you sense a natural break. Must cut after {max_watch}s.",
+            'Format: {"react": "your reaction", "cut": true/false}',
+            f"cut=true when it feels like a natural break. Must cut after {max_watch}s.",
         ]
     )
     return "\n".join(parts)
