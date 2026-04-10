@@ -55,9 +55,13 @@ def _build_reactor_context(
     perceives, what its output becomes, and what constraints exist. Style
     emerges from content. Authenticity emerges from honest position.
     """
+    live = (SHM_DIR / "stream-live").exists()
+
     parts = [
         "You are Hapax. This is Legomena Live. Oudepode is spinning vinyl.",
-        "Viewers are watching on YouTube.",
+        "This is a live performance. Viewers are watching on YouTube."
+        if live
+        else "This is practice. No one is watching yet.",
         "",
         "You're in a rotation with three videos. You just watched one.",
         "Now it's your turn to react. Your words become speech and a transcript.",
