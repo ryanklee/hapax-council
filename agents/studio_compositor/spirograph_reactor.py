@@ -50,13 +50,22 @@ class SpirographPath:
     d = 3.0
 
     def __init__(self, center_x: float = 960, center_y: float = 540, scale: float = 720) -> None:
+        self.base_center_x = center_x
         self.center_x = center_x
         self.center_y = center_y
         self.scale = scale
-        self.points = self._compute_points()
+        # Store normalized points (relative to center)
+        self._raw_points = self._compute_raw_points()
+        self.points = self._apply_center(self._raw_points)
         self._hue_offset = 0.0
+        # Horizontal drift: same speed as node orbit (1/(90*30) per frame)
+        # Oscillates across canvas width using sine wave
+        self._drift_phase = 0.0
+        self._drift_speed = 1.0 / (90 * 30)  # same as orbit speed
+        self._drift_amplitude = 300.0  # pixels of horizontal travel from center
 
-    def _compute_points(self) -> list[tuple[float, float]]:
+    def _compute_raw_points(self) -> list[tuple[float, float]]:
+        """Compute points relative to (0, 0)."""
         pts: list[tuple[float, float]] = []
         R, r, d = self.R, self.r, self.d
         t_max = 2 * math.pi * r / math.gcd(int(R), int(r))
@@ -64,13 +73,19 @@ class SpirographPath:
             t = t_max * i / self.NUM_POINTS
             x = (R - r) * math.cos(t) + d * math.cos((R - r) / r * t)
             y = (R - r) * math.sin(t) - d * math.sin((R - r) / r * t)
-            pts.append(
-                (
-                    self.center_x + x * self.scale / (R + d),
-                    self.center_y + y * self.scale / (R + d),
-                )
-            )
+            pts.append((x * self.scale / (R + d), y * self.scale / (R + d)))
         return pts
+
+    def _apply_center(self, raw: list[tuple[float, float]]) -> list[tuple[float, float]]:
+        return [(self.center_x + x, self.center_y + y) for x, y in raw]
+
+    def tick(self) -> None:
+        """Advance horizontal drift. Call once per frame."""
+        self._drift_phase = (self._drift_phase + self._drift_speed) % 1.0
+        self.center_x = (
+            self.base_center_x + math.sin(self._drift_phase * 2 * math.pi) * self._drift_amplitude
+        )
+        self.points = self._apply_center(self._raw_points)
 
     def position_at(self, t: float) -> tuple[float, float]:
         """Position on path at normalized parameter t in [0, 1)."""
@@ -588,6 +603,9 @@ class SpirographReactor:
         if not self._initialized:
             self.initialize()
             return
+
+        # Drift the spirograph horizontally
+        self.path.tick()
 
         for slot in self.video_slots:
             slot.tick(self.path)
