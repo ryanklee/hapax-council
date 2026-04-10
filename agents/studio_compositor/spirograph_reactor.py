@@ -222,6 +222,10 @@ class VideoSlot:
         self._confetti: list[ConfettiParticle] = []
         self._finished = False
         self._capturing = False
+        # Effect intensity pulse: slow logarithmic oscillation
+        # trough=0.35 (moderately effected), peak=1.0 (fully effected)
+        self._fx_phase = random.uniform(0, 1)  # desync between slots
+        self._fx_pulse_speed = 1.0 / (45 * 30)  # full cycle in 45s at 30fps
 
     def start_capture(self) -> None:
         """Start polling JPEG snapshots from youtube-player HTTP API."""
@@ -310,10 +314,20 @@ class VideoSlot:
         for _ in range(80):
             self._confetti.append(ConfettiParticle(x, y))
 
+    @property
+    def fx_intensity(self) -> float:
+        """Current effect intensity: logarithmic pulse from 0.35 (trough) to 1.0 (peak)."""
+        # Sine wave 0→1, then log-shaped: spend more time near trough, spike to peak
+        raw = (math.sin(self._fx_phase * 2 * math.pi) + 1) / 2  # 0..1
+        # Log shaping: x^0.4 spends more time near low values, sharp rise to peak
+        shaped = raw**0.4
+        return 0.35 + shaped * 0.65  # 0.35..1.0
+
     def tick(self, path: SpirographPath) -> tuple[float, float]:
-        """Update orbit position. Returns (x, y) screen position."""
+        """Update orbit position and effect pulse. Returns (x, y) screen position."""
         if not self.is_active:
             self.orbit_t = (self.orbit_t + self.orbit_speed) % 1.0
+        self._fx_phase = (self._fx_phase + self._fx_pulse_speed) % 1.0
         pos = path.position_at(self.orbit_t)
         self._confetti = [p for p in self._confetti if p.tick()]
         return pos
@@ -345,8 +359,13 @@ class VideoSlot:
             cr.translate(left, top)
             cr.set_source_surface(surface, 0, 0)
             cr.paint_with_alpha(self.ALPHA)
+            # Effect layer modulated by logarithmic pulse
             if self._fx_func is not None:
+                intensity = self.fx_intensity
+                cr.push_group()
                 self._fx_func(cr, self.WIDTH, self.HEIGHT)
+                cr.pop_group_to_source()
+                cr.paint_with_alpha(intensity)
             cr.restore()
 
         # Slot label
