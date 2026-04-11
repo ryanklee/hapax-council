@@ -423,10 +423,9 @@ class AlbumOverlay:
     ATTRIB_PATH = "/dev/shm/hapax-compositor/music-attribution.txt"
 
     def __init__(self) -> None:
-        self._x = 1200.0
-        self._y = 600.0
-        self._vx = -0.9
-        self._vy = 1.1
+        # Fixed position: lower-left quadrant (opposite token pole at upper-left)
+        self._x = 20.0
+        self._y = 1080.0 - 300.0 - 100.0 - 20.0  # SIZE + text + margin from bottom
         self._surface: Any = None
         self._surface_mtime: float = 0
         self._attrib_text: str = ""
@@ -436,22 +435,8 @@ class AlbumOverlay:
         self._fx_name: str = ""
 
     def tick(self) -> None:
-        """Bounce position. Called every frame from the FX tick."""
-        self._x += self._vx
-        self._y += self._vy
-        total_h = self.SIZE + 100  # cover + text below
-        if self._x <= 20:
-            self._x = 20
-            self._vx = abs(self._vx)
-        elif self._x + self.SIZE >= 1920 - 20:
-            self._x = 1920 - self.SIZE - 20
-            self._vx = -abs(self._vx)
-        if self._y <= 20:
-            self._y = 20
-            self._vy = abs(self._vy)
-        elif self._y + total_h >= 1080 - 20:
-            self._y = 1080 - total_h - 20
-            self._vy = -abs(self._vy)
+        """Fixed position — no bounce."""
+        pass
 
     def draw(self, cr: Any) -> None:
         """Paint album cover + splattribution on the cairooverlay."""
