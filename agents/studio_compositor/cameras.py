@@ -136,9 +136,11 @@ def add_camera_branch(
                 f"image/jpeg,width={cam.width},height={cam.height},framerate={fps}/1"
             ),
         )
-        # Try GPU decode (nvjpegdec, CUDA-based) first, fall back to CPU jpegdec
-        nv_decoder = Gst.ElementFactory.make("nvjpegdec", f"dec_{role}")
-        if nv_decoder is not None:
+        # GPU decode for BRIOs (1080p, high CPU cost). C920s use CPU jpegdec —
+        # nvjpegdec rejects their non-standard MJPEG headers.
+        use_gpu = cam.role.startswith("brio") and Gst.ElementFactory.find("nvjpegdec")
+        if use_gpu:
+            nv_decoder = Gst.ElementFactory.make("nvjpegdec", f"dec_{role}")
             parser = Gst.ElementFactory.make("jpegparse", f"parse_{role}")
             for el in [src, src_caps, parser, nv_decoder]:
                 pipeline.add(el)
@@ -146,8 +148,6 @@ def add_camera_branch(
             src_caps.link(parser)
             parser.link(nv_decoder)
             last = nv_decoder
-            if not hasattr(compositor, "_use_nvjpeg"):
-                compositor._use_nvjpeg = True
             log.info("Camera %s: using nvjpegdec (GPU decode)", cam.role)
         else:
             decoder = Gst.ElementFactory.make("jpegdec", f"dec_{role}")
@@ -156,9 +156,12 @@ def add_camera_branch(
             src.link(src_caps)
             src_caps.link(decoder)
             last = decoder
-            if not hasattr(compositor, "_use_nvjpeg"):
-                compositor._use_nvjpeg = False
-            log.warning("Camera %s: nvjpegdec unavailable, using jpegdec (CPU)", cam.role)
+            log.info("Camera %s: using jpegdec (CPU decode)", cam.role)
+        # Track per-camera decode type for snapshot branch
+        if not hasattr(compositor, "_nvjpeg_cameras"):
+            compositor._nvjpeg_cameras = set()
+        if use_gpu:
+            compositor._nvjpeg_cameras.add(cam.role)
     else:
         src_caps = Gst.ElementFactory.make("capsfilter", f"srccaps_{role}")
         pix_fmt = cam.pixel_format or "GRAY8"
@@ -236,11 +239,12 @@ def add_camera_branch(
     if compositor.config.recording.enabled:
         add_recording_branch(compositor, pipeline, camera_tee, cam, fps)
 
-    if not getattr(compositor, "_use_nvjpeg", False):
-        # CPU path: per-camera snapshots work directly from jpegdec output
+    nvjpeg_cams = getattr(compositor, "_nvjpeg_cameras", set())
+    if cam.role not in nvjpeg_cams:
+        # CPU decode: per-camera snapshots work directly from jpegdec output
         add_camera_snapshot_branch(compositor, pipeline, camera_tee, cam)
     else:
-        # GPU path: per-camera snapshots skipped (CUDA tee→CPU snapshot pipeline
+        # GPU decode: per-camera snapshots skipped (CUDA tee→CPU snapshot pipeline
         # has caps negotiation issues; FX snapshots from compositor output still work)
         log.debug("Camera %s: per-camera snapshot skipped (GPU decode path)", cam.role)
 
