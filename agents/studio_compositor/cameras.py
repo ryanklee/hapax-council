@@ -20,39 +20,57 @@ def add_camera_snapshot_branch(
     Gst = compositor._Gst
     role = cam.role.replace("-", "_")
 
-    queue = Gst.ElementFactory.make("queue", f"queue-camsnap-{role}")
-    queue.set_property("leaky", 2)
-    queue.set_property("max-size-buffers", 2)
-
-    # When nvjpegdec is active, tee output is CUDA memory — download to CPU first
     use_nvjpeg = getattr(compositor, "_use_nvjpeg", False)
-    if use_nvjpeg:
-        download = Gst.ElementFactory.make("cudadownload", f"camsnap-download-{role}")
-    convert = Gst.ElementFactory.make("videoconvert", f"camsnap-convert-{role}")
-    convert.set_property("dither", 0)  # none — Bayer default creates sawtooth columns
-    rate = Gst.ElementFactory.make("videorate", f"camsnap-rate-{role}")
-    rate_caps = Gst.ElementFactory.make("capsfilter", f"camsnap-ratecaps-{role}")
-    rate_caps.set_property("caps", Gst.Caps.from_string("video/x-raw,framerate=1/5"))
-    scale = Gst.ElementFactory.make("videoscale", f"camsnap-scale-{role}")
-    scale_caps = Gst.ElementFactory.make("capsfilter", f"camsnap-scalecaps-{role}")
-    # Scale to preview size — fullscreen output node needs reasonable resolution
     snap_w = min(cam.width, 640)
     snap_h = min(cam.height, 360)
-    scale_caps.set_property(
-        "caps", Gst.Caps.from_string(f"video/x-raw,width={snap_w},height={snap_h}")
-    )
-    encoder = Gst.ElementFactory.make("jpegenc", f"camsnap-jpeg-{role}")
-    encoder.set_property("quality", 75)
-    appsink = Gst.ElementFactory.make("appsink", f"camsnap-sink-{role}")
-    appsink.set_property("sync", False)
-    appsink.set_property("async", False)
-    appsink.set_property("drop", True)
-    appsink.set_property("max-buffers", 1)
 
     if use_nvjpeg:
-        # cudadownload BEFORE queue — leaky queue can't drop CUDA-memory buffers
-        chain = [download, queue, convert, rate, rate_caps, scale, scale_caps, encoder, appsink]
+        # GPU path: CUDA convert+scale+download in one step, then CPU jpegenc
+        cuda_cvt = Gst.ElementFactory.make("cudaconvertscale", f"camsnap-cudacvt-{role}")
+        cuda_caps = Gst.ElementFactory.make("capsfilter", f"camsnap-cudacaps-{role}")
+        cuda_caps.set_property(
+            "caps",
+            Gst.Caps.from_string(
+                f"video/x-raw(memory:CUDAMemory),format=I420,width={snap_w},height={snap_h}"
+            ),
+        )
+        download = Gst.ElementFactory.make("cudadownload", f"camsnap-download-{role}")
+        queue = Gst.ElementFactory.make("queue", f"queue-camsnap-{role}")
+        queue.set_property("leaky", 2)
+        queue.set_property("max-size-buffers", 2)
+        rate = Gst.ElementFactory.make("videorate", f"camsnap-rate-{role}")
+        rate_caps = Gst.ElementFactory.make("capsfilter", f"camsnap-ratecaps-{role}")
+        rate_caps.set_property("caps", Gst.Caps.from_string("video/x-raw,framerate=1/5"))
+        encoder = Gst.ElementFactory.make("jpegenc", f"camsnap-jpeg-{role}")
+        encoder.set_property("quality", 75)
+        appsink = Gst.ElementFactory.make("appsink", f"camsnap-sink-{role}")
+        appsink.set_property("sync", False)
+        appsink.set_property("async", False)
+        appsink.set_property("drop", True)
+        appsink.set_property("max-buffers", 1)
+        chain = [cuda_cvt, cuda_caps, download, queue, rate, rate_caps, encoder, appsink]
     else:
+        # CPU path: videoconvert + videoscale on CPU
+        queue = Gst.ElementFactory.make("queue", f"queue-camsnap-{role}")
+        queue.set_property("leaky", 2)
+        queue.set_property("max-size-buffers", 2)
+        convert = Gst.ElementFactory.make("videoconvert", f"camsnap-convert-{role}")
+        convert.set_property("dither", 0)  # none — Bayer default creates sawtooth columns
+        rate = Gst.ElementFactory.make("videorate", f"camsnap-rate-{role}")
+        rate_caps = Gst.ElementFactory.make("capsfilter", f"camsnap-ratecaps-{role}")
+        rate_caps.set_property("caps", Gst.Caps.from_string("video/x-raw,framerate=1/5"))
+        scale = Gst.ElementFactory.make("videoscale", f"camsnap-scale-{role}")
+        scale_caps = Gst.ElementFactory.make("capsfilter", f"camsnap-scalecaps-{role}")
+        scale_caps.set_property(
+            "caps", Gst.Caps.from_string(f"video/x-raw,width={snap_w},height={snap_h}")
+        )
+        encoder = Gst.ElementFactory.make("jpegenc", f"camsnap-jpeg-{role}")
+        encoder.set_property("quality", 75)
+        appsink = Gst.ElementFactory.make("appsink", f"camsnap-sink-{role}")
+        appsink.set_property("sync", False)
+        appsink.set_property("async", False)
+        appsink.set_property("drop", True)
+        appsink.set_property("max-buffers", 1)
         chain = [queue, convert, rate, rate_caps, scale, scale_caps, encoder, appsink]
 
     SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
