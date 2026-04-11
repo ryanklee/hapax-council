@@ -347,6 +347,7 @@ class DirectorLoop:
         self._video_start_time = time.monotonic()
         if self._slots:
             self._slots[self._active_slot].is_active = True
+            self._sync_slot_playback()
         self._thread = threading.Thread(target=self._loop, daemon=True, name="director-loop")
         self._thread.start()
         log.info("Director loop started (slot %d active)", self._active_slot)
@@ -356,6 +357,31 @@ class DirectorLoop:
 
     def _next_slot(self) -> None:
         self._active_slot = (self._active_slot + 1) % len(self._slots)
+        self._sync_slot_playback()
+
+    def _sync_slot_playback(self) -> None:
+        """Pause non-active slots, unpause active slot via youtube-player API."""
+        for s in self._slots:
+            try:
+                status = json.loads(
+                    urllib.request.urlopen(
+                        f"http://127.0.0.1:8055/slot/{s.slot_id}/status", timeout=2
+                    ).read()
+                )
+                is_paused = status.get("paused", False)
+                should_play = s.slot_id == self._active_slot
+
+                if should_play and is_paused or not should_play and not is_paused:
+                    urllib.request.urlopen(
+                        urllib.request.Request(
+                            f"http://127.0.0.1:8055/slot/{s.slot_id}/pause",
+                            b"",
+                            {"Content-Type": "application/json"},
+                        ),
+                        timeout=2,
+                    )
+            except Exception:
+                pass
 
     def _loop(self) -> None:
         """Unified loop: Hapax decides what to do each tick."""
