@@ -44,7 +44,7 @@ SHM_DIR = Path("/dev/shm/hapax-compositor")
 class SpirographPath:
     """Hypotrochoid parametric curve with iridescent glow rendering."""
 
-    NUM_POINTS = 1000
+    NUM_POINTS = 300
     R = 5.0
     r = 3.0
     d = 3.0
@@ -108,7 +108,7 @@ class SpirographPath:
 
         # Per-segment iridescent color (the visible thread)
         cr.set_line_width(2.5)
-        step = max(1, n // 500)
+        step = max(1, n // 100)
         for i in range(0, n - step, step):
             hue = (self._hue_offset + i / n) % 1.0
             r, g, b = colorsys.hsv_to_rgb(hue, 0.7, 1.0)
@@ -296,7 +296,7 @@ class VideoSlot:
                                 log.info("VideoSlot %d: %d frames", self.slot_id, frame_count)
             except Exception:
                 pass
-            time.sleep(0.1)  # ~10fps
+            time.sleep(0.2)  # ~5fps (reduces PIL/cairo CPU pressure)
 
         log.info("VideoSlot %d poller stopped (frames=%d)", self.slot_id, frame_count)
 
