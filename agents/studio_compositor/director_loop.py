@@ -812,37 +812,13 @@ class DirectorLoop:
             return self._tts_manager.synthesize(text, "conversation")
 
     def _play_audio(self, pcm: bytes) -> None:
+        """Play PCM using persistent pw-cat subprocess. No temp files."""
         try:
-            # Write PCM to temp file, play with pw-play (doesn't support stdin)
-            import tempfile
+            if not hasattr(self, "_audio_output") or self._audio_output is None:
+                from agents.hapax_daimonion.pw_audio_output import PwAudioOutput
 
-            with tempfile.NamedTemporaryFile(suffix=".raw", delete=False) as f:
-                f.write(pcm)
-                raw_path = f.name
-            # Convert raw PCM to WAV for pw-play
-            wav_path = raw_path + ".wav"
-            subprocess.run(
-                [
-                    "ffmpeg",
-                    "-y",
-                    "-f",
-                    "s16le",
-                    "-ar",
-                    "24000",
-                    "-ac",
-                    "1",
-                    "-i",
-                    raw_path,
-                    wav_path,
-                ],
-                capture_output=True,
-                timeout=10,
-            )
-            subprocess.run(["pw-play", wav_path], capture_output=True, timeout=30)
-            import os
-
-            os.unlink(raw_path)
-            os.unlink(wav_path)
+                self._audio_output = PwAudioOutput(sample_rate=24000, channels=1)
+            self._audio_output.write(pcm)
         except Exception:
             log.exception("Audio playback error")
 
