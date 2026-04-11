@@ -23,11 +23,16 @@ def add_camera_snapshot_branch(
     queue = Gst.ElementFactory.make("queue", f"queue-camsnap-{role}")
     queue.set_property("leaky", 2)
     queue.set_property("max-size-buffers", 2)
+
+    # When nvjpegdec is active, tee output is CUDA memory — download to CPU first
+    use_nvjpeg = getattr(compositor, "_use_nvjpeg", False)
+    if use_nvjpeg:
+        download = Gst.ElementFactory.make("cudadownload", f"camsnap-download-{role}")
     convert = Gst.ElementFactory.make("videoconvert", f"camsnap-convert-{role}")
     convert.set_property("dither", 0)  # none — Bayer default creates sawtooth columns
     rate = Gst.ElementFactory.make("videorate", f"camsnap-rate-{role}")
     rate_caps = Gst.ElementFactory.make("capsfilter", f"camsnap-ratecaps-{role}")
-    rate_caps.set_property("caps", Gst.Caps.from_string("video/x-raw,framerate=1/1"))
+    rate_caps.set_property("caps", Gst.Caps.from_string("video/x-raw,framerate=1/5"))
     scale = Gst.ElementFactory.make("videoscale", f"camsnap-scale-{role}")
     scale_caps = Gst.ElementFactory.make("capsfilter", f"camsnap-scalecaps-{role}")
     # Scale to preview size — fullscreen output node needs reasonable resolution
@@ -44,7 +49,10 @@ def add_camera_snapshot_branch(
     appsink.set_property("drop", True)
     appsink.set_property("max-buffers", 1)
 
-    chain = [queue, convert, rate, rate_caps, scale, scale_caps, encoder, appsink]
+    if use_nvjpeg:
+        chain = [queue, download, convert, rate, rate_caps, scale, scale_caps, encoder, appsink]
+    else:
+        chain = [queue, convert, rate, rate_caps, scale, scale_caps, encoder, appsink]
 
     SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
     snap_role = cam.role
@@ -109,12 +117,29 @@ def add_camera_branch(
                 f"image/jpeg,width={cam.width},height={cam.height},framerate={fps}/1"
             ),
         )
-        decoder = Gst.ElementFactory.make("jpegdec", f"dec_{role}")
-        for el in [src, src_caps, decoder]:
-            pipeline.add(el)
-        src.link(src_caps)
-        src_caps.link(decoder)
-        last = decoder
+        # Try GPU decode (nvjpegdec, CUDA-based) first, fall back to CPU jpegdec
+        nv_decoder = Gst.ElementFactory.make("nvjpegdec", f"dec_{role}")
+        if nv_decoder is not None:
+            parser = Gst.ElementFactory.make("jpegparse", f"parse_{role}")
+            for el in [src, src_caps, parser, nv_decoder]:
+                pipeline.add(el)
+            src.link(src_caps)
+            src_caps.link(parser)
+            parser.link(nv_decoder)
+            last = nv_decoder
+            if not hasattr(compositor, "_use_nvjpeg"):
+                compositor._use_nvjpeg = True
+            log.info("Camera %s: using nvjpegdec (GPU decode)", cam.role)
+        else:
+            decoder = Gst.ElementFactory.make("jpegdec", f"dec_{role}")
+            for el in [src, src_caps, decoder]:
+                pipeline.add(el)
+            src.link(src_caps)
+            src_caps.link(decoder)
+            last = decoder
+            if not hasattr(compositor, "_use_nvjpeg"):
+                compositor._use_nvjpeg = False
+            log.warning("Camera %s: nvjpegdec unavailable, using jpegdec (CPU)", cam.role)
     else:
         src_caps = Gst.ElementFactory.make("capsfilter", f"srccaps_{role}")
         pix_fmt = cam.pixel_format or "GRAY8"
