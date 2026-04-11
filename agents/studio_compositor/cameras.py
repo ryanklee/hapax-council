@@ -50,7 +50,8 @@ def add_camera_snapshot_branch(
     appsink.set_property("max-buffers", 1)
 
     if use_nvjpeg:
-        chain = [queue, download, convert, rate, rate_caps, scale, scale_caps, encoder, appsink]
+        # cudadownload BEFORE queue — leaky queue can't drop CUDA-memory buffers
+        chain = [download, queue, convert, rate, rate_caps, scale, scale_caps, encoder, appsink]
     else:
         chain = [queue, convert, rate, rate_caps, scale, scale_caps, encoder, appsink]
 
@@ -88,8 +89,8 @@ def add_camera_snapshot_branch(
         chain[i].link(chain[i + 1])
 
     tee_pad = camera_tee.request_pad(camera_tee.get_pad_template("src_%u"), None, None)
-    queue_sink = queue.get_static_pad("sink")
-    tee_pad.link(queue_sink)
+    first_sink = chain[0].get_static_pad("sink")
+    tee_pad.link(first_sink)
 
 
 def add_camera_branch(

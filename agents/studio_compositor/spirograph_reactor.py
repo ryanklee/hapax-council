@@ -296,7 +296,7 @@ class VideoSlot:
                                 log.info("VideoSlot %d: %d frames", self.slot_id, frame_count)
             except Exception:
                 pass
-            time.sleep(0.2)  # ~5fps (reduces PIL/cairo CPU pressure)
+            time.sleep(0.1)  # ~10fps (matches youtube-player snapshot rate)
 
         log.info("VideoSlot %d poller stopped (frames=%d)", self.slot_id, frame_count)
 
