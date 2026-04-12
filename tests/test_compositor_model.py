@@ -381,6 +381,138 @@ class TestGarageDoorLayout:
         rebuilt = SurfaceGeometry.model_validate_json(geom.model_dump_json())
         assert rebuilt.render_target == "hud"
 
+    def test_source_by_id_returns_source_or_none(self):
+        layout = Layout.model_validate_json(GARAGE_DOOR_PATH.read_text())
+        cam = layout.source_by_id("cam-brio-operator")
+        assert cam is not None
+        assert cam.id == "cam-brio-operator"
+        assert cam.kind == "camera"
+        assert layout.source_by_id("nonexistent") is None
+
+    def test_surface_by_id_returns_surface_or_none(self):
+        layout = Layout.model_validate_json(GARAGE_DOOR_PATH.read_text())
+        out = layout.surface_by_id("main-output")
+        assert out is not None
+        assert out.geometry.kind == "video_out"
+        assert layout.surface_by_id("nonexistent") is None
+
+    def test_assignments_for_source_returns_in_layout_order(self):
+        layout = Layout.model_validate_json(GARAGE_DOOR_PATH.read_text())
+        # cam-brio-operator should have at least one assignment in the
+        # canonical layout (it's the hero camera).
+        assigns = layout.assignments_for_source("cam-brio-operator")
+        assert len(assigns) >= 1
+        for a in assigns:
+            assert a.source == "cam-brio-operator"
+
+    def test_assignments_for_source_unknown_returns_empty_list(self):
+        layout = Layout.model_validate_json(GARAGE_DOOR_PATH.read_text())
+        assert layout.assignments_for_source("ghost") == []
+
+    def test_assignments_for_surface_returns_only_matching(self):
+        layout = Layout.model_validate_json(GARAGE_DOOR_PATH.read_text())
+        result = layout.assignments_for_surface("tile-cam-operator")
+        for a in result:
+            assert a.surface == "tile-cam-operator"
+
+    def test_assignments_for_surface_unknown_returns_empty_list(self):
+        layout = Layout.model_validate_json(GARAGE_DOOR_PATH.read_text())
+        assert layout.assignments_for_surface("ghost") == []
+
+    def test_render_targets_garage_door_is_main_only(self):
+        """Phase 5b2: garage-door's two video_out surfaces both feed
+        the ``main`` render target, so render_targets() returns
+        ('main',)."""
+        layout = Layout.model_validate_json(GARAGE_DOOR_PATH.read_text())
+        assert layout.render_targets() == ("main",)
+
+    def test_render_targets_synthetic_multi_target_layout(self):
+        """A layout declaring two distinct render_targets returns both
+        in sorted order."""
+        from shared.compositor_model import (
+            Assignment,
+            SourceSchema,
+            SurfaceGeometry,
+            SurfaceSchema,
+        )
+
+        layout = Layout(
+            name="multi",
+            sources=[
+                SourceSchema(id="s", kind="shader", backend="wgsl_render"),
+            ],
+            surfaces=[
+                SurfaceSchema(
+                    id="stream",
+                    geometry=SurfaceGeometry(
+                        kind="video_out",
+                        target="/dev/video42",
+                        render_target="main",
+                    ),
+                ),
+                SurfaceSchema(
+                    id="hud",
+                    geometry=SurfaceGeometry(
+                        kind="video_out",
+                        target="ndi://hapax.local/hud",
+                        render_target="hud",
+                    ),
+                ),
+            ],
+            assignments=[Assignment(source="s", surface="stream")],
+        )
+        assert layout.render_targets() == ("hud", "main")
+
+    def test_render_targets_defaults_unset_to_main(self):
+        """A video_out surface with render_target=None defaults to 'main'."""
+        from shared.compositor_model import (
+            Assignment,
+            SourceSchema,
+            SurfaceGeometry,
+            SurfaceSchema,
+        )
+
+        layout = Layout(
+            name="default",
+            sources=[
+                SourceSchema(id="s", kind="shader", backend="wgsl_render"),
+            ],
+            surfaces=[
+                SurfaceSchema(
+                    id="out",
+                    geometry=SurfaceGeometry(
+                        kind="video_out",
+                        target="/dev/video42",
+                    ),
+                ),
+            ],
+            assignments=[Assignment(source="s", surface="out")],
+        )
+        assert layout.render_targets() == ("main",)
+
+    def test_render_targets_empty_when_no_video_outs(self):
+        from shared.compositor_model import (
+            Assignment,
+            SourceSchema,
+            SurfaceGeometry,
+            SurfaceSchema,
+        )
+
+        layout = Layout(
+            name="no-video",
+            sources=[
+                SourceSchema(id="s", kind="shader", backend="wgsl_render"),
+            ],
+            surfaces=[
+                SurfaceSchema(
+                    id="rect",
+                    geometry=SurfaceGeometry(kind="rect", x=0, y=0, w=64, h=64),
+                ),
+            ],
+            assignments=[Assignment(source="s", surface="rect")],
+        )
+        assert layout.render_targets() == ()
+
     def test_garage_door_round_trip_against_disk_format(self):
         """Dumping the parsed layout to JSON should be valid JSON
         that can be parsed back into the same Layout."""
