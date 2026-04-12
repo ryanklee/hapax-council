@@ -4,27 +4,30 @@ Draws a 2-level Sierpinski triangle with YouTube videos masked into the 3
 corner regions and a waveform in the center void. Renders BEFORE the GL
 shader chain so glfeedback effects apply to the triangle.
 
-Rendering runs in a background thread at 10fps. The GStreamer draw callback
-only blits the pre-rendered surface (<0.5ms), avoiding pipeline stalls from
-JPEG decode and Cairo rendering in the streaming thread.
+Phase 3b: the rendering logic lives in :class:`SierpinskiCairoSource`,
+which conforms to the :class:`CairoSource` protocol. The thread loop and
+output-surface caching are owned by :class:`CairoSourceRunner`. The
+:class:`SierpinskiRenderer` facade preserves the original public API
+(``start``/``stop``/``draw``/``set_active_slot``/``set_audio_energy``)
+so existing call sites in ``fx_chain.py`` and ``overlay.py`` keep working.
 """
 
 from __future__ import annotations
 
 import logging
 import math
-import threading
 import time
 from pathlib import Path
 from typing import Any
 
 import cairo
 
+from .cairo_source import CairoSource, CairoSourceRunner
+
 log = logging.getLogger(__name__)
 
 YT_FRAME_DIR = Path("/dev/shm/hapax-compositor")
 RENDER_FPS = 10
-RENDER_INTERVAL = 1.0 / RENDER_FPS
 
 # Synthwave palette (neon pink, cyan, purple)
 COLORS = [
@@ -35,11 +38,12 @@ COLORS = [
 ]
 
 
-class SierpinskiRenderer:
-    """Draws a Sierpinski triangle with video content in the GStreamer cairooverlay.
+class SierpinskiCairoSource(CairoSource):
+    """Phase 3b CairoSource implementation for the Sierpinski overlay.
 
-    Rendering is done in a background thread at 10fps. The draw() method called
-    from the GStreamer pipeline thread only blits the cached output surface.
+    Owns the YouTube frame cache, active-slot state, and audio energy
+    snapshot. The runner calls ``render()`` once per tick on a background
+    thread.
     """
 
     def __init__(self) -> None:
@@ -48,54 +52,22 @@ class SierpinskiRenderer:
         self._active_slot = 0
         self._audio_energy = 0.0
 
-        # Background render state
-        self._output_surface: cairo.ImageSurface | None = None
-        self._output_lock = threading.Lock()
-        self._canvas_size: tuple[int, int] = (1920, 1080)
-        self._running = False
-        self._thread: threading.Thread | None = None
-
-    def start(self) -> None:
-        """Start the background render thread."""
-        self._running = True
-        self._thread = threading.Thread(
-            target=self._render_loop, daemon=True, name="sierpinski-render"
-        )
-        self._thread.start()
-        log.info("SierpinskiRenderer background thread started at %dfps", RENDER_FPS)
-
-    def stop(self) -> None:
-        """Stop the background render thread."""
-        self._running = False
-
     def set_active_slot(self, slot_id: int) -> None:
         self._active_slot = slot_id
 
     def set_audio_energy(self, energy: float) -> None:
         self._audio_energy = energy
 
-    def _render_loop(self) -> None:
-        """Background render loop — renders full Sierpinski frame at RENDER_FPS."""
-        while self._running:
-            t0 = time.monotonic()
-            try:
-                self._render_frame()
-            except Exception:
-                log.debug("Sierpinski render failed", exc_info=True)
-            elapsed = time.monotonic() - t0
-            sleep_time = RENDER_INTERVAL - elapsed
-            if sleep_time > 0:
-                time.sleep(sleep_time)
-
-    def _render_frame(self) -> None:
-        """Render a complete Sierpinski frame to a new surface, then swap."""
-        w, h = self._canvas_size
-        surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, w, h)
-        cr = cairo.Context(surface)
-
-        fw = float(w)
-        fh = float(h)
-        t = time.monotonic()
+    def render(
+        self,
+        cr: cairo.Context,
+        canvas_w: int,
+        canvas_h: int,
+        t: float,
+        state: dict[str, Any],
+    ) -> None:
+        fw = float(canvas_w)
+        fh = float(canvas_h)
 
         # Main triangle (75% of height, slightly above center)
         tri = self._get_triangle(fw, fh, scale=0.75, y_offset=-0.02)
@@ -139,10 +111,6 @@ class SierpinskiRenderer:
         # Draw line work with audio-reactive width
         line_w = 1.5 + self._audio_energy * 2.0
         self._draw_triangle_lines(cr, all_triangles, line_w, t)
-
-        # Swap output surface under lock
-        with self._output_lock:
-            self._output_surface = surface
 
     def _load_frame(self, slot_id: int) -> cairo.ImageSurface | None:
         """Load a YouTube frame JPEG as a Cairo surface, with mtime caching."""
@@ -358,16 +326,59 @@ class SierpinskiRenderer:
 
         cr.restore()
 
+
+class SierpinskiRenderer:
+    """Compositor-side facade around the polymorphic Cairo source pipeline.
+
+    Preserves the original public API (``start``/``stop``/``draw``/
+    ``set_active_slot``/``set_audio_energy``) so existing call sites in
+    ``fx_chain.py`` (instantiation) and ``overlay.py`` (synchronous draw
+    callback) continue to work without changes.
+
+    Internally:
+
+    * Holds a :class:`SierpinskiCairoSource` for the per-frame draw logic
+    * Holds a :class:`CairoSourceRunner` to drive it on a background
+      thread at the configured FPS
+    * Forwards ``draw()`` to the runner's cached output surface for the
+      sub-millisecond GStreamer streaming-thread blit
+    """
+
+    def __init__(self) -> None:
+        self._source = SierpinskiCairoSource()
+        self._runner = CairoSourceRunner(
+            source_id="sierpinski-lines",
+            source=self._source,
+            canvas_w=1920,
+            canvas_h=1080,
+            target_fps=RENDER_FPS,
+        )
+
+    def start(self) -> None:
+        """Start the background render thread."""
+        self._runner.start()
+        log.info("SierpinskiRenderer background thread started at %dfps", RENDER_FPS)
+
+    def stop(self) -> None:
+        """Stop the background render thread."""
+        self._runner.stop()
+
+    def set_active_slot(self, slot_id: int) -> None:
+        self._source.set_active_slot(slot_id)
+
+    def set_audio_energy(self, energy: float) -> None:
+        self._source.set_audio_energy(energy)
+
     def draw(self, cr: Any, canvas_w: int, canvas_h: int) -> None:
         """Blit the pre-rendered output surface. Called from on_draw at 30fps.
 
-        This method must be fast (<2ms) — it runs in the GStreamer streaming thread.
-        All rendering happens in the background thread via _render_frame().
+        This method must be fast (<2ms) — it runs in the GStreamer streaming
+        thread. All rendering happens in the background thread.
         """
-        # Update canvas size for background thread (checked on next render tick)
-        self._canvas_size = (canvas_w, canvas_h)
+        # Update canvas size for the runner — picked up on the next tick.
+        self._runner.set_canvas_size(canvas_w, canvas_h)
 
-        with self._output_lock:
-            if self._output_surface is not None:
-                cr.set_source_surface(self._output_surface, 0, 0)
-                cr.paint()
+        surface = self._runner.get_output_surface()
+        if surface is not None:
+            cr.set_source_surface(surface, 0, 0)
+            cr.paint()
