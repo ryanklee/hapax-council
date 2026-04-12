@@ -765,15 +765,30 @@ impl DynamicPipeline {
 
         // Execute each pass
         for pass in &self.passes {
-            // Backend dispatch (Phase 3a). Today only "wgsl_render" is wired
-            // to the existing render/compute path below. Future sub-phases
-            // (3b cairo, 3c text, 3d image_file) add branches here. Unknown
-            // backends are logged once and skipped — they will not crash the
-            // pipeline if a manifest is misconfigured.
+            // Backend dispatch (Phase 3a/3b). Today wgsl_render falls through
+            // to the existing render/compute path below; cairo content is
+            // uploaded by the Python CairoSourceRunner via ContentSourceManager
+            // and consumed by content_layer/sierpinski_content (which are
+            // wgsl_render passes themselves), so the cairo arm is currently
+            // a no-op observer. Future sub-phases (3c text, 3d image_file)
+            // add branches here. Unknown backends are logged at debug level
+            // and skipped — a misconfigured manifest cannot crash the
+            // pipeline.
             match pass.backend.as_str() {
                 "wgsl_render" => {
                     // Existing path — falls through to the render/compute
                     // dispatch below.
+                }
+                "cairo" => {
+                    // Phase 3b: Python CairoSourceRunner publishes RGBA via
+                    // the source protocol; the wgsl pass that consumes the
+                    // content reads it via content_slot_*. Nothing to do at
+                    // dispatch time today.
+                    log::trace!(
+                        "dynamic_pipeline: cairo backend pass '{}' (no-op observer)",
+                        pass.node_id,
+                    );
+                    continue;
                 }
                 other => {
                     log::debug!(

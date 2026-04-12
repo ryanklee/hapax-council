@@ -1,0 +1,269 @@
+"""Tests for the CairoSource protocol and CairoSourceRunner.
+
+Phase 3b of the compositor unification epic — the polymorphic
+mechanism that drives Python Cairo content sources on background
+threads.
+"""
+
+from __future__ import annotations
+
+import threading
+import time
+from typing import Any
+
+import cairo
+import pytest
+
+from agents.studio_compositor.cairo_source import CairoSource, CairoSourceRunner
+
+
+class _RecordingSource(CairoSource):
+    """Test source that records render calls and counts ticks."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+        self.canvas_sizes: list[tuple[int, int]] = []
+        self.times: list[float] = []
+        self.state_seen: list[dict[str, Any]] = []
+        self.cleanup_called = False
+        self._next_state: dict[str, Any] = {}
+
+    def set_state(self, value: dict[str, Any]) -> None:
+        self._next_state = value
+
+    def state(self) -> dict[str, Any]:
+        return dict(self._next_state)
+
+    def render(
+        self,
+        cr: cairo.Context,
+        canvas_w: int,
+        canvas_h: int,
+        t: float,
+        state: dict[str, Any],
+    ) -> None:
+        self.calls += 1
+        self.canvas_sizes.append((canvas_w, canvas_h))
+        self.times.append(t)
+        self.state_seen.append(dict(state))
+        # Draw something so the surface is non-empty
+        cr.set_source_rgba(1.0, 0.0, 0.0, 1.0)
+        cr.rectangle(0, 0, canvas_w, canvas_h)
+        cr.fill()
+
+    def cleanup(self) -> None:
+        self.cleanup_called = True
+
+
+class _ExplodingSource(CairoSource):
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def render(
+        self,
+        cr: cairo.Context,
+        canvas_w: int,
+        canvas_h: int,
+        t: float,
+        state: dict[str, Any],
+    ) -> None:
+        self.calls += 1
+        raise RuntimeError("boom")
+
+
+# ---------------------------------------------------------------------------
+# CairoSourceRunner basics
+# ---------------------------------------------------------------------------
+
+
+def test_runner_validates_target_fps():
+    src = _RecordingSource()
+    with pytest.raises(ValueError):
+        CairoSourceRunner(source_id="bad", source=src, target_fps=0.0)
+
+
+def test_runner_tick_once_calls_render():
+    src = _RecordingSource()
+    runner = CairoSourceRunner(source_id="t", source=src, canvas_w=64, canvas_h=32, target_fps=10)
+    runner.tick_once()
+    assert src.calls == 1
+    assert src.canvas_sizes == [(64, 32)]
+
+
+def test_runner_caches_output_surface():
+    src = _RecordingSource()
+    runner = CairoSourceRunner(source_id="t", source=src, canvas_w=64, canvas_h=32, target_fps=10)
+    assert runner.get_output_surface() is None
+    runner.tick_once()
+    surface = runner.get_output_surface()
+    assert surface is not None
+    assert surface.get_width() == 64
+    assert surface.get_height() == 32
+
+
+def test_runner_passes_state_to_render():
+    src = _RecordingSource()
+    src.set_state({"slot": 2, "energy": 0.7})
+    runner = CairoSourceRunner(source_id="t", source=src, canvas_w=16, canvas_h=16, target_fps=10)
+    runner.tick_once()
+    assert src.state_seen[-1] == {"slot": 2, "energy": 0.7}
+
+
+def test_runner_render_exception_does_not_corrupt_state():
+    src = _ExplodingSource()
+    runner = CairoSourceRunner(source_id="boom", source=src, canvas_w=8, canvas_h=8, target_fps=10)
+    # Exception is swallowed and logged.
+    runner.tick_once()
+    assert src.calls == 1
+    # No surface should be cached after a failed render.
+    assert runner.get_output_surface() is None
+
+
+def test_runner_set_canvas_size_picked_up_on_next_tick():
+    src = _RecordingSource()
+    runner = CairoSourceRunner(source_id="t", source=src, canvas_w=64, canvas_h=32, target_fps=10)
+    runner.tick_once()
+    runner.set_canvas_size(128, 64)
+    runner.tick_once()
+    assert src.canvas_sizes[-1] == (128, 64)
+    surface = runner.get_output_surface()
+    assert surface is not None
+    assert surface.get_width() == 128
+    assert surface.get_height() == 64
+
+
+def test_runner_frame_count_and_render_ms():
+    src = _RecordingSource()
+    runner = CairoSourceRunner(source_id="t", source=src, canvas_w=8, canvas_h=8, target_fps=10)
+    assert runner.frame_count == 0
+    runner.tick_once()
+    runner.tick_once()
+    assert runner.frame_count == 2
+    assert runner.last_render_ms >= 0.0
+
+
+# ---------------------------------------------------------------------------
+# Threaded loop
+# ---------------------------------------------------------------------------
+
+
+def test_runner_background_thread_renders_and_stops():
+    src = _RecordingSource()
+    runner = CairoSourceRunner(
+        source_id="bg",
+        source=src,
+        canvas_w=8,
+        canvas_h=8,
+        target_fps=200.0,
+    )
+    runner.start()
+    # Allow several ticks at 200fps (5ms period).
+    time.sleep(0.06)
+    runner.stop(timeout=1.0)
+    # Expect at least 2 renders in 60ms at the target rate.
+    assert src.calls >= 2
+    assert src.cleanup_called is True
+    # Output surface is populated.
+    assert runner.get_output_surface() is not None
+
+
+def test_runner_start_is_idempotent():
+    src = _RecordingSource()
+    runner = CairoSourceRunner(source_id="idem", source=src, canvas_w=8, canvas_h=8, target_fps=100)
+    runner.start()
+    # Calling start again must not spawn a second thread.
+    runner.start()
+    runner.stop(timeout=1.0)
+    # If a second thread had started we'd see double the renders, but the
+    # main correctness check is that stop() returns cleanly.
+    assert src.cleanup_called is True
+
+
+def test_runner_get_output_surface_is_thread_safe():
+    """Concurrent reads from get_output_surface() must not raise."""
+    src = _RecordingSource()
+    runner = CairoSourceRunner(
+        source_id="concurrent",
+        source=src,
+        canvas_w=16,
+        canvas_h=16,
+        target_fps=200.0,
+    )
+    runner.start()
+    errors: list[BaseException] = []
+    stop = threading.Event()
+
+    def reader() -> None:
+        try:
+            while not stop.is_set():
+                _ = runner.get_output_surface()
+        except BaseException as exc:  # pragma: no cover - failure path only
+            errors.append(exc)
+
+    readers = [threading.Thread(target=reader) for _ in range(3)]
+    for r in readers:
+        r.start()
+    time.sleep(0.05)
+    stop.set()
+    for r in readers:
+        r.join(timeout=1.0)
+    runner.stop(timeout=1.0)
+    assert not errors
+
+
+# ---------------------------------------------------------------------------
+# Sierpinski integration — facade still works after the refactor
+# ---------------------------------------------------------------------------
+
+
+def test_sierpinski_renderer_facade_renders_via_runner():
+    """Phase 3b: SierpinskiRenderer is a thin facade over CairoSourceRunner.
+
+    The public API (start/stop/draw/set_active_slot/set_audio_energy) must
+    still work and the runner should produce a non-empty output surface.
+    """
+    from agents.studio_compositor.sierpinski_renderer import SierpinskiRenderer
+
+    renderer = SierpinskiRenderer()
+    # set_*() should not crash on a fresh renderer.
+    renderer.set_active_slot(1)
+    renderer.set_audio_energy(0.5)
+    # Tick the runner directly so we don't wait on the background thread.
+    renderer._runner.tick_once()  # noqa: SLF001 — test boundary
+
+    # The cached surface is now populated.
+    out = renderer._runner.get_output_surface()  # noqa: SLF001
+    assert out is not None
+    assert out.get_width() == 1920
+    assert out.get_height() == 1080
+
+
+def test_sierpinski_renderer_draw_blits_cached_surface():
+    """SierpinskiRenderer.draw() must blit the runner's cached surface
+    onto the caller's Cairo context (the GStreamer streaming-thread path).
+    """
+    from agents.studio_compositor.sierpinski_renderer import SierpinskiRenderer
+
+    renderer = SierpinskiRenderer()
+    renderer._runner.tick_once()  # noqa: SLF001 — populate cache
+
+    target = cairo.ImageSurface(cairo.FORMAT_ARGB32, 320, 180)
+    cr = cairo.Context(target)
+    # Should not raise; the call updates the canvas size and blits.
+    renderer.draw(cr, 320, 180)
+
+
+def test_sierpinski_cairo_source_render_into_small_canvas():
+    """Direct render into a small ImageSurface — sanity-check the source
+    is decoupled from the facade and works standalone.
+    """
+    from agents.studio_compositor.sierpinski_renderer import SierpinskiCairoSource
+
+    source = SierpinskiCairoSource()
+    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, 256, 144)
+    cr = cairo.Context(surface)
+    source.render(cr, 256, 144, t=0.0, state={})
+    surface.flush()
+    # Surface bytes should contain non-zero pixels (we drew triangle lines).
+    data = bytes(surface.get_data())
+    assert any(b != 0 for b in data)
