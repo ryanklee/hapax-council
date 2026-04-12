@@ -6,6 +6,13 @@ path from outside in. Cute, colorful token contrasts the somber
 Renaissance geometry.
 
 Upper-left quadrant of the frame.
+
+Phase 3b-final of the compositor unification epic. The per-tick logic
+lives in :class:`TokenPoleCairoSource`, which conforms to the
+:class:`CairoSource` protocol and is driven by a :class:`CairoSourceRunner`
+at 30fps on a background thread. The :class:`TokenPole` facade preserves
+the original public API (``tick``/``draw``) so the existing call sites
+in :mod:`fx_chain` keep working.
 """
 
 from __future__ import annotations
@@ -16,9 +23,16 @@ import math
 import random
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+from .cairo_source import CairoSource, CairoSourceRunner
+
+if TYPE_CHECKING:
+    import cairo
 
 log = logging.getLogger(__name__)
+
+RENDER_FPS = 30
 
 LEDGER_FILE = Path("/dev/shm/hapax-compositor/token-ledger.json")
 VITRUVIAN_PATH = Path(__file__).parent.parent.parent / "assets" / "vitruvian_man_overlay.png"
@@ -107,7 +121,17 @@ class Particle:
         return self.alpha > 0.03
 
 
-class TokenPole:
+class TokenPoleCairoSource(CairoSource):
+    """Phase 3b CairoSource implementation for the token-pole overlay.
+
+    Owns the spiral path, animation state (position easing, pulse
+    phase), particle system, ledger cache and background image. The
+    runner calls :meth:`render` once per tick on a background thread —
+    this drives the internal tick-state update (ledger I/O, easing,
+    particle physics) AND the drawing, so the animation cadence
+    matches the runner's target FPS (30).
+    """
+
     def __init__(self) -> None:
         self._position: float = 0.0
         self._target_position: float = 0.0
@@ -126,7 +150,20 @@ class TokenPole:
         max_r = OVERLAY_SIZE * SPIRAL_MAX_R
         self._spiral = _build_spiral(cx, cy, max_r, NUM_POINTS)
 
-    def tick(self) -> None:
+    def render(
+        self,
+        cr: cairo.Context,
+        canvas_w: int,
+        canvas_h: int,
+        t: float,
+        state: dict[str, Any],
+    ) -> None:
+        """Advance internal animation state then paint a full scene."""
+        self._tick_state()
+        self._draw_scene(cr)
+
+    def _tick_state(self) -> None:
+        """Ledger I/O, position easing, pulse phase, particle physics."""
         now = time.monotonic()
         if now - self._last_read > 0.5:
             self._last_read = now
@@ -185,7 +222,7 @@ class TokenPole:
         else:
             log.warning("Failed to load Vitruvian Man background")
 
-    def draw(self, cr: Any) -> None:
+    def _draw_scene(self, cr: Any) -> None:
         self._load_bg(cr)
 
         # --- Dark backing card ---
@@ -341,3 +378,49 @@ class TokenPole:
         if n >= 1_000:
             return f"{n / 1_000:.1f}K"
         return str(n)
+
+
+class TokenPole:
+    """Compositor-side facade around the polymorphic Cairo source pipeline.
+
+    Preserves the original public API (``tick``/``draw``) so the
+    :func:`_pip_draw` callback in :mod:`fx_chain` keeps working. Owns a
+    :class:`CairoSourceRunner` that drives :class:`TokenPoleCairoSource`
+    on a background thread at :data:`RENDER_FPS`.
+    """
+
+    def __init__(self) -> None:
+        self._source = TokenPoleCairoSource()
+        self._runner = CairoSourceRunner(
+            source_id="token-pole",
+            source=self._source,
+            canvas_w=1920,
+            canvas_h=1080,
+            target_fps=RENDER_FPS,
+        )
+        self._runner.start()
+        log.info("TokenPole background thread started at %dfps", RENDER_FPS)
+
+    def tick(self) -> None:
+        """No-op; the runner owns the tick cadence.
+
+        Kept for API compatibility with :func:`fx_tick_callback`, which
+        calls ``tick()`` on every overlay at 30fps.
+        """
+
+    def stop(self) -> None:
+        """Stop the background render thread. Idempotent."""
+        self._runner.stop()
+
+    def draw(self, cr: cairo.Context) -> None:
+        """Blit the pre-rendered output surface.
+
+        This method runs on the GStreamer streaming thread and must stay
+        under ~2ms. All state updates, particle physics, and drawing
+        happen on the background runner thread.
+        """
+        surface = self._runner.get_output_surface()
+        if surface is None:
+            return
+        cr.set_source_surface(surface, 0, 0)
+        cr.paint()
