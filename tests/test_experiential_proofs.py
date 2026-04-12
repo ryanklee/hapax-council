@@ -37,6 +37,7 @@ No hardware, no LLM, no network.
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from dataclasses import dataclass
 from unittest.mock import AsyncMock, MagicMock
@@ -1353,7 +1354,7 @@ class TestInvariants:
     @settings(max_examples=50)
     def test_unconsented_never_leaks(self, person: str, category: str):
         """For any person name × any category, if unconsented, their name
-        never appears in what the LLM sees."""
+        never appears as an identifiable reference in what the LLM sees."""
         w = ExperientialWorld()
         w.operator_sits_down()
         w.advance(2.5)
@@ -1362,7 +1363,10 @@ class TestInvariants:
             frozenset({person}),
             category,
         )
-        assert person not in result
+        # Word-boundary match: catches "Alice" in "Alice said" but not "ro" in "project"
+        assert not re.search(r"\b" + re.escape(person) + r"\b", result), (
+            f"Person name {person!r} leaked as identifiable word in: {result!r}"
+        )
 
     @given(
         category=st.sampled_from(["email", "calendar", "document", "perception"]),
