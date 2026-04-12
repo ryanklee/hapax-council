@@ -226,10 +226,17 @@ def test_publish_costs_writes_json_atomically(tmp_path: Path):
     publish_costs(tracker, out)
     assert out.is_file()
     data = json.loads(out.read_text())
-    assert "alpha" in data
-    assert data["alpha"]["last_ms"] == 1.5
-    assert data["alpha"]["skip_count"] == 1
-    assert data["beta"]["last_ms"] == 7.25
+    # New payload envelope (audit follow-up): top-level metadata wraps
+    # the per-source map so readers can tell fresh from stale without a
+    # filesystem stat.
+    assert data["schema_version"] == 1
+    assert isinstance(data["timestamp_ms"], float)
+    assert isinstance(data["wall_clock"], float)
+    sources = data["sources"]
+    assert "alpha" in sources
+    assert sources["alpha"]["last_ms"] == 1.5
+    assert sources["alpha"]["skip_count"] == 1
+    assert sources["beta"]["last_ms"] == 7.25
 
 
 def test_publish_costs_creates_parent_directory(tmp_path: Path):
@@ -238,6 +245,22 @@ def test_publish_costs_creates_parent_directory(tmp_path: Path):
     nested = tmp_path / "nested" / "dirs" / "costs.json"
     publish_costs(tracker, nested)
     assert nested.is_file()
+
+
+def test_publish_costs_wall_clock_close_to_system_time(tmp_path: Path):
+    """wall_clock should be a real epoch seconds timestamp so readers
+    can compare it against system time, not monotonic uptime.
+    """
+    import time as _time
+
+    tracker = BudgetTracker()
+    tracker.record("x", 2.0)
+    out = tmp_path / "costs.json"
+    before = _time.time()
+    publish_costs(tracker, out)
+    after = _time.time()
+    data = json.loads(out.read_text())
+    assert before - 0.1 <= data["wall_clock"] <= after + 0.1
 
 
 # ---------------------------------------------------------------------------

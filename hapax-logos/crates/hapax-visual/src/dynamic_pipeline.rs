@@ -932,8 +932,14 @@ impl DynamicPipeline {
                     continue;
                 }
                 other => {
-                    log::debug!(
-                        "dynamic_pipeline: skipping pass '{}' with unknown backend '{}'",
+                    // Audit follow-up: was `log::debug!`, which hid the
+                    // fact that the pipeline JSON had referenced a
+                    // backend the executor doesn't implement — the user
+                    // saw a black frame with no explanation. Warn so
+                    // schema-to-executor drift surfaces immediately.
+                    log::warn!(
+                        "dynamic_pipeline: skipping pass '{}' with unknown backend '{}' \
+                         (output will be black for this pass)",
                         pass.node_id,
                         other,
                     );

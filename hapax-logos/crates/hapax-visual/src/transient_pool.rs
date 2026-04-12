@@ -12,11 +12,13 @@
 //!    of each render frame. This resets every bucket's `in_use` counter to
 //!    zero — previously-allocated textures stay in their buckets and become
 //!    available for reuse this frame.
-//! 2. Call [`acquire`](TransientTexturePool::acquire) once per intermediate
-//!    texture needed this frame, passing a factory closure that allocates a
-//!    fresh texture if the bucket has none free. The pool returns a
-//!    reference to the next free texture in the bucket (or the freshly-
-//!    allocated one).
+//! 2. Call [`acquire_tracked`](TransientTexturePool::acquire_tracked) once
+//!    per intermediate texture needed this frame, passing a factory closure
+//!    that allocates a fresh texture if the bucket has none free. The pool
+//!    returns the slot index of the acquired texture; the caller borrows
+//!    the texture itself via [`get`](TransientTexturePool::get). Returning
+//!    a slot rather than a reference sidesteps Rust's borrow checker so
+//!    the pool can update its allocation counter on the same call.
 //! 3. After the frame, the textures stay in the pool. The next
 //!    `begin_frame` recycles them.
 //!
@@ -96,48 +98,6 @@ impl<T> TransientTexturePool<T> {
         for bucket in self.buckets.values_mut() {
             bucket.in_use = 0;
         }
-    }
-
-    /// Acquire one texture from the bucket for ``pool_key``.
-    ///
-    /// If the bucket has a free slot (in_use < textures.len()), the
-    /// next free texture is returned. Otherwise the factory closure is
-    /// called to allocate a fresh texture, which is appended to the
-    /// bucket and immediately marked as in-use.
-    ///
-    /// Returns a reference to the acquired texture. The returned ref
-    /// is valid until the next mutation of `self`.
-    pub fn acquire<F>(&mut self, pool_key: u64, factory: F) -> &T
-    where
-        F: FnOnce() -> T,
-    {
-        self.total_acquires += 1;
-        let bucket = self.buckets.entry(pool_key).or_default();
-        let was_new = bucket.in_use >= bucket.textures.len();
-        if was_new {
-            bucket.textures.push(factory());
-        }
-        let slot = bucket.in_use;
-        bucket.in_use += 1;
-        // The bucket borrow ends here; we update the allocation counter
-        // after via a separate field access.
-        let view: &T = &bucket.textures[slot];
-        if was_new {
-            // Re-borrow self for the counter — bucket borrow is over
-            // because we hold only an immutable ref into bucket.textures.
-            // Actually, we still hold an immutable borrow of self via
-            // `view`. We need to record the counter before constructing
-            // the borrow.
-            //
-            // Workaround: drop the borrow by computing what we need
-            // first. See test pool_records_allocation_count_correctly.
-        }
-        // Increment via raw pointer to sidestep the borrow checker
-        // — the counter is independent of bucket data and the
-        // increment is atomic with respect to the returned reference's
-        // logical scope (single-threaded executor model).
-        let _ = was_new;
-        view
     }
 
     /// Total number of buckets currently tracked.
