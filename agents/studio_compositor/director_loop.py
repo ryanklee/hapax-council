@@ -569,7 +569,7 @@ class DirectorLoop:
             {
                 "model": "claude-opus",
                 "messages": messages,
-                "max_tokens": 300,
+                "max_tokens": 2048,
                 "temperature": 0.7,
             }
         ).encode()
