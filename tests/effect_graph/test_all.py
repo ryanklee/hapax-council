@@ -255,6 +255,143 @@ def test_fanout_fbo(compiler):
     assert next(s for s in plan.steps if s.node_id == "c").needs_dedicated_fbo
 
 
+# --- Phase 5a: multi-output compile ---
+
+
+def test_compile_default_target_is_main(compiler):
+    """Single-output graph defaults to one target named ``main``."""
+    g = EffectGraph(
+        name="t",
+        nodes={
+            "c": NodeInstance(type="colorgrade"),
+            "o": NodeInstance(type="output"),
+        },
+        edges=[["@live", "c"], ["c", "o"]],
+    )
+    plan = compiler.compile(g)
+    assert plan.target_names == ("main",)
+    assert "main" in plan.targets
+    # Backwards-compat: steps property is the union of every target.
+    assert len(plan.steps) == len(plan.targets["main"])
+
+
+def test_compile_explicit_target_name(compiler):
+    """params.target on the output node sets the target name."""
+    g = EffectGraph(
+        name="t",
+        nodes={
+            "c": NodeInstance(type="colorgrade"),
+            "o": NodeInstance(type="output", params={"target": "preview"}),
+        },
+        edges=[["@live", "c"], ["c", "o"]],
+    )
+    plan = compiler.compile(g)
+    assert plan.target_names == ("preview",)
+    assert "preview" in plan.targets
+
+
+def test_compile_two_outputs_two_targets(compiler):
+    """Two output nodes → two targets, each with its own per-target step list."""
+    g = EffectGraph(
+        name="t",
+        nodes={
+            "c": NodeInstance(type="colorgrade"),
+            "main_out": NodeInstance(type="output", params={"target": "main"}),
+            "hud_out": NodeInstance(type="output", params={"target": "hud"}),
+        },
+        edges=[
+            ["@live", "c"],
+            ["c", "main_out"],
+            ["c", "hud_out"],
+        ],
+    )
+    plan = compiler.compile(g)
+    assert plan.target_names == ("hud", "main")
+    # Each target's step list contains the colorgrade node + its output.
+    main_ids = [s.node_id for s in plan.targets["main"]]
+    hud_ids = [s.node_id for s in plan.targets["hud"]]
+    assert "c" in main_ids
+    assert "c" in hud_ids
+    assert "main_out" in main_ids
+    assert "hud_out" in hud_ids
+
+
+def test_compile_per_target_topo_sort_independent(compiler):
+    """Each target gets its own topological order; predecessors of one
+    output don't pollute the order of another output's chain."""
+    g = EffectGraph(
+        name="t",
+        nodes={
+            "shared": NodeInstance(type="colorgrade"),
+            "a_only": NodeInstance(type="bloom"),
+            "b_only": NodeInstance(type="scanlines"),
+            "main_out": NodeInstance(type="output", params={"target": "main"}),
+            "hud_out": NodeInstance(type="output", params={"target": "hud"}),
+        },
+        edges=[
+            ["@live", "shared"],
+            ["shared", "a_only"],
+            ["a_only", "main_out"],
+            ["shared", "b_only"],
+            ["b_only", "hud_out"],
+        ],
+    )
+    plan = compiler.compile(g)
+    main_ids = [s.node_id for s in plan.targets["main"]]
+    hud_ids = [s.node_id for s in plan.targets["hud"]]
+    # main contains shared + a_only + main_out, in dependency order.
+    assert main_ids.index("shared") < main_ids.index("a_only")
+    assert main_ids.index("a_only") < main_ids.index("main_out")
+    assert "b_only" not in main_ids
+    assert "hud_out" not in main_ids
+    # hud contains shared + b_only + hud_out, in dependency order.
+    assert hud_ids.index("shared") < hud_ids.index("b_only")
+    assert hud_ids.index("b_only") < hud_ids.index("hud_out")
+    assert "a_only" not in hud_ids
+    assert "main_out" not in hud_ids
+
+
+def test_compile_rejects_duplicate_target_names(compiler):
+    """Two outputs with the same target name are an error."""
+    g = EffectGraph(
+        name="t",
+        nodes={
+            "c": NodeInstance(type="colorgrade"),
+            "out1": NodeInstance(type="output", params={"target": "main"}),
+            "out2": NodeInstance(type="output", params={"target": "main"}),
+        },
+        edges=[
+            ["@live", "c"],
+            ["c", "out1"],
+            ["c", "out2"],
+        ],
+    )
+    with pytest.raises(GraphValidationError, match="duplicate target names"):
+        compiler.compile(g)
+
+
+def test_execution_plan_steps_property_concatenates_targets(compiler):
+    """The backwards-compat steps property returns concatenated target
+    steps in stable (sorted) target name order."""
+    g = EffectGraph(
+        name="t",
+        nodes={
+            "c": NodeInstance(type="colorgrade"),
+            "main_out": NodeInstance(type="output", params={"target": "main"}),
+            "hud_out": NodeInstance(type="output", params={"target": "hud"}),
+        },
+        edges=[
+            ["@live", "c"],
+            ["c", "main_out"],
+            ["c", "hud_out"],
+        ],
+    )
+    plan = compiler.compile(g)
+    # Sorted target names: ("hud", "main"). steps is hud's then main's.
+    expected = list(plan.targets["hud"]) + list(plan.targets["main"])
+    assert plan.steps == expected
+
+
 # --- Modulator ---
 
 

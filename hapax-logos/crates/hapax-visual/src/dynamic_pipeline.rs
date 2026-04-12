@@ -26,13 +26,76 @@ const TEXTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
 // --- Plan JSON schema ---
 
+/// Top-level plan.json file. Accepts both schemas:
+///
+/// * **v1** (`{"version": 1, "passes": [...]}`): a flat list of
+///   passes that all feed a single implicit ``"main"`` target. The
+///   `targets` field is empty; `passes` carries the data.
+/// * **v2** (`{"version": 2, "targets": {"main": {"passes": [...]}}}`):
+///   one named target per output node. Phase 5a of the compositor
+///   unification epic — see
+///   docs/superpowers/specs/2026-04-12-phase-5-multi-output-design.md
+///
+/// `normalize_passes()` collapses both shapes into the canonical
+/// per-target map the rest of the executor reasons about. Phase 5a
+/// only renders the ``"main"`` target; future Phase 5b additions
+/// walk every target.
 #[derive(Debug, Deserialize)]
 struct PlanFile {
     #[serde(default)]
     passes: Vec<PlanPass>,
+    #[serde(default)]
+    targets: HashMap<String, PlanTarget>,
 }
 
 #[derive(Debug, Deserialize)]
+struct PlanTarget {
+    #[serde(default)]
+    passes: Vec<PlanPass>,
+}
+
+impl PlanFile {
+    /// Return the canonical per-target passes map.
+    ///
+    /// For v2 plans, returns `targets` directly. For v1 plans, wraps
+    /// the flat `passes` list into a synthetic ``"main"`` target.
+    /// An empty plan returns an empty map (the executor renders black).
+    fn passes_by_target(&self) -> HashMap<String, Vec<PlanPass>> {
+        if !self.targets.is_empty() {
+            return self
+                .targets
+                .iter()
+                .map(|(k, v)| (k.clone(), v.passes.clone()))
+                .collect();
+        }
+        if self.passes.is_empty() {
+            return HashMap::new();
+        }
+        let mut out = HashMap::with_capacity(1);
+        out.insert("main".to_string(), self.passes.clone());
+        out
+    }
+
+    /// Return the active passes for the ``main`` target, or the first
+    /// target alphabetically if ``main`` is absent.
+    ///
+    /// Phase 5a only renders one target. Phase 5b will replace this
+    /// helper with a per-target render walk.
+    fn main_passes(&self) -> Vec<PlanPass> {
+        let map = self.passes_by_target();
+        if let Some(main) = map.get("main") {
+            return main.clone();
+        }
+        let mut keys: Vec<&String> = map.keys().collect();
+        keys.sort();
+        if let Some(first) = keys.first() {
+            return map[*first].clone();
+        }
+        Vec::new()
+    }
+}
+
+#[derive(Debug, Deserialize, Clone)]
 struct PlanPass {
     node_id: String,
     shader: String,
@@ -335,7 +398,12 @@ impl DynamicPipeline {
             }
         };
 
-        if plan.passes.is_empty() {
+        // Phase 5a: collapse v1 (flat `passes`) and v2 (`targets` map)
+        // shapes into the canonical pass list. The executor today only
+        // renders one target — Phase 5b will iterate every target.
+        let active_passes = plan.main_passes();
+
+        if active_passes.is_empty() {
             self.passes.clear();
             log::info!("dynamic_pipeline: loaded empty plan (renders black)");
             return true;
@@ -343,7 +411,7 @@ impl DynamicPipeline {
 
         // Collect all texture names referenced in the plan
         let mut texture_names: Vec<String> = Vec::new();
-        for pass in &plan.passes {
+        for pass in &active_passes {
             for input in &pass.inputs {
                 if !texture_names.contains(input) {
                     texture_names.push(input.clone());
@@ -360,7 +428,7 @@ impl DynamicPipeline {
         }
 
         // Ensure temporal textures for feedback nodes (@accum_ inputs)
-        for pass in &plan.passes {
+        for pass in &active_passes {
             if pass.inputs.iter().any(|n| n.starts_with("@accum_")) {
                 self.ensure_temporal_texture(device, &pass.node_id);
             }
@@ -370,7 +438,7 @@ impl DynamicPipeline {
         let mut new_passes = Vec::new();
         let mut input_layouts = HashMap::new();
 
-        for plan_pass in &plan.passes {
+        for plan_pass in &active_passes {
             let shader_path = self.plan_dir.join(&plan_pass.shader);
             let fragment_source = match std::fs::read_to_string(&shader_path) {
                 Ok(src) => src,
@@ -1302,3 +1370,140 @@ fn main(in: VertexOutput) -> @location(0) vec4<f32> {
     return textureSample(source_texture, source_sampler, in.uv);
 }
 "#;
+
+// ============================================================================
+// Tests — plan.json v1 / v2 normalization (Phase 5a)
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_v1_flat_passes_format() {
+        // v1 plans have a flat `passes` list and no `targets` field.
+        // The executor wraps them into a synthetic "main" target so the
+        // rest of the render loop can use the canonical per-target map.
+        let json = r#"{
+            "version": 1,
+            "passes": [
+                {"node_id": "noise", "shader": "noise.wgsl"}
+            ]
+        }"#;
+        let plan: PlanFile = serde_json::from_str(json).expect("v1 plan parses");
+        assert!(plan.targets.is_empty());
+        assert_eq!(plan.passes.len(), 1);
+        let by_target = plan.passes_by_target();
+        assert_eq!(by_target.len(), 1);
+        assert_eq!(by_target.get("main").unwrap().len(), 1);
+        assert_eq!(plan.main_passes().len(), 1);
+    }
+
+    #[test]
+    fn parses_v2_targets_format_with_main() {
+        let json = r#"{
+            "version": 2,
+            "targets": {
+                "main": {
+                    "passes": [
+                        {"node_id": "noise", "shader": "noise.wgsl"},
+                        {"node_id": "color", "shader": "colorgrade.wgsl"}
+                    ]
+                }
+            }
+        }"#;
+        let plan: PlanFile = serde_json::from_str(json).expect("v2 plan parses");
+        assert!(plan.passes.is_empty());
+        assert_eq!(plan.targets.len(), 1);
+        let main = plan.main_passes();
+        assert_eq!(main.len(), 2);
+        assert_eq!(main[0].node_id, "noise");
+        assert_eq!(main[1].node_id, "color");
+    }
+
+    #[test]
+    fn parses_v2_with_multiple_targets_returns_main() {
+        // Phase 5a: when multiple targets are present, main_passes()
+        // selects "main". The other targets are loaded into the
+        // PlanFile but not rendered until Phase 5b.
+        let json = r#"{
+            "version": 2,
+            "targets": {
+                "main": {"passes": [{"node_id": "a", "shader": "a.wgsl"}]},
+                "hud":  {"passes": [{"node_id": "b", "shader": "b.wgsl"}]}
+            }
+        }"#;
+        let plan: PlanFile = serde_json::from_str(json).expect("multi-target plan parses");
+        assert_eq!(plan.targets.len(), 2);
+        let main = plan.main_passes();
+        assert_eq!(main.len(), 1);
+        assert_eq!(main[0].node_id, "a");
+    }
+
+    #[test]
+    fn main_passes_falls_back_to_first_target_when_main_missing() {
+        // If a v2 plan has no "main" target (e.g. it's all "hud"),
+        // we render the first target alphabetically as a fallback.
+        let json = r#"{
+            "version": 2,
+            "targets": {
+                "preview": {"passes": [{"node_id": "p", "shader": "p.wgsl"}]},
+                "hud":     {"passes": [{"node_id": "h", "shader": "h.wgsl"}]}
+            }
+        }"#;
+        let plan: PlanFile = serde_json::from_str(json).expect("no-main plan parses");
+        let active = plan.main_passes();
+        // "hud" sorts before "preview" alphabetically.
+        assert_eq!(active.len(), 1);
+        assert_eq!(active[0].node_id, "h");
+    }
+
+    #[test]
+    fn empty_plan_has_no_passes() {
+        let json = r#"{"version": 2, "targets": {}}"#;
+        let plan: PlanFile = serde_json::from_str(json).expect("empty plan parses");
+        assert!(plan.main_passes().is_empty());
+    }
+
+    #[test]
+    fn v1_empty_passes_has_no_main_passes() {
+        let json = r#"{"version": 1, "passes": []}"#;
+        let plan: PlanFile = serde_json::from_str(json).expect("empty v1 plan parses");
+        assert!(plan.main_passes().is_empty());
+    }
+
+    #[test]
+    fn pass_pass_through_fields() {
+        // Verify that pass-level fields (backend, requires_content_slots,
+        // uniforms, param_order) survive the v2 → main_passes() round-trip.
+        let json = r#"{
+            "version": 2,
+            "targets": {
+                "main": {
+                    "passes": [
+                        {
+                            "node_id": "noise",
+                            "shader": "noise.wgsl",
+                            "backend": "wgsl_render",
+                            "inputs": ["@live"],
+                            "output": "final",
+                            "uniforms": {"amplitude": 0.5},
+                            "param_order": ["amplitude"],
+                            "requires_content_slots": false
+                        }
+                    ]
+                }
+            }
+        }"#;
+        let plan: PlanFile = serde_json::from_str(json).expect("rich v2 plan parses");
+        let passes = plan.main_passes();
+        assert_eq!(passes.len(), 1);
+        let p = &passes[0];
+        assert_eq!(p.backend, "wgsl_render");
+        assert_eq!(p.inputs, vec!["@live"]);
+        assert_eq!(p.output, "final");
+        assert_eq!(p.uniforms.get("amplitude").copied(), Some(0.5));
+        assert_eq!(p.param_order, vec!["amplitude"]);
+        assert!(!p.requires_content_slots);
+    }
+}

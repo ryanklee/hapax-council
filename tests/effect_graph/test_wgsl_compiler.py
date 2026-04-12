@@ -38,50 +38,70 @@ def _chain_graph() -> EffectGraph:
     )
 
 
+def _main_passes(plan: dict) -> list[dict]:
+    """Phase 5a v2 plan accessor: return the ``main`` target's passes.
+
+    Most existing tests assert against the single ``main`` target's
+    passes; this helper keeps the assertions readable instead of
+    repeating ``plan["targets"]["main"]["passes"]`` everywhere.
+    """
+    return plan["targets"]["main"]["passes"]
+
+
 # ---------------------------------------------------------------------------
 # compile_to_wgsl_plan
 # ---------------------------------------------------------------------------
 
 
 class TestCompileToWgslPlan:
+    """Phase 5a: plan shape is v2 with a ``targets`` dict.
+
+    Single-output graphs default to a one-key targets dict named
+    ``"main"`` — the existing assertions are reachable through the
+    ``_main_passes`` helper without changing their semantics.
+    """
+
     def test_single_node_produces_one_pass(self):
         plan = compile_to_wgsl_plan(_single_node_graph())
-        assert plan["version"] == 1
-        assert len(plan["passes"]) == 1
+        assert plan["version"] == 2
+        assert len(_main_passes(plan)) == 1
 
     def test_single_node_shader_name(self):
         plan = compile_to_wgsl_plan(_single_node_graph())
-        assert plan["passes"][0]["shader"] == "bloom.wgsl"
+        assert _main_passes(plan)[0]["shader"] == "bloom.wgsl"
 
     def test_single_node_type_is_render(self):
         plan = compile_to_wgsl_plan(_single_node_graph())
-        assert plan["passes"][0]["type"] == "render"
+        assert _main_passes(plan)[0]["type"] == "render"
 
     def test_chain_preserves_topological_order(self):
         plan = compile_to_wgsl_plan(_chain_graph())
-        assert len(plan["passes"]) == 2
-        assert plan["passes"][0]["node_id"] == "bloom1"
-        assert plan["passes"][1]["node_id"] == "grade1"
+        passes = _main_passes(plan)
+        assert len(passes) == 2
+        assert passes[0]["node_id"] == "bloom1"
+        assert passes[1]["node_id"] == "grade1"
 
     def test_chain_wiring(self):
         plan = compile_to_wgsl_plan(_chain_graph())
+        passes = _main_passes(plan)
         # bloom1 reads from @live
-        assert "@live" in plan["passes"][0]["inputs"]
+        assert "@live" in passes[0]["inputs"]
         # grade1 reads from bloom1's output (layer_0)
-        assert "layer_0" in plan["passes"][1]["inputs"]
+        assert "layer_0" in passes[1]["inputs"]
 
     def test_last_pass_output_is_final(self):
         plan = compile_to_wgsl_plan(_single_node_graph())
-        assert plan["passes"][-1]["output"] == "final"
+        assert _main_passes(plan)[-1]["output"] == "final"
 
     def test_chain_last_pass_output_is_final(self):
         plan = compile_to_wgsl_plan(_chain_graph())
-        assert plan["passes"][-1]["output"] == "final"
-        assert plan["passes"][0]["output"] == "layer_0"
+        passes = _main_passes(plan)
+        assert passes[-1]["output"] == "final"
+        assert passes[0]["output"] == "layer_0"
 
     def test_uniforms_from_params(self):
         plan = compile_to_wgsl_plan(_single_node_graph(params={"intensity": 0.7, "radius": 3}))
-        uniforms = plan["passes"][0]["uniforms"]
+        uniforms = _main_passes(plan)[0]["uniforms"]
         assert uniforms["intensity"] == 0.7
         assert uniforms["radius"] == 3
 
@@ -96,9 +116,10 @@ class TestCompileToWgslPlan:
             edges=[["@live", "fs"], ["fs", "out"]],
         )
         plan = compile_to_wgsl_plan(graph)
-        assert plan["passes"][0]["type"] == "render"
-        assert plan["passes"][0].get("temporal") is True
-        assert "@accum_fs" in plan["passes"][0]["inputs"]
+        passes = _main_passes(plan)
+        assert passes[0]["type"] == "render"
+        assert passes[0].get("temporal") is True
+        assert "@accum_fs" in passes[0]["inputs"]
 
     def test_reaction_diffusion_is_temporal(self):
         """reaction_diffusion should compile as a temporal render pass with @accum_ input."""
@@ -114,8 +135,9 @@ class TestCompileToWgslPlan:
             edges=[["@live", "rd"], ["rd", "out"]],
         )
         plan = compile_to_wgsl_plan(graph)
-        assert len(plan["passes"]) == 1
-        p = plan["passes"][0]
+        passes = _main_passes(plan)
+        assert len(passes) == 1
+        p = passes[0]
         assert p["node_id"] == "rd"
         assert p["shader"] == "reaction_diffusion.wgsl"
         assert p["type"] == "render"
@@ -129,12 +151,12 @@ class TestCompileToWgslPlan:
         wired in Phase 3a. Future sub-phases add cairo/text/image_file.
         """
         plan = compile_to_wgsl_plan(_single_node_graph())
-        assert plan["passes"][0]["backend"] == "wgsl_render"
+        assert _main_passes(plan)[0]["backend"] == "wgsl_render"
 
     def test_chain_all_passes_emit_backend(self):
         """Every pass in a multi-node chain must carry the backend key."""
         plan = compile_to_wgsl_plan(_chain_graph())
-        for pass_desc in plan["passes"]:
+        for pass_desc in _main_passes(plan):
             assert pass_desc["backend"] == "wgsl_render", (
                 f"pass {pass_desc.get('node_id')} missing backend"
             )
@@ -150,7 +172,7 @@ class TestCompileToWgslPlan:
             edges=[["@live", "rd"], ["rd", "out"]],
         )
         plan = compile_to_wgsl_plan(graph)
-        assert plan["passes"][0]["backend"] == "wgsl_render"
+        assert _main_passes(plan)[0]["backend"] == "wgsl_render"
 
     def test_reaction_diffusion_params(self):
         """R-D pass should include feed_rate and kill_rate in uniforms."""
@@ -172,10 +194,68 @@ class TestCompileToWgslPlan:
             edges=[["@live", "rd"], ["rd", "out"]],
         )
         plan = compile_to_wgsl_plan(graph)
-        u = plan["passes"][0]["uniforms"]
+        u = _main_passes(plan)[0]["uniforms"]
         assert u["feed_rate"] == 0.04
         assert u["kill_rate"] == 0.06
         assert u["speed"] == 1.5
+
+    # ----- Phase 5a: multi-target shape -----
+
+    def test_v2_plan_has_targets_dict(self):
+        plan = compile_to_wgsl_plan(_single_node_graph())
+        assert "targets" in plan
+        assert isinstance(plan["targets"], dict)
+        assert "passes" not in plan  # v1 flat list is gone
+
+    def test_single_output_default_target_name_is_main(self):
+        plan = compile_to_wgsl_plan(_single_node_graph())
+        assert list(plan["targets"].keys()) == ["main"]
+
+    def test_explicit_target_name_via_params(self):
+        graph = EffectGraph(
+            name="hud-only",
+            nodes={
+                "b": {"type": "bloom", "params": {}},
+                "o": {"type": "output", "params": {"target": "hud"}},
+            },
+            edges=[["@live", "b"], ["b", "o"]],
+        )
+        plan = compile_to_wgsl_plan(graph)
+        assert list(plan["targets"].keys()) == ["hud"]
+        assert len(plan["targets"]["hud"]["passes"]) == 1
+
+    def test_multi_output_emits_multi_target_plan(self):
+        """Two output nodes → two separate targets, each with its own
+        topo-sorted pass list. Shared subgraphs duplicate (Phase 5b
+        will dedupe)."""
+        graph = EffectGraph(
+            name="multi",
+            nodes={
+                "noise": {"type": "noise_overlay", "params": {}},
+                "a_color": {"type": "colorgrade", "params": {"brightness": 1.2}},
+                "b_blur": {"type": "bloom", "params": {"intensity": 0.5}},
+                "main_out": {"type": "output", "params": {"target": "main"}},
+                "hud_out": {"type": "output", "params": {"target": "hud"}},
+            },
+            edges=[
+                ["@live", "noise"],
+                ["noise", "a_color"],
+                ["a_color", "main_out"],
+                ["noise", "b_blur"],
+                ["b_blur", "hud_out"],
+            ],
+        )
+        plan = compile_to_wgsl_plan(graph)
+        assert set(plan["targets"].keys()) == {"main", "hud"}
+        main_passes = plan["targets"]["main"]["passes"]
+        hud_passes = plan["targets"]["hud"]["passes"]
+        # main: noise → a_color (2 passes)
+        # hud:  noise → b_blur  (2 passes)
+        assert [p["node_id"] for p in main_passes] == ["noise", "a_color"]
+        assert [p["node_id"] for p in hud_passes] == ["noise", "b_blur"]
+        # Both targets' last pass writes to "final" (per-target namespace).
+        assert main_passes[-1]["output"] == "final"
+        assert hud_passes[-1]["output"] == "final"
 
 
 # ---------------------------------------------------------------------------
@@ -190,7 +270,9 @@ class TestWriteWgslPipeline:
         assert plan_path == tmp_path / "plan.json"
         assert plan_path.exists()
         loaded = json.loads(plan_path.read_text())
-        assert loaded["version"] == 1
+        assert loaded["version"] == 2
+        assert "targets" in loaded
+        assert "passes" not in loaded
 
     def test_copies_wgsl_files(self, tmp_path: Path):
         nodes_dir = tmp_path / "nodes"

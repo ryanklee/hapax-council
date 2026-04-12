@@ -69,19 +69,46 @@ def validate_wgsl(source: str) -> bool:
 def compile_to_wgsl_plan(graph: EffectGraph) -> dict[str, object]:
     """Compile an EffectGraph into a WGSL execution plan dict.
 
-    Uses GraphCompiler for topological ordering, then maps each ExecutionStep
-    to a pass descriptor suitable for the Rust wgpu dynamic pipeline.
+    Uses GraphCompiler for topological ordering, then maps each
+    ExecutionStep to a pass descriptor suitable for the Rust wgpu
+    dynamic pipeline.
 
-    Returns ``{"version": 1, "passes": [...]}``.
+    Phase 5a (Compositor Unification Epic): emits the v2 plan format
+    with one entry per render target. Single-output graphs default to
+    a single target named ``"main"``, so the on-disk shape becomes
+    ``{"version": 2, "targets": {"main": {"passes": [...]}}}``. The
+    Rust ``DynamicPipeline`` parses both v1 and v2 — v1 plans are
+    wrapped into a synthetic ``main`` target at parse time.
     """
     registry = ShaderRegistry(DEFAULT_NODES_DIR)
     compiler = GraphCompiler(registry)
     plan: ExecutionPlan = compiler.compile(graph)
 
+    targets: dict[str, dict[str, object]] = {}
+    for target_name, steps in plan.targets.items():
+        passes = _build_passes_for_target(registry, steps)
+        targets[target_name] = {"passes": passes}
+
+    return {"version": 2, "targets": targets}
+
+
+def _build_passes_for_target(
+    registry: ShaderRegistry,
+    target_steps: list[ExecutionStep],
+) -> list[dict[str, object]]:
+    """Translate one target's ExecutionStep list into pass descriptors.
+
+    Pulled out of compile_to_wgsl_plan() so multi-target plans can
+    reuse the same per-step logic. The output texture name is keyed
+    on this target's local step index — each target gets its own
+    independent ``layer_0``, ``layer_1``, ... namespace and ``final``
+    output, so two targets sharing a predecessor produce two distinct
+    sets of layer textures (Phase 5b will deduplicate).
+    """
     from .wgsl_transpiler import extract_wgsl_param_names
 
     passes: list[dict[str, object]] = []
-    steps = [s for s in plan.steps if s.node_type != "output"]
+    steps = [s for s in target_steps if s.node_type != "output"]
 
     for i, step in enumerate(steps):
         is_last = i == len(steps) - 1
@@ -161,7 +188,7 @@ def compile_to_wgsl_plan(graph: EffectGraph) -> dict[str, object]:
 
         passes.append(descriptor)
 
-    return {"version": 1, "passes": passes}
+    return passes
 
 
 def write_wgsl_pipeline(
@@ -195,27 +222,54 @@ def write_wgsl_pipeline(
             "Shared uniforms not found at %s; skipping prefix in validation", _UNIFORMS_WGSL
         )
 
-    # Copy each required .wgsl file, validating combined source first.
-    valid_passes: list[dict[str, object]] = []
-    for p in plan.get("passes", []):
-        shader_name = p.get("shader", "")
-        src = nodes_dir / shader_name
-        if not src.is_file():
-            log.warning("WGSL shader not found: %s", src)
-            continue
+    # Walk every pass across every target, validating + copying its
+    # shader exactly once. Multiple targets sharing the same .wgsl
+    # file de-dup at the filesystem-copy level (the validation runs
+    # for each pass since uniforms differ, but the file write is
+    # idempotent).
+    #
+    # Phase 5a accepts both v1 (flat ``passes`` list) and v2 (``targets``
+    # dict) inputs so legacy callers and tests don't have to change
+    # all at once.
+    targets_in: dict[str, dict[str, object]] = plan.get("targets", {})  # type: ignore[assignment]
+    flat_passes_in: list[dict[str, object]] = plan.get("passes", [])  # type: ignore[assignment]
+    if not targets_in and flat_passes_in:
+        targets_in = {"main": {"passes": flat_passes_in}}
 
-        shader_source = src.read_text()
-        combined = uniforms_prefix + "\n" + shader_source if uniforms_prefix else shader_source
-        if not validate_wgsl(combined):
-            log.error("WGSL validation failed for %s — shader will not be deployed", shader_name)
-            continue
+    validated_targets: dict[str, dict[str, object]] = {}
+    seen_shaders: set[str] = set()
+    for target_name, target_body in targets_in.items():
+        passes_in: list[dict[str, object]] = target_body.get("passes", [])  # type: ignore[assignment]
+        valid_passes: list[dict[str, object]] = []
+        for p in passes_in:
+            shader_name = str(p.get("shader", ""))
+            src = nodes_dir / shader_name
+            if not src.is_file():
+                log.warning("WGSL shader not found: %s", src)
+                continue
 
-        shutil.copy2(src, output_dir / shader_name)
-        valid_passes.append(p)
+            shader_source = src.read_text()
+            combined = uniforms_prefix + "\n" + shader_source if uniforms_prefix else shader_source
+            if not validate_wgsl(combined):
+                log.error(
+                    "WGSL validation failed for %s — shader will not be deployed", shader_name
+                )
+                continue
 
-    # Rewrite plan with only the validated passes.
-    validated_plan = dict(plan)
-    validated_plan["passes"] = valid_passes
+            if shader_name not in seen_shaders:
+                shutil.copy2(src, output_dir / shader_name)
+                seen_shaders.add(shader_name)
+            valid_passes.append(p)
+        validated_targets[target_name] = {"passes": valid_passes}
+
+    # Rewrite plan with only the validated passes per target.
+    validated_plan: dict[str, object] = dict(plan)
+    validated_plan["targets"] = validated_targets
+    # Drop the legacy v1 ``passes`` field if it was present — the v2
+    # ``targets`` map is now authoritative.
+    validated_plan.pop("passes", None)
+    if "version" not in validated_plan:
+        validated_plan["version"] = 2
     plan_path = output_dir / "plan.json"
     plan_path.write_text(json.dumps(validated_plan, indent=2))
 
