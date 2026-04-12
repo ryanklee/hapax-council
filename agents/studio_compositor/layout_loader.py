@@ -151,7 +151,12 @@ class LayoutStore:
             for name, path in on_disk.items():
                 try:
                     mtime = os.path.getmtime(path)
-                except OSError:
+                except OSError as exc:
+                    # Audit follow-up: was a silent `pass`. Promoted to
+                    # warning so a permissions issue or a half-deleted
+                    # file on /tmp surfaces instead of appearing as the
+                    # layout "just not updating".
+                    log.warning("LayoutStore: stat failed for %s: %s", path, exc)
                     continue
                 if self._mtimes.get(name) == mtime:
                     continue

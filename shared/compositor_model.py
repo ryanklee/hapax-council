@@ -16,9 +16,26 @@ See docs/superpowers/specs/2026-04-12-phase-2-data-model-design.md
 
 from __future__ import annotations
 
+import difflib
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+
+def _closest_match_hint(bad_id: str, candidates: set[str], cutoff: float = 0.6) -> str:
+    """Build a " (did you mean: 'x', 'y')" suffix for error messages.
+
+    Uses :func:`difflib.get_close_matches` to find the closest existing
+    IDs. Returns an empty string when nothing is close enough (``cutoff``
+    controls the minimum similarity). Mainly called from
+    :meth:`Layout._validate_references`.
+    """
+    matches = difflib.get_close_matches(bad_id, candidates, n=3, cutoff=cutoff)
+    if not matches:
+        return ""
+    quoted = ", ".join(f"'{m}'" for m in matches)
+    return f" (did you mean: {quoted}?)"
+
 
 # ---------------------------------------------------------------------------
 # Type aliases
@@ -37,6 +54,19 @@ SourceKind = Literal[
 ]
 
 UpdateCadence = Literal["always", "on_change", "manual", "rate"]
+"""How often a source should be sampled by the executor.
+
+* ``"always"`` — re-sample on every compositor frame (current default for
+  live camera inputs and shader nodes).
+* ``"on_change"`` — re-sample only when upstream state changes. The
+  source is responsible for signalling change (file mtime, dirty flag,
+  ``cache-control`` header, etc.).
+* ``"manual"`` — re-sample only when an external caller triggers an
+  explicit refresh. Used for one-shot batch renders and hot-swapped
+  shader graphs.
+* ``"rate"`` — re-sample at a fixed rate in Hz. Requires
+  :attr:`SourceSchema.rate_hz` to be set.
+"""
 
 SurfaceKind = Literal[
     "rect",  # Fixed rectangle on the canvas (x, y, w, h)
@@ -71,12 +101,33 @@ class SourceSchema(BaseModel):
     kind: SourceKind
     backend: str
     params: dict[str, Any] = Field(default_factory=dict)
-    update_cadence: UpdateCadence = "always"
-    rate_hz: float | None = None
+    update_cadence: UpdateCadence = Field(
+        default="always",
+        description=("When the executor should resample this source. See :data:`UpdateCadence`."),
+    )
+    rate_hz: float | None = Field(
+        default=None,
+        gt=0.0,
+        description=(
+            "Target sample rate in Hz. Required when ``update_cadence == 'rate'`` and "
+            "must be unset otherwise — enforced by the ``_validate_rate`` model "
+            "validator. ``None`` means 'no explicit rate', at which point the "
+            "cadence's default sampling behavior applies."
+        ),
+    )
     tags: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _validate_rate(self) -> SourceSchema:
+        """Cadence/rate consistency check.
+
+        ``update_cadence='rate'`` requires ``rate_hz`` to be set, and any
+        other cadence forbids ``rate_hz``. This mirrors the executor's
+        assumption: the ``rate`` cadence is the only path that reads
+        ``rate_hz``, so a stray value under a different cadence would be
+        silently ignored — we fail the schema instead of letting that
+        through.
+        """
         if self.update_cadence == "rate" and self.rate_hz is None:
             raise ValueError(f"source {self.id}: update_cadence='rate' requires rate_hz")
         if self.update_cadence != "rate" and self.rate_hz is not None:
@@ -176,12 +227,15 @@ class Layout(BaseModel):
             raise ValueError(f"layout {self.name!r}: duplicate surface IDs")
         for a in self.assignments:
             if a.source not in source_ids:
+                hint = _closest_match_hint(a.source, source_ids)
                 raise ValueError(
-                    f"layout {self.name!r}: assignment references unknown source: {a.source}"
+                    f"layout {self.name!r}: assignment references unknown source: {a.source}{hint}"
                 )
             if a.surface not in surface_ids:
+                hint = _closest_match_hint(a.surface, surface_ids)
                 raise ValueError(
-                    f"layout {self.name!r}: assignment references unknown surface: {a.surface}"
+                    f"layout {self.name!r}: assignment references unknown surface: "
+                    f"{a.surface}{hint}"
                 )
         return self
 

@@ -282,9 +282,17 @@ class CairoSourceRunner:
                 self._canvas_h,
             )
         except ImportError:
+            # First-call soft import failure is an expected degradation
+            # path — the module may be deliberately absent on hosts that
+            # don't run the wgpu visual surface. Logging at debug keeps
+            # the signal out of the normal ops log.
             log.debug(
                 "imagination_source_protocol unavailable; CairoSource %s output not published",
                 self._source_id,
             )
         except Exception:
-            log.debug("CairoSource %s publish failed", self._source_id, exc_info=True)
+            # Audit follow-up: was log.debug, which hid actual publish
+            # failures (socket path changed, permissions, malformed
+            # buffer). Promoted to warning so the operator sees a
+            # broken publish instead of a stalled wgpu consumer.
+            log.warning("CairoSource %s publish failed", self._source_id, exc_info=True)

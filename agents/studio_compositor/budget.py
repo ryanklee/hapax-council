@@ -24,11 +24,19 @@ import json
 import logging
 import os
 import threading
+import time
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 
 log = logging.getLogger(__name__)
+
+COSTS_SCHEMA_VERSION = 1
+"""Schema version embedded in publish_costs output.
+
+Bumped whenever the payload shape changes in a breaking way. Readers
+can refuse to parse unknown versions rather than silently misreading.
+"""
 
 DEFAULT_WINDOW_SIZE = 120
 """Default rolling window depth (~4 seconds at 30 fps)."""
@@ -280,6 +288,26 @@ class BudgetTracker:
             self._states.pop(source_id, None)
 
 
+def atomic_write_json(payload: object, path: Path) -> None:
+    """Write ``payload`` as JSON to ``path`` atomically.
+
+    Shared helper factored out of :func:`publish_costs` and
+    :func:`publish_degraded_signal` so both publishers use identical
+    write semantics. Steps:
+
+    1. Ensure the parent directory exists.
+    2. Serialize ``payload`` to ``path.tmp``.
+    3. ``os.replace`` the tmp file onto the final path.
+
+    External readers either see the previous file or the new one —
+    never a partial write.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path.write_text(json.dumps(payload, indent=2))
+    os.replace(tmp_path, path)
+
+
 def publish_costs(tracker: BudgetTracker, path: Path) -> None:
     """Atomically write the tracker's snapshot to a JSON file.
 
@@ -287,12 +315,28 @@ def publish_costs(tracker: BudgetTracker, path: Path) -> None:
     compositor's status loop) to publish the latest state for
     observability dashboards.
 
-    Atomic means: write to ``path.tmp`` first, then ``os.replace``
-    onto the final path. External readers either see the previous
-    file or the new one — never a partial write.
+    The payload is wrapped with a top-level metadata envelope so
+    readers can distinguish stale snapshots from fresh ones without
+    needing to ``stat()`` the file:
+
+    .. code-block:: json
+
+        {
+          "schema_version": 1,
+          "timestamp_ms": 12345.678,
+          "wall_clock": 1728000000.123,
+          "sources": {
+            "album-overlay": {"last_ms": 1.2, ...},
+            ...
+          }
+        }
+
+    ``timestamp_ms`` is monotonic (process uptime in milliseconds).
+    ``wall_clock`` is ``time.time()`` seconds since the epoch, suitable
+    for comparing against system time in operator tooling.
     """
     snapshot = tracker.snapshot()
-    serializable = {
+    sources = {
         source_id: {
             "source_id": cost.source_id,
             "sample_count": cost.sample_count,
@@ -303,10 +347,13 @@ def publish_costs(tracker: BudgetTracker, path: Path) -> None:
         }
         for source_id, cost in snapshot.items()
     }
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_suffix(path.suffix + ".tmp")
-    tmp_path.write_text(json.dumps(serializable, indent=2))
-    os.replace(tmp_path, path)
+    payload = {
+        "schema_version": COSTS_SCHEMA_VERSION,
+        "timestamp_ms": round(time.monotonic() * 1000.0, 3),
+        "wall_clock": round(time.time(), 3),
+        "sources": sources,
+    }
+    atomic_write_json(payload, path)
 
 
 def _percentile(sorted_samples: list[float], q: float) -> float:

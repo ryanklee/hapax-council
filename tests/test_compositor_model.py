@@ -61,6 +61,28 @@ class TestSourceSchema:
                 rate_hz=10.0,
             )
 
+    def test_rate_hz_must_be_positive(self):
+        """Audit follow-up: rate_hz has a gt=0.0 constraint so a zero or
+        negative rate fails at schema load time instead of surfacing as a
+        divide-by-zero in the executor later.
+        """
+        with pytest.raises(ValidationError):
+            SourceSchema(
+                id="zero-rate",
+                kind="video",
+                backend="youtube_player",
+                update_cadence="rate",
+                rate_hz=0.0,
+            )
+        with pytest.raises(ValidationError):
+            SourceSchema(
+                id="neg-rate",
+                kind="video",
+                backend="youtube_player",
+                update_cadence="rate",
+                rate_hz=-5.0,
+            )
+
     def test_invalid_kind_rejected(self):
         with pytest.raises(ValidationError):
             SourceSchema(
@@ -261,6 +283,35 @@ class TestLayout:
         data["assignments"].append({"source": "missing", "surface": "f1"})
         with pytest.raises(ValidationError, match="unknown source"):
             Layout(**data)
+
+    def test_assignment_unknown_source_suggests_close_match(self):
+        """Audit follow-up: when the assignment references a source that
+        doesn't exist but is close to an existing one, the error message
+        should include a difflib 'did you mean' hint so layout authors
+        can fix the typo quickly.
+        """
+        data = self._minimal()
+        data["sources"] = [{"id": "camera-desk", "kind": "camera", "backend": "v4l2"}]
+        data["assignments"] = [{"source": "camera-dsk", "surface": "f1"}]
+        with pytest.raises(ValidationError, match="did you mean: 'camera-desk'"):
+            Layout(**data)
+
+    def test_assignment_unknown_surface_suggests_close_match(self):
+        data = self._minimal()
+        data["surfaces"] = [{"id": "tile-main", "geometry": {"kind": "tile"}}]
+        data["assignments"] = [{"source": "s1", "surface": "tile-mian"}]
+        with pytest.raises(ValidationError, match="did you mean: 'tile-main'"):
+            Layout(**data)
+
+    def test_assignment_unknown_source_omits_hint_when_nothing_close(self):
+        """If no existing ID is within difflib's similarity cutoff the
+        hint is omitted entirely so the error stays terse.
+        """
+        data = self._minimal()
+        data["assignments"].append({"source": "qqqqqqqqqqqq", "surface": "f1"})
+        with pytest.raises(ValidationError, match="unknown source: qqqqqqqqqqqq") as excinfo:
+            Layout(**data)
+        assert "did you mean" not in str(excinfo.value)
 
     def test_assignment_unknown_surface_rejected(self):
         data = self._minimal()

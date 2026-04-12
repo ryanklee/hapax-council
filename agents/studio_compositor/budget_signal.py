@@ -48,12 +48,12 @@ See: docs/superpowers/specs/2026-04-12-phase-5b-unification-epic.md (followups)
 
 from __future__ import annotations
 
-import json
 import logging
-import os
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+from agents.studio_compositor.budget import atomic_write_json
 
 if TYPE_CHECKING:
     from agents.studio_compositor.budget import BudgetTracker
@@ -92,6 +92,7 @@ def build_degraded_signal(tracker: BudgetTracker) -> dict[str, object]:
 
     payload: dict[str, object] = {
         "timestamp_ms": round(time.monotonic() * 1000.0, 3),
+        "wall_clock": round(time.time(), 3),
         "total_skip_count": total_skips,
         "degraded_source_count": degraded_count,
         "total_active_sources": len(snapshot),
@@ -124,11 +125,8 @@ def publish_degraded_signal(
     :data:`DEFAULT_SIGNAL_PATH`.
     """
     target = path or DEFAULT_SIGNAL_PATH
-    target.parent.mkdir(parents=True, exist_ok=True)
     payload = build_degraded_signal(tracker)
-    tmp = target.with_suffix(target.suffix + ".tmp")
-    tmp.write_text(json.dumps(payload, indent=2))
-    os.replace(tmp, target)
+    atomic_write_json(payload, target)
     log.debug(
         "compositor degraded signal published: %d sources degraded, %d total skips",
         int(payload.get("degraded_source_count", 0)),  # type: ignore[arg-type]
