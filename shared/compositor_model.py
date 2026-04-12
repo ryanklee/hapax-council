@@ -195,3 +195,61 @@ class Layout(BaseModel):
         sink ordering is reproducible.
         """
         return [s for s in self.surfaces if s.geometry.kind == "video_out"]
+
+    # ------------------------------------------------------------------
+    # Convenience lookups (audit follow-up)
+    # ------------------------------------------------------------------
+    #
+    # Phase 2-7 audit identified that every consumer (compile.py,
+    # OutputRouter, future executor) reinvents the same iteration
+    # patterns over sources/surfaces/assignments. These helpers
+    # consolidate the lookups in one place.
+
+    def source_by_id(self, source_id: str) -> SourceSchema | None:
+        """Return the source with ``source_id``, or None if not present.
+
+        O(n) scan over ``self.sources``. Layouts are small (tens of
+        sources at most) so the linear scan is the right call —
+        building an index would add complexity for negligible gain.
+        """
+        for source in self.sources:
+            if source.id == source_id:
+                return source
+        return None
+
+    def surface_by_id(self, surface_id: str) -> SurfaceSchema | None:
+        """Return the surface with ``surface_id``, or None if not present."""
+        for surface in self.surfaces:
+            if surface.id == surface_id:
+                return surface
+        return None
+
+    def assignments_for_source(self, source_id: str) -> list[Assignment]:
+        """Return every assignment whose source is ``source_id``.
+
+        Returned in stable layout order. Empty list if the source has
+        no assignments (e.g. it's culled this layout).
+        """
+        return [a for a in self.assignments if a.source == source_id]
+
+    def assignments_for_surface(self, surface_id: str) -> list[Assignment]:
+        """Return every assignment whose surface is ``surface_id``.
+
+        Returned in stable layout order. Multiple assignments may
+        target the same surface (Phase 4 dedup will compose them by
+        z_order + opacity).
+        """
+        return [a for a in self.assignments if a.surface == surface_id]
+
+    def render_targets(self) -> tuple[str, ...]:
+        """Return the sorted set of render target names declared by
+        any ``video_out`` surface in this layout.
+
+        Computed by walking ``video_outputs()`` and collecting the
+        ``geometry.render_target`` value of each (defaulting to
+        ``"main"`` for surfaces that omit it). The OutputRouter and
+        future multi-target executor consume this to know which
+        targets the host needs to wire.
+        """
+        names = {(s.geometry.render_target or "main") for s in self.video_outputs()}
+        return tuple(sorted(names))
