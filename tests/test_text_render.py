@@ -2,6 +2,11 @@
 
 Phase 3c of the compositor unification epic — the single source of
 truth for text-on-Cairo rendering used by AlbumOverlay and OverlayZone.
+
+Skips render-path tests when the GI Pango/PangoCairo typelibs aren't
+installed (CI containers ship without GTK). The dataclass and
+content-hash tests still run unconditionally because they have no
+GI dependency.
 """
 
 from __future__ import annotations
@@ -18,6 +23,30 @@ from agents.studio_compositor.text_render import (
     measure_text,
     render_text,
     render_text_to_surface,
+)
+
+
+def _pango_available() -> bool:
+    """True iff the GI Pango/PangoCairo typelibs are importable.
+
+    The text_render helper imports them lazily inside _build_layout so
+    a missing typelib only fails at draw time. CI containers without
+    GTK should skip the render-path tests rather than fail them.
+    """
+    try:
+        import gi  # noqa: PLC0415
+
+        gi.require_version("Pango", "1.0")
+        gi.require_version("PangoCairo", "1.0")
+        from gi.repository import Pango, PangoCairo  # noqa: F401
+    except (ImportError, ValueError):
+        return False
+    return True
+
+
+_HAS_PANGO = _pango_available()
+requires_pango = pytest.mark.skipif(
+    not _HAS_PANGO, reason="GI Pango/PangoCairo typelibs not installed"
 )
 
 
@@ -55,6 +84,7 @@ def test_outline_offsets_constants_have_expected_count():
 # ---------------------------------------------------------------------------
 
 
+@requires_pango
 def test_measure_text_returns_positive_dimensions():
     cr = _ctx()
     style = TextStyle(text="hello world", font_description="Sans 14")
@@ -63,6 +93,7 @@ def test_measure_text_returns_positive_dimensions():
     assert h > 0
 
 
+@requires_pango
 def test_measure_text_empty_string_zero_width():
     cr = _ctx()
     style = TextStyle(text="", font_description="Sans 14")
@@ -73,6 +104,7 @@ def test_measure_text_empty_string_zero_width():
     assert w == 0
 
 
+@requires_pango
 def test_render_text_returns_dimensions():
     cr = _ctx()
     style = TextStyle(text="hello", font_description="Sans 14")
@@ -81,6 +113,7 @@ def test_render_text_returns_dimensions():
     assert h > 0
 
 
+@requires_pango
 def test_render_text_draws_pixels():
     cr = _ctx(w=256, h=32)
     style = TextStyle(
@@ -97,6 +130,7 @@ def test_render_text_draws_pixels():
     assert any(b != 0 for b in data)
 
 
+@requires_pango
 def test_render_text_with_outline_draws_more_pixels_than_without():
     """Outline + foreground produces strictly more painted pixels than
     foreground alone, since the outline expands the visual footprint."""
@@ -119,6 +153,7 @@ def test_render_text_with_outline_draws_more_pixels_than_without():
     assert count_nonzero(with_outline) > count_nonzero(plain)
 
 
+@requires_pango
 def test_render_text_with_max_width_wraps():
     """A long string with a small max_width must produce a taller layout
     than the same string at full width."""
@@ -131,6 +166,7 @@ def test_render_text_with_max_width_wraps():
     assert narrow_h > wide_h
 
 
+@requires_pango
 def test_render_text_markup_mode_uses_pango_markup():
     """Markup mode should accept Pango markup tags without raising and
     produce a different visual result than text mode for the same input.
@@ -157,6 +193,7 @@ def test_render_text_markup_mode_uses_pango_markup():
 # ---------------------------------------------------------------------------
 
 
+@requires_pango
 def test_render_text_to_surface_pads_around_outline():
     style = TextStyle(
         text="X",
@@ -173,6 +210,7 @@ def test_render_text_to_surface_pads_around_outline():
     assert surface.get_height() == sh
 
 
+@requires_pango
 def test_render_text_to_surface_draws_into_returned_surface():
     style = TextStyle(
         text="hello",
@@ -226,6 +264,7 @@ def test_text_content_update_persists_new_style():
 # ---------------------------------------------------------------------------
 
 
+@requires_pango
 def test_overlay_zone_rebuild_surface_via_helper():
     """OverlayZone._rebuild_surface should populate _cached_surface using
     the shared text_render helper after the Phase 3c migration."""
