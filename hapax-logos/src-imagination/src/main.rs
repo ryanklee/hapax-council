@@ -17,7 +17,6 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::{Window, WindowId};
 
 use hapax_visual::content_sources::ContentSourceManager;
-use hapax_visual::content_textures::ContentTextureManager;
 use hapax_visual::dynamic_pipeline::DynamicPipeline;
 use hapax_visual::gpu::GpuContext;
 use hapax_visual::state::StateReader;
@@ -38,7 +37,6 @@ struct ImaginationApp {
     gpu: Option<GpuContext>,
 
     dynamic_pipeline: Option<DynamicPipeline>,
-    content_textures: Option<ContentTextureManager>,
     content_source_mgr: Option<ContentSourceManager>,
     state_reader: StateReader,
 
@@ -57,7 +55,6 @@ impl ImaginationApp {
             window_state: WindowState::load(),
             gpu: None,
             dynamic_pipeline: None,
-            content_textures: None,
             content_source_mgr: None,
             state_reader: StateReader::new(),
             start_time: Instant::now(),
@@ -189,11 +186,6 @@ impl ImaginationApp {
 
         self.state_reader.poll(dt);
 
-        if let Some(ct) = &mut self.content_textures {
-            ct.poll(&gpu.queue);
-            ct.tick_fades(dt, &gpu.queue);
-        }
-
         if let Some(csm) = &mut self.content_source_mgr {
             csm.scan(&gpu.device, &gpu.queue);
             csm.tick_fades(dt);
@@ -213,15 +205,8 @@ impl ImaginationApp {
             .create_view(&wgpu::TextureViewDescriptor::default());
 
         if let Some(pipeline) = &mut self.dynamic_pipeline {
-            let legacy_opacities = self.content_textures.as_ref()
-                .map(|ct| ct.slot_opacities()).unwrap_or([0.0; 4]);
-            let source_opacities = self.content_source_mgr.as_ref()
+            let opacities = self.content_source_mgr.as_ref()
                 .map(|cs| cs.slot_opacities()).unwrap_or([0.0; 4]);
-            let opacities = if source_opacities.iter().any(|&o| o > 0.001) {
-                source_opacities
-            } else {
-                legacy_opacities
-            };
             pipeline.render(
                 &gpu.device,
                 &gpu.queue,
@@ -231,7 +216,6 @@ impl ImaginationApp {
                 dt,
                 time,
                 opacities,
-                self.content_textures.as_ref(),
                 self.content_source_mgr.as_ref(),
             );
         }
@@ -312,13 +296,11 @@ impl ApplicationHandler for ImaginationApp {
         let h = size.height.max(1);
 
         let dynamic_pipeline = DynamicPipeline::new(&gpu.device, &gpu.queue, w, h, gpu.format);
-        let content_textures = ContentTextureManager::new(&gpu.device, &gpu.queue);
         let content_source_mgr = ContentSourceManager::new(&gpu.device, &gpu.queue);
 
         self.window = Some(window.clone());
         self.gpu = Some(gpu);
         self.dynamic_pipeline = Some(dynamic_pipeline);
-        self.content_textures = Some(content_textures);
         self.content_source_mgr = Some(content_source_mgr);
 
         log::info!("Visual surface initialized ({}x{})", w, h);

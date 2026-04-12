@@ -1,28 +1,26 @@
-"""Sierpinski content loader — writes YouTube video frames to the wgpu content slot manifest.
+"""Sierpinski content loader — publishes YouTube video frames via the unified source protocol.
 
-Replaces SpirographReactor. Polls yt-frame-{0,1,2}.jpg snapshots from the youtube-player
-daemon and writes them to the content slot manifest that the Rust ContentTextureManager
-polls every 500ms.
+Replaces the legacy ContentTextureManager/slots.json path. Polls yt-frame-{0,1,2}.jpg
+snapshots from the youtube-player daemon and injects them into the wgpu content source
+protocol (/dev/shm/hapax-imagination/sources/yt-slot-{N}/) via content_injector.
 
 The Sierpinski triangle shader (sierpinski_content.wgsl) handles the triangle-region
 masking and compositing on the GPU side. This loader is the data pipeline.
+
+Active slot opacity is higher (0.9) than inactive slots (0.3). Slot ordering via
+z_order so the active slot sorts highest and the shader binds it first.
 """
 
 from __future__ import annotations
 
-import json
 import logging
-import shutil
 import threading
 import time
 from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-CONTENT_DIR = Path("/dev/shm/hapax-imagination/content")
-ACTIVE_DIR = CONTENT_DIR / "active"
 YT_FRAME_DIR = Path("/dev/shm/hapax-compositor")
-MANIFEST_PATH = ACTIVE_DIR / "slots.json"
 
 
 class VideoSlotStub:
@@ -60,7 +58,12 @@ class VideoSlotStub:
 
 
 class SierpinskiLoader:
-    """Loads YouTube video frames into the wgpu content slot pipeline."""
+    """Publishes YouTube video frames to the wgpu content source protocol.
+
+    Each slot (0, 1, 2) becomes a named source at /dev/shm/hapax-imagination/sources/
+    yt-slot-{N}/. Sources are refreshed every 0.4s. Active slot gets higher opacity
+    and z_order so the shader binds it prominently.
+    """
 
     def __init__(self) -> None:
         self._running = False
@@ -71,7 +74,6 @@ class SierpinskiLoader:
     def start(self) -> None:
         """Start the frame polling thread and deferred director initialization."""
         self._running = True
-        ACTIVE_DIR.mkdir(parents=True, exist_ok=True)
         self._thread = threading.Thread(
             target=self._poll_loop, daemon=True, name="sierpinski-loader"
         )
@@ -124,44 +126,39 @@ class SierpinskiLoader:
         pass
 
     def _poll_loop(self) -> None:
-        """Poll YouTube frame snapshots and write content slot manifest."""
+        """Poll YouTube frame snapshots and publish them as content sources."""
+        from agents.reverie.content_injector import inject_jpeg, remove_source
+
         while self._running:
             try:
-                self._update_manifest()
+                self._publish_sources(inject_jpeg, remove_source)
             except Exception:
-                log.debug("Manifest update failed", exc_info=True)
-            time.sleep(0.4)  # Slightly faster than Rust's 500ms poll
+                log.debug("Source publish failed", exc_info=True)
+            time.sleep(0.4)
 
-    def _update_manifest(self) -> None:
-        """Write slots.json manifest pointing at current YouTube frame JPEGs."""
-        slots = []
+    def _publish_sources(self, inject_jpeg, remove_source) -> None:
+        """Publish each YouTube slot as a source via content_injector.
+
+        Active slot gets opacity 0.9 and z_order 5 (highest among YT slots).
+        Inactive slots get opacity 0.3 and z_order 2-4.
+        Slots with missing yt-frame files get their source removed.
+        """
         for slot_id in range(3):
             frame_path = YT_FRAME_DIR / f"yt-frame-{slot_id}.jpg"
+            source_id = f"yt-slot-{slot_id}"
             if not frame_path.exists():
+                # Clean up stale source when the video is gone
+                remove_source(source_id)
                 continue
-            # Active slot gets full salience, others reduced
-            salience = 0.9 if slot_id == self._active_slot else 0.3
-            # Copy frame to content active dir for Rust to load
-            dest = ACTIVE_DIR / f"slot_{slot_id}.jpg"
-            try:
-                shutil.copy2(str(frame_path), str(dest))
-            except OSError:
-                continue
-            slots.append(
-                {
-                    "index": slot_id,
-                    "path": str(dest),
-                    "kind": "camera_frame",
-                    "salience": salience,
-                }
+            is_active = slot_id == self._active_slot
+            opacity = 0.9 if is_active else 0.3
+            # Active slot z_order = 5, inactive slots 2-4 in slot_id order
+            z_order = 5 if is_active else (2 + slot_id)
+            inject_jpeg(
+                source_id=source_id,
+                jpeg_path=frame_path,
+                opacity=opacity,
+                z_order=z_order,
+                blend_mode="over",
+                tags=["youtube", "sierpinski"],
             )
-
-        manifest = {
-            "fragment_id": "sierpinski-yt",
-            "slots": slots,
-            "continuation": True,
-            "material": "void",
-        }
-        tmp = MANIFEST_PATH.with_suffix(".tmp")
-        tmp.write_text(json.dumps(manifest))
-        tmp.rename(MANIFEST_PATH)

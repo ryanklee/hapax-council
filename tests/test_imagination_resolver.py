@@ -29,14 +29,12 @@ from agents.imagination_context import (
 )
 from agents.imagination_resolver import (
     FAST_KINDS,
-    MAX_SLOTS,
     SLOW_KINDS,
     ContentReference,
     cleanup_content_dir,
     resolve_references,
     resolve_references_staged,
     resolve_text,
-    write_slot_manifest,
 )
 
 # ---------------------------------------------------------------------------
@@ -191,39 +189,6 @@ def test_resolve_references_all_fast_kinds_produces_nothing(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_write_slot_manifest(tmp_path):
-    refs = [
-        ContentReference(kind="text", source="Hello", query=None, salience=0.7),
-        ContentReference(kind="text", source="World", query=None, salience=0.4),
-    ]
-    frag = _make_fragment(fid="m1")
-    manifest_path = tmp_path / "slots.json"
-    paths = [tmp_path / "m1-0.jpg", tmp_path / "m1-1.jpg"]
-    for p in paths:
-        p.write_bytes(b"\xff\xd8dummy")
-    write_slot_manifest(frag, paths, manifest_path, refs=refs)
-    data = json.loads(manifest_path.read_text())
-    assert data["fragment_id"] == "m1"
-    assert len(data["slots"]) == 2
-    assert data["slots"][0]["index"] == 0
-    assert data["slots"][0]["salience"] == 0.7
-    assert data["material"] == "water"
-    assert data["continuation"] is False
-
-
-def test_resolve_references_staged_atomic(tmp_path):
-    staging = tmp_path / "staging"
-    active = tmp_path / "active"
-    refs = [ContentReference(kind="text", source="Test content", query=None, salience=0.5)]
-    frag = _make_fragment(fid="s1")
-    resolve_references_staged(frag, staging_dir=staging, active_dir=active, refs=refs)
-    assert active.exists()
-    assert not staging.exists()
-    assert (active / "s1-0.jpg").exists()
-    manifest = json.loads((active / "slots.json").read_text())
-    assert manifest["fragment_id"] == "s1"
-
-
 def test_resolve_references_staged_replaces_previous(tmp_path):
     staging = tmp_path / "staging"
     active = tmp_path / "active"
@@ -236,52 +201,6 @@ def test_resolve_references_staged_replaces_previous(tmp_path):
     resolve_references_staged(frag2, staging_dir=staging, active_dir=active, refs=refs2)
     assert (active / "r2-0.jpg").exists()
     assert not (active / "r1-0.jpg").exists()
-
-
-def test_manifest_camera_frame_uses_source_path(tmp_path):
-    refs = [ContentReference(kind="camera_frame", source="overhead", query=None, salience=0.8)]
-    frag = _make_fragment(fid="c1")
-    manifest_path = tmp_path / "slots.json"
-    write_slot_manifest(frag, [], manifest_path, refs=refs)
-    data = json.loads(manifest_path.read_text())
-    assert data["slots"][0]["path"] == "/dev/shm/hapax-compositor/overhead.jpg"
-    assert data["slots"][0]["kind"] == "camera_frame"
-
-
-def test_manifest_file_ref_uses_source_path(tmp_path):
-    refs = [ContentReference(kind="file", source="/tmp/test.jpg", query=None, salience=0.6)]
-    frag = _make_fragment(fid="f1")
-    manifest_path = tmp_path / "slots.json"
-    write_slot_manifest(frag, [], manifest_path, refs=refs)
-    data = json.loads(manifest_path.read_text())
-    assert data["slots"][0]["path"] == "/tmp/test.jpg"
-
-
-def test_manifest_max_four_slots(tmp_path):
-    refs = [
-        ContentReference(kind="text", source=f"Slot {i}", query=None, salience=0.5)
-        for i in range(6)
-    ]
-    frag = _make_fragment(fid="max")
-    manifest_path = tmp_path / "slots.json"
-    write_slot_manifest(
-        frag, [tmp_path / f"max-{i}.jpg" for i in range(6)], manifest_path, refs=refs
-    )
-    data = json.loads(manifest_path.read_text())
-    assert len(data["slots"]) == 4  # capped at MAX_SLOTS
-
-
-def test_manifest_includes_material_and_continuation(tmp_path):
-    """Manifest includes material and continuation for Rust shader interaction (B3)."""
-    refs = [ContentReference(kind="text", source="Flame", query=None, salience=0.8)]
-    frag = _make_fragment(fid="mat1", material="fire", continuation=True)
-    manifest_path = tmp_path / "slots.json"
-    paths = [tmp_path / "mat1-0.jpg"]
-    paths[0].write_bytes(b"\xff\xd8dummy")
-    write_slot_manifest(frag, paths, manifest_path, refs=refs)
-    data = json.loads(manifest_path.read_text())
-    assert data["material"] == "fire"
-    assert data["continuation"] is True
 
 
 def test_cleanup_removes_old_files(tmp_path):
@@ -842,11 +761,6 @@ def test_fragment_id_uniqueness():
 def test_slow_and_fast_kinds_are_disjoint():
     """SLOW_KINDS and FAST_KINDS must not overlap."""
     assert set() == SLOW_KINDS & FAST_KINDS
-
-
-def test_max_slots_is_four():
-    """Rust compositor expects exactly 4 texture slots."""
-    assert MAX_SLOTS == 4
 
 
 # ---------------------------------------------------------------------------
