@@ -171,12 +171,12 @@
   "surfaces": [
     {
       "id": "main-output",
-      "geometry": {"kind": "video_out", "target": "/dev/video42"},
+      "geometry": {"kind": "video_out", "target": "/dev/video42", "render_target": "main"},
       "z_order": 0
     },
     {
       "id": "wgpu-surface",
-      "geometry": {"kind": "video_out", "target": "wgpu_winit_window"},
+      "geometry": {"kind": "video_out", "target": "wgpu_winit_window", "render_target": "main"},
       "z_order": 0
     },
     {

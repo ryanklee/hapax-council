@@ -348,6 +348,39 @@ class TestGarageDoorLayout:
         assert "/dev/video42" in targets
         assert "wgpu_winit_window" in targets
 
+    def test_garage_door_video_out_surfaces_declare_render_target(self):
+        """Phase 5b2: every video_out surface in the canonical layout
+        declares which render target feeds it. Today both feed
+        ``main`` — Phase 5b3+ will support per-output render targets."""
+        layout = Layout.model_validate_json(GARAGE_DOOR_PATH.read_text())
+        for s in layout.video_outputs():
+            assert s.geometry.render_target == "main"
+
+    def test_layout_video_outputs_helper_returns_in_layout_order(self):
+        """Layout.video_outputs() preserves the source list order so
+        OutputRouter sink ordering is reproducible."""
+        layout = Layout.model_validate_json(GARAGE_DOOR_PATH.read_text())
+        video_outs = layout.video_outputs()
+        # Layout order: main-output (/dev/video42) first, then wgpu-surface.
+        assert video_outs[0].id == "main-output"
+        assert video_outs[1].id == "wgpu-surface"
+
+    def test_render_target_field_optional_defaults_to_none(self):
+        """render_target is optional; backwards-compat layouts that
+        omit it parse cleanly with the field set to None. Phase 5b3
+        OutputRouter treats None as ``main``."""
+        from shared.compositor_model import SurfaceGeometry
+
+        geom = SurfaceGeometry(kind="video_out", target="/dev/video42")
+        assert geom.render_target is None
+
+    def test_render_target_field_round_trips_through_json(self):
+        from shared.compositor_model import SurfaceGeometry
+
+        geom = SurfaceGeometry(kind="video_out", target="/dev/video42", render_target="hud")
+        rebuilt = SurfaceGeometry.model_validate_json(geom.model_dump_json())
+        assert rebuilt.render_target == "hud"
+
     def test_garage_door_round_trip_against_disk_format(self):
         """Dumping the parsed layout to JSON should be valid JSON
         that can be parsed back into the same Layout."""
