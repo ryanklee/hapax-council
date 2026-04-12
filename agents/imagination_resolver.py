@@ -7,7 +7,6 @@ are skipped — handled by the Rust visual surface.
 
 from __future__ import annotations
 
-import json
 import logging
 import shutil
 import textwrap
@@ -52,7 +51,6 @@ RENDER_HEIGHT = 1080
 SLOW_KINDS = {"text", "qdrant_query", "url"}
 CAMERA_FRAME_DIR = "/dev/shm/hapax-compositor"
 FAST_KINDS = {"camera_frame", "file"}
-MAX_SLOTS = 4
 
 # ---------------------------------------------------------------------------
 # Font loading
@@ -162,60 +160,18 @@ def resolve_references(
     return results
 
 
-def write_slot_manifest(
-    fragment: ImaginationFragment,
-    resolved_paths: list[Path],
-    manifest_path: Path,
-    refs: list[ContentReference] | None = None,
-) -> None:
-    """Write a slot manifest JSON for the Rust content texture manager.
-
-    References are passed explicitly via *refs* (decoupled from the fragment
-    model which no longer carries content_references).
-    """
-    slots = []
-    resolved_idx = 0
-
-    for i, ref in enumerate((refs or [])[:MAX_SLOTS]):
-        if ref.kind == "camera_frame":
-            path = f"{CAMERA_FRAME_DIR}/{ref.source}.jpg"
-        elif ref.kind == "file":
-            path = ref.source
-        elif resolved_idx < len(resolved_paths):
-            path = str(resolved_paths[resolved_idx])
-            resolved_idx += 1
-        else:
-            continue
-
-        slots.append(
-            {
-                "index": i,
-                "path": path,
-                "kind": ref.kind,
-                "salience": ref.salience,
-            }
-        )
-
-    manifest = {
-        "fragment_id": fragment.id,
-        "slots": slots,
-        "continuation": fragment.continuation,
-        "material": fragment.material,
-    }
-
-    manifest_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = manifest_path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(manifest))
-    tmp.rename(manifest_path)
-
-
 def resolve_references_staged(
     fragment: ImaginationFragment,
     staging_dir: Path | None = None,
     active_dir: Path | None = None,
     refs: list[ContentReference] | None = None,
 ) -> list[Path]:
-    """Resolve content references to staging, then atomically swap to active."""
+    """Resolve content references to staging, then atomically swap to active.
+
+    Writes the unified source protocol (ContentSourceManager). The legacy
+    slots.json manifest path has been removed as part of the compositor
+    unification epic — ContentTextureManager no longer exists.
+    """
     staging = staging_dir or (CONTENT_DIR / "staging")
     active = active_dir or (CONTENT_DIR / "active")
 
@@ -224,7 +180,6 @@ def resolve_references_staged(
     staging.mkdir(parents=True, exist_ok=True)
 
     resolved = resolve_references(fragment, content_dir=staging, refs=refs)
-    write_slot_manifest(fragment, resolved, staging / "slots.json", refs=refs)
 
     old = active.with_name("old")
     if active.exists():

@@ -13,7 +13,6 @@ use serde::Deserialize;
 use wgpu::util::DeviceExt;
 
 use crate::content_sources::ContentSourceManager;
-use crate::content_textures::ContentTextureManager;
 use crate::output::ShmOutput;
 use crate::state::StateReader;
 use crate::uniform_buffer::UniformBuffer;
@@ -551,7 +550,6 @@ impl DynamicPipeline {
         dt: f32,
         time: f32,
         content_slot_opacities: [f32; 4],
-        content_textures: Option<&ContentTextureManager>,
         content_sources: Option<&ContentSourceManager>,
     ) {
         self.try_reload(device);
@@ -743,7 +741,7 @@ impl DynamicPipeline {
             let is_temporal = pass.inputs.iter().any(|n| n.starts_with("@accum_"));
 
             if let Some(ref render_pipeline) = pass.render_pipeline {
-                let input_bind_group = self.create_input_bind_group(device, &pass.inputs, content_textures, content_sources);
+                let input_bind_group = self.create_input_bind_group(device, &pass.inputs, content_sources);
 
                 // Resolve output texture view
                 let output_view = match self.textures.get(&pass.output) {
@@ -794,7 +792,7 @@ impl DynamicPipeline {
                     }
                 }
             } else if let Some(ref compute_pipeline) = pass.compute_pipeline {
-                let input_bind_group = self.create_input_bind_group(device, &pass.inputs, content_textures, content_sources);
+                let input_bind_group = self.create_input_bind_group(device, &pass.inputs, content_sources);
                 let storage_bind_group =
                     self.create_storage_bind_group(device, &pass.output);
 
@@ -1069,7 +1067,6 @@ impl DynamicPipeline {
         &self,
         device: &wgpu::Device,
         inputs: &[String],
-        content_textures: Option<&ContentTextureManager>,
         content_sources: Option<&ContentSourceManager>,
     ) -> wgpu::BindGroup {
         let input_count = inputs.len();
@@ -1121,13 +1118,9 @@ impl DynamicPipeline {
                 let idx: usize = name.strip_prefix("content_slot_")
                     .and_then(|s| s.parse().ok())
                     .unwrap_or(0);
-                let slot_view = if content_sources.map(|cs| cs.has_active_sources()).unwrap_or(false) {
-                    content_sources.unwrap().slot_view(idx)
-                } else {
-                    content_textures
-                        .map(|ct| ct.slot_view(idx))
-                        .unwrap_or_else(|| self.textures.get("final").map(|t| &t.view).unwrap())
-                };
+                let slot_view = content_sources
+                    .map(|cs| cs.slot_view(idx))
+                    .unwrap_or_else(|| self.textures.get("final").map(|t| &t.view).unwrap());
                 entries.push(wgpu::BindGroupEntry {
                     binding: (2 + i) as u32,
                     resource: wgpu::BindingResource::TextureView(slot_view),
