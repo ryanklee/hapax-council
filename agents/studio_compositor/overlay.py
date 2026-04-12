@@ -28,6 +28,10 @@ def on_draw(compositor: Any, overlay: Any, cr: Any, timestamp: int, duration: in
         # Feed audio energy for reactive line width
         if hasattr(compositor, "_cached_audio"):
             sierpinski.set_audio_energy(compositor._cached_audio.get("mixer_energy", 0.0))
+        # Sync active slot from loader to renderer
+        loader = getattr(compositor, "_sierpinski_loader", None)
+        if loader is not None:
+            sierpinski.set_active_slot(loader._active_slot)
         sierpinski.draw(cr, canvas_w, canvas_h)
 
     # Render content overlay zones (markdown/ANSI from Obsidian via Pango)

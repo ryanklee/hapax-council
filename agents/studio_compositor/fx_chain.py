@@ -780,9 +780,10 @@ def build_inline_fx_chain(
     compositor._sierpinski_loader = SierpinskiLoader()
     compositor._sierpinski_loader.start()
     compositor._sierpinski_renderer = SierpinskiRenderer()
+    compositor._sierpinski_renderer.start()
     compositor._spirograph_reactor = None
     compositor._yt_overlay = None
-    log.info("SierpinskiLoader + SierpinskiRenderer created")
+    log.info("SierpinskiLoader + SierpinskiRenderer created (render thread at 10fps)")
 
     log.info(
         "FX chain: %d shader slots, glvideomixer (camera base + live flash 60%%)",

@@ -4,13 +4,16 @@ Draws a 2-level Sierpinski triangle with YouTube videos masked into the 3
 corner regions and a waveform in the center void. Renders BEFORE the GL
 shader chain so glfeedback effects apply to the triangle.
 
-Called from overlay.py's on_draw callback at 30fps.
+Rendering runs in a background thread at 10fps. The GStreamer draw callback
+only blits the pre-rendered surface (<0.5ms), avoiding pipeline stalls from
+JPEG decode and Cairo rendering in the streaming thread.
 """
 
 from __future__ import annotations
 
 import logging
 import math
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -20,6 +23,8 @@ import cairo
 log = logging.getLogger(__name__)
 
 YT_FRAME_DIR = Path("/dev/shm/hapax-compositor")
+RENDER_FPS = 10
+RENDER_INTERVAL = 1.0 / RENDER_FPS
 
 # Synthwave palette (neon pink, cyan, purple)
 COLORS = [
@@ -31,7 +36,11 @@ COLORS = [
 
 
 class SierpinskiRenderer:
-    """Draws a Sierpinski triangle with video content in the GStreamer cairooverlay."""
+    """Draws a Sierpinski triangle with video content in the GStreamer cairooverlay.
+
+    Rendering is done in a background thread at 10fps. The draw() method called
+    from the GStreamer pipeline thread only blits the cached output surface.
+    """
 
     def __init__(self) -> None:
         self._frame_surfaces: dict[int, cairo.ImageSurface | None] = {}
@@ -39,11 +48,101 @@ class SierpinskiRenderer:
         self._active_slot = 0
         self._audio_energy = 0.0
 
+        # Background render state
+        self._output_surface: cairo.ImageSurface | None = None
+        self._output_lock = threading.Lock()
+        self._canvas_size: tuple[int, int] = (1920, 1080)
+        self._running = False
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> None:
+        """Start the background render thread."""
+        self._running = True
+        self._thread = threading.Thread(
+            target=self._render_loop, daemon=True, name="sierpinski-render"
+        )
+        self._thread.start()
+        log.info("SierpinskiRenderer background thread started at %dfps", RENDER_FPS)
+
+    def stop(self) -> None:
+        """Stop the background render thread."""
+        self._running = False
+
     def set_active_slot(self, slot_id: int) -> None:
         self._active_slot = slot_id
 
     def set_audio_energy(self, energy: float) -> None:
         self._audio_energy = energy
+
+    def _render_loop(self) -> None:
+        """Background render loop — renders full Sierpinski frame at RENDER_FPS."""
+        while self._running:
+            t0 = time.monotonic()
+            try:
+                self._render_frame()
+            except Exception:
+                log.debug("Sierpinski render failed", exc_info=True)
+            elapsed = time.monotonic() - t0
+            sleep_time = RENDER_INTERVAL - elapsed
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+
+    def _render_frame(self) -> None:
+        """Render a complete Sierpinski frame to a new surface, then swap."""
+        w, h = self._canvas_size
+        surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, w, h)
+        cr = cairo.Context(surface)
+
+        fw = float(w)
+        fh = float(h)
+        t = time.monotonic()
+
+        # Main triangle (75% of height, slightly above center)
+        tri = self._get_triangle(fw, fh, scale=0.75, y_offset=-0.02)
+
+        # Level 1 subdivision: 3 corners + center void
+        m01 = self._midpoint(tri[0], tri[1])
+        m12 = self._midpoint(tri[1], tri[2])
+        m02 = self._midpoint(tri[0], tri[2])
+
+        corner_0 = [tri[0], m01, m02]  # top
+        corner_1 = [m01, tri[1], m12]  # bottom-left
+        corner_2 = [m02, m12, tri[2]]  # bottom-right
+        center = [m01, m12, m02]  # center void
+
+        # Load and draw video frames in corner triangles
+        for slot_id, corner in enumerate([corner_0, corner_1, corner_2]):
+            frame_surface = self._load_frame(slot_id)
+            opacity = 0.9 if slot_id == self._active_slot else 0.4
+            self._draw_video_in_triangle(cr, frame_surface, corner, opacity)
+
+        # Waveform in center
+        self._draw_waveform(cr, center, self._audio_energy)
+
+        # Level 2 subdivision lines (inside corners)
+        all_triangles = [tri, corner_0, corner_1, corner_2, center]
+
+        # Subdivide corners for level 2 line detail
+        for corner in [corner_0, corner_1, corner_2]:
+            cm01 = self._midpoint(corner[0], corner[1])
+            cm12 = self._midpoint(corner[1], corner[2])
+            cm02 = self._midpoint(corner[0], corner[2])
+            all_triangles.extend(
+                [
+                    [corner[0], cm01, cm02],
+                    [cm01, corner[1], cm12],
+                    [cm02, cm12, corner[2]],
+                    [cm01, cm12, cm02],
+                ]
+            )
+
+        # Draw line work with audio-reactive width
+        line_w = 1.5 + self._audio_energy * 2.0
+        self._draw_triangle_lines(cr, all_triangles, line_w, t)
+
+        # Swap output surface under lock
+        with self._output_lock:
+            self._output_surface = surface
 
     def _load_frame(self, slot_id: int) -> cairo.ImageSurface | None:
         """Load a YouTube frame JPEG as a Cairo surface, with mtime caching."""
@@ -55,6 +154,9 @@ class SierpinskiRenderer:
             if mtime == self._frame_mtimes.get(slot_id, 0):
                 return self._frame_surfaces.get(slot_id)
             # Load JPEG via GdkPixbuf → Cairo surface
+            import gi
+
+            gi.require_version("GdkPixbuf", "2.0")
             from gi.repository import GdkPixbuf
 
             pixbuf = GdkPixbuf.Pixbuf.new_from_file(str(path))
@@ -62,6 +164,8 @@ class SierpinskiRenderer:
             w, h = pixbuf.get_width(), pixbuf.get_height()
             surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, w, h)
             cr = cairo.Context(surface)
+
+            gi.require_version("Gdk", "4.0")
             from gi.repository import Gdk
 
             Gdk.cairo_set_source_pixbuf(cr, pixbuf, 0, 0)
@@ -255,50 +359,15 @@ class SierpinskiRenderer:
         cr.restore()
 
     def draw(self, cr: Any, canvas_w: int, canvas_h: int) -> None:
-        """Main draw entry point — called from on_draw at 30fps."""
-        w = float(canvas_w)
-        h = float(canvas_h)
-        t = time.monotonic()
+        """Blit the pre-rendered output surface. Called from on_draw at 30fps.
 
-        # Main triangle (85% of height, slightly above center)
-        tri = self._get_triangle(w, h, scale=0.75, y_offset=-0.02)
+        This method must be fast (<2ms) — it runs in the GStreamer streaming thread.
+        All rendering happens in the background thread via _render_frame().
+        """
+        # Update canvas size for background thread (checked on next render tick)
+        self._canvas_size = (canvas_w, canvas_h)
 
-        # Level 1 subdivision: 3 corners + center void
-        m01 = self._midpoint(tri[0], tri[1])
-        m12 = self._midpoint(tri[1], tri[2])
-        m02 = self._midpoint(tri[0], tri[2])
-
-        corner_0 = [tri[0], m01, m02]  # top
-        corner_1 = [m01, tri[1], m12]  # bottom-left
-        corner_2 = [m02, m12, tri[2]]  # bottom-right
-        center = [m01, m12, m02]  # center void
-
-        # Load and draw video frames in corner triangles
-        for slot_id, corner in enumerate([corner_0, corner_1, corner_2]):
-            surface = self._load_frame(slot_id)
-            opacity = 0.9 if slot_id == self._active_slot else 0.4
-            self._draw_video_in_triangle(cr, surface, corner, opacity)
-
-        # Waveform in center
-        self._draw_waveform(cr, center, self._audio_energy)
-
-        # Level 2 subdivision lines (inside corners)
-        all_triangles = [tri, corner_0, corner_1, corner_2, center]
-
-        # Subdivide corners for level 2 line detail
-        for corner in [corner_0, corner_1, corner_2]:
-            cm01 = self._midpoint(corner[0], corner[1])
-            cm12 = self._midpoint(corner[1], corner[2])
-            cm02 = self._midpoint(corner[0], corner[2])
-            all_triangles.extend(
-                [
-                    [corner[0], cm01, cm02],
-                    [cm01, corner[1], cm12],
-                    [cm02, cm12, corner[2]],
-                    [cm01, cm12, cm02],
-                ]
-            )
-
-        # Draw line work with audio-reactive width
-        line_w = 1.5 + self._audio_energy * 2.0
-        self._draw_triangle_lines(cr, all_triangles, line_w, t)
+        with self._output_lock:
+            if self._output_surface is not None:
+                cr.set_source_surface(self._output_surface, 0, 0)
+                cr.paint()
