@@ -149,8 +149,11 @@ GStreamer-based livestream pipeline. Distinct from Reverie (the wgpu visual surf
 - `docs/superpowers/plans/2026-04-12-compositor-unification-epic.md` — full epic plan
 - `docs/superpowers/audits/2026-04-12-compositor-unification-audit.md` — multi-phase audit + action items (all HIGH/MEDIUM/LOW items shipped in PRs #673–#676)
 - `docs/superpowers/handoff/2026-04-12-session-handoff.md` — Apr 12 session handoff
+- `docs/superpowers/handoff/2026-04-12-alpha-stream-handoff.md` — Apr 12 alpha Stream A handoff (A1/A2/A10/A11)
 
-**YouTube player bootstrap gap (known):** `agents/studio_compositor/director_loop.py` only advances slots on `yt-finished-N` marker files and never does a cold-start `/slot/N/play`. After any `youtube-player.service` restart, the Sierpinski corners stay empty until a human POSTs initial URLs. Workaround documented in the Apr 12 handoff; defensive PR deferred.
+**Director loop bootstrap (fixed 2026-04-12):** `DirectorLoop.start()` dispatches playlist reloads (via daemon threads) for any slot whose `yt-frame-N.jpg` file is absent (PR #679). Without this, a `youtube-player.service` restart used to leave the Sierpinski corners blank until a human manually POSTed initial URLs — observed 2026-04-12 as a 13 h outage. Also note: the playlist helper `_load_playlist()` was deleted along with `spirograph_reactor.py` in PR #644 and restored in PR #686, which is required or the cold-start dispatch is a silent no-op. Caches to `/dev/shm/hapax-compositor/playlist.json`, falls back to `yt-dlp --flat-playlist` extraction if the cache is missing.
+
+**Studio compositor service env (fixed 2026-04-12):** `studio-compositor.service` now loads `/run/user/1000/hapax-secrets.env` via `EnvironmentFile=` (PR #686), matching `hapax-daimonion` / `logos-api`. Without this the compositor has no `LITELLM_API_KEY` and no `LANGFUSE_PUBLIC_KEY`, so the director loop's LLM calls and all Langfuse telemetry silently fail.
 
 **Camera USB robustness (known hardware problem):** The three Logitech BRIO cameras keep getting kicked off the bus with kernel `device descriptor read/64, error -71` (EPROTO). Almost certainly a TS4 USB3.2 Gen2 hub / cable / power issue, not software. Investigation note: `docs/research/2026-04-12-brio-usb-robustness.md`. Reboot is the current workaround; `try_reconnect_camera` in `state.py` retries every ~10s but cannot fix signal-level USB errors.
 
@@ -309,6 +312,7 @@ Destructive command detection strips quoted strings before matching to prevent f
 - **`shared/dimensions.py`** — 11 profile dimensions. Sync agents produce behavioral facts only.
 - **`shared/consent.py`** — `ConsentContract`, `ConsentRegistry`, `contract_check()`
 - **`shared/agent_registry.py`** — `AgentManifest` (4-layer schema), query by category/capability/RACI
+- **`shared/telemetry.py`** — `hapax_span` / `hapax_event` / `hapax_score` for Langfuse circulatory-system instrumentation. `hapax_span` uses an `ExitStack` so setup failures yield a no-op span and caller exceptions propagate cleanly — do not refactor it back to a single try/except wrapping the yield, that reintroduces the `RuntimeError: generator didn't stop after throw()` bug that silently killed the director loop for 47 min on 2026-04-12 (PR #685). Note: metadata values must be strings; non-string values are dropped with a warning by langfuse's `propagate_attributes` but do not break the span.
 
 ## Voice Grounding Research Continuity
 
