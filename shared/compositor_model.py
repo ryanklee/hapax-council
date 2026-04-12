@@ -97,7 +97,10 @@ class SurfaceGeometry(BaseModel):
     - tile: positioned by the compositor's layout algorithm at runtime
     - masked_region: mask name references a registered mask shape
     - wgpu_binding: binding_name is the wgpu bind group binding (e.g. content_slot_0)
-    - video_out / ndi_out: target is the output device or NDI source name
+    - video_out / ndi_out: ``target`` is the output device or NDI source
+      name; ``render_target`` (Phase 5b2) is the render target name
+      whose final output feeds this sink. Defaults to ``"main"`` so
+      single-target layouts keep working.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -110,6 +113,7 @@ class SurfaceGeometry(BaseModel):
     mask: str | None = None
     binding_name: str | None = None
     target: str | None = None
+    render_target: str | None = None
 
 
 class SurfaceSchema(BaseModel):
@@ -180,3 +184,14 @@ class Layout(BaseModel):
                     f"layout {self.name!r}: assignment references unknown surface: {a.surface}"
                 )
         return self
+
+    def video_outputs(self) -> list[SurfaceSchema]:
+        """Return surfaces whose geometry kind is ``video_out``.
+
+        Phase 5b2: the OutputRouter (Phase 5b3) consumes this list to
+        wire each output sink to the render target named by the
+        surface's ``geometry.render_target`` field (default ``"main"``).
+        Surfaces are returned in stable layout order so the resulting
+        sink ordering is reproducible.
+        """
+        return [s for s in self.surfaces if s.geometry.kind == "video_out"]
