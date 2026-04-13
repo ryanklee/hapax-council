@@ -1,4 +1,4 @@
-"""Reverie prediction monitor — tracks 6 post-fix behavioral predictions.
+"""Reverie prediction monitor — tracks 7 post-fix behavioral predictions.
 
 Samples affordance pipeline state, chronicle events, and perception signals
 every 5 minutes. Compares actual trajectories against predicted trends from
@@ -12,6 +12,7 @@ Predictions monitored:
   P4: Winner-take-all risk (combined score std dev stays > 0.03)
   P5: Content vs vocabulary balance (technique/params event ratio 0.3–0.7)
   P6: Presence differentiation (no significant score gap active vs idle)
+  P7: Uniforms freshness (hapax-imagination-loop liveness watchdog, F6 part 3)
 """
 
 from __future__ import annotations
@@ -406,8 +407,101 @@ def p6_presence_differentiation(perception: dict) -> PredictionResult:
     )
 
 
+# P7 uniforms-freshness thresholds. The reverie mixer rewrites uniforms.json
+# every governance tick (nominally 1 s). 30 s gives generous headroom for
+# transient Qdrant latency spikes and per-tick logging bursts; 60 s is the
+# critical threshold at which the dimensional drought (multi-day outage
+# leading to #696) would have been caught within minutes instead of days.
+_P7_WARN_AGE_S = 30.0
+_P7_CRIT_AGE_S = 60.0
+
+
+def p7_uniforms_freshness(now: float | None = None) -> PredictionResult:
+    """P7: uniforms.json mtime is recent — hapax-imagination-loop liveness.
+
+    The reverie mixer's ``write_uniforms`` call is the terminal step of the
+    visual chain pipeline. If the imagination-loop daemon is crashed, wedged,
+    or starved (e.g. by the F6 startup dispatch-drain before #702), the
+    file's mtime goes stale and the GPU keeps rendering from the last
+    committed frame while the daimonion cognitive state drifts away from
+    what the operator sees.
+
+    Delta's reverie-bridge investigation (2026-04-12) found that the
+    imagination-loop service had been **inactive** for the entire session
+    with no alert. This watchdog closes that gap: uniforms.json is the
+    single file whose freshness proves the entire chain (DMN → reverie
+    mixer → affordance pipeline → Rust override bridge) is alive.
+
+    Thresholds:
+        < 30 s  → healthy
+        30–60 s → transient stall, non-alerting warning (no ntfy)
+        ≥ 60 s  → critical alert
+
+    Returns zero age when the file is missing entirely, which counts as a
+    critical alert — a missing uniforms.json means hapax-imagination has
+    never booted against this shm tmpfs.
+    """
+    now = now if now is not None else time.time()
+
+    if not UNIFORMS_FILE.exists():
+        return PredictionResult(
+            name="P7_uniforms_freshness",
+            expected="< 30s",
+            actual=-1.0,
+            healthy=False,
+            alert=(
+                f"uniforms.json missing at {UNIFORMS_FILE} — hapax-imagination "
+                "has not booted or shm tmpfs is not mounted"
+            ),
+            detail=json.dumps({"path": str(UNIFORMS_FILE), "exists": False}),
+        )
+
+    try:
+        mtime = UNIFORMS_FILE.stat().st_mtime
+    except OSError as exc:
+        return PredictionResult(
+            name="P7_uniforms_freshness",
+            expected="< 30s",
+            actual=-1.0,
+            healthy=False,
+            alert=f"uniforms.json stat failed: {exc}",
+            detail=json.dumps({"path": str(UNIFORMS_FILE), "error": str(exc)}),
+        )
+
+    age = max(0.0, now - mtime)
+
+    if age >= _P7_CRIT_AGE_S:
+        healthy = False
+        alert = (
+            f"uniforms.json age {age:.1f}s ≥ {_P7_CRIT_AGE_S:.0f}s critical — "
+            "hapax-imagination-loop may be crashed, wedged, or starved"
+        )
+    elif age >= _P7_WARN_AGE_S:
+        healthy = True
+        alert = None
+    else:
+        healthy = True
+        alert = None
+
+    return PredictionResult(
+        name="P7_uniforms_freshness",
+        expected=f"< {_P7_WARN_AGE_S:.0f}s",
+        actual=round(age, 2),
+        healthy=healthy,
+        alert=alert,
+        detail=json.dumps(
+            {
+                "path": str(UNIFORMS_FILE),
+                "mtime": round(mtime, 2),
+                "warn_threshold_s": _P7_WARN_AGE_S,
+                "crit_threshold_s": _P7_CRIT_AGE_S,
+            }
+        ),
+    )
+
+
 def sample() -> MonitorSample:
-    """Take one complete sample of all 6 predictions."""
+    """Take one complete sample of all 7 predictions."""
     now = time.time()
     deploy_ts = _get_deploy_ts()
     hours = (now - deploy_ts) / 3600
@@ -424,6 +518,7 @@ def sample() -> MonitorSample:
         p4_winner_take_all(chronicle),
         p5_content_vocabulary_balance(chronicle),
         p6_presence_differentiation(perception),
+        p7_uniforms_freshness(now),
     ]
 
     result = MonitorSample(
