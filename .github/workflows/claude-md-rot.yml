@@ -1,0 +1,39 @@
+name: CLAUDE.md rotation policy
+
+# Runs on every PR that touches a CLAUDE.md file. Catches rot patterns the
+# regular CI workflow misses because its paths-ignore filter excludes *.md.
+# Patterns enforced and rationale: see
+# docs/superpowers/specs/2026-04-13-claude-md-excellence-design.md
+# This workflow does NOT consume any user-controlled GitHub event inputs —
+# it only checks out the source and runs vendored scripts.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**/CLAUDE.md"
+      - "scripts/check-claude-md-rot.sh"
+      - "tests/test_check_claude_md_rot.sh"
+  pull_request:
+    branches: [main]
+    paths:
+      - "**/CLAUDE.md"
+      - "scripts/check-claude-md-rot.sh"
+      - "tests/test_check_claude_md_rot.sh"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: claude-md-rot-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rot-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run rot check across all CLAUDE.md files
+        run: ./scripts/check-claude-md-rot.sh
+      - name: Run rot script test suite
+        run: bash tests/test_check_claude_md_rot.sh

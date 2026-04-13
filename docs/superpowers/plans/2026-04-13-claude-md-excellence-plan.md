@@ -127,3 +127,19 @@ Action: create `CLAUDE.md`, add to `.git/info/exclude`.
 - All 5 PRs merged.
 - All 3 local files on disk.
 - `/revise-claude-md` re-audit reports ≥ 90 on every file.
+
+## Status (post-execution)
+
+All 5 PRs merged 2026-04-13 06:06–06:13 UTC.
+
+| # | Repo | PR | Merge SHA |
+|---|---|---|---|
+| 1 | hapax-council | [#726](https://github.com/ryanklee/hapax-council/pull/726) | `f0ca6b323` |
+| 2 | hapax-officium | [#63](https://github.com/ryanklee/hapax-officium/pull/63) | `25a98b2` |
+| 3 | hapax-phone | [#2](https://github.com/ryanklee/hapax-phone/pull/2) | `6c00c57` |
+| 4 | hapax-watch | [#22](https://github.com/ryanklee/hapax-watch/pull/22) | `faea109` |
+| 5 | distro-work | [#27](https://github.com/ryanklee/distro-work/pull/27) | `fc8bb95` |
+
+Local-only files in place: `~/projects/atlas-voice-training/CLAUDE.md`, `~/projects/tabbyAPI/CLAUDE.md`, `~/dotfiles/workspace-CLAUDE.md` (symlinked into `~/projects/CLAUDE.md`).
+
+Followups landed in the audit pass on the same day: see `docs/superpowers/audits/2026-04-13-claude-md-excellence-audit.md` for findings + remediation status.
