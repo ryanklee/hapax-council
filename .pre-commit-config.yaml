@@ -19,3 +19,9 @@ repos:
         language: script
         always_run: true
         pass_filenames: false
+      - id: claude-md-rot
+        name: CLAUDE.md rotation policy check
+        entry: scripts/check-claude-md-rot.sh
+        language: script
+        files: CLAUDE\.md$
+        pass_filenames: true

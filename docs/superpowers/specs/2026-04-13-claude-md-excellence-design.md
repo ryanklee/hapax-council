@@ -2,7 +2,9 @@
 
 **Date:** 2026-04-13
 **Author:** beta
-**Status:** draft
+**Status:** active
+**Plan:** [`docs/superpowers/plans/2026-04-13-claude-md-excellence-plan.md`](../plans/2026-04-13-claude-md-excellence-plan.md)
+**Audit:** [`docs/superpowers/audits/2026-04-13-claude-md-excellence-audit.md`](../audits/2026-04-13-claude-md-excellence-audit.md)
 
 ## Problem
 
