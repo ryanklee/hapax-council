@@ -1,4 +1,9 @@
-"""Studio Compositor package -- backward-compatible re-exports."""
+"""Studio Compositor package — backward-compatible re-exports.
+
+Source-registry epic completion is planned in
+``docs/superpowers/plans/2026-04-13-reverie-source-registry-completion-plan.md``
+(umbrella over the parent 2026-04-12 source-registry foundation plan).
+"""
 
 from .compositor import StudioCompositor
 from .config import load_config
