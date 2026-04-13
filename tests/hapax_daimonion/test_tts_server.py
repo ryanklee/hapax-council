@@ -52,10 +52,14 @@ async def _sync_client_request(path: Path, payload: dict[str, str]) -> tuple[dic
             s.settimeout(5.0)
             s.connect(str(path))
             s.sendall(json.dumps(payload).encode("utf-8") + b"\n")
-            try:
-                s.shutdown(socket.SHUT_WR)
-            except OSError:
-                pass
+            # BETA-FINDING-G regression: do NOT shutdown(SHUT_WR)
+            # here. The production path uses uvloop, where
+            # ``asyncio.StreamReader.readuntil(b"\n")`` blocks even
+            # when the buffered data already contains the delimiter
+            # if an EOF arrives before the loop has processed the
+            # buffer. Keep the write half open until the response
+            # is received. Matches
+            # ``DaimonionTtsClient.synthesize`` production behavior.
             buf = bytearray()
             while b"\n" not in buf:
                 chunk = s.recv(4096)

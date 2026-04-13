@@ -57,14 +57,19 @@ class DaimonionTtsClient:
                 s.connect(str(self.socket_path))
                 request = json.dumps({"text": text, "use_case": use_case})
                 s.sendall(request.encode("utf-8") + b"\n")
-                # shutdown the write side so the server can detect EOF on
-                # its single-request read, not that it strictly needs it
-                # — readuntil('\n') already frames the request — but it
-                # makes broken-pipe semantics cleaner if the server closes.
-                try:
-                    s.shutdown(socket.SHUT_WR)
-                except OSError:
-                    pass
+                # BETA-FINDING-G: the initial version of this client
+                # called ``s.shutdown(SHUT_WR)`` here. That caused a
+                # 100% failure rate in production because the server
+                # runs on uvloop, and uvloop's
+                # ``asyncio.StreamReader.readuntil(b"\n")`` does not
+                # surface the already-buffered newline before the EOF
+                # notification: it waits for more data that will never
+                # arrive, and the connection hangs until the client's
+                # read timeout fires. Keeping the write side open past
+                # ``sendall`` lets the server's readuntil return the
+                # framed request immediately. The request is already
+                # newline-terminated so there is no ambiguity about
+                # message boundaries.
                 header_bytes, body_head = _read_until_newline(s)
                 if header_bytes is None:
                     log.warning("tts client: server closed before header")
