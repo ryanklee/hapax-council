@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from collections.abc import Iterable
 from pathlib import Path
 
 log = logging.getLogger("reverie.uniforms")
@@ -18,6 +19,23 @@ MATERIAL_MAP = {"water": 0, "fire": 1, "earth": 2, "air": 3, "void": 4}
 
 _plan_defaults_cache: dict[str, float] | None = None
 _plan_defaults_mtime: float = 0.0
+
+
+def _iter_passes(plan: dict) -> Iterable[dict]:
+    """Yield pass dicts from either v1 (flat) or v2 (targets.*) plan schemas.
+
+    The Rust DynamicPipeline emits v2 (``plan["targets"][name]["passes"]``).
+    Walking ``plan["passes"]`` on a v2 plan returns an empty iterator, which
+    silently emptied the defaults cache and starved the visual chain → GPU
+    bridge. Handle both schemas so the reader stays robust to either.
+    """
+    targets = plan.get("targets")
+    if isinstance(targets, dict):
+        for target in targets.values():
+            if isinstance(target, dict):
+                yield from target.get("passes", [])
+        return
+    yield from plan.get("passes", [])
 
 
 def _load_plan_defaults() -> dict[str, float]:
@@ -32,7 +50,7 @@ def _load_plan_defaults() -> dict[str, float]:
     defaults: dict[str, float] = {}
     try:
         plan = json.loads(PLAN_FILE.read_text())
-        for p in plan.get("passes", []):
+        for p in _iter_passes(plan):
             node_id = p.get("node_id", "")
             for k, v in p.get("uniforms", {}).items():
                 if isinstance(v, (int, float)):
@@ -126,10 +144,12 @@ def write_uniforms(
 
     # Content layer: material and salience come from imagination, not chain deltas.
     if imagination:
+        salience_scaled = float(imagination.get("salience", 0.0)) * silence
         uniforms["content.material"] = float(
             MATERIAL_MAP.get(str(imagination.get("material", "water")), 0)
         )
-        uniforms["content.salience"] = float(imagination.get("salience", 0.0)) * silence
+        uniforms["content.salience"] = salience_scaled
+        uniforms["content.intensity"] = salience_scaled
 
     # Trace params (Amendment 2): always written, zero when inactive.
     uniforms["fb.trace_center_x"] = trace_center[0] if trace_strength > 0 else 0.5
