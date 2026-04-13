@@ -144,3 +144,162 @@ class TestImpingementConsumer:
         result = consumer.read_new()
         assert len(result) == 1
         assert result[0].source == "backlog"
+
+
+class TestCursorPersistence:
+    """Cursor persistence across restarts (F6 part 2).
+
+    Composes on top of ``start_at_end``: ``cursor_path`` combines
+    startup-skip semantics with crash-resume. First-ever startup (cursor
+    file missing) seeks to end; subsequent starts resume from the saved
+    cursor. Each advance is atomically persisted. Correct for daemons
+    where missing an impingement would be a correctness bug
+    (daimonion voice state, fortress governance).
+    """
+
+    def test_first_startup_seeks_to_end_and_skips_backlog(self, tmp_path: Path) -> None:
+        path = tmp_path / "imp.jsonl"
+        cursor_path = tmp_path / "cursor.txt"
+        _write_jsonl(path, [_make_imp("pre-backlog-1"), _make_imp("pre-backlog-2")])
+
+        consumer = ImpingementConsumer(path, cursor_path=cursor_path)
+
+        assert consumer.cursor == 2
+        assert consumer.read_new() == []
+        assert cursor_path.exists()
+        assert cursor_path.read_text() == "2"
+
+    def test_second_startup_resumes_from_persisted_cursor(self, tmp_path: Path) -> None:
+        path = tmp_path / "imp.jsonl"
+        cursor_path = tmp_path / "cursor.txt"
+        _write_jsonl(path, [_make_imp("old-1"), _make_imp("old-2")])
+
+        c1 = ImpingementConsumer(path, cursor_path=cursor_path)
+        assert c1.cursor == 2
+
+        _write_jsonl(path, [_make_imp("new-1"), _make_imp("new-2")])
+
+        c2 = ImpingementConsumer(path, cursor_path=cursor_path)
+        assert c2.cursor == 2
+        result = c2.read_new()
+        assert len(result) == 2
+        assert result[0].source == "new-1"
+        assert result[1].source == "new-2"
+        assert cursor_path.read_text() == "4"
+
+    def test_cursor_persisted_after_read_new_advance(self, tmp_path: Path) -> None:
+        path = tmp_path / "imp.jsonl"
+        cursor_path = tmp_path / "cursor.txt"
+        path.write_text("", encoding="utf-8")
+
+        consumer = ImpingementConsumer(path, cursor_path=cursor_path)
+        assert consumer.cursor == 0
+        assert cursor_path.read_text() == "0"
+
+        _write_jsonl(path, [_make_imp("one"), _make_imp("two")])
+        consumer.read_new()
+        assert cursor_path.read_text() == "2"
+
+        _write_jsonl(path, [_make_imp("three")])
+        consumer.read_new()
+        assert cursor_path.read_text() == "3"
+
+    def test_corrupt_cursor_file_falls_back_to_end_of_file(self, tmp_path: Path) -> None:
+        path = tmp_path / "imp.jsonl"
+        cursor_path = tmp_path / "cursor.txt"
+        _write_jsonl(path, [_make_imp("a"), _make_imp("b"), _make_imp("c")])
+        cursor_path.write_text("not-a-number", encoding="utf-8")
+
+        consumer = ImpingementConsumer(path, cursor_path=cursor_path)
+
+        assert consumer.cursor == 3
+        assert consumer.read_new() == []
+        assert cursor_path.read_text() == "3"
+
+    def test_negative_cursor_in_file_falls_back_to_end_of_file(self, tmp_path: Path) -> None:
+        path = tmp_path / "imp.jsonl"
+        cursor_path = tmp_path / "cursor.txt"
+        _write_jsonl(path, [_make_imp("a"), _make_imp("b")])
+        cursor_path.write_text("-5", encoding="utf-8")
+
+        consumer = ImpingementConsumer(path, cursor_path=cursor_path)
+
+        assert consumer.cursor == 2
+
+    def test_file_shrinkage_resets_cursor_and_returns_empty(self, tmp_path: Path) -> None:
+        path = tmp_path / "imp.jsonl"
+        cursor_path = tmp_path / "cursor.txt"
+        _write_jsonl(path, [_make_imp("a"), _make_imp("b"), _make_imp("c")])
+
+        consumer = ImpingementConsumer(path, cursor_path=cursor_path)
+        assert consumer.cursor == 3
+
+        path.write_text("", encoding="utf-8")
+        _write_jsonl(path, [_make_imp("post-rotation")])
+
+        result = consumer.read_new()
+        assert result == []
+        assert consumer.cursor == 1
+        assert cursor_path.read_text() == "1"
+
+        _write_jsonl(path, [_make_imp("after-reset")])
+        result = consumer.read_new()
+        assert len(result) == 1
+        assert result[0].source == "after-reset"
+
+    def test_cursor_parent_directory_created_on_demand(self, tmp_path: Path) -> None:
+        path = tmp_path / "imp.jsonl"
+        cursor_path = tmp_path / "nested" / "deeper" / "cursor.txt"
+        _write_jsonl(path, [_make_imp()])
+
+        consumer = ImpingementConsumer(path, cursor_path=cursor_path)
+
+        assert cursor_path.exists()
+        assert cursor_path.parent.is_dir()
+        assert consumer.cursor == 1
+
+    def test_cursor_path_takes_precedence_over_start_at_end(self, tmp_path: Path) -> None:
+        path = tmp_path / "imp.jsonl"
+        cursor_path = tmp_path / "cursor.txt"
+        _write_jsonl(path, [_make_imp("first"), _make_imp("second")])
+        cursor_path.write_text("1", encoding="utf-8")
+
+        consumer = ImpingementConsumer(
+            path,
+            start_at_end=True,
+            cursor_path=cursor_path,
+        )
+
+        assert consumer.cursor == 1
+        result = consumer.read_new()
+        assert len(result) == 1
+        assert result[0].source == "second"
+
+    def test_cursor_write_failure_does_not_crash_read_new(self, tmp_path: Path) -> None:
+        path = tmp_path / "imp.jsonl"
+        cursor_path = tmp_path / "cursor.txt"
+        path.write_text("", encoding="utf-8")
+        consumer = ImpingementConsumer(path, cursor_path=cursor_path)
+
+        _write_jsonl(path, [_make_imp("one")])
+
+        with patch.object(Path, "replace", side_effect=OSError("readonly fs")):
+            result = consumer.read_new()
+
+        assert len(result) == 1
+        assert consumer.cursor == 1
+
+    def test_missing_impingement_file_bootstrap(self, tmp_path: Path) -> None:
+        path = tmp_path / "imp.jsonl"
+        cursor_path = tmp_path / "cursor.txt"
+
+        consumer = ImpingementConsumer(path, cursor_path=cursor_path)
+
+        assert consumer.cursor == 0
+        assert cursor_path.read_text() == "0"
+        assert consumer.read_new() == []
+
+        _write_jsonl(path, [_make_imp("first-write")])
+        result = consumer.read_new()
+        assert len(result) == 1
+        assert result[0].source == "first-write"
