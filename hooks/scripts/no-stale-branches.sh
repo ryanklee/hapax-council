@@ -4,9 +4,14 @@
 # Two categories of protection:
 #
 # 1. BRANCH CREATION GATE
-#    Blocks: git branch, git checkout -b, git switch -c, git worktree add
-#    When: ANY local or remote feature branches have unmerged commits vs main
-#    Also: enforces worktree limit (max 3: alpha + beta + one spontaneous)
+#    Blocks: git branch, git checkout -b, git switch -c,
+#            git worktree add WITH -b/-B (attaching an existing branch
+#            to a new worktree is not new work and is always allowed).
+#    When: ANY local or remote feature branches have unmerged commits vs main.
+#    Also: enforces session worktree limit (max 4: alpha + beta + delta
+#          + one spontaneous). Infrastructure worktrees under ~/.cache/
+#          (e.g. rebuild-scratch managed by rebuild-logos.sh from FU-6)
+#          are NOT counted — they exist independently of session work.
 #
 # 2. DESTRUCTIVE COMMAND GATE
 #    Blocks: git reset --hard, git checkout ., git branch -f, git worktree remove
@@ -17,6 +22,12 @@
 # Rationale: completed work was lost to abandoned branches AND to subagents
 # that ran destructive git commands on feature branches. No new work starts
 # until prior work is merged; no work is silently discarded.
+#
+# Delta as first-class (2026-04-12): the prior 3-slot limit forced delta to
+# fight rebuild-scratch (infrastructure) for the one spontaneous slot. Delta
+# is one of three concurrent peer sessions (alpha/beta/delta) and deserves
+# its own permanent slot. Making delta first-class + excluding infrastructure
+# worktrees fixes both problems.
 set -euo pipefail
 
 INPUT="$(cat)"
@@ -41,8 +52,12 @@ echo "$CMD" | grep -qE '^\s*git\s+switch\s+(-c|--create)\s' && is_create=true
 # Only match: git branch <word> where <word> starts with a letter (branch name)
 echo "$CMD" | grep -qE '^\s*git\s+branch\s+[a-zA-Z]' && is_create=true
 
-# git worktree add
-echo "$CMD" | grep -qE '^\s*git\s+worktree\s+add\s' && is_create=true
+# git worktree add WITH -b/-B creates a new branch.
+# Attaching a worktree to an EXISTING branch is not branch creation — it's
+# re-attaching an already-declared line of work to a working tree. Allow
+# unconditionally so a delta session can reclaim its own branch from a
+# removed worktree without being blocked by its own PR.
+echo "$CMD" | grep -qE '^\s*git\s+worktree\s+add\s.*-[bB]\s' && is_create=true
 
 # --- Detect branch-destructive commands ---
 # These silently discard commits on feature branches. Block when on a
@@ -125,13 +140,20 @@ if ! git rev-parse --is-inside-work-tree &>/dev/null; then
   exit 0
 fi
 
-# Worktree limit: alpha (primary) + beta (permanent) + 1 spontaneous = max 3
+# Session worktree limit: alpha (primary) + beta (permanent) + delta
+# (permanent, first-class) + 1 spontaneous = max 4 session worktrees.
+#
+# Infrastructure worktrees under ~/.cache/ (e.g. rebuild-scratch at
+# $HOME/.cache/hapax/rebuild/worktree, managed by rebuild-logos.sh via
+# flock from FU-6 / PR #703) are NOT counted — they are not session
+# worktrees and exist independently of session work.
 if echo "$CMD" | grep -qE '^\s*git\s+worktree\s+add\s'; then
-    wt_count=$(git worktree list 2>/dev/null | wc -l)
-    if [ "$wt_count" -ge 3 ]; then
-        echo "BLOCKED: Max 3 worktrees (alpha + beta + 1 spontaneous). Clean up before adding another." >&2
-        echo "  Current worktrees:" >&2
-        git worktree list 2>/dev/null | sed 's/^/    /' >&2
+    session_wt_count=$(git worktree list 2>/dev/null | grep -v '/\.cache/' | wc -l)
+    if [ "$session_wt_count" -ge 4 ]; then
+        echo "BLOCKED: Max 4 session worktrees (alpha + beta + delta + 1 spontaneous). Clean up before adding another." >&2
+        echo "  Current session worktrees (infrastructure under ~/.cache/ excluded):" >&2
+        git worktree list 2>/dev/null | grep -v '/\.cache/' | sed 's/^/    /' >&2
+        git worktree list 2>/dev/null | grep '/\.cache/' | sed 's/^/    [infra, not counted] /' >&2 || true
         exit 2
     fi
 fi

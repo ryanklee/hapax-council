@@ -155,6 +155,7 @@ GStreamer-based livestream pipeline. Distinct from Reverie (the wgpu visual surf
 
 **Spec + audit:**
 - `docs/superpowers/plans/2026-04-12-compositor-unification-epic.md` — full epic plan
+- `docs/superpowers/specs/2026-04-12-compositor-source-registry-foundation-design.md` — PR 1 of the follow-up source-registry epic: make the `Layout`/`SourceSchema`/`SurfaceSchema`/`Assignment` framework authoritative, register reverie as an `external_rgba` source, migrate the three cairo overlays to natural-size + layout-driven placement, support mid-stream PiP geometry mutation via `compositor.surface.set_geometry`, lay `appsrc` pads for every source so preset chains can reference any of them.
 - `docs/superpowers/audits/2026-04-12-compositor-unification-audit.md` — multi-phase audit + action items (all HIGH/MEDIUM/LOW items shipped in PRs #673–#676)
 - `docs/superpowers/handoff/2026-04-12-session-handoff.md` — Apr 12 session handoff
 - `docs/superpowers/handoff/2026-04-12-alpha-stream-handoff.md` — Apr 12 alpha Stream A handoff (A1/A2/A10/A11)
@@ -227,7 +228,7 @@ PreToolUse hooks enforce branch discipline and safety at the tool-call level:
 | Hook | Gates | Blocks when |
 |------|-------|-------------|
 | `work-resolution-gate.sh` | Edit, Write | Feature branch with commits but no PR; on main with open PRs whose branch is local |
-| `no-stale-branches.sh` | Bash | **Branch creation:** any unmerged branches exist. **Destructive commands** (`git reset --hard`, `git checkout .`, `git branch -f`, `git worktree remove`): on a feature branch with commits ahead of main |
+| `no-stale-branches.sh` | Bash | **Branch creation** (`git branch`, `git checkout -b`, `git switch -c`, `git worktree add` WITH `-b`/`-B`): any unmerged branches exist. **Session worktree limit:** max 4 (alpha + beta + delta + 1 spontaneous); infrastructure worktrees under `~/.cache/` are not counted. **Destructive commands** (`git reset --hard`, `git checkout .`, `git branch -f`, `git worktree remove`): on a feature branch with commits ahead of main. Delta is a first-class peer session since 2026-04-12 — attaching `git worktree add` to an EXISTING branch is not branch creation and is always allowed |
 | `push-gate.sh` | Bash | Push without passing tests |
 | `pii-guard.sh` | Edit, Write | PII patterns in file content |
 | `axiom-commit-scan.sh` | Bash | Commit messages violating axiom patterns |
