@@ -6,6 +6,8 @@ VS Code extension for the Hapax system. Replaces the archived `obsidian-hapax` p
 
 Part of the three-tier Hapax architecture. This is a Tier 1 interface (interactive). Architecture specs live in [hapax-constitution](https://github.com/ryanklee/hapax-constitution).
 
+> **Sister extension:** kept byte-near-identical with `hapax-officium/vscode/CLAUDE.md`. The only intentional difference is the logos API port (8051 here, 8050 there). Any other drift is a bug — edit both in sync.
+
 ## Build and Run
 
 ```bash
