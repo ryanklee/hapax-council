@@ -141,3 +141,94 @@ def test_resolve_fails_loudly_on_second_unknown_after_known() -> None:
     with pytest.raises(PresetLoadError) as excinfo:
         resolve_preset_inputs(graph, registry)
     assert "ghost" in str(excinfo.value)
+
+
+# ── Compositor preset-load path wiring ──────────────────────────────
+
+
+def test_try_graph_preset_rejects_preset_with_unknown_input_pad(tmp_path, caplog) -> None:
+    """Post-epic audit Phase 1 finding #2 regression pin.
+
+    ``resolve_preset_inputs`` existed in the compiler module after
+    Phase 7 of the completion epic but no caller invoked it from the
+    preset-load path. A preset that referenced an unknown source pad
+    was silently loaded into the graph runtime. This test pins that
+    ``try_graph_preset`` now (a) calls ``resolve_preset_inputs``,
+    (b) refuses to load on ``PresetLoadError``, and (c) logs the
+    rejection at ERROR so AC-7 ("fails loudly") is visible in ops
+    logs.
+    """
+    import logging
+
+    from agents.studio_compositor.effects import try_graph_preset
+    from agents.studio_compositor.source_registry import SourceRegistry
+
+    # Minimal preset JSON with an ``inputs`` entry pointing at an
+    # unknown source pad. ``nodes``/``edges`` are kept minimal — the
+    # test exercises the input-resolution gate, not the node graph.
+    bad_preset = {
+        "name": "bad-inputs-preset",
+        "nodes": {"n": {"type": "noise"}},
+        "edges": [],
+        "inputs": [{"pad": "does-not-exist", "as": "layer0"}],
+    }
+    preset_dir = tmp_path / "presets"
+    preset_dir.mkdir()
+    preset_path = preset_dir / "bad_inputs_preset.json"
+    preset_path.write_text(
+        __import__("json").dumps(bad_preset),
+    )
+
+    # Fake compositor with the minimum surface `try_graph_preset`
+    # inspects: a source_registry that knows *some* pad, a
+    # _graph_runtime with a load_graph spy, and a class that lets us
+    # monkey-patch the preset directory search via environment
+    # indirection (we override the Path.home() lookup by pointing the
+    # tmp_path-hosted preset into the second fallback directory).
+
+    class _FakeRuntime:
+        def __init__(self) -> None:
+            self.loaded = False
+
+        def load_graph(self, graph) -> None:  # noqa: ARG002
+            self.loaded = True
+
+    class _FakeCompositor:
+        def __init__(self, registry: SourceRegistry) -> None:
+            self.source_registry = registry
+            self._graph_runtime = _FakeRuntime()
+
+    registry = SourceRegistry()
+    registry.register("reverie", _StubBackend())
+    compositor = _FakeCompositor(registry)
+
+    # ``try_graph_preset`` walks two directories in order:
+    # ``~/.config/hapax/effect-presets`` and
+    # ``<repo>/presets``. Monkey-patch the former via HOME so the
+    # tmp preset wins the search without touching the real repo.
+    import os
+
+    monkey_home = tmp_path / "home"
+    (monkey_home / ".config" / "hapax" / "effect-presets").mkdir(parents=True)
+    for p in preset_dir.iterdir():
+        (monkey_home / ".config" / "hapax" / "effect-presets" / p.name).write_text(p.read_text())
+    old_home = os.environ.get("HOME")
+    os.environ["HOME"] = str(monkey_home)
+    caplog.set_level(logging.ERROR, logger="agents.studio_compositor.effects")
+    try:
+        result = try_graph_preset(compositor, "bad_inputs_preset")
+    finally:
+        if old_home is not None:
+            os.environ["HOME"] = old_home
+        else:
+            os.environ.pop("HOME", None)
+
+    assert result is False, "preset with unknown input pad must not load"
+    assert compositor._graph_runtime.loaded is False, (
+        "graph runtime must not receive a preset whose inputs failed to resolve"
+    )
+    # ERROR log mentions the rejected preset name.
+    assert any(
+        "bad_inputs_preset" in rec.message and rec.levelno >= logging.ERROR
+        for rec in caplog.records
+    ), "rejection must log at ERROR for AC-7 'fails loudly'"
