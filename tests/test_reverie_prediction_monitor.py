@@ -102,7 +102,88 @@ class TestP7UniformsFreshness:
         prediction_names = [p.name for p in result.predictions]
         assert "P7_uniforms_freshness" in prediction_names
         assert "P8_uniforms_coverage" in prediction_names
-        assert len(result.predictions) == 8
+        assert "P9_imagination_freshness" in prediction_names
+        assert len(result.predictions) == 9
+
+
+def _patch_imagination_current(path: Path):
+    """Context helper that points P9's current.json at tmp_path."""
+    return patch.object(monitor, "_P9_IMAGINATION_CURRENT_FILE", path)
+
+
+class TestP9ImaginationFreshness:
+    """P9 is structurally parallel to P7 but watches a different file and a
+    different service. P7 = reverie mixer frozen. P9 = imagination loop dead.
+
+    The looser 300/600 s thresholds are intentional: the imagination loop's
+    LLM tick has legitimate latency variance (TabbyAPI batching, reasoning
+    model warmup, retry backoff) that the 1 s reverie tick does not.
+    """
+
+    def test_fresh_file_reports_healthy(self, tmp_path: Path) -> None:
+        path = tmp_path / "current.json"
+        path.write_text("{}", encoding="utf-8")
+        with _patch_imagination_current(path):
+            result = monitor.p9_imagination_freshness()
+        assert result.name == "P9_imagination_freshness"
+        assert result.healthy is True
+        assert result.alert is None
+        assert result.actual < monitor._P9_WARN_AGE_S
+
+    def test_warning_window_is_healthy_but_not_alerting(self, tmp_path: Path) -> None:
+        path = tmp_path / "current.json"
+        path.write_text("{}", encoding="utf-8")
+        warn_mtime = time.time() - (monitor._P9_WARN_AGE_S + 5)
+        os.utime(path, (warn_mtime, warn_mtime))
+        with _patch_imagination_current(path):
+            result = monitor.p9_imagination_freshness()
+        assert result.healthy is True
+        assert result.alert is None
+        assert result.actual >= monitor._P9_WARN_AGE_S
+        assert result.actual < monitor._P9_CRIT_AGE_S
+
+    def test_critical_age_reports_unhealthy_with_alert(self, tmp_path: Path) -> None:
+        path = tmp_path / "current.json"
+        path.write_text("{}", encoding="utf-8")
+        crit_mtime = time.time() - (monitor._P9_CRIT_AGE_S + 60)
+        os.utime(path, (crit_mtime, crit_mtime))
+        with _patch_imagination_current(path):
+            result = monitor.p9_imagination_freshness()
+        assert result.healthy is False
+        assert result.alert is not None
+        assert "critical" in result.alert
+        assert "hapax-imagination-loop" in result.alert
+        assert result.actual >= monitor._P9_CRIT_AGE_S
+
+    def test_missing_file_is_unhealthy(self, tmp_path: Path) -> None:
+        path = tmp_path / "nonexistent.json"
+        with _patch_imagination_current(path):
+            result = monitor.p9_imagination_freshness()
+        assert result.healthy is False
+        assert result.alert is not None
+        assert "missing" in result.alert
+        assert result.actual == -1.0
+
+    def test_explicit_now_override_lets_us_compute_age_deterministically(
+        self, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "current.json"
+        path.write_text("{}", encoding="utf-8")
+        mtime = 2_000_000.0
+        os.utime(path, (mtime, mtime))
+        with _patch_imagination_current(path):
+            result = monitor.p9_imagination_freshness(now=2_000_000.0 + 120.0)
+        assert result.healthy is True
+        assert result.actual == 120.0
+
+    def test_thresholds_are_looser_than_p7(self) -> None:
+        """P9 must tolerate more latency than P7 because LLM ticks are burstier.
+
+        Pin the relationship so a future tightening of P9 doesn't silently
+        start alerting on normal imagination-loop variance.
+        """
+        assert monitor._P9_WARN_AGE_S > monitor._P7_WARN_AGE_S
+        assert monitor._P9_CRIT_AGE_S > monitor._P7_CRIT_AGE_S
 
 
 class TestP8UniformsCoverage:

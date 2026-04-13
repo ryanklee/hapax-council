@@ -506,6 +506,26 @@ def p7_uniforms_freshness(now: float | None = None) -> PredictionResult:
 # PR #696 would have triggered — and that delta PR-3 was queued for.
 _P8_ALLOWED_DEFICIT = 5
 
+# P9 imagination-loop freshness thresholds. ``current.json`` is the
+# imagination loop's fragment publisher (see ``agents/imagination.py::
+# publish_fragment``). Nominal cadence is the CadenceController's
+# ``base_s`` (12 s). Warn generous at 300 s (25× base — ample headroom
+# for TabbyAPI latency spikes and transient tick failures), critical at
+# 600 s (50× base — we're certain the loop has been dead long enough
+# for operator escalation). These are deliberately looser than P7
+# because the imagination loop has legitimately bursty LLM latency in
+# ways the 1 s reverie tick does not.
+#
+# This check is the P7-shaped watchdog for the OTHER half of the
+# bridge. P7 catches "reverie mixer frozen" (uniforms.json stale);
+# P9 catches "imagination loop dead" (current.json stale). Beta's
+# 2026-04-13 discovery sweep (BETA-FINDING-2026-04-13-A) found the
+# imagination loop had been logging ``Imagination tick failed`` for
+# 36 hours with zero alerts because no freshness gauge existed.
+_P9_IMAGINATION_CURRENT_FILE = Path("/dev/shm/hapax-imagination/current.json")
+_P9_WARN_AGE_S = 300.0
+_P9_CRIT_AGE_S = 600.0
+
 
 def p8_uniforms_coverage() -> PredictionResult:
     """P8: uniforms.json key count stays within ``ALLOWED_DEFICIT`` of plan defaults.
@@ -583,8 +603,99 @@ def p8_uniforms_coverage() -> PredictionResult:
     )
 
 
+def p9_imagination_freshness(now: float | None = None) -> PredictionResult:
+    """P9: current.json mtime is recent — hapax-imagination-loop liveness.
+
+    The imagination loop's terminal step is ``publish_fragment`` writing
+    a fresh ``ImaginationFragment`` to ``/dev/shm/hapax-imagination/
+    current.json``. If the loop is crashed, wedged, or — the pattern
+    beta's 2026-04-13 discovery sweep caught — silently catching every
+    tick exception in its try/except safety net, the file's mtime goes
+    stale while the systemd unit still reports ``active (running)``
+    and the reverie mixer continues ticking against the vocabulary
+    defaults. No Prometheus metric, no health monitor alert, no ntfy.
+
+    This watchdog is the P7-shaped twin for the OTHER half of the
+    bridge. P7 catches "reverie mixer frozen" (uniforms.json stale);
+    P9 catches "imagination loop dead" (current.json stale). Both must
+    fire for the bridge to surface a problem.
+
+    Thresholds:
+        < 300 s → healthy
+        300–600 s → warning window, healthy but no ntfy
+        ≥ 600 s → critical alert
+
+    300 s is 25× the CadenceController's ``base_s`` (12 s) — ample
+    headroom for TabbyAPI latency spikes and transient retry backoff.
+    600 s is 50× base — certain-dead by then. A missing file counts
+    as critical: no ``current.json`` at all means the loop has never
+    published since boot.
+
+    Reference: BETA-FINDING-2026-04-13-A (beta.yaml) — 36-hour silent
+    failure because no alert path existed.
+    """
+    now = now if now is not None else time.time()
+    path = _P9_IMAGINATION_CURRENT_FILE
+
+    if not path.exists():
+        return PredictionResult(
+            name="P9_imagination_freshness",
+            expected=f"< {_P9_WARN_AGE_S:.0f}s",
+            actual=-1.0,
+            healthy=False,
+            alert=(
+                f"current.json missing at {path} — hapax-imagination-loop "
+                "has never published a fragment this boot or shm tmpfs is "
+                "not mounted"
+            ),
+            detail=json.dumps({"path": str(path), "exists": False}),
+        )
+
+    try:
+        mtime = path.stat().st_mtime
+    except OSError as exc:
+        return PredictionResult(
+            name="P9_imagination_freshness",
+            expected=f"< {_P9_WARN_AGE_S:.0f}s",
+            actual=-1.0,
+            healthy=False,
+            alert=f"current.json stat failed: {exc}",
+            detail=json.dumps({"path": str(path), "error": str(exc)}),
+        )
+
+    age = max(0.0, now - mtime)
+
+    if age >= _P9_CRIT_AGE_S:
+        healthy = False
+        alert = (
+            f"current.json age {age:.0f}s ≥ {_P9_CRIT_AGE_S:.0f}s critical — "
+            "hapax-imagination-loop.service is almost certainly dead "
+            "(see journalctl --user -u hapax-imagination-loop.service "
+            "for tick-failure exception traces)"
+        )
+    else:
+        healthy = True
+        alert = None
+
+    return PredictionResult(
+        name="P9_imagination_freshness",
+        expected=f"< {_P9_WARN_AGE_S:.0f}s",
+        actual=round(age, 2),
+        healthy=healthy,
+        alert=alert,
+        detail=json.dumps(
+            {
+                "path": str(path),
+                "mtime": round(mtime, 2),
+                "warn_threshold_s": _P9_WARN_AGE_S,
+                "crit_threshold_s": _P9_CRIT_AGE_S,
+            }
+        ),
+    )
+
+
 def sample() -> MonitorSample:
-    """Take one complete sample of all 8 predictions."""
+    """Take one complete sample of all 9 predictions."""
     now = time.time()
     deploy_ts = _get_deploy_ts()
     hours = (now - deploy_ts) / 3600
@@ -603,6 +714,7 @@ def sample() -> MonitorSample:
         p6_presence_differentiation(perception),
         p7_uniforms_freshness(now),
         p8_uniforms_coverage(),
+        p9_imagination_freshness(now),
     ]
 
     result = MonitorSample(
