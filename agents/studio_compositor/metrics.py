@@ -18,12 +18,22 @@ level lock.
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
 import time
+from pathlib import Path
 from typing import Any
 
 log = logging.getLogger(__name__)
+
+# Delta retirement handoff item #3 / AC-13: the Rust
+# ``hapax-imagination`` ``headless::Renderer`` publishes its
+# ``DynamicPipeline::pool_metrics()`` to this path as a JSON document
+# at ~1 Hz (every 60 render frames). The poll loop below reads it and
+# mirrors the six fields onto the Prometheus gauges
+# ``reverie_pool_*`` registered below.
+_POOL_METRICS_SHM_PATH = Path("/dev/shm/hapax-imagination/pool_metrics.json")
 
 
 _PROMETHEUS_AVAILABLE = False
@@ -64,6 +74,12 @@ RTMP_CONNECTED: Any = None
 RTMP_ENCODER_ERRORS_TOTAL: Any = None
 RTMP_BIN_REBUILDS_TOTAL: Any = None
 RTMP_BITRATE_BPS: Any = None
+REVERIE_POOL_BUCKET_COUNT: Any = None
+REVERIE_POOL_TOTAL_TEXTURES: Any = None
+REVERIE_POOL_TOTAL_ACQUIRES: Any = None
+REVERIE_POOL_TOTAL_ALLOCATIONS: Any = None
+REVERIE_POOL_REUSE_RATIO: Any = None
+REVERIE_POOL_SLOT_COUNT: Any = None
 
 
 def _init_metrics() -> None:
@@ -89,6 +105,12 @@ def _init_metrics() -> None:
     global RTMP_ENCODER_ERRORS_TOTAL
     global RTMP_BIN_REBUILDS_TOTAL
     global RTMP_BITRATE_BPS
+    global REVERIE_POOL_BUCKET_COUNT
+    global REVERIE_POOL_TOTAL_TEXTURES
+    global REVERIE_POOL_TOTAL_ACQUIRES
+    global REVERIE_POOL_TOTAL_ALLOCATIONS
+    global REVERIE_POOL_REUSE_RATIO
+    global REVERIE_POOL_SLOT_COUNT
 
     if not _PROMETHEUS_AVAILABLE:
         return
@@ -213,6 +235,44 @@ def _init_metrics() -> None:
         "studio_rtmp_bitrate_bps",
         "Rolling 10-second average RTMP bitrate",
         ["endpoint"],
+        registry=REGISTRY,
+    )
+
+    # Delta retirement handoff item #3 / AC-13: surface
+    # ``DynamicPipeline::pool_metrics()`` from the Rust imagination
+    # binary over the shared-memory JSON bridge at
+    # ``/dev/shm/hapax-imagination/pool_metrics.json``. The Rust
+    # ``headless::Renderer::render_frame`` writes one tmp+rename
+    # atomic JSON document per 60 frames (~1 Hz). The poll loop below
+    # reads that file every second and mirrors it onto these gauges.
+    REVERIE_POOL_BUCKET_COUNT = Gauge(
+        "reverie_pool_bucket_count",
+        "Distinct (w, h, format) buckets currently allocated in DynamicPipeline",
+        registry=REGISTRY,
+    )
+    REVERIE_POOL_TOTAL_TEXTURES = Gauge(
+        "reverie_pool_total_textures",
+        "Total GPU textures the DynamicPipeline transient pool currently owns",
+        registry=REGISTRY,
+    )
+    REVERIE_POOL_TOTAL_ACQUIRES = Gauge(
+        "reverie_pool_total_acquires",
+        "Lifetime acquire_tracked calls on the transient texture pool",
+        registry=REGISTRY,
+    )
+    REVERIE_POOL_TOTAL_ALLOCATIONS = Gauge(
+        "reverie_pool_total_allocations",
+        "Lifetime fresh-allocation count on the transient texture pool",
+        registry=REGISTRY,
+    )
+    REVERIE_POOL_REUSE_RATIO = Gauge(
+        "reverie_pool_reuse_ratio",
+        "Fraction of pool acquires that reused a cached texture (1.0 = perfect)",
+        registry=REGISTRY,
+    )
+    REVERIE_POOL_SLOT_COUNT = Gauge(
+        "reverie_pool_slot_count",
+        "Distinct named slots currently mapped in intermediate_slots",
         registry=REGISTRY,
     )
 
@@ -420,7 +480,8 @@ def _refresh_counts() -> None:
 
 
 def _poll_loop() -> None:
-    """Background thread: update last-frame-age gauges and uptime."""
+    """Background thread: update last-frame-age gauges, uptime, and
+    mirror the reverie pool_metrics JSON from SHM onto gauges."""
     while True:
         time.sleep(1.0)
         now = time.monotonic()
@@ -447,3 +508,42 @@ def _poll_loop() -> None:
             COMP_UPTIME.set(now - boot)
         if COMP_WATCHDOG_LAST_FED is not None and wd_age >= 0:
             COMP_WATCHDOG_LAST_FED.set(wd_age)
+
+        _mirror_reverie_pool_metrics()
+
+
+def _mirror_reverie_pool_metrics() -> None:
+    """Read the latest pool_metrics.json published by the Rust
+    ``hapax-imagination`` binary and update the six ``reverie_pool_*``
+    gauges.
+
+    File absence is normal (the reverie daemon may not be running, or
+    may be on an older build without the publisher). Any parse or
+    read error is logged at debug level and silently skipped so the
+    camera-metric polling path stays unaffected.
+    """
+    if REVERIE_POOL_BUCKET_COUNT is None:
+        return
+    try:
+        raw = _POOL_METRICS_SHM_PATH.read_text()
+    except FileNotFoundError:
+        return
+    except OSError as exc:
+        log.debug("reverie pool_metrics read failed: %s", exc)
+        return
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        log.debug("reverie pool_metrics parse failed: %s", exc)
+        return
+    if not isinstance(data, dict):
+        return
+    try:
+        REVERIE_POOL_BUCKET_COUNT.set(float(data.get("bucket_count", 0)))
+        REVERIE_POOL_TOTAL_TEXTURES.set(float(data.get("total_textures", 0)))
+        REVERIE_POOL_TOTAL_ACQUIRES.set(float(data.get("total_acquires", 0)))
+        REVERIE_POOL_TOTAL_ALLOCATIONS.set(float(data.get("total_allocations", 0)))
+        REVERIE_POOL_REUSE_RATIO.set(float(data.get("reuse_ratio", 0.0)))
+        REVERIE_POOL_SLOT_COUNT.set(float(data.get("slot_count", 0)))
+    except (TypeError, ValueError) as exc:
+        log.debug("reverie pool_metrics coerce failed: %s", exc)
