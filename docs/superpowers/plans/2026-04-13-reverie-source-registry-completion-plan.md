@@ -648,14 +648,21 @@ Per-phase rollback: `git revert <merge SHA>`. Critical rollback notes:
 
 | Phase | PR # | Status | Merged SHA |
 |---|---|---|---|
-| 1 | 735 | — | — |
-| 2 | — | — | — |
-| 3 | — | — | — |
-| 4 | — | — | — |
-| 5 | — | — | — |
-| 6 | — | — | — |
-| 7 | — | — | — |
-| 8 | — | — | — |
-| 9 | — | — | — |
+| 1 | 735 | ✅ merged | `dc7e4559a` |
+| 2 | 738 | ✅ merged (C8–C11 cairo natural-size) | `d659daedb` |
+| 3 | 739 | ✅ merged (E15+E16 render-path flip) | `f7789f705` |
+| 4a | 742 | ✅ merged (F18 headless scaffold) | `d3e227aa2` |
+| 4b | — | ⚪ deferred — real offscreen render loop (see retirement handoff) | — |
+| 5 | 743 | ✅ merged (G20+G22; G21 → 5b) | `734d72f9e` |
+| 5b | — | ⚪ deferred — Tauri pass-through + TS registry + `StudioCompositor.start_layout_only` wiring | — |
+| 6 | 744 | ✅ merged (H23+H24; H25 → 6b) | `187446307` |
+| 6b | — | ⚪ deferred — main-layer railroad-tracks integration test | — |
+| 7 | 745 | ✅ merged (I26+I27 preset schema) | `ac6642cca` |
+| 8 | 746 | ✅ merged (8.1/8.5/8.6 freshness gauge + imagination + Amendment 4) | `96821a460` |
+| 8b | — | ⚪ deferred — FreshnessGauge generalization + pool metrics IPC + F7 annotation | — |
+| 9 | (this PR) | 🟡 acceptance sweep + retirement handoff (docs) | — |
+| 9b | — | ⚪ deferred — legacy facade removal (after 5b is observed clean) | — |
 
-**Update this table after each phase merges.**
+**Session sign-off.** Eight operational phase PRs shipped in a single autonomous alpha session on 2026-04-13. Every deferred follow-up (4b / 5b / 6b / 8b / 9b) has an explicit owner in the retirement handoff at `docs/superpowers/handoff/2026-04-13-alpha-reverie-source-registry-epic-retirement.md`. Full acceptance sweep at `docs/superpowers/audits/2026-04-13-reverie-source-registry-completion-sweep.md`.
+
+**Epic complete.**

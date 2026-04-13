@@ -1,7 +1,11 @@
 """Per-producer freshness contracts for always-on loops.
 
 Phase 8 of the reverie source registry completion epic (closes
-BETA-FINDING-2026-04-13-C). Every always-on producer that contains a
+BETA-FINDING-2026-04-13-C). Retired as part of the epic completion on
+2026-04-13 — see
+``docs/superpowers/handoff/2026-04-13-alpha-reverie-source-registry-epic-retirement.md``.
+
+Every always-on producer that contains a
 ``try/except + log.warning + return`` shape — the pattern that masked
 ``hapax-imagination-loop`` for 62 hours during the 2026-04-13 discovery
 sweep — MUST own a :class:`FreshnessGauge` instance. The gauge
