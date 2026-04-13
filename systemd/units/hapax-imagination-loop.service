@@ -2,7 +2,11 @@
 Description=Hapax Imagination Loop Daemon
 After=hapax-secrets.service hapax-dmn.service
 Wants=hapax-dmn.service
+Requires=hapax-dmn.service
 PartOf=hapax-visual-stack.target
+StartLimitBurst=5
+StartLimitIntervalSec=300
+OnFailure=notify-failure@%n.service
 
 [Service]
 Type=simple
@@ -14,9 +18,6 @@ WorkingDirectory=%h/projects/hapax-council
 MemoryMax=1G
 Restart=on-failure
 RestartSec=10
-StartLimitBurst=5
-StartLimitIntervalSec=300
-OnFailure=notify-failure@%n.service
 
 [Install]
 WantedBy=hapax-visual-stack.target
