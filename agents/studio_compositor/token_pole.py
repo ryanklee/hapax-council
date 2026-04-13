@@ -37,10 +37,13 @@ RENDER_FPS = 30
 LEDGER_FILE = Path("/dev/shm/hapax-compositor/token-ledger.json")
 VITRUVIAN_PATH = Path(__file__).parent.parent.parent / "assets" / "vitruvian_man_overlay.png"
 
-# Layout — upper left quadrant
-OVERLAY_X = 20
-OVERLAY_Y = 20
-OVERLAY_SIZE = 300  # display size of the vitruvian background
+# Natural size of the token-pole source — drawn at local origin (0, 0).
+# The compositor places this surface at its assigned SurfaceSchema.geometry
+# rather than hardcoding a canvas-relative position. The :class:`TokenPole`
+# facade blits the output at (20, 20) for the legacy ``fx_chain._pip_draw``
+# path until Phase 3 of the source-registry completion epic flips the
+# render loop to walk LayoutState.
+NATURAL_SIZE = 300
 
 # Spiral is centered on the figure's navel (golden ratio center of the human body)
 # Relative to the overlay image (0-1 normalized)
@@ -66,7 +69,6 @@ COLOR_GLYPH_OUTER = (1.0, 0.45, 0.7)
 COLOR_GLYPH = (1.0, 0.9, 0.4)
 COLOR_GLYPH_INNER = (1.0, 1.0, 0.85)
 COLOR_GLYPH_CHEEK = (1.0, 0.55, 0.55, 0.5)
-COLOR_TEXT = (0.95, 0.9, 0.95, 0.9)
 COLOR_EXPLOSION = [
     (1.0, 0.4, 0.6),
     (1.0, 0.9, 0.3),
@@ -144,10 +146,10 @@ class TokenPoleCairoSource(CairoSource):
         self._pulse: float = 0.0
         self._bg_surface: Any = None
         self._bg_loaded = False
-        # Build spiral in pixel coordinates
-        cx = OVERLAY_X + OVERLAY_SIZE * SPIRAL_CENTER_X
-        cy = OVERLAY_Y + OVERLAY_SIZE * SPIRAL_CENTER_Y
-        max_r = OVERLAY_SIZE * SPIRAL_MAX_R
+        # Build spiral in local natural-size coordinates (origin at 0, 0).
+        cx = NATURAL_SIZE * SPIRAL_CENTER_X
+        cy = NATURAL_SIZE * SPIRAL_CENTER_Y
+        max_r = NATURAL_SIZE * SPIRAL_MAX_R
         self._spiral = _build_spiral(cx, cy, max_r, NUM_POINTS)
 
     def render(
@@ -190,8 +192,8 @@ class TokenPoleCairoSource(CairoSource):
             pass
 
     def _spawn_explosion(self) -> None:
-        cx = OVERLAY_X + OVERLAY_SIZE * SPIRAL_CENTER_X
-        cy = OVERLAY_Y + OVERLAY_SIZE * SPIRAL_CENTER_Y
+        cx = NATURAL_SIZE * SPIRAL_CENTER_X
+        cy = NATURAL_SIZE * SPIRAL_CENTER_Y
         for _ in range(60):
             self._particles.append(Particle(cx, cy))
 
@@ -225,15 +227,15 @@ class TokenPoleCairoSource(CairoSource):
     def _draw_scene(self, cr: Any) -> None:
         self._load_bg(cr)
 
-        # --- Dark backing card ---
+        # --- Dark backing card (natural-size, origin at 0, 0) ---
         cr.set_source_rgba(0.05, 0.04, 0.08, 0.88)
         # Rounded rectangle
         _r = 12
         cr.new_sub_path()
-        cr.arc(OVERLAY_X + OVERLAY_SIZE - _r, OVERLAY_Y + _r, _r, -math.pi / 2, 0)
-        cr.arc(OVERLAY_X + OVERLAY_SIZE - _r, OVERLAY_Y + OVERLAY_SIZE - _r, _r, 0, math.pi / 2)
-        cr.arc(OVERLAY_X + _r, OVERLAY_Y + OVERLAY_SIZE - _r, _r, math.pi / 2, math.pi)
-        cr.arc(OVERLAY_X + _r, OVERLAY_Y + _r, _r, math.pi, 3 * math.pi / 2)
+        cr.arc(NATURAL_SIZE - _r, _r, _r, -math.pi / 2, 0)
+        cr.arc(NATURAL_SIZE - _r, NATURAL_SIZE - _r, _r, 0, math.pi / 2)
+        cr.arc(_r, NATURAL_SIZE - _r, _r, math.pi / 2, math.pi)
+        cr.arc(_r, _r, _r, math.pi, 3 * math.pi / 2)
         cr.close_path()
         cr.fill()
 
@@ -242,8 +244,7 @@ class TokenPoleCairoSource(CairoSource):
             cr.save()
             sw = self._bg_surface.get_width()
             sh = self._bg_surface.get_height()
-            scale = OVERLAY_SIZE / max(sw, sh) if max(sw, sh) > 0 else 1
-            cr.translate(OVERLAY_X, OVERLAY_Y)
+            scale = NATURAL_SIZE / max(sw, sh) if max(sw, sh) > 0 else 1
             cr.scale(scale, scale)
             cr.set_source_surface(self._bg_surface, 0, 0)
             cr.paint_with_alpha(1.0)
@@ -285,8 +286,8 @@ class TokenPoleCairoSource(CairoSource):
         if idx < len(self._spiral):
             gx, gy = self._spiral[idx]
         else:
-            gx = OVERLAY_X + OVERLAY_SIZE * SPIRAL_CENTER_X
-            gy = OVERLAY_Y + OVERLAY_SIZE * SPIRAL_CENTER_Y
+            gx = NATURAL_SIZE * SPIRAL_CENTER_X
+            gy = NATURAL_SIZE * SPIRAL_CENTER_Y
 
         pulse_r = math.sin(self._pulse) * 2
         bounce_y = math.sin(self._pulse * 1.7) * 1.5
@@ -342,42 +343,19 @@ class TokenPoleCairoSource(CairoSource):
         cr.arc(gx, gy + bounce_y + 1, 3.5, 0.2, math.pi - 0.2)
         cr.stroke()
 
-        # --- Labels ---
-        cr.set_source_rgba(*COLOR_TEXT)
-        cr.select_font_face("monospace", 0, 1)
-        cr.set_font_size(11)
-
-        # Goal at top-right of overlay
-        if self._threshold > 0:
-            cr.move_to(OVERLAY_X + OVERLAY_SIZE + 8, OVERLAY_Y + 15)
-            cr.show_text(self._format_tokens(self._threshold))
-
-        # Explosion count
-        if self._explosions > 0:
-            cr.set_font_size(10)
-            cr.move_to(OVERLAY_X + OVERLAY_SIZE + 8, OVERLAY_Y + 30)
-            cr.show_text(f"x{self._explosions}")
-
-        # Token count at bottom-left of overlay
-        cr.select_font_face("monospace", 0, 0)
-        cr.set_font_size(11)
-        if self._total_tokens > 0:
-            cr.move_to(OVERLAY_X, OVERLAY_Y + OVERLAY_SIZE + 18)
-            cr.show_text(self._format_tokens(self._total_tokens))
-
         # --- Particles ---
+        # Phase 2 of the source-registry completion epic dropped the old
+        # Goal / Explosion-count / Token-count labels because they used
+        # to live in the canvas margin just outside the overlay card,
+        # which no longer exists once the source renders into a
+        # self-contained 300×300 surface. The ledger state is still
+        # tracked in ``_threshold`` / ``_explosions`` / ``_total_tokens``
+        # so a future inside-the-card label layout can render them
+        # without re-plumbing state.
         for p in self._particles:
             cr.set_source_rgba(*p.color, p.alpha)
             cr.arc(p.x, p.y, p.size, 0, 2 * math.pi)
             cr.fill()
-
-    @staticmethod
-    def _format_tokens(n: int) -> str:
-        if n >= 1_000_000:
-            return f"{n / 1_000_000:.1f}M"
-        if n >= 1_000:
-            return f"{n / 1_000:.1f}K"
-        return str(n)
 
 
 class TokenPole:
@@ -389,17 +367,30 @@ class TokenPole:
     on a background thread at :data:`RENDER_FPS`.
     """
 
+    # Legacy visible position on the 1920x1080 compositor canvas. Phase 2
+    # kept this shim while the source refactored from canvas-absolute to
+    # natural-origin rendering — Phase 3's LayoutState-walking _pip_draw
+    # will walk ``SurfaceSchema.geometry`` instead and this constant will
+    # be deleted along with the facade.
+    _LEGACY_BLIT_X = 20
+    _LEGACY_BLIT_Y = 20
+
     def __init__(self) -> None:
         self._source = TokenPoleCairoSource()
         self._runner = CairoSourceRunner(
             source_id="token-pole",
             source=self._source,
-            canvas_w=1920,
-            canvas_h=1080,
+            canvas_w=NATURAL_SIZE,
+            canvas_h=NATURAL_SIZE,
             target_fps=RENDER_FPS,
         )
         self._runner.start()
-        log.info("TokenPole background thread started at %dfps", RENDER_FPS)
+        log.info(
+            "TokenPole background thread started at %dfps (natural %dx%d)",
+            RENDER_FPS,
+            NATURAL_SIZE,
+            NATURAL_SIZE,
+        )
 
     def tick(self) -> None:
         """No-op; the runner owns the tick cadence.
@@ -413,7 +404,13 @@ class TokenPole:
         self._runner.stop()
 
     def draw(self, cr: cairo.Context) -> None:
-        """Blit the pre-rendered output surface.
+        """Blit the pre-rendered natural-size surface at the legacy position.
+
+        Blit offset matches the pre-Phase-2 visible position so the
+        legacy :func:`fx_chain._pip_draw` callback keeps rendering the
+        vitruvian in the upper-left quadrant of the canvas until
+        Phase 3 flips the render loop to walk
+        :class:`~agents.studio_compositor.layout_state.LayoutState`.
 
         This method runs on the GStreamer streaming thread and must stay
         under ~2ms. All state updates, particle physics, and drawing
@@ -422,5 +419,5 @@ class TokenPole:
         surface = self._runner.get_output_surface()
         if surface is None:
             return
-        cr.set_source_surface(surface, 0, 0)
+        cr.set_source_surface(surface, self._LEGACY_BLIT_X, self._LEGACY_BLIT_Y)
         cr.paint()
