@@ -134,6 +134,31 @@ class CairoSourceRunner:
         # reused for every successful render-tick push. Stays None if
         # GStreamer isn't importable (unit tests without gi).
         self._gst_appsrc: Any = None
+        # Post-epic audit Phase 1 finding #3: Phase 8 wired
+        # FreshnessGauge into imagination_loop and ShmRgbaReader but
+        # not into CairoSourceRunner, leaving AC-10
+        # ("compositor_source_frame_age_seconds for every registered
+        # source") unsatisfied for cairo sources. The gauge is built
+        # eagerly so every runner (token_pole, album, stream_overlay,
+        # sierpinski) exposes a heartbeat metric named after its
+        # source id.
+        try:
+            from shared.freshness_gauge import FreshnessGauge
+
+            # Base name is ``compositor_source_frame_{id}`` — FreshnessGauge
+            # appends ``_published_total`` / ``_failed_total`` / ``_age_seconds``
+            # suffixes, yielding the three metrics the AC requires.
+            self._freshness_gauge = FreshnessGauge(
+                name=f"compositor_source_frame_{source_id}",
+                expected_cadence_s=self._period,
+            )
+        except Exception:
+            log.warning(
+                "FreshnessGauge unavailable for cairo source %s; continuing without metric",
+                source_id,
+                exc_info=True,
+            )
+            self._freshness_gauge = None
 
     @property
     def source_id(self) -> str:
@@ -337,6 +362,13 @@ class CairoSourceRunner:
                 self._budget_ms,
                 self._consecutive_skips,
             )
+            # Budget skips still represent a "no new frame was
+            # published this tick" event — mark the gauge failed so
+            # the age_seconds() series crosses its staleness tolerance
+            # during a sustained over-budget run, exactly matching the
+            # operator-visible degraded state.
+            if self._freshness_gauge is not None:
+                self._freshness_gauge.mark_failed()
             return
 
         t0 = time.monotonic()
@@ -356,12 +388,16 @@ class CairoSourceRunner:
             surface.flush()
         except Exception:
             log.exception("CairoSource %s render failed", self._source_id)
+            if self._freshness_gauge is not None:
+                self._freshness_gauge.mark_failed()
             return
 
         with self._output_lock:
             self._output_surface = surface
         self._frame_count += 1
         self._last_render_ms = (time.monotonic() - t0) * 1000.0
+        if self._freshness_gauge is not None:
+            self._freshness_gauge.mark_published()
         # Phase 6 H23: push the same rendered surface into the
         # main-layer appsrc if one has been built. No-op when
         # ``gst_appsrc()`` was never called.
