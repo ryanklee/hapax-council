@@ -4,6 +4,8 @@ Externalized executive function infrastructure. LLM agents handle cognitive work
 
 Shared conventions (uv, ruff, testing, git workflow, pydantic-ai) are in the workspace `CLAUDE.md` — this file covers council-specific details only.
 
+**Sister surfaces:** the [vscode extension](vscode/CLAUDE.md) is the operator's editor-side reading surface; [`hapax-mcp`](https://github.com/ryanklee/hapax-mcp) provides the same Logos API to Claude Code via MCP. **Spec dependency:** governance axioms come from [`hapax-constitution`](https://github.com/ryanklee/hapax-constitution) via the `hapax-sdlc` package; locally extended set in `axioms/registry.yaml`.
+
 CLAUDE.md rotation policy: `docs/superpowers/specs/2026-04-13-claude-md-excellence-design.md`. Bug-fix retrospectives, PR fingerprints, and incident narratives do not belong here.
 
 ## Architecture

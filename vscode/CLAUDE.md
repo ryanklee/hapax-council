@@ -6,7 +6,9 @@ VS Code extension for the Hapax system. Replaces the archived `obsidian-hapax` p
 
 Part of the three-tier Hapax architecture. This is a Tier 1 interface (interactive). Architecture specs live in [hapax-constitution](https://github.com/ryanklee/hapax-constitution).
 
-> **Sister extension:** kept byte-near-identical with `hapax-officium/vscode/CLAUDE.md`. The only intentional difference is the logos API port (8051 here, 8050 there). Any other drift is a bug — edit both in sync.
+> **Sister extension:** kept byte-near-identical with `hapax-officium/vscode/CLAUDE.md`. Intentional differences: this file targets the council Logos API (port 8051 vs officium's 8050). Any other drift is a bug — edit both in sync. The drift guard runs in `scripts/check-vscode-sister-extensions.sh`.
+
+> **Sister surface:** `hapax-mcp` exposes the same Logos API as MCP tools to Claude Code. The two surfaces are interchangeable from a data-access standpoint; choose by workflow.
 
 ## Build and Run
 
