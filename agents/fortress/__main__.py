@@ -43,6 +43,8 @@ GOVERNANCE_INTERVAL = 2.0  # seconds
 MAINTENANCE_INTERVAL = 30.0
 IDLE_POLL_INTERVAL = 5.0
 
+IMPINGEMENT_CURSOR_PATH = Path.home() / ".cache" / "hapax" / "impingement-cursor-fortress.txt"
+
 
 def _atomic_write(path: Path, data: dict[str, object]) -> None:
     """Write JSON atomically via tmp+rename."""
@@ -55,7 +57,11 @@ def _atomic_write(path: Path, data: dict[str, object]) -> None:
 class FortressDaemon:
     """Runtime orchestrator connecting bridge, governor, and lifecycle components."""
 
-    def __init__(self, config: FortressConfig | None = None) -> None:
+    def __init__(
+        self,
+        config: FortressConfig | None = None,
+        impingement_cursor_path: Path | None = None,
+    ) -> None:
         self._config = config or FortressConfig()
         self._bridge = DFHackBridge(config=self._config.bridge)
         self._governor = FortressGovernor(config=self._config)
@@ -83,7 +89,8 @@ class FortressDaemon:
         from agents._impingement_consumer import ImpingementConsumer
 
         self._impingement_consumer = ImpingementConsumer(
-            Path("/dev/shm/hapax-dmn/impingements.jsonl")
+            Path("/dev/shm/hapax-dmn/impingements.jsonl"),
+            cursor_path=impingement_cursor_path,
         )
 
         # Affordance pipeline: index fortress capability and register interrupt tokens
@@ -542,7 +549,7 @@ async def main() -> None:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    daemon = FortressDaemon()
+    daemon = FortressDaemon(impingement_cursor_path=IMPINGEMENT_CURSOR_PATH)
 
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):

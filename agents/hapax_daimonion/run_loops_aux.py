@@ -140,7 +140,13 @@ def _world_routing_enabled() -> bool:
 
 async def impingement_consumer_loop(daemon: VoiceDaemon) -> None:
     """Poll DMN impingements and route through affordance pipeline."""
-    consumer = ImpingementConsumer(Path("/dev/shm/hapax-dmn/impingements.jsonl"))
+    consumer = ImpingementConsumer(
+        Path("/dev/shm/hapax-dmn/impingements.jsonl"),
+        cursor_path=Path.home()
+        / ".cache"
+        / "hapax"
+        / "impingement-cursor-daimonion-affordance.txt",
+    )
 
     while daemon._running:
         try:

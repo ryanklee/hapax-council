@@ -147,7 +147,10 @@ async def run_inner(daemon: VoiceDaemon) -> None:
         """Poll impingements and route through CPAL control loop."""
         from agents._impingement_consumer import ImpingementConsumer
 
-        consumer = ImpingementConsumer(Path("/dev/shm/hapax-dmn/impingements.jsonl"))
+        consumer = ImpingementConsumer(
+            Path("/dev/shm/hapax-dmn/impingements.jsonl"),
+            cursor_path=Path.home() / ".cache" / "hapax" / "impingement-cursor-daimonion-cpal.txt",
+        )
         while daemon._running:
             try:
                 for imp in consumer.read_new():
