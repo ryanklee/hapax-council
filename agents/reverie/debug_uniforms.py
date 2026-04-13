@@ -32,6 +32,15 @@ from pathlib import Path
 
 from agents.reverie._uniforms import _iter_passes
 
+__all__ = [
+    "ALLOWED_DEFICIT",
+    "PLAN_FILE",
+    "UNIFORMS_FILE",
+    "UniformsSnapshot",
+    "main",
+    "snapshot",
+]
+
 UNIFORMS_FILE = Path("/dev/shm/hapax-imagination/uniforms.json")
 PLAN_FILE = Path("/dev/shm/hapax-imagination/pipeline/plan.json")
 
