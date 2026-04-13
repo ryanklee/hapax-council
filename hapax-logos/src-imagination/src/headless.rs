@@ -1,99 +1,186 @@
-//! Headless wgpu renderer scaffold — Phase 4a of the reverie source-registry
+//! Offscreen reverie render loop — Phase 4b of the reverie source-registry
 //! completion epic.
 //!
-//! Activated by `HAPAX_IMAGINATION_HEADLESS=1`. The **skeleton** constructor
-//! lands here so the env-var branch compiles and the marker unit test pins
-//! the module's public surface; the **real** offscreen render loop (owned
-//! wgpu texture → `DynamicPipeline::render` → staging copy-out → SHM write
-//! to `/dev/shm/hapax-sources/reverie.rgba`) lands in Phase 4b.
+//! Activated by `HAPAX_IMAGINATION_HEADLESS=1`. Owns a private
+//! `wgpu::Device`, `wgpu::Queue`, and an offscreen `Rgba8UnormSrgb`
+//! texture that stands in for the windowed path's surface view.
+//! `DynamicPipeline::render` blits into that offscreen texture exactly
+//! the way it would blit into a winit surface view, and its internal
+//! `ShmOutput` continues to publish `/dev/shm/hapax-visual/frame.jpg`
+//! (Tauri reads this) and `/dev/shm/hapax-sources/reverie.rgba`
+//! (compositor `ShmRgbaReader` reads this). No window is ever created.
 //!
-//! Parent plan: `docs/superpowers/plans/2026-04-12-compositor-source-registry-foundation-plan.md`
-//! Task 18. Deliberately deferred in PR #723 as "several hours of work I
-//! don't want to half-ship" — Phase 4a delivers the scaffold so Phase 4b
-//! can land the real loop behind an already-landed env var without another
-//! schema-level change.
-//!
-//! The Phase 4 systemd unit update (Task 19) is intentionally NOT shipped
-//! here: setting `HAPAX_IMAGINATION_HEADLESS=1` on the service unit while
-//! `run_forever` is a stub would take the reverie visual surface dark.
+//! The windowed path in `main.rs` is preserved for local-dev runs
+//! without the env var. The systemd unit flips the env var on so the
+//! production service no longer spawns a visible winit window.
 
 use std::convert::Infallible;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-/// Offscreen reverie render loop. Placeholder for Phase 4b.
+use hapax_visual::content_sources::ContentSourceManager;
+use hapax_visual::dynamic_pipeline::DynamicPipeline;
+use hapax_visual::state::StateReader;
+
+/// Offscreen texture format. Matches the sRGB format the winit path
+/// selects from `surface.get_capabilities` — the blit pipeline built
+/// inside `DynamicPipeline` expects this to match so the final blit
+/// target format agrees with its pipeline descriptor.
+const OFFSCREEN_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
+
 pub struct Renderer {
+    device: wgpu::Device,
+    queue: wgpu::Queue,
     width: u32,
     height: u32,
+    offscreen_view: wgpu::TextureView,
+    #[allow(dead_code)]
+    offscreen_texture: wgpu::Texture,
+    pipeline: DynamicPipeline,
+    content_source_mgr: ContentSourceManager,
+    state_reader: StateReader,
+    start_time: Instant,
+    last_frame: Instant,
+    frame_count: u64,
 }
 
 impl Renderer {
-    /// Test-only constructor — no GPU, no tokio runtime, just the dims.
-    ///
-    /// Used by the unit test at the bottom of this module and by any
-    /// future callers that need a compile-time marker that the headless
-    /// module is reachable from `main.rs`.
-    #[cfg(test)]
-    pub fn new_for_tests(width: u32, height: u32) -> Self {
-        Self { width, height }
-    }
-
-    /// Async constructor. In Phase 4a this is a compile-only stub that
-    /// records the requested dimensions; in Phase 4b it will build a
-    /// `GpuContext::new_headless`, allocate an owned wgpu texture +
-    /// staging buffer, and wire them to `DynamicPipeline::render`.
+    /// Build a real headless renderer. Creates a private wgpu device,
+    /// an offscreen target texture, and the same `DynamicPipeline` +
+    /// `ContentSourceManager` + `StateReader` triple the winit path
+    /// uses. `DynamicPipeline::new` internally constructs its own
+    /// `ShmOutput`, so frames begin landing in `/dev/shm` as soon as
+    /// `run_forever` starts ticking.
     pub async fn new(width: u32, height: u32) -> Self {
-        log::warn!(
-            "HAPAX_IMAGINATION_HEADLESS=1 is enabled but the Phase 4a \
-             skeleton `headless::Renderer::new` does not yet own a GPU \
-             context. The reverie surface is effectively paused in \
-             headless mode until Phase 4b ships. Unset the env var to \
-             return to the winit path."
+        let (device, queue) = create_headless_device().await;
+
+        let offscreen_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("hapax-imagination-headless-offscreen"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: OFFSCREEN_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        let offscreen_view =
+            offscreen_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        let pipeline = DynamicPipeline::new(&device, &queue, width, height, OFFSCREEN_FORMAT);
+        let content_source_mgr = ContentSourceManager::new(&device, &queue);
+        let state_reader = StateReader::new();
+
+        log::info!(
+            "headless::Renderer initialized {}x{} — DynamicPipeline + ShmOutput live, \
+             no winit window",
+            width,
+            height
         );
-        Self { width, height }
+
+        let now = Instant::now();
+        Self {
+            device,
+            queue,
+            width,
+            height,
+            offscreen_view,
+            offscreen_texture,
+            pipeline,
+            content_source_mgr,
+            state_reader,
+            start_time: now,
+            last_frame: now,
+            frame_count: 0,
+        }
     }
 
-    /// Drive the render loop forever. Phase 4a stub sleeps in a 60fps
-    /// tick so the binary does not busy-loop while the env var is set.
-    /// Phase 4b will replace the body with:
-    ///
-    /// 1. Reuse `StateReader::poll` from the windowed path.
-    /// 2. Call `DynamicPipeline::render` into a view of the owned
-    ///    offscreen texture.
-    /// 3. Encode a copy-to-buffer command submission and
-    ///    `device.poll(Wait)` for it.
-    /// 4. Map the staging buffer, read RGBA bytes, pass them to a
-    ///    shared writer that publishes to
-    ///    `/dev/shm/hapax-sources/reverie.rgba` + sidecar.
-    pub async fn run_forever(self) -> Infallible {
+    /// Drive the render loop forever. 60fps tokio interval. Each tick
+    /// polls state, ticks content sources, and calls
+    /// `DynamicPipeline::render` into the offscreen view. The pipeline
+    /// writes `frame.jpg` + `reverie.rgba` every other frame internally.
+    pub async fn run_forever(mut self) -> Infallible {
         let mut interval = tokio::time::interval(Duration::from_millis(16));
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         log::info!(
-            "headless::Renderer::run_forever stub started at {}x{} — \
-             no frames will be rendered until Phase 4b",
+            "headless::Renderer::run_forever started at {}x{}",
             self.width,
-            self.height,
+            self.height
         );
         loop {
             interval.tick().await;
+            self.render_frame();
+        }
+    }
+
+    fn render_frame(&mut self) {
+        let now = Instant::now();
+        let dt = now.duration_since(self.last_frame).as_secs_f32();
+        self.last_frame = now;
+        let time = now.duration_since(self.start_time).as_secs_f32();
+
+        self.state_reader.poll(dt);
+        self.content_source_mgr.scan(&self.device, &self.queue);
+        self.content_source_mgr.tick_fades(dt);
+
+        let opacities = self.content_source_mgr.slot_opacities();
+        self.pipeline.render(
+            &self.device,
+            &self.queue,
+            &self.offscreen_view,
+            OFFSCREEN_FORMAT,
+            &self.state_reader,
+            dt,
+            time,
+            opacities,
+            Some(&self.content_source_mgr),
+        );
+
+        self.frame_count = self.frame_count.wrapping_add(1);
+        if self.frame_count % 600 == 0 {
+            log::info!(
+                "headless frame_count={} ({:.1}s elapsed)",
+                self.frame_count,
+                now.duration_since(self.start_time).as_secs_f32()
+            );
         }
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+/// Build a wgpu device+queue with no surface attached. Mirrors the
+/// windowed `GpuContext::new` adapter/device settings so the pipeline
+/// build path behaves the same as the winit path — same required
+/// features, same limits, same backend.
+async fn create_headless_device() -> (wgpu::Device, wgpu::Queue) {
+    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        backends: wgpu::Backends::VULKAN,
+        ..Default::default()
+    });
 
-    #[test]
-    fn new_for_tests_records_dimensions() {
-        let r = Renderer::new_for_tests(1920, 1080);
-        assert_eq!(r.width, 1920);
-        assert_eq!(r.height, 1080);
-    }
+    let adapter = instance
+        .request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::HighPerformance,
+            compatible_surface: None,
+            force_fallback_adapter: false,
+        })
+        .await
+        .expect("headless: no suitable GPU adapter found");
 
-    #[test]
-    fn new_for_tests_accepts_arbitrary_dims() {
-        let r = Renderer::new_for_tests(640, 360);
-        assert_eq!(r.width, 640);
-        assert_eq!(r.height, 360);
-    }
+    log::info!("headless: using adapter {:?}", adapter.get_info().name);
+
+    adapter
+        .request_device(
+            &wgpu::DeviceDescriptor {
+                label: Some("hapax-visual-headless"),
+                required_features: wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES,
+                required_limits: wgpu::Limits::default(),
+                ..Default::default()
+            },
+            None,
+        )
+        .await
+        .expect("headless: failed to create device")
 }

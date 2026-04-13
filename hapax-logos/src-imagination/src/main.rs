@@ -481,14 +481,12 @@ fn main() {
 
     log::info!("hapax-imagination {} (built {})", GIT_SHA, BUILD_TS);
 
-    // Phase 4a scaffold: HAPAX_IMAGINATION_HEADLESS=1 routes to the
-    // headless::Renderer stub instead of creating a winit Window. The
-    // stub is a 60fps tick loop that does not yet own a GPU context —
-    // Phase 4b wires the real offscreen render pipeline. See
-    // `src/headless.rs` for the Phase 4a scope and the Phase 4b to-do.
-    // The systemd unit update that sets this env var by default is
-    // also deliberately held until Phase 4b so production service does
-    // not go dark.
+    // Phase 4b: HAPAX_IMAGINATION_HEADLESS=1 routes to the real
+    // headless::Renderer — private wgpu device, offscreen target
+    // texture, same DynamicPipeline + ShmOutput chain the winit path
+    // uses. No window is ever created. The systemd unit flips this
+    // env var on so `hapax-imagination.service` no longer spawns a
+    // visible surface outside Logos.
     if std::env::var("HAPAX_IMAGINATION_HEADLESS")
         .map(|v| v == "1")
         .unwrap_or(false)
@@ -498,8 +496,7 @@ fn main() {
             let renderer = headless::Renderer::new(1920, 1080).await;
             // run_forever returns Infallible — it never completes. Match
             // on the divergent type so the compiler knows we never fall
-            // through. If Phase 4b replaces run_forever with a fallible
-            // loop, swap this for an explicit error log + exit.
+            // through.
             match renderer.run_forever().await {}
         });
     }

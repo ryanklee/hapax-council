@@ -13,6 +13,13 @@ MemoryMax=4G
 Environment=XDG_RUNTIME_DIR=%t
 Environment=__NV_DISABLE_EXPLICIT_SYNC=1
 Environment=RUST_LOG=info
+# Phase 4b: run the reverie visual surface fully headless. Frames
+# still flow to /dev/shm/hapax-visual/frame.jpg (Tauri VisualSurface
+# reads this via the HTTP frame server on :8053) and to
+# /dev/shm/hapax-sources/reverie.rgba (studio compositor
+# ShmRgbaReader reads this). No winit window is created — reverie
+# no longer spawns as a standalone surface outside Logos.
+Environment=HAPAX_IMAGINATION_HEADLESS=1
 
 [Install]
 WantedBy=default.target

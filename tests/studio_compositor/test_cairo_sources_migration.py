@@ -77,6 +77,48 @@ def test_sierpinski_renders_at_natural_640x640() -> None:
     assert _any_nonzero_pixels(surf)
 
 
+def test_cairo_source_runner_has_per_source_freshness_gauge() -> None:
+    """Post-epic audit Phase 1 finding #3 regression pin.
+
+    AC-10 ("compositor_source_frame_age_seconds populates for every
+    registered source") required a heartbeat gauge on each cairo
+    runner. Phase 8 wired one into imagination_loop and ShmRgbaReader
+    but skipped cairo sources, leaving the four core cairo runners
+    (token_pole, album, stream_overlay, sierpinski) ungauged. Post-
+    epic audit wires a gauge per runner — this test pins that
+    ``CairoSourceRunner.__init__`` builds the gauge and that a
+    successful render advances ``mark_published``.
+    """
+    from agents.studio_compositor.cairo_source import CairoSourceRunner
+    from agents.studio_compositor.token_pole import TokenPoleCairoSource
+
+    runner = CairoSourceRunner(
+        source_id="token_pole_test",
+        source=TokenPoleCairoSource(),
+        canvas_w=300,
+        canvas_h=300,
+        natural_w=300,
+        natural_h=300,
+        target_fps=5.0,
+    )
+    # Gauge exists as an attribute — the constructor should not have
+    # silently skipped it. ``None`` is only acceptable if
+    # ``prometheus_client`` is wholly absent AND ``FreshnessGauge``
+    # itself raises on import, which it does not.
+    assert hasattr(runner, "_freshness_gauge")
+    assert runner._freshness_gauge is not None
+
+    # A fresh runner has no published frames, so ``age_seconds``
+    # returns ``+inf`` (never-marked sentinel). After a single tick
+    # the gauge flips to a finite value.
+    import math
+
+    assert math.isinf(runner._freshness_gauge.age_seconds())
+    runner.tick_once()
+    age = runner._freshness_gauge.age_seconds()
+    assert math.isfinite(age) and age >= 0.0
+
+
 @pytest.mark.parametrize(
     ("module_path", "pattern_name"),
     [

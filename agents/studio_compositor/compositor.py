@@ -76,6 +76,16 @@ _FALLBACK_LAYOUT = Layout(
             },
         ),
         SourceSchema(
+            id="stream_overlay",
+            kind="cairo",
+            backend="cairo",
+            params={
+                "class_name": "StreamOverlayCairoSource",
+                "natural_w": 400,
+                "natural_h": 200,
+            },
+        ),
+        SourceSchema(
             id="sierpinski",
             kind="cairo",
             backend="cairo",
@@ -114,7 +124,7 @@ _FALLBACK_LAYOUT = Layout(
         ),
         SurfaceSchema(
             id="pip-lr",
-            geometry=SurfaceGeometry(kind="rect", x=1260, y=420, w=640, h=640),
+            geometry=SurfaceGeometry(kind="rect", x=1500, y=860, w=400, h=200),
             z_order=10,
         ),
     ],
@@ -122,23 +132,52 @@ _FALLBACK_LAYOUT = Layout(
         Assignment(source="token_pole", surface="pip-ul"),
         Assignment(source="reverie", surface="pip-ur"),
         Assignment(source="album", surface="pip-ll"),
+        Assignment(source="stream_overlay", surface="pip-lr"),
     ],
 )
+
+
+def _notify_fallback(target: Path, reason: str) -> None:
+    """Send a throttled ntfy when the compositor falls back to _FALLBACK_LAYOUT.
+
+    Post-epic audit Phase 1 finding #6: AC-8 ("deleting default.json →
+    fallback layout + ntfy") only had the fallback half wired.
+    Non-fatal — notification failures must never mask the fallback
+    itself. The notification path mirrors the camera-transition
+    pattern in ``_notify_camera_transition`` but without the
+    per-role throttle (layout fallback is rare enough that one
+    notification per event is the right cadence).
+    """
+    try:
+        from shared.notify import send_notification
+
+        send_notification(
+            title="Compositor layout fallback",
+            body=(
+                f"{target}: {reason}. Booting with hardcoded _FALLBACK_LAYOUT. "
+                "Check the file or restore from git."
+            ),
+            tag="compositor-layout-fallback",
+            priority="default",
+        )
+    except Exception:
+        log.debug("fallback layout ntfy failed", exc_info=True)
 
 
 def load_layout_or_fallback(path: Path) -> Layout:
     """Load a compositor Layout from JSON, falling back to the hardcoded rescue.
 
     Any failure mode — file missing, malformed JSON, pydantic validation
-    error — logs a WARNING with the offending path and returns
-    ``_FALLBACK_LAYOUT``. The compositor boots with a working source
-    registry unconditionally.
+    error — logs a WARNING with the offending path, fires a one-shot
+    ntfy via :func:`_notify_fallback`, and returns ``_FALLBACK_LAYOUT``.
+    The compositor boots with a working source registry unconditionally.
     """
     target = Path(path)
     try:
         raw = json.loads(target.read_text())
     except FileNotFoundError:
         log.warning("compositor layout %s missing — using fallback", target)
+        _notify_fallback(target, "file missing")
         return _FALLBACK_LAYOUT
     except (OSError, json.JSONDecodeError) as exc:
         log.warning(
@@ -146,6 +185,7 @@ def load_layout_or_fallback(path: Path) -> Layout:
             target,
             exc,
         )
+        _notify_fallback(target, f"read error: {exc}")
         return _FALLBACK_LAYOUT
 
     try:
@@ -156,6 +196,7 @@ def load_layout_or_fallback(path: Path) -> Layout:
             target,
             exc,
         )
+        _notify_fallback(target, f"schema validation failed: {exc}")
         return _FALLBACK_LAYOUT
 
 
@@ -190,6 +231,8 @@ class StudioCompositor:
         )
         self.layout_state: LayoutState | None = None
         self.source_registry: SourceRegistry | None = None
+        self._layout_autosaver: Any = None
+        self._layout_file_watcher: Any = None
         self.pipeline: Any = None
         self.loop: Any = None
         self._running = False
@@ -458,6 +501,31 @@ class StudioCompositor:
             len(registry.ids()),
         )
 
+        # Post-epic audit finding #1: LayoutAutoSaver + LayoutFileWatcher
+        # exist in layout_persistence.py but were never instantiated by
+        # StudioCompositor, leaving AC-5 ("file-watch reload within ≤2s")
+        # unwired. Start both here so runtime layout edits round-trip
+        # through the in-memory state.
+        try:
+            from agents.studio_compositor.layout_persistence import (
+                LayoutAutoSaver,
+                LayoutFileWatcher,
+            )
+
+            self._layout_autosaver = LayoutAutoSaver(state, self._layout_path)
+            self._layout_autosaver.start()
+            self._layout_file_watcher = LayoutFileWatcher(state, self._layout_path)
+            self._layout_file_watcher.start()
+            log.info(
+                "layout persistence threads started: autosave + file-watch on %s",
+                self._layout_path,
+            )
+        except Exception:
+            log.exception(
+                "failed to start layout persistence threads — "
+                "compositor continues without auto-save or hot-reload"
+            )
+
     def start(self) -> None:
         """Build and start the pipeline."""
         self.start_layout_only()
@@ -468,6 +536,19 @@ class StudioCompositor:
 
     def stop(self) -> None:
         """Stop the pipeline cleanly."""
+        if self._layout_file_watcher is not None:
+            try:
+                self._layout_file_watcher.stop()
+            except Exception:
+                log.exception("LayoutFileWatcher.stop failed")
+            self._layout_file_watcher = None
+        if self._layout_autosaver is not None:
+            try:
+                self._layout_autosaver.stop()
+            except Exception:
+                log.exception("LayoutAutoSaver.stop failed")
+            self._layout_autosaver = None
+
         from .lifecycle import stop_compositor
 
         stop_compositor(self)
