@@ -93,6 +93,8 @@ class CairoSourceRunner:
         publish_to_source_protocol: bool = False,
         budget_tracker: BudgetTracker | None = None,
         budget_ms: float | None = None,
+        natural_w: int | None = None,
+        natural_h: int | None = None,
     ) -> None:
         if target_fps <= 0:
             raise ValueError(f"target_fps must be > 0, got {target_fps}")
@@ -102,6 +104,18 @@ class CairoSourceRunner:
         self._source = source
         self._canvas_w = canvas_w
         self._canvas_h = canvas_h
+        # Source-registry epic PR 1: natural_w/natural_h decouple render
+        # resolution from canvas dimensions. A source declares its natural
+        # content size (e.g. 300×300 for TokenPole, 640×360 for reverie),
+        # the runner allocates the render surface at that size, and the
+        # compositor places it at the assigned SurfaceSchema.geometry via
+        # scale-on-blit. Defaults to canvas dims for backward compat so
+        # existing callers (including set_canvas_size users) keep working
+        # unchanged — we track whether natural was explicitly set so that
+        # set_canvas_size() can update natural dims only for implicit cases.
+        self._natural_explicit = natural_w is not None or natural_h is not None
+        self._natural_w = natural_w if natural_w is not None else canvas_w
+        self._natural_h = natural_h if natural_h is not None else canvas_h
         self._period = 1.0 / target_fps
         self._publish = publish_to_source_protocol
         self._stop = threading.Event()
@@ -149,9 +163,19 @@ class CairoSourceRunner:
         return self._consecutive_skips > 0
 
     def set_canvas_size(self, w: int, h: int) -> None:
-        """Update the canvas size. Picked up on the next tick."""
+        """Update the canvas size. Picked up on the next tick.
+
+        If the runner was constructed without explicit ``natural_w``/``natural_h``,
+        the natural dims were auto-derived from canvas and are updated too so
+        legacy callers that use ``set_canvas_size`` to resize the output continue
+        to work. If natural dims were set explicitly at construction, they are
+        left alone (the source declares its own content resolution).
+        """
         self._canvas_w = w
         self._canvas_h = h
+        if not self._natural_explicit:
+            self._natural_w = w
+            self._natural_h = h
 
     def get_output_surface(self) -> cairo.ImageSurface | None:
         """Return the most recent rendered surface, or None.
@@ -234,12 +258,15 @@ class CairoSourceRunner:
 
         t0 = time.monotonic()
         try:
-            surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, self._canvas_w, self._canvas_h)
+            # Allocate at natural size (not canvas size) so sources render
+            # at their content resolution and the compositor scales to the
+            # assigned SurfaceSchema.geometry during blit.
+            surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, self._natural_w, self._natural_h)
             cr = cairo.Context(surface)
             self._source.render(
                 cr,
-                self._canvas_w,
-                self._canvas_h,
+                self._natural_w,
+                self._natural_h,
                 t0,
                 self._source.state(),
             )
