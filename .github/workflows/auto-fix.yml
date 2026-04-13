@@ -161,7 +161,7 @@ jobs:
       # The actual fix — Claude reads the log file and the codebase
       - name: Run Claude Code
         if: steps.pr.outputs.skip != 'true' && steps.guard.outputs.tripped != 'true'
-        uses: anthropics/claude-code-action@88c168b39e7e64da0286d812b6e9fbebb6708185
+        uses: anthropics/claude-code-action@657fb7c9c986158a19624b357bcbc8c6deb83598
         with:
           model: claude-sonnet-4-6
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
