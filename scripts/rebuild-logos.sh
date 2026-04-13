@@ -10,7 +10,10 @@
 #
 # History: see FU-6 (PR #703) for the scratch-worktree rewrite and the
 # retirement handoff at docs/superpowers/handoff/2026-04-12-alpha-fu6-handoff.md
-# for the scope split and architectural follow-up.
+# for the scope split and architectural follow-up. The 2026-04-13 OOM cascade
+# (handoff: docs/superpowers/handoff/2026-04-13-alpha-oom-cascade-handoff.md)
+# re-surfaced the alpha-as-deploy-target tension when a primary-worktree
+# `git restore` silently reverted a symlinked systemd unit file mid-session.
 set -euo pipefail
 
 REPO="$HOME/projects/hapax-council"
