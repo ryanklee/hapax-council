@@ -143,6 +143,8 @@ GStreamer-based livestream pipeline. Distinct from Reverie (the wgpu visual surf
 **Specs and handoffs:**
 - `docs/superpowers/plans/2026-04-12-compositor-unification-epic.md` — the unification epic
 - `docs/superpowers/specs/2026-04-12-compositor-source-registry-foundation-design.md` — source-registry epic (register reverie as `external_rgba`, migrate cairo overlays to natural-size + layout-driven placement)
+- `docs/superpowers/specs/2026-04-13-reverie-source-registry-completion-design.md` — umbrella epic that finishes the above plan + adjacent observability work (freshness gauges, pool metrics IPC, F7/F10 decisions, Amendment 4 verification)
+- `docs/superpowers/plans/2026-04-13-reverie-source-registry-completion-plan.md` — master plan for the completion epic (9 phases, serial execution)
 - `docs/superpowers/handoff/2026-04-12-delta-source-registry-handoff.md` — delta session pickup
 
 **Camera 24/7 resilience epic (shipped):** software-layer containment of Logitech BRIO USB bus-kick (kernel `device descriptor read/64, error -71`, hardware-level). Per-camera sub-pipelines with paired fallback producers, hot-swap via `interpipesrc.listen-to`, 5-state recovery FSM with exponential backoff, pyudev monitoring, Prometheus metrics on `127.0.0.1:9482`, `Type=notify` + `WatchdogSec=60s`, native GStreamer RTMP output via `rtmp_output.py` (NVENC p4 low-latency, MediaMTX relay on `127.0.0.1:1935`). Retirement handoff: `docs/superpowers/handoff/2026-04-13-alpha-camera-247-epic-handoff.md`. Dependencies: `gst-plugin-interpipe`, `mediamtx-bin`, `python-prometheus_client`, `sdnotify`.
