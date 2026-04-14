@@ -117,6 +117,45 @@ elif [ "${#new_timers[@]}" -gt 0 ]; then
     echo "skipped enabling ${#new_timers[@]} new timer(s) (SKIP_TIMER_ENABLE=1)"
 fi
 
-if [ "$changed" -eq 0 ] && [ "${enabled_in_sweep:-0}" -eq 0 ]; then
+# LRR Phase 3 item 1: walk ``systemd/units/*.service.d/`` directories
+# and install each drop-in as a real symlink under
+# ``~/.config/systemd/user/<service>.service.d/<name>.conf``. Previously
+# the script only handled top-level unit files, so drop-ins shipped in
+# the repo (audio-recorder.service.d/, contact-mic-recorder.service.d/)
+# were silently not installed. Phase 3 adds tabbyapi.service.d/ and
+# hapax-dmn.service.d/ — both MUST be active for the Option α → γ
+# partition reconciliation to take effect. Handling this class of
+# file now fixes both the new drop-ins and the latent existing ones.
+#
+# Destination layout: ``~/.config/systemd/user/<service>.service.d/``
+# is a REAL directory (not a symlink). Individual ``.conf`` files
+# inside it are symlinks back to the repo. This matches the existing
+# manually-placed ``tabbyapi.service.d/gpu-pin.conf`` file that has
+# been on disk since Sprint 5b Phase 2a.
+dropin_changed=0
+for dropin_dir in "$REPO_DIR"/*.service.d; do
+    [ -d "$dropin_dir" ] || continue
+    svc_name="$(basename "$dropin_dir")"
+    dest_dropin_dir="$DEST_DIR/$svc_name"
+    mkdir -p "$dest_dropin_dir"
+    for conf in "$dropin_dir"/*.conf; do
+        [ -f "$conf" ] || continue
+        conf_name="$(basename "$conf")"
+        dest_conf="$dest_dropin_dir/$conf_name"
+        if [ -L "$dest_conf" ] && [ "$(readlink "$dest_conf")" = "$conf" ]; then
+            continue
+        fi
+        ln -sf "$conf" "$dest_conf"
+        echo "dropin-linked: $svc_name/$conf_name"
+        dropin_changed=$((dropin_changed + 1))
+    done
+done
+
+if [ "$dropin_changed" -gt 0 ]; then
+    systemctl --user daemon-reload
+    echo "daemon-reload done ($dropin_changed drop-in conf(s) linked)"
+fi
+
+if [ "$changed" -eq 0 ] && [ "${enabled_in_sweep:-0}" -eq 0 ] && [ "$dropin_changed" -eq 0 ]; then
     echo "all units up to date"
 fi

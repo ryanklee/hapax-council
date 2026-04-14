@@ -120,3 +120,103 @@ class TestTimerEnablementSweep:
         assert "enable --now" in body, (
             "first-install path still needs enable --now so freshly linked timers start immediately"
         )
+
+
+class TestServiceDropInInstall:
+    """LRR Phase 3 regression pins for the ``*.service.d/`` drop-in
+    handling added to install-units.sh.
+
+    Before Phase 3, the script only walked top-level ``*.service``,
+    ``*.timer``, ``*.target``, ``*.path`` files under ``systemd/units/``.
+    Drop-in directories (``systemd/units/*.service.d/``) were silently
+    ignored, so the existing ``audio-recorder.service.d/archive-path.conf``
+    and ``contact-mic-recorder.service.d/archive-path.conf`` entries
+    were never installed. Phase 3 adds ``tabbyapi.service.d/gpu-pin.conf``
+    and ``hapax-dmn.service.d/gpu-pin.conf`` and MUST install them for
+    the Option α → γ partition reconciliation to take effect.
+
+    These pins lock the drop-in walk in so any future refactor that
+    drops it is caught in CI.
+    """
+
+    def test_script_walks_service_d_directories(self) -> None:
+        body = INSTALL_SCRIPT.read_text(encoding="utf-8")
+        assert "*.service.d" in body, (
+            "install-units.sh must iterate *.service.d drop-in directories"
+        )
+
+    def test_script_creates_destination_service_d_dir(self) -> None:
+        body = INSTALL_SCRIPT.read_text(encoding="utf-8")
+        assert "mkdir -p " in body
+        assert "dest_dropin_dir" in body, (
+            "drop-in install must ensure the destination .d directory exists"
+        )
+
+    def test_script_symlinks_individual_conf_files(self) -> None:
+        body = INSTALL_SCRIPT.read_text(encoding="utf-8")
+        assert "ln -sf" in body
+        # Look for the specific drop-in loop
+        assert '"$conf" "$dest_conf"' in body, (
+            "drop-in loop must link each .conf individually, not the parent dir"
+        )
+
+    def test_script_reloads_daemon_when_dropins_change(self) -> None:
+        body = INSTALL_SCRIPT.read_text(encoding="utf-8")
+        assert "dropin_changed" in body
+        assert '"$dropin_changed" -gt 0' in body, (
+            "daemon-reload must be gated on dropin_changed so idempotent re-runs don't spam reloads"
+        )
+
+
+class TestPhase3DropInsPresent:
+    """LRR Phase 3 item 1 regression pins: the two new drop-ins shipped
+    in this PR for partition reconciliation α → γ must exist in the
+    repo and contain the expected environment variables.
+    """
+
+    TABBYAPI_DROPIN = REPO_ROOT / "systemd" / "units" / "tabbyapi.service.d" / "gpu-pin.conf"
+    HAPAX_DMN_DROPIN = REPO_ROOT / "systemd" / "units" / "hapax-dmn.service.d" / "gpu-pin.conf"
+
+    def test_tabbyapi_dropin_exists(self) -> None:
+        assert self.TABBYAPI_DROPIN.is_file(), (
+            f"tabbyapi gpu-pin drop-in missing at {self.TABBYAPI_DROPIN} — "
+            "Phase 3 partition reconciliation requires it"
+        )
+
+    def test_hapax_dmn_dropin_exists(self) -> None:
+        assert self.HAPAX_DMN_DROPIN.is_file(), (
+            f"hapax-dmn gpu-pin drop-in missing at {self.HAPAX_DMN_DROPIN} — "
+            "Phase 3 partition reconciliation requires it"
+        )
+
+    def test_tabbyapi_dropin_declares_option_gamma(self) -> None:
+        body = self.TABBYAPI_DROPIN.read_text(encoding="utf-8")
+        assert "[Service]" in body
+        assert "CUDA_DEVICE_ORDER=PCI_BUS_ID" in body, (
+            "tabbyapi drop-in must pin CUDA_DEVICE_ORDER=PCI_BUS_ID before any "
+            "CUDA_VISIBLE_DEVICES line, or the device-index-to-card mapping "
+            "inverts (see Phase 3 spec §1.1)"
+        )
+        assert "CUDA_VISIBLE_DEVICES=0,1" in body, (
+            "tabbyapi drop-in must expose both GPUs under Option γ"
+        )
+
+    def test_hapax_dmn_dropin_pinned_to_gpu_0(self) -> None:
+        body = self.HAPAX_DMN_DROPIN.read_text(encoding="utf-8")
+        assert "[Service]" in body
+        assert "CUDA_DEVICE_ORDER=PCI_BUS_ID" in body, (
+            "hapax-dmn drop-in must pin CUDA_DEVICE_ORDER=PCI_BUS_ID for the "
+            "same reason as tabbyapi (see Phase 3 spec §1.1)"
+        )
+        assert "CUDA_VISIBLE_DEVICES=0" in body, (
+            "hapax-dmn drop-in must pin to GPU 0 (5060 Ti) under Option γ"
+        )
+
+    def test_tabbyapi_service_timeout_180(self) -> None:
+        """Phase 3 item 8: TimeoutStartSec raised to 180 for Hermes 3 load."""
+        svc = REPO_ROOT / "systemd" / "units" / "tabbyapi.service"
+        body = svc.read_text(encoding="utf-8")
+        assert "TimeoutStartSec=180" in body, (
+            "tabbyapi.service TimeoutStartSec must be 180 for Hermes 3 70B "
+            "load headroom; Qwen loads fine under this too"
+        )
