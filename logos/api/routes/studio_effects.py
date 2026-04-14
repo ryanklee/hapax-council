@@ -7,9 +7,14 @@ These routes share the _graph_runtime and _shader_registry globals from studio.p
 from __future__ import annotations
 
 import json as _json_mod
+import logging
+import time
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
+
+log = logging.getLogger(__name__)
 
 _BUILTIN_PRESETS = Path(__file__).parent.parent.parent.parent / "presets"
 _USER_PRESETS = Path.home() / ".config" / "hapax" / "effect-presets"
@@ -18,6 +23,71 @@ COMPOSITOR_LAYER_DIR = Path("/dev/shm/hapax-compositor")
 COMPOSITOR_STATUS_PATH = Path("/dev/shm/hapax-compositor/status.json")
 
 router = APIRouter(prefix="/api", tags=["studio-effects"])
+
+
+# Livestream-performance-map W4.5 / Sprint 7 P1: per-stage command
+# latency histogram for the studio effect-graph mutation pipeline. Lazy
+# init avoids polluting test environments without prometheus_client.
+# The histogram registers on the default REGISTRY so the existing
+# prometheus_fastapi_instrumentator /metrics endpoint exposes it without
+# additional wiring.
+#
+# Stages (all measured at the FastAPI handler):
+#   - validate     — Pydantic parse + EffectGraph / GraphPatch construction
+#   - runtime_load — graph_runtime.load_graph / apply_patch
+#   - ipc_write    — write to /dev/shm/hapax-compositor/graph-mutation.json
+#   - total        — full handler from entry to return
+#
+# The downstream stages (compositor inotify wake → WGSL compile → first
+# frame) live in a separate process; a Wave 5 follow-up will instrument
+# them on the compositor side and the operator can sum medians for an
+# end-to-end estimate. This PR captures the FastAPI-side stages, which
+# is where the operator's command actions originate.
+_LATENCY_BUCKETS_MS: tuple[float, ...] = (
+    1.0,
+    2.0,
+    5.0,
+    10.0,
+    20.0,
+    50.0,
+    100.0,
+    200.0,
+    500.0,
+    1000.0,
+    2000.0,
+)
+_COMMAND_LATENCY: Any = None
+_COMMAND_LATENCY_INIT_FAILED = False
+
+
+def _command_latency() -> Any:
+    """Return the lazy-init Histogram, or None if prometheus_client is unavailable."""
+    global _COMMAND_LATENCY, _COMMAND_LATENCY_INIT_FAILED
+    if _COMMAND_LATENCY is not None or _COMMAND_LATENCY_INIT_FAILED:
+        return _COMMAND_LATENCY
+    try:
+        from prometheus_client import Histogram
+
+        _COMMAND_LATENCY = Histogram(
+            "logos_command_latency_ms",
+            "Per-stage latency for the studio effect-graph command pipeline (FastAPI handler stages)",
+            ["command", "stage"],
+            buckets=_LATENCY_BUCKETS_MS,
+        )
+    except Exception:
+        log.debug("logos_command_latency_ms init failed", exc_info=True)
+        _COMMAND_LATENCY_INIT_FAILED = True
+    return _COMMAND_LATENCY
+
+
+def _observe_stage(command: str, stage: str, dt_ms: float) -> None:
+    hist = _command_latency()
+    if hist is None:
+        return
+    try:
+        hist.labels(command=command, stage=stage).observe(dt_ms)
+    except Exception:
+        log.debug("logos_command_latency_ms observe failed", exc_info=True)
 
 
 def _get_runtime():
@@ -54,6 +124,7 @@ async def get_effect_graph():
 async def replace_effect_graph(request: dict[str, object]):
     from agents.effect_graph.types import EffectGraph
 
+    t_start = time.perf_counter()
     rt = _get_runtime()
     if not rt:
         raise HTTPException(503, "Compositor not available")
@@ -61,7 +132,11 @@ async def replace_effect_graph(request: dict[str, object]):
     source = str(request.pop("fx_source", request.pop("_source", "live")))
     try:
         graph = EffectGraph(**request)
+        t_validate = time.perf_counter()
+        _observe_stage("replace_graph", "validate", (t_validate - t_start) * 1000.0)
         rt.load_graph(graph)
+        t_runtime = time.perf_counter()
+        _observe_stage("replace_graph", "runtime_load", (t_runtime - t_validate) * 1000.0)
     except Exception as e:
         raise HTTPException(400, str(e)) from e
     try:
@@ -71,8 +146,11 @@ async def replace_effect_graph(request: dict[str, object]):
         # Write source selection alongside graph mutation
         source_path = Path("/dev/shm/hapax-compositor/fx-source.txt")
         source_path.write_text(source)
+        t_ipc = time.perf_counter()
+        _observe_stage("replace_graph", "ipc_write", (t_ipc - t_runtime) * 1000.0)
     except OSError:
         pass
+    _observe_stage("replace_graph", "total", (time.perf_counter() - t_start) * 1000.0)
     return {"status": "ok"}
 
 
@@ -80,13 +158,19 @@ async def replace_effect_graph(request: dict[str, object]):
 async def patch_effect_graph(request: dict[str, object]):
     from agents.effect_graph.types import GraphPatch
 
+    t_start = time.perf_counter()
     rt = _get_runtime()
     if not rt:
         raise HTTPException(503, "Compositor not available")
     try:
-        rt.apply_patch(GraphPatch(**request))
+        patch = GraphPatch(**request)
+        t_validate = time.perf_counter()
+        _observe_stage("patch_graph", "validate", (t_validate - t_start) * 1000.0)
+        rt.apply_patch(patch)
+        _observe_stage("patch_graph", "runtime_load", (time.perf_counter() - t_validate) * 1000.0)
     except Exception as e:
         raise HTTPException(400, str(e)) from e
+    _observe_stage("patch_graph", "total", (time.perf_counter() - t_start) * 1000.0)
     return {"status": "ok"}
 
 
