@@ -50,13 +50,16 @@ REQUIRED_CONDITION_FIELDS = (
 
 @pytest.fixture
 def isolated_registry(tmp_path: Path):
-    """Yield the CLI module with REGISTRY_DIR pointing at a tempdir."""
+    """Yield the CLI module with REGISTRY_DIR + marker paths on a tempdir."""
     cli = _load_cli()
     registry = tmp_path / "registry"
+    marker = tmp_path / "shm" / "research-marker.json"
     with (
         patch.object(cli, "REGISTRY_DIR", registry),
         patch.object(cli, "CURRENT_FILE", registry / "current.txt"),
         patch.object(cli, "LOCK_FILE", registry / ".registry.lock"),
+        patch.object(cli, "RESEARCH_MARKER_SHM_PATH", marker),
+        patch.object(cli, "MARKER_CHANGES_LOG", registry / "research_marker_changes.jsonl"),
     ):
         yield cli
 
@@ -239,3 +242,109 @@ def _args(**kwargs) -> object:
             self.__dict__.update(kw)
 
     return _NS(**kwargs)
+
+
+class TestResearchMarkerWriter:
+    """LRR Phase 1 item 3: research-marker SHM injection."""
+
+    def test_init_writes_marker_to_configured_path(self, isolated_registry):
+        cli = isolated_registry
+        cli.cmd_init(_args())
+        assert cli.RESEARCH_MARKER_SHM_PATH.exists()
+        import json
+
+        data = json.loads(cli.RESEARCH_MARKER_SHM_PATH.read_text())
+        assert data["condition_id"] == "cond-phase-a-baseline-qwen-001"
+        assert "written_at" in data
+
+    def test_open_overwrites_marker_with_new_condition(self, isolated_registry):
+        cli = isolated_registry
+        cli.cmd_init(_args())
+        cli.cmd_open(_args(slug="experimental"))
+        import json
+
+        data = json.loads(cli.RESEARCH_MARKER_SHM_PATH.read_text())
+        assert data["condition_id"] == "cond-experimental-001"
+
+    def test_close_active_condition_drops_marker_to_null(self, isolated_registry):
+        cli = isolated_registry
+        cli.cmd_init(_args())
+        cli.cmd_close(_args(condition_id="cond-phase-a-baseline-qwen-001"))
+        import json
+
+        data = json.loads(cli.RESEARCH_MARKER_SHM_PATH.read_text())
+        assert data["condition_id"] is None
+
+    def test_close_non_current_condition_does_not_change_marker(self, isolated_registry):
+        cli = isolated_registry
+        cli.cmd_init(_args())
+        cli.cmd_open(_args(slug="experimental"))
+        # Now current is cond-experimental-001. Closing the OLD condition
+        # should not change the marker since it's not the active one.
+        cli.cmd_close(_args(condition_id="cond-phase-a-baseline-qwen-001"))
+        import json
+
+        data = json.loads(cli.RESEARCH_MARKER_SHM_PATH.read_text())
+        assert data["condition_id"] == "cond-experimental-001"
+
+    def test_marker_changes_audit_log_appends_one_line_per_transition(self, isolated_registry):
+        cli = isolated_registry
+        cli.cmd_init(_args())
+        cli.cmd_open(_args(slug="experimental"))
+        cli.cmd_close(_args(condition_id="cond-experimental-001"))
+        log_path = cli.MARKER_CHANGES_LOG
+        assert log_path.exists()
+        import json
+
+        lines = log_path.read_text().strip().splitlines()
+        assert len(lines) == 3, f"expected 3 audit lines, got {len(lines)}"
+        events = [json.loads(line) for line in lines]
+        # Event 1: init (None → cond-phase-a-baseline-qwen-001)
+        assert events[0]["before"] is None
+        assert events[0]["after"] == "cond-phase-a-baseline-qwen-001"
+        # Event 2: open (previous → cond-experimental-001)
+        assert events[1]["before"] == "cond-phase-a-baseline-qwen-001"
+        assert events[1]["after"] == "cond-experimental-001"
+        # Event 3: close (cond-experimental-001 → None)
+        assert events[2]["before"] == "cond-experimental-001"
+        assert events[2]["after"] is None
+
+
+class TestTagReactionsSubcommand:
+    """LRR Phase 1 item 9: backfill stream-reactions Qdrant points."""
+
+    def test_dry_run_does_not_import_qdrant(self, isolated_registry):
+        cli = isolated_registry
+        cli.cmd_init(_args())
+        result = cli.cmd_tag_reactions(
+            _args(
+                condition_id="cond-phase-a-baseline-qwen-001",
+                dry_run=True,
+                batch_size=100,
+            )
+        )
+        assert result == 0
+
+    def test_unknown_condition_id_is_rejected(self, isolated_registry):
+        cli = isolated_registry
+        cli.cmd_init(_args())
+        result = cli.cmd_tag_reactions(
+            _args(
+                condition_id="cond-does-not-exist",
+                dry_run=False,
+                batch_size=100,
+            )
+        )
+        assert result == 1
+
+    def test_dry_run_with_known_condition_returns_success(self, isolated_registry):
+        cli = isolated_registry
+        cli.cmd_init(_args())
+        result = cli.cmd_tag_reactions(
+            _args(
+                condition_id="cond-phase-a-baseline-qwen-001",
+                dry_run=True,
+                batch_size=50,
+            )
+        )
+        assert result == 0
