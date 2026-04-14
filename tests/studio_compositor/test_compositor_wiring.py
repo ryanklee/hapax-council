@@ -358,3 +358,72 @@ class TestStudioCompositorBudgetWiring:
         assert payload["total_skip_count"] == 1
         assert payload["degraded_source_count"] == 1
         assert payload["worst_source"]["source_id"] == "overlay-zones"
+
+
+class TestStudioCompositorOutputRouterWiring:
+    """Phase 10 carry-over from Phase 2 item 10.
+
+    ``OutputRouter.from_layout`` is pure data plumbing that enumerates
+    video_out surfaces into typed OutputBinding records. Phase 2
+    documented this migration as a carry-over; this test pins the
+    compositor-side wiring so the router is available to any
+    downstream consumer (diagnostics, future router-driven sinks).
+    """
+
+    def test_compositor_initializes_output_router_to_none(self) -> None:
+        compositor = _make_compositor()
+        assert compositor.output_router is None
+
+    def test_start_layout_only_populates_output_router(self, tmp_path: Path) -> None:
+        from agents.studio_compositor.output_router import OutputRouter
+
+        layout_file = tmp_path / "default.json"
+        layout_file.write_text(DEFAULT_JSON.read_text())
+
+        compositor = _make_compositor(layout_path=layout_file)
+        compositor.start_layout_only()
+
+        assert isinstance(compositor.output_router, OutputRouter)
+        # Default layout has 3 video_out surfaces from Phase 2 item 10:
+        # v4l2 loopback + rtmp MediaMTX + hls local.
+        assert len(compositor.output_router) >= 3
+        sink_kinds = {b.sink_kind for b in compositor.output_router}
+        assert {"v4l2", "rtmp", "hls"}.issubset(sink_kinds)
+
+    def test_output_router_bindings_cover_every_video_out_surface(self, tmp_path: Path) -> None:
+        """Every video_out surface in the layout must yield a binding."""
+        layout_file = tmp_path / "default.json"
+        layout_file.write_text(DEFAULT_JSON.read_text())
+
+        compositor = _make_compositor(layout_path=layout_file)
+        compositor.start_layout_only()
+
+        assert compositor.output_router is not None
+        assert compositor.layout_state is not None
+        layout = compositor.layout_state.get()
+        video_out_ids = {s.id for s in layout.surfaces if s.geometry.kind == "video_out"}
+        binding_ids = {b.surface_id for b in compositor.output_router}
+        assert video_out_ids.issubset(binding_ids), (
+            f"router missing bindings for video_out surfaces: {video_out_ids - binding_ids}"
+        )
+
+
+class TestResearchMarkerOverlayRegistered:
+    """Phase 10 carry-over from Phase 2 item 4.
+
+    The Phase 2 ResearchMarkerOverlay class was implemented but not
+    registered with the cairo_sources class-name registry, making it
+    undeclarable from layout JSON. Pin the registration so a future
+    layout entry can reach the class via ``class_name``.
+    """
+
+    def test_research_marker_overlay_is_registered(self) -> None:
+        from agents.studio_compositor.cairo_sources import (
+            get_cairo_source_class,
+            list_classes,
+        )
+        from agents.studio_compositor.research_marker_overlay import ResearchMarkerOverlay
+
+        assert "ResearchMarkerOverlay" in list_classes()
+        cls = get_cairo_source_class("ResearchMarkerOverlay")
+        assert cls is ResearchMarkerOverlay
