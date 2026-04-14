@@ -433,6 +433,16 @@ class StudioCompositor:
                     switch_fx_source(self, "live")
                 except Exception:
                     log.exception("FX source fallback switch failed after error")
+            elif src_name == "hls-sink":
+                # hls-sink races with hls-archive-rotate.timer over segment
+                # files: the rotator moves a segment to the archive directory,
+                # then hlssink2's own rotation queue tries to delete the same
+                # file and posts an ERROR for the missing file. The element is
+                # not in a broken state — it can keep writing new segments —
+                # so suppress fatal escalation. If hls-sink ever fails for a
+                # real reason (disk full, permission denied), the warning is
+                # still surfaced in the journal.
+                log.warning("HLS sink error (non-fatal): %s", err.message)
             else:
                 log.error("Pipeline error from %s: %s (debug: %s)", src_name, err.message, debug)
                 self.stop()
