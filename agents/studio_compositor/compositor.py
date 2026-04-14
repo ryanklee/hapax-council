@@ -433,15 +433,22 @@ class StudioCompositor:
                     switch_fx_source(self, "live")
                 except Exception:
                     log.exception("FX source fallback switch failed after error")
-            elif src_name == "hls-sink":
-                # hls-sink races with hls-archive-rotate.timer over segment
-                # files: the rotator moves a segment to the archive directory,
-                # then hlssink2's own rotation queue tries to delete the same
-                # file and posts an ERROR for the missing file. The element is
-                # not in a broken state — it can keep writing new segments —
-                # so suppress fatal escalation. If hls-sink ever fails for a
-                # real reason (disk full, permission denied), the warning is
-                # still surfaced in the journal.
+            elif (
+                src_name == "hls-sink"
+                or src_name.startswith("splitmuxsink")
+                or src_name.startswith("giostreamsink")
+                or src_name.startswith("mpegtsmux")
+                or "hls" in src_name.lower()
+            ):
+                # hls-sink and its internal children (splitmuxsink,
+                # giostreamsink, mpegtsmux) all emit ERROR messages that
+                # must be scoped non-fatal. The hlssink2 element wraps a
+                # splitmuxsink which wraps a giostreamsink, and each
+                # child posts errors under its own src_name — the
+                # original scope check (drop #33) only caught
+                # src_name == "hls-sink" and missed the children.
+                # EMFILE errors from hls-sink write paths surface on
+                # giostreamsink0 and must not escalate to self.stop().
                 log.warning("HLS sink error (non-fatal): %s", err.message)
             else:
                 log.error("Pipeline error from %s: %s (debug: %s)", src_name, err.message, debug)
