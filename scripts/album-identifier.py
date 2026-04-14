@@ -58,6 +58,30 @@ LYRICS_FILE = SHM_DIR / "track-lyrics.txt"
 LITELLM_URL = "http://localhost:4000/v1/chat/completions"
 LITELLM_KEY = ""
 
+
+def _record_album_identifier_spend(data: dict) -> None:
+    """LRR Phase 0 item 2: wire the token ledger.
+
+    Every album-identifier LiteLLM call should record its prompt + completion
+    token spend into the shared token ledger so the token pole reflects
+    album-identifier activity (not just director_loop / hapax). All five LLM
+    call sites in this module call this helper after parsing the response
+    JSON. Costs default to 0.0 because LiteLLM proxy doesn't surface the
+    upstream cost; the token counts are the load-bearing field for the
+    sub-logarithmic pole scaling formula.
+    """
+    try:
+        from token_ledger import record_spend
+
+        usage = data.get("usage") or {}
+        prompt_tokens = int(usage.get("prompt_tokens") or 0)
+        completion_tokens = int(usage.get("completion_tokens") or 0)
+        if prompt_tokens or completion_tokens:
+            record_spend("album-identifier", prompt_tokens, completion_tokens, cost=0.0)
+    except Exception:
+        log.debug("token_ledger record_spend failed", exc_info=True)
+
+
 # --- State ---
 _last_hash: str = ""
 _current_album: dict = {}
@@ -136,7 +160,9 @@ def detect_and_crop_album(frame_data: bytes) -> bytes | None:
             {"Content-Type": "application/json", "Authorization": f"Bearer {key}"},
         )
         resp = urllib.request.urlopen(req, timeout=20)
-        raw = json.loads(resp.read())["choices"][0]["message"]["content"].strip()
+        data = json.loads(resp.read())
+        _record_album_identifier_spend(data)
+        raw = data["choices"][0]["message"]["content"].strip()
         if raw.startswith("```"):
             raw = raw.split("\n", 1)[1] if "\n" in raw else raw[3:]
             if raw.endswith("```"):
@@ -242,6 +268,7 @@ def identify_album_vision(image_data: bytes) -> dict | None:
         )
         resp = urllib.request.urlopen(req, timeout=20)
         data = json.loads(resp.read())
+        _record_album_identifier_spend(data)
         raw = data["choices"][0]["message"]["content"].strip()
         if raw.startswith("```"):
             raw = raw.split("\n", 1)[1] if "\n" in raw else raw[3:]
@@ -413,6 +440,7 @@ def identify_album_and_track(image_data: bytes) -> tuple[dict | None, str | None
         )
         resp = urllib.request.urlopen(req, timeout=45)
         data = json.loads(resp.read())
+        _record_album_identifier_spend(data)
         raw = data["choices"][0]["message"]["content"].strip()
 
         if raw.startswith("```"):
@@ -521,6 +549,7 @@ def capture_and_identify_track() -> str | None:
         )
         resp = urllib.request.urlopen(req, timeout=30)
         data = json.loads(resp.read())
+        _record_album_identifier_spend(data)
         raw = data["choices"][0]["message"]["content"].strip()
         if raw.startswith("```"):
             raw = raw.split("\n", 1)[1] if "\n" in raw else raw[3:]
@@ -575,6 +604,7 @@ def _fetch_lyrics(artist: str, track: str) -> str | None:
         )
         resp = urllib.request.urlopen(req, timeout=20)
         data = json.loads(resp.read())
+        _record_album_identifier_spend(data)
         text = data["choices"][0]["message"]["content"].strip()
         if "INSTRUMENTAL" in text.upper()[:20]:
             log.info("Track is instrumental, no lyrics")
