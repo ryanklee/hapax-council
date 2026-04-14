@@ -27,11 +27,26 @@ import cairo
 # check path when YT frames were hot. `gi.require_version` is cheap
 # once the version is bound for the interpreter's lifetime, so the
 # module-level import is effectively free on subsequent calls.
-import gi
+#
+# Guarded against CI environments that lack the GdkPixbuf/Gdk typelibs.
+# The test runner only exercises the geometry + render-callback paths,
+# never touches `_load_frame` — so missing typelibs in CI are harmless
+# at runtime, but an unguarded `gi.require_version` raises at module
+# import time and blocks the whole test collection. The try/except
+# below keeps `GdkPixbuf = None` in that environment and `_load_frame`
+# short-circuits via `_HAS_GDK` before touching any gi namespace.
+try:
+    import gi
 
-gi.require_version("GdkPixbuf", "2.0")
-gi.require_version("Gdk", "4.0")
-from gi.repository import Gdk, GdkPixbuf  # noqa: E402
+    gi.require_version("GdkPixbuf", "2.0")
+    gi.require_version("Gdk", "4.0")
+    from gi.repository import Gdk, GdkPixbuf  # noqa: E402
+
+    _HAS_GDK = True
+except (ImportError, ValueError):
+    Gdk = None  # type: ignore[assignment]
+    GdkPixbuf = None  # type: ignore[assignment]
+    _HAS_GDK = False
 
 from .cairo_source import CairoSource, CairoSourceRunner
 
@@ -163,6 +178,11 @@ class SierpinskiCairoSource(CairoSource):
 
     def _load_frame(self, slot_id: int) -> cairo.ImageSurface | None:
         """Load a YouTube frame JPEG as a Cairo surface, with mtime caching."""
+        if not _HAS_GDK:
+            # CI path — GdkPixbuf typelib unavailable. Return whatever's
+            # been cached (usually None); the renderer handles None
+            # surfaces by skipping the video draw.
+            return self._frame_surfaces.get(slot_id)
         path = YT_FRAME_DIR / f"yt-frame-{slot_id}.jpg"
         if not path.exists():
             return self._frame_surfaces.get(slot_id)
