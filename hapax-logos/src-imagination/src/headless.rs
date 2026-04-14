@@ -29,11 +29,25 @@ use hapax_visual::state::StateReader;
 /// stable — the Python side hard-codes the key names in its poll loop.
 const POOL_METRICS_SHM_PATH: &str = "/dev/shm/hapax-imagination/pool_metrics.json";
 
+/// LRR Phase 0 item 4 / FINDING-Q step 4 — sibling JSON for shader
+/// health (rollback counter). Separate from `pool_metrics.json` because
+/// pool metrics are render-loop-frequency (1 Hz at 60 fps) while shader
+/// rollbacks are event-driven (rare). Separate cadences keep both
+/// writers clean. Spike notes: see
+/// `docs/superpowers/specs/2026-04-14-lrr-phase-0-finding-q-spike-notes.md`.
+const SHADER_HEALTH_SHM_PATH: &str = "/dev/shm/hapax-imagination/shader_health.json";
+
 /// How often the renderer publishes pool metrics, measured in frames.
 /// At the 60 fps render interval this gives roughly a 1 Hz Prometheus
 /// sample cadence — cheap enough to be unconditional, dense enough that
 /// reuse-ratio drift is visible on the dashboard.
 const POOL_METRICS_PUBLISH_EVERY_FRAMES: u64 = 60;
+
+/// Shader health publish cadence. Shader rollbacks are rare so we don't
+/// need 1 Hz; once every ~10 seconds is plenty for Grafana alerting and
+/// keeps the writer overhead negligible. Frame count is mod'd so this
+/// runs alongside the pool publish without contention.
+const SHADER_HEALTH_PUBLISH_EVERY_FRAMES: u64 = 600;
 
 /// Offscreen texture format. Matches the sRGB format the winit path
 /// selects from `surface.get_capabilities` — the blit pipeline built
@@ -170,6 +184,33 @@ impl Renderer {
         if self.frame_count % POOL_METRICS_PUBLISH_EVERY_FRAMES == 0 {
             publish_pool_metrics(&self.pipeline.pool_metrics());
         }
+
+        // LRR Phase 0 item 4 / FINDING-Q step 4: publish shader rollback
+        // counter to a sibling JSON. The compositor's Python exporter
+        // re-publishes it as `hapax_imagination_shader_rollback_total`.
+        // Lower cadence than pool metrics (~10 s) because rollback events
+        // are rare and the counter only changes when one fires.
+        if self.frame_count % SHADER_HEALTH_PUBLISH_EVERY_FRAMES == 0 {
+            publish_shader_health(self.pipeline.shader_rollback_total());
+        }
+    }
+}
+
+/// LRR Phase 0 item 4 / FINDING-Q step 4 — write the shader rollback
+/// counter to ``/dev/shm/hapax-imagination/shader_health.json`` for the
+/// compositor Python exporter to re-publish as
+/// ``hapax_imagination_shader_rollback_total``.
+///
+/// Same atomic-write pattern as ``publish_pool_metrics``. Failures are
+/// swallowed with a ``log::warn`` — the render loop must not block on
+/// observability writes.
+fn publish_shader_health(rollback_total: u64) {
+    let payload = format!(
+        "{{\"shader_rollback_total\":{}}}\n",
+        rollback_total,
+    );
+    if let Err(e) = write_atomic(Path::new(SHADER_HEALTH_SHM_PATH), payload.as_bytes()) {
+        log::warn!("publish_shader_health: write failed: {e}");
     }
 }
 

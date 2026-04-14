@@ -35,6 +35,15 @@ log = logging.getLogger(__name__)
 # ``reverie_pool_*`` registered below.
 _POOL_METRICS_SHM_PATH = Path("/dev/shm/hapax-imagination/pool_metrics.json")
 
+# LRR Phase 0 item 4 / FINDING-Q step 4: the Rust imagination renderer
+# also publishes ``DynamicPipeline::shader_rollback_total()`` to this
+# sibling path at ~10 Hz (every 600 render frames). Lower cadence than
+# pool metrics because rollbacks are rare. The poll loop reads this and
+# publishes ``hapax_imagination_shader_rollback_total`` as a Prometheus
+# counter. Spike doc:
+# ``docs/superpowers/specs/2026-04-14-lrr-phase-0-finding-q-spike-notes.md``
+_SHADER_HEALTH_SHM_PATH = Path("/dev/shm/hapax-imagination/shader_health.json")
+
 
 _PROMETHEUS_AVAILABLE = False
 try:
@@ -110,6 +119,11 @@ COMP_TTS_CLIENT_TIMEOUT_TOTAL: Any = None
 CAM_FRAME_FLOW_STALE_TOTAL: Any = None
 COMP_VOICE_ACTIVE: Any = None
 COMP_MUSIC_DUCKED: Any = None
+HAPAX_IMAGINATION_SHADER_ROLLBACK_TOTAL: Any = None
+# Last value the mirror published, so we can detect rollback events
+# (the gauge → counter delta must be non-negative since the underlying
+# Rust counter is monotonic across imagination process lifetime).
+_LAST_SHADER_ROLLBACK_TOTAL: int = 0
 
 
 def _init_metrics() -> None:
@@ -148,6 +162,7 @@ def _init_metrics() -> None:
     global CAM_FRAME_FLOW_STALE_TOTAL
     global COMP_VOICE_ACTIVE
     global COMP_MUSIC_DUCKED
+    global HAPAX_IMAGINATION_SHADER_ROLLBACK_TOTAL
 
     if not _PROMETHEUS_AVAILABLE:
         return
@@ -253,6 +268,20 @@ def _init_metrics() -> None:
     COMP_MUSIC_DUCKED = Gauge(
         "studio_compositor_music_ducked",
         "1 when SlotAudioControl is in any non-idle envelope state (ducking/ducked/restoring), 0 when idle",
+        registry=REGISTRY,
+    )
+
+    # LRR Phase 0 item 4 / FINDING-Q step 4: shader rollback counter.
+    # Mirrors the Rust `DynamicPipeline::shader_rollback_total()` over
+    # the SHM bridge at /dev/shm/hapax-imagination/shader_health.json.
+    # The Rust counter is monotonic across imagination process lifetime;
+    # the Python mirror reads the absolute value and bumps the
+    # Prometheus counter by the delta on each poll. A nonzero rate over
+    # any rolling window is a Grafana alert candidate — every rollback
+    # event represents a hot-reload that was rejected by validation.
+    HAPAX_IMAGINATION_SHADER_ROLLBACK_TOTAL = Counter(
+        "hapax_imagination_shader_rollback_total",
+        "Cumulative WGSL hot-reload rollback events (validation failures + runtime panics)",
         registry=REGISTRY,
     )
 
@@ -661,6 +690,7 @@ def _poll_loop() -> None:
         _update_memory_footprint()
         _update_gpu_vram()
         _mirror_reverie_pool_metrics()
+        _mirror_imagination_shader_health()
 
 
 def _update_memory_footprint() -> None:
@@ -789,3 +819,51 @@ def _mirror_reverie_pool_metrics() -> None:
         REVERIE_POOL_SLOT_COUNT.set(float(data.get("slot_count", 0)))
     except (TypeError, ValueError) as exc:
         log.debug("reverie pool_metrics coerce failed: %s", exc)
+
+
+def _mirror_imagination_shader_health() -> None:
+    """LRR Phase 0 item 4 / FINDING-Q step 4: read shader_health.json
+    published by the Rust ``hapax-imagination`` binary and bump the
+    Prometheus counter by the delta against the last seen value.
+
+    The Rust side exposes a monotonic counter
+    (``DynamicPipeline::shader_rollback_total()``). Each poll reads the
+    absolute value, computes ``current - _LAST_SHADER_ROLLBACK_TOTAL``,
+    and increments the Prometheus counter by that delta. Restarts of
+    the imagination process reset the Rust counter to 0 — when that
+    happens, the delta is negative and we don't increment (the
+    Prometheus counter is monotonic per scrape regardless).
+
+    File absence is normal. Errors are debug-level.
+    """
+    global _LAST_SHADER_ROLLBACK_TOTAL
+    if HAPAX_IMAGINATION_SHADER_ROLLBACK_TOTAL is None:
+        return
+    try:
+        raw = _SHADER_HEALTH_SHM_PATH.read_text()
+    except FileNotFoundError:
+        return
+    except OSError as exc:
+        log.debug("imagination shader_health read failed: %s", exc)
+        return
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        log.debug("imagination shader_health parse failed: %s", exc)
+        return
+    if not isinstance(data, dict):
+        return
+    try:
+        current = int(data.get("shader_rollback_total", 0))
+    except (TypeError, ValueError) as exc:
+        log.debug("imagination shader_health coerce failed: %s", exc)
+        return
+    if current < _LAST_SHADER_ROLLBACK_TOTAL:
+        # Imagination process restarted — Rust counter reset to 0.
+        # Re-baseline without bumping the Prometheus counter.
+        _LAST_SHADER_ROLLBACK_TOTAL = current
+        return
+    delta = current - _LAST_SHADER_ROLLBACK_TOTAL
+    if delta > 0:
+        HAPAX_IMAGINATION_SHADER_ROLLBACK_TOTAL.inc(delta)
+        _LAST_SHADER_ROLLBACK_TOTAL = current

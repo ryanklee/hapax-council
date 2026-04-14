@@ -212,6 +212,72 @@ struct DynamicPass {
 /// must be unique across targets. Global pseudo-textures (`@live`,
 /// `@accum_*`, `content_slot_*`) and already-namespaced names
 /// (anything containing ":") are returned unchanged.
+/// LRR Phase 0 item 4 / FINDING-Q step 2 — compute a stable hash of the
+/// raw `plan.json` contents. Used by the pre-validation gate's structured
+/// log lines so the operator can grep the journal for repeat failures of
+/// a specific bad plan.
+///
+/// Uses `DefaultHasher` over the raw string. Not cryptographic — collisions
+/// are fine. Stability across runs of the same `plan_data` is the only
+/// load-bearing property.
+fn compute_manifest_hash(plan_data: &str) -> String {
+    let mut h = DefaultHasher::new();
+    plan_data.hash(&mut h);
+    format!("{:016x}", h.finish())
+}
+
+/// LRR Phase 0 item 4 / FINDING-Q step 2 — validate every pass's shader
+/// against naga BEFORE the wgpu hot-reload swap.
+///
+/// Walks `active_passes` and for each one:
+///   1. Reads `<plan_dir>/<plan_pass.shader>`. Read errors are validation
+///      failures (the build phase's silent `continue` on read errors was
+///      the original FINDING-Q bug — pre-validation catches it).
+///   2. Concatenates `SHARED_UNIFORMS_WGSL + "\n" + fragment_source`
+///      (matching what the build phase will actually compile) and runs
+///      `naga::front::wgsl::parse_str` on it. Naga is the same library
+///      wgpu uses internally, so a successful parse here is a strong
+///      predictor of a successful pipeline build.
+///
+/// Returns a `Vec<String>` of failure descriptions. Empty Vec means the
+/// plan is safe to swap in. Each failure is "{target}/{node_id}: <reason>"
+/// so the operator sees ALL broken passes in one log line, not just the
+/// first one.
+///
+/// This function is pure (no `self`, no `&mut`, no `&wgpu::Device`) so it
+/// is unit-testable without a GPU adapter.
+fn validate_plan_shaders(
+    plan_dir: &Path,
+    active_passes: &[(String, PlanPass)],
+) -> Vec<String> {
+    let mut failures: Vec<String> = Vec::new();
+    for (target_name, plan_pass) in active_passes {
+        let shader_path = plan_dir.join(&plan_pass.shader);
+        let fragment_source = match std::fs::read_to_string(&shader_path) {
+            Ok(src) => src,
+            Err(e) => {
+                failures.push(format!(
+                    "{}/{}: shader file unreadable ({:?}): {}",
+                    target_name, plan_pass.node_id, shader_path, e
+                ));
+                continue;
+            }
+        };
+        // Match the build phase's actual compile input: SHARED_UNIFORMS_WGSL
+        // is prepended via format! at line 658 (render) / 601 (compute).
+        let combined = format!("{}\n{}", SHARED_UNIFORMS_WGSL, fragment_source);
+        if let Err(parse_err) = naga::front::wgsl::parse_str(&combined) {
+            failures.push(format!(
+                "{}/{}: WGSL parse failed: {}",
+                target_name,
+                plan_pass.node_id,
+                parse_err.message()
+            ));
+        }
+    }
+    failures
+}
+
 fn namespace_texture_name(name: &str, target: &str) -> String {
     if name.contains(':') {
         return name.to_string();
@@ -562,6 +628,33 @@ impl DynamicPipeline {
                 rewritten.output = namespace_texture_name(&rewritten.output, target_name);
                 active_passes.push((target_name.clone(), rewritten));
             }
+        }
+
+        // LRR Phase 0 item 4 / FINDING-Q step 2 — pre-validation gate.
+        //
+        // Before any side effects (texture allocation, pool acquisition,
+        // wgpu pipeline construction), validate every pass's shader file
+        // via the pure helper `validate_plan_shaders`. The helper is
+        // pure (takes refs, no device, no self) so it's unit-testable
+        // without spinning up a wgpu adapter.
+        //
+        // On any failure: increment shader_rollback_total, log a
+        // structured warning with the manifest hash, and return false
+        // WITHOUT touching self.passes — the previous good plan keeps
+        // rendering. Manifest hash is stable across runs of the same
+        // plan_data so the operator can grep the journal for repeat
+        // failures.
+        let manifest_hash = compute_manifest_hash(&plan_data);
+        let validation_failures = validate_plan_shaders(&self.plan_dir, &active_passes);
+        if !validation_failures.is_empty() {
+            self.shader_rollback_total.fetch_add(1, Ordering::Relaxed);
+            log::warn!(
+                "dynamic_pipeline: hot-reload REJECTED, manifest_hash={}, {} pass(es) failed validation: {}",
+                manifest_hash,
+                validation_failures.len(),
+                validation_failures.join("; ")
+            );
+            return false;
         }
 
         // Collect all texture names referenced in the plan (already
@@ -1988,5 +2081,109 @@ mod tests {
         // Reuse ratio derivation matches the pool's contract.
         let derived = (m.total_acquires - m.total_allocations) as f64 / m.total_acquires as f64;
         assert!((derived - m.reuse_ratio).abs() < 1e-9);
+    }
+
+    // ----- LRR Phase 0 item 4 / FINDING-Q step 2 — pre-validation gate -----
+
+    fn make_pass(node_id: &str, shader: &str) -> PlanPass {
+        PlanPass {
+            node_id: node_id.to_string(),
+            pass_type: "render".to_string(),
+            shader: shader.to_string(),
+            inputs: Vec::new(),
+            output: format!("{}_out", node_id),
+            uniforms: HashMap::new(),
+            param_order: Vec::new(),
+            steps_per_frame: 1,
+            requires_content_slots: false,
+            backend: "wgsl_render".to_string(),
+        }
+    }
+
+    #[test]
+    fn manifest_hash_is_stable_across_calls() {
+        let a = compute_manifest_hash("hello world");
+        let b = compute_manifest_hash("hello world");
+        assert_eq!(a, b);
+        assert_eq!(a.len(), 16);
+    }
+
+    #[test]
+    fn manifest_hash_changes_with_input() {
+        let a = compute_manifest_hash("hello world");
+        let b = compute_manifest_hash("hello world!");
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn validate_plan_shaders_passes_on_valid_wgsl() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        // A minimal valid fragment shader matching the production
+        // convention: take @location(0) uv directly and return a
+        // @location(0) vec4 (no VertexOutput struct — that's defined in
+        // the vertex stage which is linked separately by wgpu). The
+        // pre-validation prepends SHARED_UNIFORMS_WGSL only, matching
+        // the build phase's actual compile input.
+        let shader_src = r#"
+@fragment
+fn main(@location(0) v_texcoord: vec2<f32>) -> @location(0) vec4<f32> {
+    return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+}
+"#;
+        std::fs::write(dir.path().join("ok.wgsl"), shader_src).unwrap();
+        let passes = vec![("main".to_string(), make_pass("ok_node", "ok.wgsl"))];
+        let failures = validate_plan_shaders(dir.path(), &passes);
+        assert!(failures.is_empty(), "expected no failures, got {:?}", failures);
+    }
+
+    #[test]
+    fn validate_plan_shaders_fails_on_missing_file() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let passes = vec![("main".to_string(), make_pass("missing_node", "does-not-exist.wgsl"))];
+        let failures = validate_plan_shaders(dir.path(), &passes);
+        assert_eq!(failures.len(), 1);
+        assert!(failures[0].contains("main/missing_node"));
+        assert!(failures[0].contains("shader file unreadable"));
+    }
+
+    #[test]
+    fn validate_plan_shaders_fails_on_broken_wgsl() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        // Garbage WGSL that should fail naga parse.
+        std::fs::write(
+            dir.path().join("broken.wgsl"),
+            "this is not valid WGSL at all !@#$%",
+        )
+        .unwrap();
+        let passes = vec![("main".to_string(), make_pass("broken_node", "broken.wgsl"))];
+        let failures = validate_plan_shaders(dir.path(), &passes);
+        assert_eq!(failures.len(), 1);
+        assert!(failures[0].contains("main/broken_node"));
+        assert!(failures[0].contains("WGSL parse failed"));
+    }
+
+    #[test]
+    fn validate_plan_shaders_collects_all_failures() {
+        // Multiple failing passes → all reported, not just the first.
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::write(dir.path().join("broken1.wgsl"), "bad").unwrap();
+        std::fs::write(dir.path().join("broken2.wgsl"), "also bad").unwrap();
+        let passes = vec![
+            ("main".to_string(), make_pass("a", "broken1.wgsl")),
+            ("main".to_string(), make_pass("b", "broken2.wgsl")),
+            ("main".to_string(), make_pass("c", "missing.wgsl")),
+        ];
+        let failures = validate_plan_shaders(dir.path(), &passes);
+        assert_eq!(failures.len(), 3);
+        assert!(failures.iter().any(|f| f.contains("a:")));
+        assert!(failures.iter().any(|f| f.contains("b:")));
+        assert!(failures.iter().any(|f| f.contains("c:")));
+    }
+
+    #[test]
+    fn validate_plan_shaders_empty_input_returns_empty() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let failures = validate_plan_shaders(dir.path(), &[]);
+        assert!(failures.is_empty());
     }
 }
