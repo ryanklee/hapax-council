@@ -336,6 +336,16 @@ def build_inline_fx_chain(
     # --- glvideomixer: GPU-native compositing ---
     glmixer = Gst.ElementFactory.make("glvideomixer", "fx-glmixer")
     glmixer.set_property("background", 1)  # 1=black (default is 0=checker!)
+    # Delta drop #40 GLM-1: same GstAggregator `latency=0` issue as
+    # cudacompositor (see pipeline.py COMP-1). The base path has a
+    # cairooverlay streaming-thread callback (~6-10 ms per frame, drop #39)
+    # that the flash path does not, creating a consistent 6-10 ms pad
+    # timing mismatch. 33 ms of grace aligns both pads on the same
+    # source-frame timestamp and eliminates the 18-31% of output frames
+    # that would otherwise carry one-frame-old base content. No
+    # `ignore-inactive-pads` counterpart: glvideomixer does not expose
+    # that property (its internal aggregator base does not surface it).
+    glmixer.set_property("latency", 33_000_000)
 
     # --- Post-mixer: shader chain → output ---
     from agents.effect_graph.pipeline import SlotPipeline

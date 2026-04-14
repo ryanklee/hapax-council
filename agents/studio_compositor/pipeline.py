@@ -58,6 +58,27 @@ def build_pipeline(compositor: Any) -> Any:
             comp_element.set_property("cuda-device-id", 0)
         except Exception:
             log.debug("cudacompositor: cuda-device-id property not supported", exc_info=True)
+        # Delta drop #35 COMP-1: GstAggregator default `latency=0` means the
+        # aggregator produces output as soon as any sink pad has data, using
+        # the last-repeated buffer from pads that are still behind. Per-camera
+        # producer pipelines introduce a few ms of JPEG-decode variance, so
+        # some fraction of output frames carry one-frame-old content from the
+        # slower pads. One frame of grace (33 ms at 30 fps) aligns all pads
+        # on the same source-frame timestamp at ~10-33% of the existing
+        # 100-300 ms end-to-end latency budget.
+        try:
+            comp_element.set_property("latency", 33_000_000)
+        except Exception:
+            log.debug("cudacompositor: latency property not supported", exc_info=True)
+        # Delta drop #35 COMP-2: `ignore-inactive-pads=true` lets the
+        # aggregator produce output even when a sink pad has no data. This
+        # matters during primary→fallback interpipesrc hot-swap (Camera 24/7
+        # epic): the swap briefly leaves one pad buffer-less, and without
+        # this flag the whole composite stalls on the missing pad.
+        try:
+            comp_element.set_property("ignore-inactive-pads", True)
+        except Exception:
+            log.debug("cudacompositor: ignore-inactive-pads property not supported", exc_info=True)
     pipeline.add(comp_element)
 
     fps = compositor.config.framerate
