@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 
 use notify::{Event, EventKind, RecommendedWatcher, Watcher};
@@ -312,6 +312,24 @@ pub struct DynamicPipeline {
     width: u32,
     height: u32,
     frame_count: u64,
+    /// LRR Phase 0 item 4 / FINDING-Q step 4 — counter for shader hot-reload
+    /// rollback events. Incremented every time the validation gate rejects
+    /// a hot-reload attempt or a runtime panic forces a rollback to the
+    /// last-known-good plan. Surfaced via `shader_rollback_total()` and
+    /// published over the imagination → compositor SHM bridge so
+    /// `hapax_imagination_shader_rollback_total` lands on Prometheus
+    /// alongside the existing `reverie_pool_*` gauges.
+    ///
+    /// Wrapped in `Arc` to match the existing `pending_reload` pattern;
+    /// the watcher closure can clone the Arc if it ever needs to bump the
+    /// counter from outside the render thread.
+    ///
+    /// Today (PR #788) the counter exists but no code path increments it.
+    /// PR #3a wires the validation gate; PR #3b wires the runtime-panic
+    /// rollback. See the spike doc at
+    /// `docs/superpowers/specs/2026-04-14-lrr-phase-0-finding-q-spike-notes.md`
+    /// for the design rationale and recommended PR sequence.
+    shader_rollback_total: Arc<AtomicU64>,
 }
 
 impl DynamicPipeline {
@@ -471,6 +489,7 @@ impl DynamicPipeline {
             width,
             height,
             frame_count: 0,
+            shader_rollback_total: Arc::new(AtomicU64::new(0)),
         };
 
         // Try loading existing plan
@@ -1247,6 +1266,19 @@ impl DynamicPipeline {
             reuse_ratio: self.intermediate_pool.reuse_ratio(),
             slot_count: self.intermediate_slots.len(),
         }
+    }
+
+    /// LRR Phase 0 item 4 / FINDING-Q step 4 — read the shader rollback
+    /// counter. Returns the cumulative count of hot-reload validation
+    /// failures + runtime-panic rollbacks since process start.
+    ///
+    /// Today (PR #788) this always returns 0 because no code path
+    /// increments the counter yet. PR #3a wires the validation gate at
+    /// `try_reload`; PR #3b wires the runtime-panic rollback. The getter
+    /// exists so the imagination → compositor SHM publisher can pick up
+    /// the value via a stable API once those PRs land.
+    pub fn shader_rollback_total(&self) -> u64 {
+        self.shader_rollback_total.load(Ordering::Relaxed)
     }
 
     pub fn resize(&mut self, device: &wgpu::Device, width: u32, height: u32) {
