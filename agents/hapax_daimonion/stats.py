@@ -3,11 +3,30 @@
 Pure functions for sequential hypothesis testing and correlation analysis
 across SCED experiment phases. Uses scipy.special for Beta CDF to avoid
 the scipy.stats init crash with torch (scipy 1.17 + torch compatibility issue).
+
+LRR Phase 1 item 7 verification (2026-04-14):
+- The original analysis stack is **beta-binomial** (`bayes_factor`,
+  `rope_check`) — appropriate for binary success/failure proportions
+  but not for continuous behavioral metrics like grounding act counts.
+- Bundle 2 §1 calls for **BEST** (Bayesian Estimation Supersedes the
+  t-test, Kruschke 2013) for continuous group comparisons. The
+  canonical Kruschke implementation uses PyMC + MCMC; council does
+  not currently have PyMC as a dependency.
+- This file ships a **scipy-only analytical BEST approximation**
+  (`best_two_sample`) appropriate for Phase 1 + 2 + 3 work. The
+  approximation uses Welch's t-test + a normal approximation for the
+  posterior over the difference of means, and reports the same dict
+  shape as Bundle 2's canonical `report_best`. **Phase 4 baseline
+  collection should upgrade to MCMC-BEST** before any claim is filed.
+- DEVIATION-NNN: if Phase 4 needs the canonical MCMC version, file a
+  deviation against this file when adding the PyMC dependency. The
+  approximation here is a known-good interim, not a substitute.
 """
 
 from __future__ import annotations
 
 import math
+from typing import Any
 
 import numpy as np
 from scipy.special import betainc
@@ -220,3 +239,144 @@ def baseline_corrected_tau(
         "n_baseline": n_a,
         "n_intervention": n_b,
     }
+
+
+# ----------------------------------------------------------------------------
+# LRR Phase 1 item 7 — BEST two-sample comparison (analytical approximation)
+# ----------------------------------------------------------------------------
+
+BEST_METHOD_LABEL = "scipy-analytical-approx-2026-04-14"
+"""Label written into the result dict so future analyses can detect which
+implementation produced the numbers. Phase 4 may upgrade to MCMC-BEST and
+this label will change to e.g. ``pymc-mcmc-2026-04-XX`` so historical
+comparisons can re-run analyses against the new implementation."""
+
+
+def best_two_sample(
+    group_a: list[float] | np.ndarray,
+    group_b: list[float] | np.ndarray,
+    rope_effect_size: tuple[float, float] = (-0.1, 0.1),
+) -> dict[str, Any]:
+    """Bayesian two-sample comparison — analytical approximation of BEST.
+
+    Per Bundle 2 §1, the canonical BEST implementation uses PyMC + MCMC
+    sampling (Kruschke 2013). Council does not currently have PyMC as a
+    dependency, so this function ships a scipy-only analytical
+    approximation appropriate for Phase 1 + 2 + 3 LRR work. **Phase 4
+    baseline collection should upgrade to MCMC-BEST** before any claim
+    is filed (see DEVIATION procedure in module docstring).
+
+    Approach:
+        1. Welch's two-sample setup: pooled variance + degrees of freedom
+        2. Approximate the posterior over (mu_b - mu_a) as a Normal centered
+           on the observed difference with std = Welch standard error
+        3. Approximate effect size posterior via Normal(d_obs, se_d) where
+           d_obs is Cohen's d and se_d is the conventional sampling SE
+        4. Report 95% HDI as ±1.96·SE around the mean (HDI of a Normal
+           equals the equal-tailed CI when the distribution is symmetric)
+        5. P(diff > 0) and P(effect outside ROPE) computed via normal CDF
+
+    The result dict shape matches Bundle 2's canonical ``report_best``
+    output so future MCMC-BEST upgrades drop in cleanly. The
+    ``BEST_METHOD_LABEL`` field lets downstream consumers detect which
+    implementation produced the numbers.
+
+    Args:
+        group_a: 1D array of metric values from Condition A
+        group_b: 1D array of metric values from Condition B
+        rope_effect_size: ROPE bounds for Cohen's d (default ±0.1 per Kruschke)
+
+    Returns:
+        Dict with method, n_a, n_b, diff_means_*, effect_size_*,
+        p_diff_means_positive, p_effect_outside_rope_*. NaN-safe: if either
+        group is empty or pooled variance is zero, returns a sentinel dict
+        with method=BEST_METHOD_LABEL and all numeric fields set to None.
+    """
+    a = np.asarray(group_a, dtype=np.float64)
+    b = np.asarray(group_b, dtype=np.float64)
+    n_a = len(a)
+    n_b = len(b)
+    if n_a < 2 or n_b < 2:
+        return _best_sentinel(n_a, n_b, "insufficient sample size (need n >= 2 per group)")
+
+    mean_a = float(a.mean())
+    mean_b = float(b.mean())
+    var_a = float(a.var(ddof=1))
+    var_b = float(b.var(ddof=1))
+    if var_a <= 0 and var_b <= 0:
+        return _best_sentinel(n_a, n_b, "pooled variance is zero (both groups constant)")
+
+    diff_obs = mean_b - mean_a
+
+    # Welch standard error for the difference of means
+    se_diff = math.sqrt(var_a / n_a + var_b / n_b)
+
+    # Cohen's d (pooled SD), with sampling SE per Hedges-Olkin
+    pooled_sd = math.sqrt((var_a + var_b) / 2.0)
+    if pooled_sd <= 0:
+        return _best_sentinel(n_a, n_b, "pooled SD is zero")
+    d_obs = diff_obs / pooled_sd
+    se_d = math.sqrt((n_a + n_b) / (n_a * n_b) + d_obs**2 / (2 * (n_a + n_b)))
+
+    # 95% HDI (= equal-tailed 95% CI for a symmetric Normal posterior)
+    z95 = 1.959963984540054  # scipy.stats.norm.ppf(0.975)
+    diff_hdi_lo = diff_obs - z95 * se_diff
+    diff_hdi_hi = diff_obs + z95 * se_diff
+    effect_hdi_lo = d_obs - z95 * se_d
+    effect_hdi_hi = d_obs + z95 * se_d
+
+    # P(diff > 0) under Normal(diff_obs, se_diff)
+    # Z-score for diff_obs > 0 → P = Phi(diff_obs / se_diff)
+    p_diff_positive = (
+        _normal_cdf(diff_obs / se_diff) if se_diff > 0 else (1.0 if diff_obs > 0 else 0.0)
+    )
+
+    # P(effect outside ROPE) under Normal(d_obs, se_d)
+    rope_lo, rope_hi = rope_effect_size
+    if se_d > 0:
+        p_below_rope = _normal_cdf((rope_lo - d_obs) / se_d)
+        p_above_rope = 1.0 - _normal_cdf((rope_hi - d_obs) / se_d)
+        p_outside_rope = p_below_rope + p_above_rope
+    else:
+        p_outside_rope = 0.0 if rope_lo <= d_obs <= rope_hi else 1.0
+
+    return {
+        "method": BEST_METHOD_LABEL,
+        "ref": "Kruschke 2013 (analytical approx; canonical MCMC pending Phase 4 PyMC dep)",
+        "n_a": n_a,
+        "n_b": n_b,
+        "diff_means_mean": diff_obs,
+        "diff_means_hdi95": [diff_hdi_lo, diff_hdi_hi],
+        "diff_means_se": se_diff,
+        "effect_size_mean": d_obs,
+        "effect_size_hdi95": [effect_hdi_lo, effect_hdi_hi],
+        "effect_size_se": se_d,
+        "p_diff_means_positive": float(p_diff_positive),
+        "p_effect_outside_rope_neg10_pos10": float(p_outside_rope),
+        "rope_used": list(rope_effect_size),
+    }
+
+
+def _best_sentinel(n_a: int, n_b: int, reason: str) -> dict[str, Any]:
+    """Return a None-filled BEST result dict when input is invalid."""
+    return {
+        "method": BEST_METHOD_LABEL,
+        "ref": "Kruschke 2013 (analytical approx)",
+        "n_a": n_a,
+        "n_b": n_b,
+        "diff_means_mean": None,
+        "diff_means_hdi95": None,
+        "diff_means_se": None,
+        "effect_size_mean": None,
+        "effect_size_hdi95": None,
+        "effect_size_se": None,
+        "p_diff_means_positive": None,
+        "p_effect_outside_rope_neg10_pos10": None,
+        "rope_used": None,
+        "error": reason,
+    }
+
+
+def _normal_cdf(z: float) -> float:
+    """Standard normal CDF via math.erf (avoids scipy.stats import)."""
+    return 0.5 * (1.0 + math.erf(z / math.sqrt(2.0)))
