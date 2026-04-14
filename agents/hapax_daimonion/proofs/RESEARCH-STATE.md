@@ -1,7 +1,31 @@
 # Voice Grounding Research State
 
-**Last updated:** 2026-04-03 (session 23 — Total Affordance Field epic)
+**Last updated:** 2026-04-14 (LRR Phase 0 open — voice grounding state pin)
 **Update convention:** After any session with research decisions or implementation progress, update this file before ending.
+
+## 2026-04-14 — LRR Phase 0 voice grounding state pin
+
+The LIVESTREAM RESEARCH READY (LRR) epic opened Phase 0 on 2026-04-14. This pin captures the voice grounding research state at LRR Phase 0 open so future LRR phases (especially Phase 4 Phase A Completion + OSF Pre-Registration and Phase 5 Hermes 3 70B Substrate Swap) have an authoritative reference.
+
+**Cycle 2 Phase A status: READY but not started.**
+
+- **Pre-registration written but not filed.** OSF project not created. ORCID setup not completed.
+- **Baseline data collection has not begun.** No Phase A sessions logged into the (not yet existing) research registry.
+- **Implementation is ready** (Batches 1-4 + wiring gaps closed in PR #236; GQI-stimmung coupling live; experiment config set to `phase-a-baseline-continuity-v2`).
+- **Frozen-file enforcement is partial.** RESEARCH/R&D mode isolation shipped (session 7) and `experiment-freeze-manifest.txt` is in place, but the LRR epic Phase 1 will add a research registry that tags every reaction with a condition ID — this is not yet built.
+- **Sprint 0 G3 gate is the explicit Phase 4 blocker.** The LRR epic Phase 4 preamble documents two options for resolving it. No decision yet.
+
+**LRR phases that close these items:**
+
+- **LRR Phase 1** — Research Registry Foundation builds the append-only registry where Phase A sessions get a `condition_id` (`cond-phase-a-baseline-qwen-001`).
+- **LRR Phase 4** — Phase A Completion + OSF Pre-Registration files the pre-reg, creates the OSF project, runs ≥10 Condition A sessions, marks `collection_halt_at`.
+- **LRR Phase 5** — Hermes 3 70B Substrate Swap is formalized as DEVIATION-037 + a new claim `claim-shaikh-sft-vs-dpo` testing SFT-only vs DPO under identical grounding directives. The substrate swap IS the claim, not a confound.
+
+**Voice transcript files** (used by Phase 6 stream-mode firewall): live at `~/.local/share/hapax-daimonion/events-*.jsonl`. Permissions tightened to `600` on 2026-04-14 (LRR Phase 0 item 9). The daimonion daily rotation hook still creates new files at 644; **Phase 6 must add `umask 077` or post-create `chmod 600`** to the rotation path. Filed as a Phase 6 prerequisite.
+
+**Kokoro TTS baseline** (Phase 5 reference): captured 2026-04-14 by `scripts/kokoro-baseline.py`, written to `~/hapax-state/benchmarks/kokoro-latency/baseline.json`. Cold synth 29.8 s (one-time spaCy install included), warm synth p50 2253.9 ms, warm RTF p50 0.415. Phase 5 GPU TTS evaluations (StyleTTS 2 spike, etc.) compare against these numbers.
+
+
 
 ## Position (one paragraph)
 
