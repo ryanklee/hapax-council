@@ -67,10 +67,40 @@ def _corporate_boundary_policies(
     if role in ("subject", "enforcer"):
 
         def _no_work_data(_agent_id: str, data: Labeled[Any]) -> bool:
-            """Deny data categorized as work/employer data."""
-            if hasattr(data, "metadata") and isinstance(data.metadata, dict):
-                return data.metadata.get("data_category") != "work"
-            return True  # No metadata = no category = allowed
+            """Deny data categorized as work/employer data.
+
+            BETA-FINDING-M (queue 025 Phase 1): the prior version of
+            this check returned ``True`` (allow) when the data
+            object had no ``metadata`` dict or no ``data_category``
+            key. Same structural shape as BETA-FINDING-K: a
+            weight-90 governance guarantee silently degrading to
+            "proceed without enforcement" when its prerequisite
+            (metadata labeling) is absent.
+
+            Fix: fail-closed. Missing metadata or missing category
+            now denies the write. Callers that legitimately pass
+            unlabeled data must attach a ``data_category`` of
+            ``"personal"`` (or whatever the correct home-data tag
+            is). A warning logs the specific tag state so the
+            operator sees which call site is missing labels.
+            """
+            if not (hasattr(data, "metadata") and isinstance(data.metadata, dict)):
+                _log.warning(
+                    "corporate_boundary: _no_work_data denying data with no "
+                    "metadata dict (fail-closed). Label the data with "
+                    "data_category before routing through a corporate_boundary "
+                    "subject/enforcer agent."
+                )
+                return False
+            category = data.metadata.get("data_category")
+            if category is None:
+                _log.warning(
+                    "corporate_boundary: _no_work_data denying data with no "
+                    "data_category key (fail-closed). Set data_category "
+                    "explicitly on the metadata dict."
+                )
+                return False
+            return category != "work"
 
         output_policies.append(
             GovernorPolicy(

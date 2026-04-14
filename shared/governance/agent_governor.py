@@ -67,10 +67,30 @@ def _corporate_boundary_policies(
     if role in ("subject", "enforcer"):
 
         def _no_work_data(_agent_id: str, data: Labeled[Any]) -> bool:
-            """Deny data categorized as work/employer data."""
-            if hasattr(data, "metadata") and isinstance(data.metadata, dict):
-                return data.metadata.get("data_category") != "work"
-            return True  # No metadata = no category = allowed
+            """Deny data categorized as work/employer data.
+
+            BETA-FINDING-M (queue 025 Phase 1): fail-closed on
+            missing metadata or missing ``data_category``. Mirrors
+            the fix in ``agents/_governance/agent_governor.py``;
+            both files will converge when shared/ is dissolved.
+            """
+            if not (hasattr(data, "metadata") and isinstance(data.metadata, dict)):
+                _log.warning(
+                    "corporate_boundary: _no_work_data denying data with no "
+                    "metadata dict (fail-closed). Label the data with "
+                    "data_category before routing through a corporate_boundary "
+                    "subject/enforcer agent."
+                )
+                return False
+            category = data.metadata.get("data_category")
+            if category is None:
+                _log.warning(
+                    "corporate_boundary: _no_work_data denying data with no "
+                    "data_category key (fail-closed). Set data_category "
+                    "explicitly on the metadata dict."
+                )
+                return False
+            return category != "work"
 
         output_policies.append(
             GovernorPolicy(
