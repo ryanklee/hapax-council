@@ -442,7 +442,9 @@ def build_inline_fx_chain(
 
     compositor._sierpinski_loader = SierpinskiLoader()
     compositor._sierpinski_loader.start()
-    compositor._sierpinski_renderer = SierpinskiRenderer()
+    compositor._sierpinski_renderer = SierpinskiRenderer(
+        budget_tracker=getattr(compositor, "_budget_tracker", None)
+    )
     compositor._sierpinski_renderer.start()
     log.info("SierpinskiLoader + SierpinskiRenderer created (render thread at 10fps)")
 

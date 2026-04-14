@@ -121,3 +121,54 @@ class TestSourceRegistryDispatch:
         )
         with pytest.raises(UnknownBackendError, match="shm_path"):
             registry.construct_backend(src)
+
+
+class TestSourceRegistryBudgetWiring:
+    """Phase 10: registry-constructed cairo runners must forward budget_tracker.
+
+    Per delta 2026-04-14-compositor-frame-budget-forensics.md: the Phase 7
+    BudgetTracker was installed but never reached any CairoSourceRunner —
+    construct_backend fell through to CairoSourceRunner() with budget_tracker
+    defaulted to None. This test pins the wiring so the dead path stays dead.
+    """
+
+    def test_cairo_backend_receives_budget_tracker_when_provided(self):
+        from agents.studio_compositor.budget import BudgetTracker
+
+        registry = SourceRegistry()
+        tracker = BudgetTracker()
+        src = _make_source(
+            "token_pole",
+            "cairo",
+            {"class_name": "TokenPoleCairoSource", "natural_w": 300, "natural_h": 300},
+        )
+        backend = registry.construct_backend(src, budget_tracker=tracker)
+        assert backend._budget_tracker is tracker
+
+    def test_cairo_backend_tracker_defaults_to_none(self):
+        registry = SourceRegistry()
+        src = _make_source(
+            "token_pole",
+            "cairo",
+            {"class_name": "TokenPoleCairoSource", "natural_w": 300, "natural_h": 300},
+        )
+        backend = registry.construct_backend(src)
+        assert backend._budget_tracker is None
+
+    def test_cairo_runner_records_into_tracker_on_tick(self):
+        """After one successful render, the tracker must have a sample."""
+        from agents.studio_compositor.budget import BudgetTracker
+
+        registry = SourceRegistry()
+        tracker = BudgetTracker()
+        src = _make_source(
+            "token_pole",
+            "cairo",
+            {"class_name": "TokenPoleCairoSource", "natural_w": 300, "natural_h": 300},
+        )
+        runner = registry.construct_backend(src, budget_tracker=tracker)
+        runner.tick_once()
+        snap = tracker.snapshot()
+        assert "token_pole" in snap
+        assert snap["token_pole"].sample_count == 1
+        assert snap["token_pole"].last_ms >= 0.0

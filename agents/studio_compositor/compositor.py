@@ -284,7 +284,15 @@ class StudioCompositor:
         self._overlay_cache_surface: Any = None
         self._overlay_cache_timestamp: float = 0.0
         self._overlay_cache_cam_hash: str = ""
-        self._overlay_zone_manager = OverlayZoneManager()
+        # Phase 10 observability polish — wire the Phase 7 BudgetTracker
+        # that has sat dead since PR #752. One tracker shared across every
+        # CairoSourceRunner in the process; lifecycle.start_compositor
+        # schedules the GLib timer that publishes snapshots to
+        # /dev/shm/hapax-compositor/costs.json and degraded.json.
+        from agents.studio_compositor.budget import BudgetTracker
+
+        self._budget_tracker = BudgetTracker()
+        self._overlay_zone_manager = OverlayZoneManager(budget_tracker=self._budget_tracker)
         self._audio_capture = CompositorAudioCapture()
 
         self._graph_runtime = init_graph_runtime(self)
@@ -503,7 +511,7 @@ class StudioCompositor:
         registry = SourceRegistry()
         for source in layout.sources:
             try:
-                backend = registry.construct_backend(source)
+                backend = registry.construct_backend(source, budget_tracker=self._budget_tracker)
             except Exception:
                 log.exception(
                     "failed to construct backend for source %s (backend=%s)",

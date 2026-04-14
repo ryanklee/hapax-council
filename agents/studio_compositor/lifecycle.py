@@ -131,6 +131,29 @@ def start_compositor(compositor: Any) -> None:
 
     GLib.timeout_add(33, lambda: fx_tick_callback(compositor))  # 30fps uniform updates
 
+    # Phase 10 observability polish — publish BudgetTracker snapshots + the
+    # degraded signal every second. Closes the dead-path finding from delta's
+    # 2026-04-14 compositor frame budget forensics drop: prior to this timer
+    # _PUBLISH_COSTS_FRESHNESS + _PUBLISH_DEGRADED_FRESHNESS stayed at
+    # age_seconds=+Inf for the lifetime of the process.
+    def _compositor_budget_publish_tick() -> bool:
+        tracker = getattr(compositor, "_budget_tracker", None)
+        if tracker is None:
+            return compositor._running
+        try:
+            from pathlib import Path
+
+            from agents.studio_compositor.budget import publish_costs
+            from agents.studio_compositor.budget_signal import publish_degraded_signal
+
+            publish_costs(tracker, Path("/dev/shm/hapax-compositor/costs.json"))
+            publish_degraded_signal(tracker)
+        except Exception:
+            log.debug("compositor budget publish tick failed", exc_info=True)
+        return compositor._running
+
+    GLib.timeout_add(1000, _compositor_budget_publish_tick)
+
     # Phase 3: start the udev monitor so USB add/remove events drive the
     # per-camera state machine. Runs in-process via pyudev.glib bridged to
     # the GLib main loop.

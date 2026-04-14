@@ -18,11 +18,14 @@ import logging
 import math
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import cairo
 
 from .cairo_source import CairoSource, CairoSourceRunner
+
+if TYPE_CHECKING:
+    from agents.studio_compositor.budget import BudgetTracker
 
 log = logging.getLogger(__name__)
 
@@ -344,7 +347,7 @@ class SierpinskiRenderer:
       sub-millisecond GStreamer streaming-thread blit
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, budget_tracker: BudgetTracker | None = None) -> None:
         self._source = SierpinskiCairoSource()
         self._runner = CairoSourceRunner(
             source_id="sierpinski-lines",
@@ -352,6 +355,7 @@ class SierpinskiRenderer:
             canvas_w=1920,
             canvas_h=1080,
             target_fps=RENDER_FPS,
+            budget_tracker=budget_tracker,
         )
 
     def start(self) -> None:
