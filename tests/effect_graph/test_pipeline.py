@@ -205,3 +205,51 @@ class TestGlfeedbackDiffCheck:
         assert all(f is None for f in pipe._slot_last_frag), (
             "create_slots must reset _slot_last_frag so new slot instances start fresh"
         )
+
+    def test_recompile_and_accum_clear_counters_increment(self, registry, compiler):
+        """Phase 10 / delta metric-coverage-gaps C7 + C8 proof-of-fix counters.
+
+        A real change to slot 0 must bump both compositor_glfeedback_recompile_total
+        and compositor_glfeedback_accum_clear_total. A no-op repeat must not.
+        """
+        from agents.studio_compositor import metrics as comp_metrics
+
+        comp_metrics._init_metrics()
+        if (
+            comp_metrics.COMP_GLFEEDBACK_RECOMPILE_TOTAL is None
+            or comp_metrics.COMP_GLFEEDBACK_ACCUM_CLEAR_TOTAL is None
+        ):
+            import pytest as _pt
+
+            _pt.skip("prometheus_client not available in this environment")
+
+        def _total(counter) -> float:
+            for metric in counter.collect():
+                for sample in metric.samples:
+                    if sample.name.endswith("_total"):
+                        return sample.value
+            return 0.0
+
+        baseline_recomp = _total(comp_metrics.COMP_GLFEEDBACK_RECOMPILE_TOTAL)
+        baseline_clear = _total(comp_metrics.COMP_GLFEEDBACK_ACCUM_CLEAR_TOTAL)
+
+        pipe = self._temporal_pipeline(registry, compiler)
+        plan = self._plan(compiler, type1="colorgrade")
+        pipe.activate_plan(plan)
+
+        after_first_recomp = _total(comp_metrics.COMP_GLFEEDBACK_RECOMPILE_TOTAL)
+        after_first_clear = _total(comp_metrics.COMP_GLFEEDBACK_ACCUM_CLEAR_TOTAL)
+        assert after_first_recomp > baseline_recomp, (
+            "first activate_plan must bump COMP_GLFEEDBACK_RECOMPILE_TOTAL"
+        )
+        assert after_first_clear > baseline_clear, (
+            "first activate_plan must bump COMP_GLFEEDBACK_ACCUM_CLEAR_TOTAL"
+        )
+
+        pipe.activate_plan(plan)
+        assert _total(comp_metrics.COMP_GLFEEDBACK_RECOMPILE_TOTAL) == after_first_recomp, (
+            "repeat activate_plan must NOT bump recompile counter"
+        )
+        assert _total(comp_metrics.COMP_GLFEEDBACK_ACCUM_CLEAR_TOTAL) == after_first_clear, (
+            "repeat activate_plan must NOT bump accum-clear counter"
+        )

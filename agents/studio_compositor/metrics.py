@@ -120,6 +120,8 @@ CAM_FRAME_FLOW_STALE_TOTAL: Any = None
 COMP_VOICE_ACTIVE: Any = None
 COMP_MUSIC_DUCKED: Any = None
 HAPAX_IMAGINATION_SHADER_ROLLBACK_TOTAL: Any = None
+COMP_GLFEEDBACK_RECOMPILE_TOTAL: Any = None
+COMP_GLFEEDBACK_ACCUM_CLEAR_TOTAL: Any = None
 # Last value the mirror published, so we can detect rollback events
 # (the gauge → counter delta must be non-negative since the underlying
 # Rust counter is monotonic across imagination process lifetime).
@@ -282,6 +284,32 @@ def _init_metrics() -> None:
     HAPAX_IMAGINATION_SHADER_ROLLBACK_TOTAL = Counter(
         "hapax_imagination_shader_rollback_total",
         "Cumulative WGSL hot-reload rollback events (validation failures + runtime panics)",
+        registry=REGISTRY,
+    )
+
+    # Phase 10 / delta metric-coverage-gaps C7 + C8: proof-of-fix
+    # metrics for the glfeedback diff-check landing alongside this
+    # phase. C7 counts shader recompile events (including no-op
+    # re-sets until the diff check lands — after which the counter
+    # rate should drop from ~336/hour to <= 20/hour of real changes).
+    # C8 counts accumulation-buffer clears; the Rust plugin clears on
+    # every real shader change, so its rate tracks the genuine
+    # recompile rate after the fix. Together they give the operator
+    # a direct before/after picture of the fix.
+    global COMP_GLFEEDBACK_RECOMPILE_TOTAL
+    global COMP_GLFEEDBACK_ACCUM_CLEAR_TOTAL
+    COMP_GLFEEDBACK_RECOMPILE_TOTAL = Counter(
+        "compositor_glfeedback_recompile_total",
+        "Number of times SlotPipeline.activate_plan set_property-ed a glfeedback "
+        "fragment. Counts only real set_property calls; byte-identical re-sets "
+        "are elided by the Phase 10 diff check.",
+        registry=REGISTRY,
+    )
+    COMP_GLFEEDBACK_ACCUM_CLEAR_TOTAL = Counter(
+        "compositor_glfeedback_accum_clear_total",
+        "Number of times activate_plan triggered an accumulation-buffer clear "
+        "(paired with recompile_total: every real shader change clears both "
+        "accum FBOs in the Rust plugin).",
         registry=REGISTRY,
     )
 

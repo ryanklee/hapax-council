@@ -17,6 +17,56 @@ from .consent import log_consent_event
 log = logging.getLogger(__name__)
 
 
+def _log_feature_probes(compositor: Any) -> None:
+    """Log one INFO line per optional subsystem probe (Phase 10 D3).
+
+    Stable format: ``feature-probe: NAME=BOOL`` so `grep -e
+    'feature-probe:' journalctl` gives a clean per-boot inventory.
+    Each probe is isolated in its own try/except so any one probe
+    failing still lets the rest report.
+    """
+    probes: list[tuple[str, bool]] = []
+
+    try:
+        from agents.studio_compositor import metrics as _comp_metrics
+
+        probes.append(("prometheus_client", _comp_metrics.REGISTRY is not None))
+    except Exception:
+        probes.append(("prometheus_client", False))
+
+    try:
+        from agents.studio_compositor.budget import BudgetTracker
+
+        tracker = getattr(compositor, "_budget_tracker", None)
+        probes.append(("budget_tracker_active", isinstance(tracker, BudgetTracker)))
+    except Exception:
+        probes.append(("budget_tracker_active", False))
+
+    try:
+        from agents.studio_fx.gpu import has_cuda
+
+        probes.append(("opencv_cuda", has_cuda()))
+    except Exception:
+        probes.append(("opencv_cuda", False))
+
+    try:
+        probes.append(("output_router", getattr(compositor, "output_router", None) is not None))
+    except Exception:
+        probes.append(("output_router", False))
+
+    try:
+        from agents.studio_compositor.cairo_sources import list_classes
+
+        probes.append(
+            ("research_marker_overlay_registered", "ResearchMarkerOverlay" in list_classes())
+        )
+    except Exception:
+        probes.append(("research_marker_overlay_registered", False))
+
+    for name, value in probes:
+        log.info("feature-probe: %s=%s", name, str(value).lower())
+
+
 def start_compositor(compositor: Any) -> None:
     """Build and start the pipeline."""
     from .fx_chain import fx_tick_callback
@@ -26,6 +76,15 @@ def start_compositor(compositor: Any) -> None:
     compositor._GLib, compositor._Gst = init_gstreamer()
     GLib = compositor._GLib
     Gst = compositor._Gst
+
+    # Phase 10 / delta metric-coverage-gaps D3 — announce every
+    # optional subsystem that was probed at startup, so latent-
+    # feature disables (CUDA, BudgetTracker, prometheus_client,
+    # OpenCV-CUDA) are loud rather than silent. One line per probe,
+    # stable key names for grep. Delta's drop #1 and drop #6 each
+    # spent investigation cycles on features that were installed but
+    # runtime-disabled; this probe log would have caught both on day 1.
+    _log_feature_probes(compositor)
 
     log.info("Building compositor pipeline with %d cameras", len(compositor.config.cameras))
 

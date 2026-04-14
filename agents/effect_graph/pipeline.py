@@ -183,6 +183,25 @@ class SlotPipeline:
                 self._set_uniforms(i, self._slot_base_params[i])
                 self._slots[i].set_property("update-shader", True)
 
+        # Phase 10 / delta metric-coverage-gaps C7 + C8 — proof-of-fix
+        # counters. Every post-diff-check real fragment set triggers
+        # exactly one Rust-side recompile, and every recompile clears
+        # both accum FBOs. The two counters therefore track in lockstep
+        # at real-change rate. Before the Phase 10 PR #1 diff check,
+        # these would have read ~24 per activate_plan; with the fix in
+        # place they read only real changes. Import inside the function
+        # so the compositor metrics module can be absent in unit tests.
+        if fragment_set_count > 0:
+            try:
+                from agents.studio_compositor import metrics as _comp_metrics
+
+                if _comp_metrics.COMP_GLFEEDBACK_RECOMPILE_TOTAL is not None:
+                    _comp_metrics.COMP_GLFEEDBACK_RECOMPILE_TOTAL.inc(fragment_set_count)
+                if _comp_metrics.COMP_GLFEEDBACK_ACCUM_CLEAR_TOTAL is not None:
+                    _comp_metrics.COMP_GLFEEDBACK_ACCUM_CLEAR_TOTAL.inc(fragment_set_count)
+            except Exception:
+                log.debug("glfeedback recompile counters unavailable", exc_info=True)
+
         log.info(
             "Activated plan '%s': %d/%d slots used, %d fragment set_property calls",
             plan.name,

@@ -427,3 +427,46 @@ class TestResearchMarkerOverlayRegistered:
         assert "ResearchMarkerOverlay" in list_classes()
         cls = get_cairo_source_class("ResearchMarkerOverlay")
         assert cls is ResearchMarkerOverlay
+
+
+class TestFeatureProbeLog:
+    """Phase 10 / delta metric-coverage-gaps D3 — startup feature-probe log.
+
+    Delta's drop #1 and drop #6 each spent investigation cycles on
+    features that were installed but runtime-disabled (BudgetTracker,
+    OpenCV CUDA). A per-boot ``feature-probe: NAME=BOOL`` inventory
+    makes every latent-feature disable loud from startup.
+    """
+
+    def test_log_feature_probes_emits_expected_keys(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        import logging as _logging
+
+        from agents.studio_compositor.lifecycle import _log_feature_probes
+
+        layout_file = tmp_path / "default.json"
+        layout_file.write_text(DEFAULT_JSON.read_text())
+        compositor = _make_compositor(layout_path=layout_file)
+        compositor.start_layout_only()
+
+        with caplog.at_level(_logging.INFO, logger="agents.studio_compositor.lifecycle"):
+            _log_feature_probes(compositor)
+
+        messages = [rec.message for rec in caplog.records if "feature-probe:" in rec.message]
+        joined = " | ".join(messages)
+        for key in [
+            "prometheus_client=",
+            "budget_tracker_active=",
+            "opencv_cuda=",
+            "output_router=",
+            "research_marker_overlay_registered=",
+        ]:
+            assert key in joined, f"feature-probe log missing key: {key!r}"
+        assert "budget_tracker_active=true" in joined, (
+            "budget_tracker should read as active after start_layout_only"
+        )
+        assert "output_router=true" in joined, (
+            "output_router should read as wired after start_layout_only"
+        )
+        assert "research_marker_overlay_registered=true" in joined

@@ -223,6 +223,53 @@ def test_render_text_to_surface_draws_into_returned_surface():
 
 
 # ---------------------------------------------------------------------------
+# Phase 10 / delta overlay_zones-cairo-invalid-size (R2, D1) diagnostic
+# ---------------------------------------------------------------------------
+
+
+@requires_pango
+def test_render_text_to_surface_logs_diagnostic_on_cairo_error(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """When cairo.ImageSurface raises, the diagnostic line must fire.
+
+    Delta's 2026-04-14 overlay_zones-cairo-invalid-size drop captured
+    ~50 cairo.Error bursts at text_render.py:188 and listed three
+    candidate causes. Without a per-failure capture of sw/sh/text
+    metrics the root cause is not attributable. This test pins that
+    the diagnostic line IS emitted on failure and carries the
+    relevant fields.
+    """
+    import logging as _logging
+
+    import agents.studio_compositor.text_render as tr
+
+    style = TextStyle(text="hi", font_description="Sans 18")
+    real_cls = tr.cairo.ImageSurface
+    call_count = {"n": 0}
+
+    def _raising_image_surface(fmt, w, h):
+        call_count["n"] += 1
+        # First call = measurement surface (1x1), must succeed.
+        # Second call = the final surface — this is the one text_render
+        # wraps in the diagnostic.
+        if call_count["n"] == 1:
+            return real_cls(fmt, w, h)
+        raise tr.cairo.Error("invalid value (typical overlay_zones burst)")
+
+    monkeypatch.setattr(tr.cairo, "ImageSurface", _raising_image_surface)
+
+    with caplog.at_level(_logging.ERROR, logger="agents.studio_compositor.text_render"):
+        with pytest.raises(tr.cairo.Error):
+            render_text_to_surface(style, padding_px=4)
+
+    messages = [rec.message for rec in caplog.records]
+    assert any("render_text_to_surface cairo.ImageSurface failed" in m for m in messages)
+    assert any("text_len=" in m and "text_preview=" in m for m in messages)
+    assert any("sw=" in m and "sh=" in m for m in messages)
+
+
+# ---------------------------------------------------------------------------
 # TextContent change-detection
 # ---------------------------------------------------------------------------
 
