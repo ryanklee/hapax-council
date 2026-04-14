@@ -114,6 +114,39 @@ PERCEPTION_INTERVAL = 8.0  # seconds between LLM perception calls
 MIN_VIDEO_DURATION = 15.0  # minimum seconds before allowing CUT
 MAX_VIDEO_DURATION = 60.0  # force CUT after this
 
+# LRR Phase 1 item 2 + 3: every reaction is tagged with the current
+# research condition_id so the JSONL + Qdrant writes carry an experimental
+# context tag. Source of truth = /dev/shm/hapax-compositor/research-marker.json
+# written by `scripts/research-registry.py open|close|init`. Reader caches
+# the value for 5 s so we don't pay a syscall per reaction in the hot path.
+_RESEARCH_MARKER_PATH = Path("/dev/shm/hapax-compositor/research-marker.json")
+_RESEARCH_MARKER_CACHE_TTL_S = 5.0
+_research_marker_cache: dict[str, float | str | None] = {
+    "loaded_at": 0.0,
+    "condition_id": None,
+}
+
+
+def _read_research_marker() -> str | None:
+    """Return the current research condition_id, cached for 5 s.
+
+    File absence + parse errors fall back to None silently. The
+    research-registry CLI atomic-writes this file via tmp+rename so a
+    racing read never sees a partial document.
+    """
+    now = time.monotonic()
+    if (now - float(_research_marker_cache["loaded_at"] or 0.0)) < _RESEARCH_MARKER_CACHE_TTL_S:
+        return _research_marker_cache["condition_id"]  # type: ignore[return-value]
+    try:
+        raw = _RESEARCH_MARKER_PATH.read_text()
+        data = json.loads(raw)
+        condition_id = data.get("condition_id") if isinstance(data, dict) else None
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        condition_id = None
+    _research_marker_cache["condition_id"] = condition_id
+    _research_marker_cache["loaded_at"] = now
+    return condition_id
+
 
 def _get_litellm_key() -> str:
     global LITELLM_KEY
@@ -858,6 +891,11 @@ class DirectorLoop:
             "video_channel": video_channel,
             "album": album,
             "stimmung": "nominal",
+            # LRR Phase 1 item 2: research condition tag. Read once per
+            # reaction (cached 5 s in `_read_research_marker`). Both the
+            # JSONL writer below and the Qdrant upsert pick up this field
+            # via the shared `record` dict — no second read.
+            "condition_id": _read_research_marker(),
         }
         try:
             stimmung_path = Path("/dev/shm/hapax-stimmung/state.json")
