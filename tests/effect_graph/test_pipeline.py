@@ -107,3 +107,149 @@ def test_ghost_preset(pipeline, compiler):
     pipeline.activate_plan(plan)
     assigned = [a for a in pipeline.slot_assignments if a]
     assert "trail" in assigned and "bloom" in assigned
+
+
+class TestGlfeedbackDiffCheck:
+    """Activate-plan should not re-set fragment to its current value.
+
+    Per delta 2026-04-14 glfeedback-shader-recompile-storm drop: every
+    byte-identical re-set cascades a Rust-side accum-buffer clear and a
+    shader recompile, producing one visual flicker per plan activation
+    on any feedback-using effect.
+    """
+
+    def _temporal_pipeline(self, registry, compiler):
+        pipe = SlotPipeline(registry, num_slots=8)
+        pipe._slots = [MagicMock() for _ in range(8)]
+        pipe._slot_is_temporal = [True] * 8
+        return pipe
+
+    def _plan(self, compiler, type1: str = "colorgrade", type2: str | None = None):
+        nodes = {
+            "a": NodeInstance(type=type1),
+            "o": NodeInstance(type="output"),
+        }
+        edges: list[list[str]] = [["@live", "a"]]
+        if type2:
+            nodes["b"] = NodeInstance(type=type2)
+            edges.append(["a", "b"])
+            edges.append(["b", "o"])
+        else:
+            edges.append(["a", "o"])
+        g = EffectGraph(name="t", nodes=nodes, edges=edges)
+        return compiler.compile(g)
+
+    def test_repeat_plan_skips_fragment_set_property(self, registry, compiler):
+        pipe = self._temporal_pipeline(registry, compiler)
+        plan = self._plan(compiler)
+
+        pipe.activate_plan(plan)
+        calls_after_first = sum(
+            1 for c in pipe._slots[0].set_property.call_args_list if c.args[0] == "fragment"
+        )
+        assert calls_after_first == 1, (
+            "first activation must set fragment once on the colorgrade slot"
+        )
+
+        passthrough_mock = pipe._slots[3]
+        passthrough_calls_first = sum(
+            1 for c in passthrough_mock.set_property.call_args_list if c.args[0] == "fragment"
+        )
+        assert passthrough_calls_first == 1
+
+        for mock in pipe._slots:
+            mock.reset_mock()
+
+        pipe.activate_plan(plan)
+        for i, mock in enumerate(pipe._slots):
+            frag_calls = [c for c in mock.set_property.call_args_list if c.args[0] == "fragment"]
+            assert len(frag_calls) == 0, (
+                f"slot {i}: identical re-activation must not re-set fragment "
+                f"(got {len(frag_calls)} set_property calls)"
+            )
+
+    def test_plan_with_real_change_sets_fragment(self, registry, compiler):
+        pipe = self._temporal_pipeline(registry, compiler)
+        plan_a = self._plan(compiler, type1="colorgrade")
+        plan_b = self._plan(compiler, type1="bloom")
+
+        pipe.activate_plan(plan_a)
+        for mock in pipe._slots:
+            mock.reset_mock()
+
+        pipe.activate_plan(plan_b)
+        slot0_frag_calls = [
+            c for c in pipe._slots[0].set_property.call_args_list if c.args[0] == "fragment"
+        ]
+        assert len(slot0_frag_calls) == 1, "slot 0 changed colorgrade → bloom, must set fragment"
+
+        for i in range(1, 8):
+            frag_calls = [
+                c for c in pipe._slots[i].set_property.call_args_list if c.args[0] == "fragment"
+            ]
+            assert len(frag_calls) == 0, (
+                f"slot {i} (passthrough) unchanged across plans, must not re-set fragment"
+            )
+
+    def test_last_frag_memo_reset_on_recreate(self, registry, compiler):
+        pipe = self._temporal_pipeline(registry, compiler)
+        plan = self._plan(compiler)
+        pipe.activate_plan(plan)
+        assert any(f is not None for f in pipe._slot_last_frag)
+
+        Gst = MagicMock()
+        factory = MagicMock()
+        factory.find.return_value = None
+        Gst.ElementFactory = factory
+        pipe.create_slots(Gst)
+        assert all(f is None for f in pipe._slot_last_frag), (
+            "create_slots must reset _slot_last_frag so new slot instances start fresh"
+        )
+
+    def test_recompile_and_accum_clear_counters_increment(self, registry, compiler):
+        """Phase 10 / delta metric-coverage-gaps C7 + C8 proof-of-fix counters.
+
+        A real change to slot 0 must bump both compositor_glfeedback_recompile_total
+        and compositor_glfeedback_accum_clear_total. A no-op repeat must not.
+        """
+        from agents.studio_compositor import metrics as comp_metrics
+
+        comp_metrics._init_metrics()
+        if (
+            comp_metrics.COMP_GLFEEDBACK_RECOMPILE_TOTAL is None
+            or comp_metrics.COMP_GLFEEDBACK_ACCUM_CLEAR_TOTAL is None
+        ):
+            import pytest as _pt
+
+            _pt.skip("prometheus_client not available in this environment")
+
+        def _total(counter) -> float:
+            for metric in counter.collect():
+                for sample in metric.samples:
+                    if sample.name.endswith("_total"):
+                        return sample.value
+            return 0.0
+
+        baseline_recomp = _total(comp_metrics.COMP_GLFEEDBACK_RECOMPILE_TOTAL)
+        baseline_clear = _total(comp_metrics.COMP_GLFEEDBACK_ACCUM_CLEAR_TOTAL)
+
+        pipe = self._temporal_pipeline(registry, compiler)
+        plan = self._plan(compiler, type1="colorgrade")
+        pipe.activate_plan(plan)
+
+        after_first_recomp = _total(comp_metrics.COMP_GLFEEDBACK_RECOMPILE_TOTAL)
+        after_first_clear = _total(comp_metrics.COMP_GLFEEDBACK_ACCUM_CLEAR_TOTAL)
+        assert after_first_recomp > baseline_recomp, (
+            "first activate_plan must bump COMP_GLFEEDBACK_RECOMPILE_TOTAL"
+        )
+        assert after_first_clear > baseline_clear, (
+            "first activate_plan must bump COMP_GLFEEDBACK_ACCUM_CLEAR_TOTAL"
+        )
+
+        pipe.activate_plan(plan)
+        assert _total(comp_metrics.COMP_GLFEEDBACK_RECOMPILE_TOTAL) == after_first_recomp, (
+            "repeat activate_plan must NOT bump recompile counter"
+        )
+        assert _total(comp_metrics.COMP_GLFEEDBACK_ACCUM_CLEAR_TOTAL) == after_first_clear, (
+            "repeat activate_plan must NOT bump accum-clear counter"
+        )

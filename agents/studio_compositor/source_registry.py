@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Protocol
 if TYPE_CHECKING:
     import cairo
 
+    from agents.studio_compositor.budget import BudgetTracker
     from shared.compositor_model import SourceSchema
 
 log = logging.getLogger(__name__)
@@ -68,7 +69,12 @@ class SourceRegistry:
         """Return the list of registered source_ids in insertion order."""
         return list(self._backends.keys())
 
-    def construct_backend(self, source: SourceSchema) -> SourceBackend:
+    def construct_backend(
+        self,
+        source: SourceSchema,
+        *,
+        budget_tracker: BudgetTracker | None = None,
+    ) -> SourceBackend:
         """Instantiate a backend for ``source`` using its ``backend`` dispatcher.
 
         ``cairo`` backends are looked up in
@@ -80,6 +86,12 @@ class SourceRegistry:
         ``shm_rgba`` backends resolve directly to a
         :class:`~agents.studio_compositor.shm_rgba_reader.ShmRgbaReader`
         pointing at ``params.shm_path``.
+
+        When ``budget_tracker`` is provided, cairo backends record their
+        per-frame render time into the tracker so the compositor's cost
+        snapshot publisher has live samples. Phase 10 wire-up for the
+        previously dead-path BudgetTracker — T1/T2/T3 findings from
+        delta's 2026-04-14 compositor frame budget forensics drop.
 
         Raises :class:`UnknownBackendError` for any other backend string,
         missing ``class_name`` on cairo, or missing ``shm_path`` on shm_rgba.
@@ -108,6 +120,7 @@ class SourceRegistry:
                 target_fps=target_fps,
                 natural_w=natural_w,
                 natural_h=natural_h,
+                budget_tracker=budget_tracker,
             )
         if source.backend == "shm_rgba":
             from agents.studio_compositor.shm_rgba_reader import ShmRgbaReader

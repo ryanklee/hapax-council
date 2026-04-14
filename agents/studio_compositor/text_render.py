@@ -24,10 +24,13 @@ See: docs/superpowers/specs/2026-04-12-phase-3-executor-polymorphism-design.md
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Literal
 
 import cairo
+
+log = logging.getLogger(__name__)
 
 # Standard outline offset patterns. Callers can supply custom tuples,
 # but these two cover the existing OverlayZone (8-offset thick) and
@@ -185,7 +188,30 @@ def render_text_to_surface(
 
     sw = text_w + padding_px * 2
     sh = text_h + padding_px * 2
-    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, sw, sh)
+    # Phase 10 R2/D1 diagnostic — delta's overlay_zones-cairo-invalid-size
+    # drop captured ~50 ``cairo.Error: invalid value`` exceptions from this
+    # exact line in a 4-second window. Wrapping the ImageSurface
+    # construction with a diagnostic log that captures the exact inputs
+    # narrows the three competing root-cause hypotheses (negative or
+    # zero dims, text_w/text_h overflow, Pango layout returning garbage)
+    # to one, without needing the live capture to reproduce.
+    try:
+        surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, sw, sh)
+    except (cairo.Error, ValueError):
+        text_preview = (style.text or "")[:80].replace("\n", "\\n")
+        log.exception(
+            "render_text_to_surface cairo.ImageSurface failed: "
+            "sw=%d sh=%d text_w=%d text_h=%d padding_px=%d "
+            "text_len=%d text_preview=%r",
+            sw,
+            sh,
+            text_w,
+            text_h,
+            padding_px,
+            len(style.text or ""),
+            text_preview,
+        )
+        raise
     cr = cairo.Context(surface)
     render_text(cr, style, x=padding_px, y=padding_px)
     return surface, sw, sh

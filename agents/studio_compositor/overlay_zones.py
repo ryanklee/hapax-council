@@ -22,6 +22,8 @@ from .overlay_parser import parse_overlay_content
 if TYPE_CHECKING:
     import cairo
 
+    from agents.studio_compositor.budget import BudgetTracker
+
 log = logging.getLogger(__name__)
 
 SNAPSHOT_DIR = Path("/dev/shm/hapax-compositor")
@@ -368,7 +370,12 @@ class OverlayZoneManager:
     :data:`RENDER_FPS`.
     """
 
-    def __init__(self, zone_configs: list[dict[str, Any]] | None = None) -> None:
+    def __init__(
+        self,
+        zone_configs: list[dict[str, Any]] | None = None,
+        *,
+        budget_tracker: BudgetTracker | None = None,
+    ) -> None:
         self._source = OverlayZonesCairoSource(zone_configs)
         self._runner = CairoSourceRunner(
             source_id="overlay-zones",
@@ -376,6 +383,7 @@ class OverlayZoneManager:
             canvas_w=1920,
             canvas_h=1080,
             target_fps=RENDER_FPS,
+            budget_tracker=budget_tracker,
         )
         self._runner.start()
         log.info("OverlayZoneManager background thread started at %dfps", RENDER_FPS)

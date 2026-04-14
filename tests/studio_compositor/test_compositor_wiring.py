@@ -250,3 +250,223 @@ class TestStartDelegatesThroughStartLayoutOnly:
         assert compositor.layout_state is not None
         assert compositor.source_registry is not None
         fake_lifecycle.assert_called_once_with(compositor)
+
+
+class TestStudioCompositorBudgetWiring:
+    """Phase 10 (delta 2026-04-14-compositor-frame-budget-forensics) regression pins.
+
+    Delta's drop identified that the Phase 7 BudgetTracker was never
+    instantiated and no CairoSourceRunner ever had a tracker wired —
+    publish_costs + publish_degraded_signal both showed age_seconds=+Inf
+    for the process lifetime. These tests pin the wiring so any future
+    regression is visible.
+    """
+
+    def test_compositor_owns_a_budget_tracker_after_init(self) -> None:
+        from agents.studio_compositor.budget import BudgetTracker
+
+        compositor = _make_compositor()
+        assert isinstance(compositor._budget_tracker, BudgetTracker)
+
+    def test_overlay_zone_manager_runner_has_tracker_wired(self) -> None:
+        compositor = _make_compositor()
+        runner = compositor._overlay_zone_manager._runner
+        assert runner._budget_tracker is compositor._budget_tracker
+
+    def test_start_layout_only_wires_tracker_to_cairo_backends(self, tmp_path: Path) -> None:
+        """Every cairo backend in the SourceRegistry shares the compositor tracker."""
+        from agents.studio_compositor.cairo_source import CairoSourceRunner
+
+        layout_file = tmp_path / "default.json"
+        layout_file.write_text(DEFAULT_JSON.read_text())
+
+        compositor = _make_compositor(layout_path=layout_file)
+        compositor.start_layout_only()
+
+        assert compositor.source_registry is not None
+        cairo_runners = [
+            compositor.source_registry._backends[sid]
+            for sid in compositor.source_registry.ids()
+            if isinstance(compositor.source_registry._backends[sid], CairoSourceRunner)
+        ]
+        assert cairo_runners, "layout must contain at least one cairo-backed source"
+        for runner in cairo_runners:
+            assert runner._budget_tracker is compositor._budget_tracker, (
+                f"cairo runner {runner.source_id} is missing tracker wiring"
+            )
+
+    def test_tracker_collects_samples_across_runner_ticks(self, tmp_path: Path) -> None:
+        """After ticking every cairo runner once, the tracker has per-source samples."""
+        from agents.studio_compositor.cairo_source import CairoSourceRunner
+
+        layout_file = tmp_path / "default.json"
+        layout_file.write_text(DEFAULT_JSON.read_text())
+
+        compositor = _make_compositor(layout_path=layout_file)
+        compositor.start_layout_only()
+
+        assert compositor.source_registry is not None
+        for sid in compositor.source_registry.ids():
+            backend = compositor.source_registry._backends[sid]
+            if isinstance(backend, CairoSourceRunner):
+                backend.tick_once()
+
+        snap = compositor._budget_tracker.snapshot()
+        recorded = {sid for sid, cost in snap.items() if cost.sample_count > 0}
+        assert recorded, (
+            "BudgetTracker.snapshot() had zero samples after ticking cairo runners — "
+            "wiring is dead, regression of T1/T2 from the delta drop"
+        )
+
+    def test_publish_costs_round_trips_to_json(self, tmp_path: Path) -> None:
+        """publish_costs(tracker, path) writes a parseable JSON snapshot."""
+        from agents.studio_compositor.budget import publish_costs
+        from agents.studio_compositor.cairo_source import CairoSourceRunner
+
+        layout_file = tmp_path / "default.json"
+        layout_file.write_text(DEFAULT_JSON.read_text())
+
+        compositor = _make_compositor(layout_path=layout_file)
+        compositor.start_layout_only()
+
+        assert compositor.source_registry is not None
+        for sid in compositor.source_registry.ids():
+            backend = compositor.source_registry._backends[sid]
+            if isinstance(backend, CairoSourceRunner):
+                backend.tick_once()
+
+        costs_path = tmp_path / "costs.json"
+        publish_costs(compositor._budget_tracker, costs_path)
+        assert costs_path.is_file()
+        payload = json.loads(costs_path.read_text())
+        assert payload["schema_version"] == 1
+        assert "sources" in payload
+        assert any(source.get("sample_count", 0) > 0 for source in payload["sources"].values())
+
+    def test_publish_degraded_signal_round_trips(self, tmp_path: Path) -> None:
+        """publish_degraded_signal writes a parseable degraded-signal JSON."""
+        from agents.studio_compositor.budget_signal import publish_degraded_signal
+
+        compositor = _make_compositor()
+        compositor._budget_tracker.record("overlay-zones", 4.5)
+        compositor._budget_tracker.record_skip("overlay-zones")
+
+        degraded_path = tmp_path / "degraded.json"
+        publish_degraded_signal(compositor._budget_tracker, degraded_path)
+        assert degraded_path.is_file()
+        payload = json.loads(degraded_path.read_text())
+        assert payload["total_skip_count"] == 1
+        assert payload["degraded_source_count"] == 1
+        assert payload["worst_source"]["source_id"] == "overlay-zones"
+
+
+class TestStudioCompositorOutputRouterWiring:
+    """Phase 10 carry-over from Phase 2 item 10.
+
+    ``OutputRouter.from_layout`` is pure data plumbing that enumerates
+    video_out surfaces into typed OutputBinding records. Phase 2
+    documented this migration as a carry-over; this test pins the
+    compositor-side wiring so the router is available to any
+    downstream consumer (diagnostics, future router-driven sinks).
+    """
+
+    def test_compositor_initializes_output_router_to_none(self) -> None:
+        compositor = _make_compositor()
+        assert compositor.output_router is None
+
+    def test_start_layout_only_populates_output_router(self, tmp_path: Path) -> None:
+        from agents.studio_compositor.output_router import OutputRouter
+
+        layout_file = tmp_path / "default.json"
+        layout_file.write_text(DEFAULT_JSON.read_text())
+
+        compositor = _make_compositor(layout_path=layout_file)
+        compositor.start_layout_only()
+
+        assert isinstance(compositor.output_router, OutputRouter)
+        # Default layout has 3 video_out surfaces from Phase 2 item 10:
+        # v4l2 loopback + rtmp MediaMTX + hls local.
+        assert len(compositor.output_router) >= 3
+        sink_kinds = {b.sink_kind for b in compositor.output_router}
+        assert {"v4l2", "rtmp", "hls"}.issubset(sink_kinds)
+
+    def test_output_router_bindings_cover_every_video_out_surface(self, tmp_path: Path) -> None:
+        """Every video_out surface in the layout must yield a binding."""
+        layout_file = tmp_path / "default.json"
+        layout_file.write_text(DEFAULT_JSON.read_text())
+
+        compositor = _make_compositor(layout_path=layout_file)
+        compositor.start_layout_only()
+
+        assert compositor.output_router is not None
+        assert compositor.layout_state is not None
+        layout = compositor.layout_state.get()
+        video_out_ids = {s.id for s in layout.surfaces if s.geometry.kind == "video_out"}
+        binding_ids = {b.surface_id for b in compositor.output_router}
+        assert video_out_ids.issubset(binding_ids), (
+            f"router missing bindings for video_out surfaces: {video_out_ids - binding_ids}"
+        )
+
+
+class TestResearchMarkerOverlayRegistered:
+    """Phase 10 carry-over from Phase 2 item 4.
+
+    The Phase 2 ResearchMarkerOverlay class was implemented but not
+    registered with the cairo_sources class-name registry, making it
+    undeclarable from layout JSON. Pin the registration so a future
+    layout entry can reach the class via ``class_name``.
+    """
+
+    def test_research_marker_overlay_is_registered(self) -> None:
+        from agents.studio_compositor.cairo_sources import (
+            get_cairo_source_class,
+            list_classes,
+        )
+        from agents.studio_compositor.research_marker_overlay import ResearchMarkerOverlay
+
+        assert "ResearchMarkerOverlay" in list_classes()
+        cls = get_cairo_source_class("ResearchMarkerOverlay")
+        assert cls is ResearchMarkerOverlay
+
+
+class TestFeatureProbeLog:
+    """Phase 10 / delta metric-coverage-gaps D3 — startup feature-probe log.
+
+    Delta's drop #1 and drop #6 each spent investigation cycles on
+    features that were installed but runtime-disabled (BudgetTracker,
+    OpenCV CUDA). A per-boot ``feature-probe: NAME=BOOL`` inventory
+    makes every latent-feature disable loud from startup.
+    """
+
+    def test_log_feature_probes_emits_expected_keys(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        import logging as _logging
+
+        from agents.studio_compositor.lifecycle import _log_feature_probes
+
+        layout_file = tmp_path / "default.json"
+        layout_file.write_text(DEFAULT_JSON.read_text())
+        compositor = _make_compositor(layout_path=layout_file)
+        compositor.start_layout_only()
+
+        with caplog.at_level(_logging.INFO, logger="agents.studio_compositor.lifecycle"):
+            _log_feature_probes(compositor)
+
+        messages = [rec.message for rec in caplog.records if "feature-probe:" in rec.message]
+        joined = " | ".join(messages)
+        for key in [
+            "prometheus_client=",
+            "budget_tracker_active=",
+            "opencv_cuda=",
+            "output_router=",
+            "research_marker_overlay_registered=",
+        ]:
+            assert key in joined, f"feature-probe log missing key: {key!r}"
+        assert "budget_tracker_active=true" in joined, (
+            "budget_tracker should read as active after start_layout_only"
+        )
+        assert "output_router=true" in joined, (
+            "output_router should read as wired after start_layout_only"
+        )
+        assert "research_marker_overlay_registered=true" in joined

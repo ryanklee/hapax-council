@@ -25,6 +25,7 @@ from .effects import init_graph_runtime
 from .layout_loader import LayoutStore
 from .layout_state import LayoutState
 from .models import CompositorConfig, OverlayState, TileRect
+from .output_router import OutputRouter
 from .overlay_zones import OverlayZoneManager
 from .profiles import load_camera_profiles
 from .source_registry import SourceRegistry
@@ -256,6 +257,7 @@ class StudioCompositor:
         )
         self.layout_state: LayoutState | None = None
         self.source_registry: SourceRegistry | None = None
+        self.output_router: OutputRouter | None = None
         self._layout_autosaver: Any = None
         self._layout_file_watcher: Any = None
         self._command_server: Any = None
@@ -284,7 +286,15 @@ class StudioCompositor:
         self._overlay_cache_surface: Any = None
         self._overlay_cache_timestamp: float = 0.0
         self._overlay_cache_cam_hash: str = ""
-        self._overlay_zone_manager = OverlayZoneManager()
+        # Phase 10 observability polish — wire the Phase 7 BudgetTracker
+        # that has sat dead since PR #752. One tracker shared across every
+        # CairoSourceRunner in the process; lifecycle.start_compositor
+        # schedules the GLib timer that publishes snapshots to
+        # /dev/shm/hapax-compositor/costs.json and degraded.json.
+        from agents.studio_compositor.budget import BudgetTracker
+
+        self._budget_tracker = BudgetTracker()
+        self._overlay_zone_manager = OverlayZoneManager(budget_tracker=self._budget_tracker)
         self._audio_capture = CompositorAudioCapture()
 
         self._graph_runtime = init_graph_runtime(self)
@@ -503,7 +513,7 @@ class StudioCompositor:
         registry = SourceRegistry()
         for source in layout.sources:
             try:
-                backend = registry.construct_backend(source)
+                backend = registry.construct_backend(source, budget_tracker=self._budget_tracker)
             except Exception:
                 log.exception(
                     "failed to construct backend for source %s (backend=%s)",
@@ -520,11 +530,31 @@ class StudioCompositor:
                 )
         self.layout_state = state
         self.source_registry = registry
+
+        # Phase 10 carry-over from Phase 2 item 10: attach the router
+        # that enumerates video_out surfaces. Pure data plumbing —
+        # the legacy hardcoded sink construction in ``pipeline.py`` is
+        # still authoritative at runtime. Downstream consumers (e.g.
+        # future router-driven sink building, or diagnostics) read from
+        # ``self.output_router.bindings()``. Log the discovered
+        # bindings so the operator can confirm each video_out surface
+        # is visible to the new router plumbing.
+        self.output_router = OutputRouter.from_layout(layout)
+        for binding in self.output_router:
+            log.info(
+                "output router binding: surface=%s render_target=%s sink_kind=%s sink_path=%s",
+                binding.surface_id,
+                binding.render_target,
+                binding.sink_kind,
+                binding.sink_path,
+            )
+
         log.info(
-            "layout loaded: name=%s sources=%d registered=%d",
+            "layout loaded: name=%s sources=%d registered=%d bindings=%d",
             layout.name,
             len(layout.sources),
             len(registry.ids()),
+            len(self.output_router),
         )
 
         # Post-epic audit finding #1: LayoutAutoSaver + LayoutFileWatcher

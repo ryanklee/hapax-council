@@ -70,6 +70,7 @@ def list_classes() -> list[str]:
 
 def _register_builtins() -> None:
     from agents.studio_compositor.album_overlay import AlbumOverlayCairoSource
+    from agents.studio_compositor.research_marker_overlay import ResearchMarkerOverlay
     from agents.studio_compositor.sierpinski_renderer import SierpinskiCairoSource
     from agents.studio_compositor.stream_overlay import StreamOverlayCairoSource
     from agents.studio_compositor.token_pole import TokenPoleCairoSource
@@ -83,6 +84,14 @@ def _register_builtins() -> None:
     # feeds the ``stream_overlay`` source in the default layout's
     # ``pip-lr`` quadrant — operator's "chat stats LR" default.
     register("StreamOverlayCairoSource", StreamOverlayCairoSource)
+    # Phase 10 carry-over from Phase 2 item 4: expose the research
+    # marker overlay in the class-name registry so it's declarable
+    # from layout JSON. Actual layout surface + assignment is a
+    # separate operator-owned decision (the overlay is a top-strip
+    # banner so it needs a full-width surface, unlike the other PiP
+    # cairo sources). Registering here unblocks ``ResearchMarkerOverlay``
+    # layout declarations without forcing a default-layout change.
+    register("ResearchMarkerOverlay", ResearchMarkerOverlay)
 
 
 _register_builtins()
