@@ -106,9 +106,12 @@ impl ObjectImpl for GlFeedback {
                 // rounding errors produced the sawtooth/stripe artifact.
                 let is_pt = frag.as_ref().map_or(true, |f| !f.contains("tex_accum"));
                 let mut props = self.props.lock().unwrap();
-                props.fragment = frag;
-                props.is_passthrough = is_pt;
-                props.shader_dirty = true;
+                if props.fragment != frag {
+                    props.fragment = frag;
+                    props.is_passthrough = is_pt;
+                    props.shader_dirty = true;
+                }
+                // else: identical value, no recompile, no accum clear
             }
             "uniforms" => {
                 let raw = value.get::<Option<String>>().unwrap().unwrap_or_default();

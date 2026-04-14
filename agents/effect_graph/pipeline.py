@@ -38,6 +38,7 @@ class SlotPipeline:
         self._slot_base_params: list[dict[str, Any]] = [{} for _ in range(num_slots)]
         self._slot_preset_params: list[dict[str, Any]] = [{} for _ in range(num_slots)]
         self._slot_pending_frag: list[str | None] = [None] * num_slots
+        self._slot_last_frag: list[str | None] = [None] * num_slots
         self._slot_is_temporal: list[bool] = [False] * num_slots
 
     def create_slots(self, Gst: Any, plan: ExecutionPlan | None = None) -> list[Any]:
@@ -50,6 +51,7 @@ class SlotPipeline:
         self._slots = []
         self._slot_base_params = [{} for _ in range(self._num_slots)]
         self._slot_pending_frag = [None] * self._num_slots
+        self._slot_last_frag = [None] * self._num_slots
         self._slot_is_temporal = [False] * self._num_slots
 
         has_glfeedback = Gst.ElementFactory.find("glfeedback") is not None
@@ -163,21 +165,31 @@ class SlotPipeline:
                 self._slot_preset_params[slot_idx] = dict(step.params)
                 slot_idx += 1
 
-        # Apply changes to each slot
+        # Apply changes to each slot. Diff against last-set fragment so
+        # byte-identical re-sets (typical for passthrough slots across
+        # plan activations) do not trigger a GL recompile + accum clear.
+        fragment_set_count = 0
         for i in range(self._num_slots):
             if self._slot_is_temporal[i]:
-                # glfeedback: set fragment and uniforms via GObject properties
                 frag = self._slot_pending_frag[i] or PASSTHROUGH_SHADER
                 node = self._slot_assignments[i] or "passthrough"
-                log.info("Slot %d (%s): setting fragment (%d chars)", i, node, len(frag))
-                self._slots[i].set_property("fragment", frag)
+                if frag != self._slot_last_frag[i]:
+                    log.info("Slot %d (%s): setting fragment (%d chars)", i, node, len(frag))
+                    self._slots[i].set_property("fragment", frag)
+                    self._slot_last_frag[i] = frag
+                    fragment_set_count += 1
                 self._apply_glfeedback_uniforms(i)
             else:
-                # glshader: set uniforms via Gst.Structure, trigger GL recompile
                 self._set_uniforms(i, self._slot_base_params[i])
                 self._slots[i].set_property("update-shader", True)
 
-        log.info("Activated plan '%s': %d/%d slots used", plan.name, slot_idx, self._num_slots)
+        log.info(
+            "Activated plan '%s': %d/%d slots used, %d fragment set_property calls",
+            plan.name,
+            slot_idx,
+            self._num_slots,
+            fragment_set_count,
+        )
 
     def find_slot_for_node(self, node_type: str) -> int | None:
         """Find which slot a node type is assigned to.
