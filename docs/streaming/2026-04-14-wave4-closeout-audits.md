@@ -87,3 +87,54 @@ No fix needed. The interfaces are correctly enumerated, claimed by `uvcvideo`, a
 ## Status
 
 Both audits closed. No follow-up code work scheduled. This doc is the canonical record so future sessions don't re-run the same investigations.
+
+---
+
+## 2026-04-14 update — LRR Phase 0 item 6: native RTMP path is canonical
+
+Filed alongside this audit doc as part of LRR Phase 0 (Verification & Stabilization). The RTMP output path is fully wired and consent-gated; this section pins the decision and documents the runtime contract.
+
+### `toggle_livestream` definition
+
+`agents/studio_compositor/compositor.py:594-647` defines `StudioCompositor.toggle_livestream(activate, reason)`. The method:
+
+1. Accesses `self._rtmp_bin` (constructed at compositor build time, **detached** by default per `agents/studio_compositor/pipeline.py:194` log line `"rtmp output bin constructed (detached until toggle_livestream)"`)
+2. On `activate=True`: calls `rtmp_bin.build_and_attach(self.pipeline)`, sets `metrics.RTMP_CONNECTED{endpoint="youtube"}=1`, sends an ntfy notification
+3. On `activate=False`: calls `rtmp_bin.detach_and_teardown(self.pipeline)`, clears the metric, sends an ntfy stop notification
+4. Returns `(success, message)` for the affordance handler
+
+### Consent gating
+
+`toggle_livestream` is **only** called from the affordance handler that runs after the unified semantic recruitment pipeline's consent check. The constitutional axiom `interpersonal_transparency` (`axioms/registry.yaml` weight 88) requires a `livestream` capability with `consent_required=True`, so the affordance pipeline filters it out unless an active consent contract exists. Fail-closed, 60 s cache.
+
+This means the RTMP output cannot start without:
+1. Affordance pipeline recruiting the `livestream` capability
+2. Consent contract being active in `axioms/contracts/`
+3. Affordance handler dispatching `compositor.toggle_livestream(True, reason)` on the GLib main loop
+
+### The chain when active
+
+```
+director_loop / affordance handler
+  → compositor.toggle_livestream(True, ...)
+    → rtmp_bin.build_and_attach(pipeline)
+      → GStreamer elements wired into the encoder tee
+        → rtmp2sink location=rtmp://127.0.0.1:1935/studio
+          → MediaMTX accepts publish on path 'studio'
+            → HLS muxer at http://127.0.0.1:8888/studio/index.m3u8
+              → in-app Logos preview, restream candidates, etc.
+```
+
+### Decision: native RTMP is the canonical LRR output path
+
+For all LRR phase work going forward:
+
+- **Native RTMP (the chain documented above) is canonical.** Phase 5 (Hermes 3 substrate swap) latency budgets, Phase 9 (closed-loop feedback) trigger latencies, and Phase 10 (observability + drills) measurements all use the native RTMP path.
+- **The OBS-fork path** (`/dev/video42` v4l2 loopback → OBS → NVENC → OBS RTMP push) is **legacy**. It still works and is useful for operator-controlled scene composition during recording, but LRR's research-validity requirements need the deterministic single-process path that native RTMP provides. The OBS fork remains available for non-LRR use cases.
+- **`/dev/video42` loopback stays alive** because Logos preview surfaces and the studio-person-detector still consume it. It's not deprecated, just not part of the LRR critical path.
+
+### LRR Phase 0 exit criterion satisfied
+
+> `toggle_livestream` path documented; production output confirmed.
+
+This update is the documentation. Production output is confirmed by the audit chain in PR #781 plus the `metrics.RTMP_CONNECTED{endpoint="youtube"}` gauge wiring already in place.
