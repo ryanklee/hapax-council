@@ -9,6 +9,7 @@
  */
 
 import { useEffect, useRef, useCallback } from "react";
+import { usePageVisible } from "../../hooks/usePageVisible";
 
 interface AmbientShaderProps {
   speed: number;
@@ -158,6 +159,7 @@ export function AmbientShader({
   const uniformsRef = useRef<Record<string, WebGLUniformLocation | null>>({});
   const rafRef = useRef<number>(0);
   const startTimeRef = useRef<number>(performance.now());
+  const pageVisible = usePageVisible();
 
   const initGL = useCallback(() => {
     const canvas = canvasRef.current;
@@ -254,8 +256,12 @@ export function AmbientShader({
     return () => window.removeEventListener("resize", resize);
   }, [displayState]);
 
-  // Render loop
+  // Render loop — driven by setTimeout at the target FPS so rAF isn't
+  // pumped at 60Hz for a 5fps ambient background. Pauses entirely when the
+  // page/tab is hidden.
   useEffect(() => {
+    if (!pageVisible) return;
+
     const gl = glRef.current;
     const canvas = canvasRef.current;
     if (!gl || !canvas) return;
@@ -263,14 +269,12 @@ export function AmbientShader({
     const u = uniformsRef.current;
     const fps = targetFPS(displayState);
     const frameInterval = 1000 / fps;
-    let lastFrame = 0;
+    let timeoutId: number | null = null;
+    let cancelled = false;
 
-    const render = (now: number) => {
-      rafRef.current = requestAnimationFrame(render);
-
-      if (now - lastFrame < frameInterval) return;
-      lastFrame = now;
-
+    const drawFrame = () => {
+      if (cancelled) return;
+      const now = performance.now();
       const elapsed = (now - startTimeRef.current) / 1000;
       gl.uniform1f(u.u_time, elapsed);
       gl.uniform1f(u.u_speed, speed);
@@ -281,13 +285,19 @@ export function AmbientShader({
       gl.uniform1f(u.u_lod, lodForState(displayState));
 
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      timeoutId = window.setTimeout(() => {
+        rafRef.current = requestAnimationFrame(drawFrame);
+      }, frameInterval);
     };
 
-    rafRef.current = requestAnimationFrame(render);
+    rafRef.current = requestAnimationFrame(drawFrame);
     return () => {
+      cancelled = true;
+      if (timeoutId !== null) clearTimeout(timeoutId);
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [speed, turbulence, warmth, brightness, displayState]);
+  }, [speed, turbulence, warmth, brightness, displayState, pageVisible]);
 
   return (
     <canvas

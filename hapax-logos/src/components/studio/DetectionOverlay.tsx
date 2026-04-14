@@ -333,9 +333,12 @@ export function DetectionOverlay({
         return;
       }
 
-      // Skip rendering when container is off-screen (hidden region)
+      // Container off-screen: sleep instead of busy-looping rAF at 60Hz.
+      // Re-probe every 250ms so the loop resumes when parent becomes visible.
       if (!container.offsetParent) {
-        requestAnimationFrame(render);
+        setTimeout(() => {
+          if (running) requestAnimationFrame(render);
+        }, 250);
         return;
       }
 
