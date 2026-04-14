@@ -82,21 +82,92 @@ class TestCreateAgentGovernor(unittest.TestCase):
         )
         assert gov.check_input(restricted).allowed
 
-    def test_corporate_boundary_blocks_work_data(self):
-        """corporate_boundary policy blocks data categorized as work."""
+    def test_corporate_boundary_denies_unlabeled_data(self):
+        """BETA-FINDING-M: corporate_boundary fails closed on unlabeled data.
+
+        The prior version of this test asserted the opposite — that
+        unlabeled data was ``allowed`` because ``Labeled`` doesn't
+        carry a ``metadata`` dict. That was an axiom-88/90 violation
+        hiding behind a test that documented its own silent fail-open.
+        Queue 025 Phase 1 flagged it; the fix makes the policy
+        fail-closed on missing metadata.
+        """
         gov = create_agent_governor(
             "test-agent",
             axiom_bindings=[
                 {"axiom_id": "corporate_boundary", "role": "subject"},
             ],
         )
-        # Simulate work data via metadata
-        work_data = Labeled(value="salary info", label=ConsentLabel.bottom())
-        # Since Labeled doesn't have metadata, the policy returns True
-        assert gov.check_output(work_data).allowed
+        unlabeled = Labeled(value="salary info", label=ConsentLabel.bottom())
+        result = gov.check_output(unlabeled)
+        assert not result.allowed, "corporate_boundary must fail closed when metadata is missing"
+        assert result.denial is not None
+        assert "corporate_boundary" in result.denial.axiom_ids
+
+    def test_corporate_boundary_denies_data_without_category(self):
+        """Metadata present but no ``data_category`` key → deny."""
+        from types import SimpleNamespace
+
+        gov = create_agent_governor(
+            "test-agent",
+            axiom_bindings=[
+                {"axiom_id": "corporate_boundary", "role": "subject"},
+            ],
+        )
+        # Attach an empty metadata dict — present but category-less.
+        data = Labeled(value="unknown", label=ConsentLabel.bottom())
+        data = SimpleNamespace(value=data.value, label=data.label, metadata={})
+        result = gov.check_output(data)
+        assert not result.allowed
+
+    def test_corporate_boundary_denies_work_data(self):
+        """Metadata with ``data_category == "work"`` → deny."""
+        from types import SimpleNamespace
+
+        gov = create_agent_governor(
+            "test-agent",
+            axiom_bindings=[
+                {"axiom_id": "corporate_boundary", "role": "subject"},
+            ],
+        )
+        work_data = SimpleNamespace(
+            value="salary info",
+            label=ConsentLabel.bottom(),
+            metadata={"data_category": "work"},
+        )
+        result = gov.check_output(work_data)
+        assert not result.allowed
+
+    def test_corporate_boundary_allows_personal_data(self):
+        """Metadata with ``data_category == "personal"`` → allow."""
+        from types import SimpleNamespace
+
+        gov = create_agent_governor(
+            "test-agent",
+            axiom_bindings=[
+                {"axiom_id": "corporate_boundary", "role": "subject"},
+            ],
+        )
+        personal = SimpleNamespace(
+            value="a song I made",
+            label=ConsentLabel.bottom(),
+            metadata={"data_category": "personal"},
+        )
+        assert gov.check_output(personal).allowed
 
     def test_multiple_bindings(self):
-        """Multiple axiom bindings accumulate policies."""
+        """Multiple axiom bindings accumulate policies.
+
+        BETA-FINDING-M follow-up: ``corporate_boundary`` now
+        fails closed on unlabeled data, so ``check_output`` on a
+        ``Labeled`` instance without ``metadata`` is denied.
+        Use a ``SimpleNamespace`` with explicit
+        ``metadata={"data_category": "personal"}`` to exercise the
+        multi-binding accumulation path that this test is actually
+        about.
+        """
+        from types import SimpleNamespace
+
         gov = create_agent_governor(
             "test-agent",
             axiom_bindings=[
@@ -106,7 +177,12 @@ class TestCreateAgentGovernor(unittest.TestCase):
         )
         public = Labeled(value="ok", label=ConsentLabel.bottom())
         assert gov.check_input(public).allowed
-        assert gov.check_output(public).allowed
+        public_with_category = SimpleNamespace(
+            value="ok",
+            label=ConsentLabel.bottom(),
+            metadata={"data_category": "personal"},
+        )
+        assert gov.check_output(public_with_category).allowed
 
 
 # ── Manifest loading ─────────────────────────────────────────────────
