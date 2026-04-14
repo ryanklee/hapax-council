@@ -32,8 +32,8 @@ The original Phase 3 design (`livestream-research-ready-epic-design.md` §"Phase
 ### 1.1 Item 1 — Partition reconciliation α → γ
 
 **Current (Option α):**
-- `tabbyapi.service`: `CUDA_DEVICE_ORDER=PCI_BUS_ID`, `CUDA_VISIBLE_DEVICES=1` — pinned to 3090 only (single-GPU)
-- `hapax-dmn.service`: no explicit GPU pin, runs on GPU 1 (3090) by default
+- `tabbyapi.service`: no explicit CUDA env vars. CUDA default `FASTEST_FIRST` ranks the 3090 (~17.8 TFLOPS FP32) as cuda:0, config.yml has no `gpu_split` so exllamav3 loads single-GPU on cuda:0 → Qwen3.5-9B resident on the 3090 alone.
+- `hapax-dmn.service`: no explicit CUDA env vars. Same FASTEST_FIRST ordering → cuda:0 = 3090 → faster-whisper STT + embedding co-tenant on the 3090.
 
 **Target (Option γ):**
 - `tabbyapi.service`: `CUDA_DEVICE_ORDER=PCI_BUS_ID`, `CUDA_VISIBLE_DEVICES=0,1` — both GPUs visible for layer-split
@@ -111,28 +111,23 @@ Regression pin: `tests/test_install_units_sweep_pin.py` extended to assert that 
 
 ### 3.1 Revert Option γ → Option α (partition)
 
-If Hermes 3 fails to load or benchmarks below threshold:
+If Hermes 3 fails to load or benchmarks below threshold, remove the two Phase 3 drop-ins entirely. The base units have no CUDA env vars, so CUDA default FASTEST_FIRST restores cuda:0 = 3090 and both services return to their Option α single-GPU-on-3090 placement.
 
 ```bash
-# 1. Edit the tabbyapi drop-in
-sed -i 's/CUDA_VISIBLE_DEVICES=0,1/CUDA_VISIBLE_DEVICES=1/' \
-    ~/projects/hapax-council/systemd/units/tabbyapi.service.d/gpu-pin.conf
+# 1. Remove both drop-ins from the live systemd directory
+rm ~/.config/systemd/user/tabbyapi.service.d/gpu-pin.conf
+rm ~/.config/systemd/user/hapax-dmn.service.d/gpu-pin.conf
 
-# 2. Edit the hapax-dmn drop-in
-sed -i 's/CUDA_VISIBLE_DEVICES=0/CUDA_VISIBLE_DEVICES=1/' \
-    ~/projects/hapax-council/systemd/units/hapax-dmn.service.d/gpu-pin.conf
-
-# 3. Re-run install-units.sh to refresh symlinks (no-op if still correct)
-bash ~/projects/hapax-council/systemd/scripts/install-units.sh
-
-# 4. Reload + restart
+# 2. Reload + restart
 systemctl --user daemon-reload
 systemctl --user restart tabbyapi.service
 systemctl --user restart hapax-dmn.service
 
-# 5. Verify rollback
+# 3. Verify rollback
 nvidia-smi  # confirm: 3090 has tabbyapi + hapax-dmn; 5060 Ti has compositor only
 ```
+
+The repo-tracked drop-in files under `systemd/units/*.service.d/` can be left in place — a subsequent `install-units.sh` run will re-link them and bring Option γ back. To lock in the reversion across install-units.sh runs, revert the PR on main and re-run `install-units.sh`.
 
 ### 3.2 Revert Hermes 3 → Qwen3.5-9B (config)
 
@@ -182,15 +177,48 @@ The `TimeoutStartSec=180` value is forward-compatible with smaller models — no
 - **Self-quantization (Phase 3 PR #2) is multi-hour.** The 6-12 hour window blocks TabbyAPI from handling simultaneous inference (the 3090 is busy with quant compute). Plan for overnight.
 - **X670E install (Phase 3 PR #3) is a separate operator window** (~2026-04-16). Items 4, 10, 11 ship there.
 
-## 6. Operational verification findings (follow-up)
+## 6. Operational verification findings
 
-This section is updated by a second commit on this branch after the operational tasks run. Placeholder for:
+### 6.1 Item 4 — PCIe link width (2026-04-14, pre-mobo baseline)
 
-- [ ] Item 0 formal systemd-integrated sm_120 test
-- [ ] Item 3 PSU combined-load stress (30 min)
-- [ ] Item 4 PCIe link width `lspci -vvs` output
-- [ ] Item 5 thermal validation during stress
-- [ ] Item 11 brio-operator fps re-measurement under Option γ
+```
+$ sudo lspci -vvs 03:00.0 | grep -E 'LnkCap|LnkSta'   # RTX 5060 Ti
+    LnkCap:  Speed 32GT/s, Width x8   (PCIe Gen 5 x8)
+    LnkSta:  Speed 8GT/s (downgraded), Width x4 (downgraded)
+           ^^^^^^^^ PCIe Gen 3 x4 — massively downgraded
+
+$ sudo lspci -vvs 07:00.0 | grep -E 'LnkCap|LnkSta'   # RTX 3090
+    LnkCap:  Speed 16GT/s, Width x16  (PCIe Gen 4 x16)
+    LnkSta:  Speed 16GT/s, Width x16  — running at full capability
+```
+
+**Finding:** The 5060 Ti is running at PCIe Gen 3 x4 (8 GT/s × 4 lanes ≈ 3.94 GB/s) against a PCIe Gen 5 x8 capability (~31.5 GB/s). That's an **8× bandwidth penalty**. This is the B550 chipset slot topology limit — the second x16 slot on this motherboard splits lanes via the chipset and drops to Gen 3 x4 when populated. The 3090 in the primary slot is fine.
+
+**Implication for Option γ / Hermes 3:**
+- Layer-split inter-GPU communication (activations between layers 0-76 on 3090 and any overflow slice on 5060 Ti) will use the 5060 Ti's PCIe link, which is 4 GB/s.
+- For a 2.75 GiB overflow slice on the 5060 Ti, the activation bandwidth per forward pass is small (~MB, not GB) so the Gen 3 x4 link is **not** the inference bottleneck — the 3090's own SM throughput dominates.
+- Model load from disk → 5060 Ti VRAM: 2.75 GiB / 3.94 GB/s ≈ 0.7 s, adds negligible latency to cold start.
+- **The downgrade is cosmetically ugly but behaviorally acceptable for Option γ.** It will be re-measured after the X670E install (Phase 3 PR #3) when both slots can deliver full bandwidth.
+
+### 6.2 Item 5 — Thermal baseline (2026-04-14, pre-partition)
+
+Snapshot under nominal compositor + Qwen3.5-9B + hapax-dmn load:
+
+| GPU | Temp | Power | VRAM | Clocks |
+|---|---|---|---|---|
+| 0 — RTX 5060 Ti | 50 °C | 37 W | 3866 / 16311 MiB | 2947 MHz |
+| 1 — RTX 3090 | 74 °C | 240 W | 15581 / 24576 MiB | 1800 MHz |
+
+The 3090 at 74 °C / 240 W is within the safe envelope (TjMax 93 °C, TDP 350 W) under light inference load. Under Option γ with Hermes 3 70B resident, expected steady-state temp is ~80-85 °C and power ~280-320 W — still safe, but thermally hotter than Option α. A true 30-minute sustained-load thermal validation (item 5 full test) is deferred to the next idle window because it requires disrupting active services.
+
+### 6.3 Items 0 + 3 — Deferred to operator-scheduled windows
+
+- **Item 0** (formal systemd-integrated sm_120 test): requires a controlled `systemctl restart tabbyapi` with timing instrumentation. Beta's shell-level PyTorch matmul already confirmed sm_120 works on the 5060 Ti at the kernel level. The systemd-integrated re-verification adds confidence but disrupts local-fast/coding/reasoning routes briefly. **Schedule during operator idle window.**
+- **Item 3** (PSU combined-load 30-min stress): requires saturating both GPUs simultaneously for 30 minutes under `nvidia-smi --query-gpu=power.draw,clocks_throttle_reasons.hw_power_brake_slowdown` monitoring. Heavily disrupts compositor and voice during the test window. **Schedule during operator idle window.**
+
+### 6.4 Item 11 — Brio-operator fps (post-BRIO-swap, Phase 3 PR #3)
+
+Deferred to post-mobo install window when the BRIO replacement lands.
 
 ## 7. Handoff implications
 
