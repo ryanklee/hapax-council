@@ -1,0 +1,12 @@
+[Unit]
+Description=LRR Phase 4 mid-collection integrity check schedule
+Documentation=file:/home/hapax/projects/hapax-council/docs/superpowers/specs/2026-04-15-lrr-phase-4-phase-a-completion-osf-design.md
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=30m
+Persistent=true
+Unit=hapax-lrr-phase-4-integrity.service
+
+[Install]
+WantedBy=timers.target
