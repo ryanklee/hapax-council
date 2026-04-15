@@ -19,7 +19,21 @@ NotifyAccess=main
 WatchdogSec=60s
 WorkingDirectory=%h/projects/hapax-council
 ExecStartPre=/usr/bin/mkdir -p %h/video-recording %h/.cache/hapax-compositor/hls
-ExecStartPre=/usr/bin/find %h/.cache/hapax-compositor/hls -type f -delete
+# LRR Phase 2 spec §3.2 (item 2) REMOVED: the ExecStartPre `find ... -delete` on
+# the HLS cache dir was a debugging vestige that deleted every unrotated segment
+# on every compositor restart. Phase 2 wants segments PERSISTED to the archive,
+# not truncated. The `hls-archive-rotate.timer` (fires every 60s via
+# `systemd/units/hls-archive-rotate.timer`) rotates finalized segments out of
+# ~/.cache/hapax-compositor/hls/ into ~/hapax-state/stream-archive/hls/<date>/.
+# The compositor precheck below verifies the rotator is enabled + active before
+# startup so a rotator-disabled state is loud, not silent.
+#
+# Historical context: the original `find -delete` was added when the HLS cache
+# was treated as purely ephemeral. Phase 2 reframes the HLS cache as a staging
+# area for the research archive; wiping it on restart defeats the rotator's
+# purpose during the restart window. See
+# `docs/research/2026-04-14-lrr-phase-2-hls-archive-dormant.md` §5 "hlssink2
+# retention should be lenient" for the original analysis.
 ExecStartPre=%h/projects/hapax-council/scripts/studio-install-udev-rules.sh
 ExecStartPre=%h/projects/hapax-council/systemd/units/studio-camera-setup.sh
 # Phase 2 archive precheck — verifies hls-archive-rotate.timer is

@@ -82,6 +82,30 @@ class TestStudioCompositorArchivePrecheckWired:
             f"expected exactly 1 ExecStartPre line for archive precheck, got {len(pre_lines)}"
         )
 
+    def test_service_does_not_delete_hls_cache_on_start(self) -> None:
+        """LRR Phase 2 spec §3.2 (item 2) regression pin.
+
+        The old ``ExecStartPre=/usr/bin/find ~/.cache/hapax-compositor/hls -type f -delete``
+        line deleted every unrotated HLS segment on every compositor restart,
+        defeating the archive rotator. Phase 2 requires the HLS cache to be
+        treated as a staging area, not a purge target. This test fires if
+        the delete-on-start line is re-introduced (via revert, copy-paste
+        from an older branch, or a well-meaning "clean up stale data" PR).
+        """
+        body = STUDIO_SERVICE.read_text(encoding="utf-8")
+        exec_pre_lines = [
+            line
+            for line in body.splitlines()
+            if line.startswith("ExecStartPre=") and "hapax-compositor/hls" in line
+        ]
+        for line in exec_pre_lines:
+            assert "-delete" not in line, (
+                f"studio-compositor.service ExecStartPre line deletes HLS cache on "
+                f"start, violating LRR Phase 2 spec §3.2: {line!r}. The rotator "
+                f"(hls-archive-rotate.timer, 60s cadence) persists segments to the "
+                f"archive; wiping the cache on restart breaks the archive pipeline."
+            )
+
 
 class TestArchivePrecheckScriptContents:
     def test_precheck_creates_hls_archive_dir(self) -> None:
