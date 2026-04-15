@@ -528,15 +528,25 @@ Each phase section below is structured as a mini-design-doc, intended to be extr
 
 ---
 
-### Phase 5 — Hermes 3 70B Substrate Swap
+### Phase 5 — Substrate Scenario 1+2 Deployment (was: Hermes 3 70B Substrate Swap, SUPERSEDED)
 
-**Goal:** Execute the Hermes 3 migration plan. Swap the local inference substrate from Qwen3.5-9B to Hermes 3 70B SFT-only. Mark the Condition A→A' boundary in the research registry. File DEVIATION-037.
+> **2026-04-15 amendment (queue #154):** the original Hermes 3 70B substrate swap framing below is **structurally superseded** by drop #62 §14 (Hermes abandonment, 2026-04-15T06:35Z) + §16 (substrate scenario 1+2 ratification, 2026-04-15T18:21Z) + §17 (Option C parallel TabbyAPI pivot, 2026-04-15T18:49Z).
+>
+> **Current authoritative spec:** `docs/superpowers/specs/2026-04-15-lrr-phase-5-substrate-scenario-1-2-design.md` (PR #896, queue #138). Execution plan: `docs/superpowers/plans/2026-04-15-lrr-phase-5-substrate-scenario-1-2-plan.md` (PR #900, queue #143).
+>
+> **Old Hermes-framed spec** (`2026-04-14-lrr-phase-5-hermes-3-substrate-swap-design.md`) lives only on the `beta-phase-4-bootstrap` cohabitation branch and is NOT authoritative. Do not use it for Phase 5 execution.
+>
+> **New Phase 5 scope:** dual-track substrate deployment — scenario 1 (Qwen3.5-9B production verification via RIFTS empirical benchmark) + scenario 2 (OLMo 3-7B × {SFT, DPO, RLVR} parallel-deployed via Option C parallel TabbyAPI `:5001`). Enables `claim-shaikh-sft-vs-dpo-vs-rlvr` cycle 2 isogenic test. Closes when both scenarios + all cross-cutting drills (consent revocation, speech continuity, CAPABLE tier, cognitive loop) pass. See the new spec for full deliverables, exit criteria, and risk analysis.
+>
+> **Cross-references:** drop #62 §14 + §16 + §17 in `docs/research/2026-04-14-cross-epic-fold-in-lrr-hsea.md`; LRR Phase 3 §0.5 amendment (PR #897, queue #139); HSEA Hermes drift sweep (PR #898, queue #141).
 
-**Dependency:** Phase 3 (hardware ready) + Phase 4 (Condition A locked).
+**[HISTORICAL] Original goal (Hermes framing, obsolete):** Execute the Hermes 3 migration plan. Swap the local inference substrate from Qwen3.5-9B to Hermes 3 70B SFT-only. Mark the Condition A→A' boundary in the research registry. File DEVIATION-037.
 
-**Intended spec path:** `docs/superpowers/specs/YYYY-MM-DD-lrr-phase-5-hermes-3-substrate-swap-design.md`
+**Dependency:** Phase 3 (hardware ready) + Phase 4 (Condition A locked) + **drop #62 §16 ratification (shipped, PR #895)**.
 
-**Theoretical grounding:** Per Hermes 3 70B voice architecture design and Option B decision. The substrate swap IS the claim (SFT-only vs DPO under identical grounding directives).
+**Intended spec path:** ~~`docs/superpowers/specs/YYYY-MM-DD-lrr-phase-5-hermes-3-substrate-swap-design.md`~~ **→ `docs/superpowers/specs/2026-04-15-lrr-phase-5-substrate-scenario-1-2-design.md`**
+
+**Theoretical grounding:** Per ~~Hermes 3 70B voice architecture design and Option B decision. The substrate swap IS the claim (SFT-only vs DPO under identical grounding directives).~~ Dual-track isogenic test per drop #62 §16: scenario 1 (Qwen RIFTS baseline) + scenario 2 (OLMo 3-7B three-regime comparison). The **isogenic variant triad IS the claim** — OLMo's SFT, DPO, RLVR variants share architecture + pretraining, differing only in post-training, which is the cleanest test of "does training regime affect conversational grounding" available.
 
 **Scope:**
 
