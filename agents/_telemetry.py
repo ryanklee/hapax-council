@@ -152,12 +152,38 @@ def hapax_score(
     value: float,
     *,
     comment: str = "",
+    metadata: dict[str, Any] | None = None,
 ) -> None:
-    """Attach a numeric score to a span."""
+    """Attach a numeric score to a span.
+
+    Args:
+        span: Langfuse span / trace handle.
+        name: score name.
+        value: numeric score value.
+        comment: optional free-form comment.
+        metadata: optional flat dict of attributes attached to the score
+            itself. Used by LRR Phase 4 to tag voice grounding DVs with
+            ``condition_id`` so post-hoc analysis can filter Langfuse
+            scores by research condition. Callers that don't need
+            per-score attribution pass nothing.
+
+    The metadata kwarg is forwarded to ``span.score(..., metadata=...)``.
+    If the underlying Langfuse SDK version does not accept the metadata
+    kwarg, the try/except silently drops the score (same fail-safe
+    contract as any other Langfuse SDK issue).
+    """
     if span is None:
         return
     try:
-        span.score(name=name, value=round(value, 4), data_type="NUMERIC", comment=comment)
+        kwargs: dict[str, Any] = {
+            "name": name,
+            "value": round(value, 4),
+            "data_type": "NUMERIC",
+            "comment": comment,
+        }
+        if metadata:
+            kwargs["metadata"] = metadata
+        span.score(**kwargs)
     except Exception:
         log.debug("Langfuse score failed: %s", name, exc_info=True)
 
@@ -207,12 +233,27 @@ def hapax_bool_score(
     value: bool,
     *,
     comment: str = "",
+    metadata: dict[str, Any] | None = None,
 ) -> None:
-    """Attach a boolean score to a span."""
+    """Attach a boolean score to a span.
+
+    See :func:`hapax_score` for the ``metadata`` kwarg contract — same
+    semantics, forwarded to ``span.score(..., metadata=...)`` so LRR
+    Phase 4 boolean DVs can carry the research ``condition_id``
+    attribution.
+    """
     if span is None:
         return
     try:
-        span.score(name=name, value=int(value), data_type="BOOLEAN", comment=comment)
+        kwargs: dict[str, Any] = {
+            "name": name,
+            "value": int(value),
+            "data_type": "BOOLEAN",
+            "comment": comment,
+        }
+        if metadata:
+            kwargs["metadata"] = metadata
+        span.score(**kwargs)
     except Exception:
         log.debug("Langfuse bool score failed: %s", name, exc_info=True)
 

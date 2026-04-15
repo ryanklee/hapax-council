@@ -477,18 +477,38 @@ class ConversationPipeline:
             return
 
         from agents._telemetry import hapax_trace
+        from shared.research_marker import read_research_marker
 
         _t_start = time.monotonic()
+
+        # LRR Phase 4 scope item 1: read the active research condition
+        # once per utterance (the cache TTL in shared.research_marker is
+        # 5 s, so this is cheap). ``condition_id`` is stamped on both
+        # the parent trace's metadata (via hapax_trace below) and on
+        # every child score's metadata (via the local _score_meta dict
+        # passed into the inner call). When the marker is absent, the
+        # condition_id is None and no metadata tagging happens — this
+        # matches the director_loop's "no active research condition,
+        # don't attribute telemetry" fail-safe semantics.
+        _condition_id = read_research_marker()
+
+        _trace_metadata: dict[str, object] = {
+            "turn": self.turn_count,
+            "audio_bytes": len(audio_bytes),
+        }
+        if _condition_id:
+            _trace_metadata["condition_id"] = _condition_id
+
         _utt_trace_cm = hapax_trace(
             "voice",
             "utterance",
             session_id=getattr(self, "_session_id", None),
-            metadata={"turn": self.turn_count, "audio_bytes": len(audio_bytes)},
+            metadata=_trace_metadata,
         )
         _utt_trace = _utt_trace_cm.__enter__()
 
         try:
-            await self._process_utterance_inner(audio_bytes, _utt_trace, _t_start)
+            await self._process_utterance_inner(audio_bytes, _utt_trace, _t_start, _condition_id)
         finally:
             # Guarantee trace closure on ALL code paths — 7 early returns
             # previously leaked unclosed traces, causing next turn's scores
@@ -499,10 +519,34 @@ class ConversationPipeline:
                 pass
 
     async def _process_utterance_inner(
-        self, audio_bytes: bytes, _utt_trace, _t_start: float
+        self,
+        audio_bytes: bytes,
+        _utt_trace,
+        _t_start: float,
+        _condition_id: str | None = None,
     ) -> None:
-        """Inner utterance processing — extracted so try/finally guarantees trace closure."""
+        """Inner utterance processing — extracted so try/finally guarantees trace closure.
+
+        ``_condition_id`` is the active LRR research condition read at
+        the top of ``process_utterance`` via ``shared.research_marker``.
+        It is stamped as ``metadata={"condition_id": ...}`` on every
+        ``hapax_score`` / ``hapax_bool_score`` call that writes a
+        grounding DV, so post-hoc analysis can filter Langfuse scores
+        by research condition (LRR Phase 4 scope item 1). When no
+        research condition is active, ``_condition_id`` is ``None`` and
+        score metadata is not tagged — matching the director_loop
+        fail-safe semantic.
+        """
         from agents._telemetry import hapax_bool_score, hapax_event, hapax_score
+
+        # LRR Phase 4 scope item 1: score-level metadata for voice
+        # grounding DVs. Built once at the top of utterance processing
+        # and passed to every hapax_score/hapax_bool_score call below.
+        # When condition_id is None (no active research condition),
+        # the dict is None and no metadata is attached.
+        _score_meta: dict[str, object] | None = (
+            {"condition_id": _condition_id} if _condition_id else None
+        )
 
         # STT
         self.state = ConvState.TRANSCRIBING
@@ -788,6 +832,7 @@ class ConversationPipeline:
                     user_utterance=transcript,
                     langfuse_trace=_utt_trace,
                     directive_strategy=_directive_strategy,
+                    condition_id=_condition_id,
                 )
                 # Expose for visual overlay monitoring
                 self.last_anchor_score = _grounding_scores.get("context_anchor_success", 0.0)
@@ -807,7 +852,12 @@ class ConversationPipeline:
                 # Probe question: check sentinel retrieval
                 sentinel_score = self.check_sentinel_retrieval(_last_response)
                 if sentinel_score is not None:
-                    hapax_score(_utt_trace, "sentinel_retrieval", sentinel_score)
+                    hapax_score(
+                        _utt_trace,
+                        "sentinel_retrieval",
+                        sentinel_score,
+                        metadata=_score_meta,
+                    )
 
                 # Update conversation thread with structured entry
                 _user_text = _extract_substance(transcript)
@@ -892,11 +942,17 @@ class ConversationPipeline:
                     tool_error=_tool_error,
                     follow_up_delay=_follow_up_delay,
                 )
-                hapax_score(_utt_trace, "frustration_score", signals.score)
+                hapax_score(
+                    _utt_trace,
+                    "frustration_score",
+                    signals.score,
+                    metadata=_score_meta,
+                )
                 hapax_score(
                     _utt_trace,
                     "frustration_rolling_avg",
                     self._frustration_detector.rolling_average,
+                    metadata=_score_meta,
                 )
                 if self._frustration_detector.is_spiked:
                     hapax_event(
@@ -914,16 +970,30 @@ class ConversationPipeline:
         # Score and close the utterance trace
         _t_end = time.monotonic()
         _total_ms = (_t_end - _t_start) * 1000
-        hapax_score(_utt_trace, "total_latency_ms", _total_ms)
+        hapax_score(_utt_trace, "total_latency_ms", _total_ms, metadata=_score_meta)
         _consent_threshold = 2000 if getattr(self, "_consent_phase", "none") != "none" else 5000
-        hapax_bool_score(_utt_trace, "consent_latency_ok", _total_ms < _consent_threshold)
+        hapax_bool_score(
+            _utt_trace,
+            "consent_latency_ok",
+            _total_ms < _consent_threshold,
+            metadata=_score_meta,
+        )
         if self._salience_router is not None:
             _bd = self._salience_router.last_breakdown
             if _bd is not None:
-                hapax_score(_utt_trace, "activation_score", _bd.final_activation)
-                hapax_score(_utt_trace, "novelty", _bd.novelty)
-                hapax_score(_utt_trace, "concern_overlap", _bd.concern_overlap)
-                hapax_score(_utt_trace, "dialog_feature_score", _bd.dialog_feature_score)
+                hapax_score(
+                    _utt_trace, "activation_score", _bd.final_activation, metadata=_score_meta
+                )
+                hapax_score(_utt_trace, "novelty", _bd.novelty, metadata=_score_meta)
+                hapax_score(
+                    _utt_trace, "concern_overlap", _bd.concern_overlap, metadata=_score_meta
+                )
+                hapax_score(
+                    _utt_trace,
+                    "dialog_feature_score",
+                    _bd.dialog_feature_score,
+                    metadata=_score_meta,
+                )
         self.state = ConvState.LISTENING
 
     async def _generate_and_speak(self) -> None:

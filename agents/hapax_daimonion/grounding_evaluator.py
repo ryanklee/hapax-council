@@ -187,16 +187,30 @@ def evaluate_turn(
     user_utterance: str | None = None,
     langfuse_trace=None,
     directive_strategy: str | None = None,
+    condition_id: str | None = None,
 ) -> dict[str, float]:
     """Run all per-turn scores and push to Langfuse.
 
     Args:
         directive_strategy: Current grounding ledger strategy (e.g. "advance",
             "rephrase", "elaborate"). If provided, scores directive compliance.
+        condition_id: Active LRR research condition_id. If provided, every
+            ``hapax_score(...)`` call below tags its Langfuse score with
+            ``metadata={"condition_id": condition_id}`` so post-hoc
+            analysis can filter voice grounding DVs by research
+            condition (LRR Phase 4 scope item 1). When ``None``, no
+            metadata is attached — matching the fail-safe semantic of
+            ``shared.research_marker.read_research_marker`` when no
+            active condition is set.
 
     Returns dict of score_name → value for logging.
     """
     from agents._telemetry import hapax_score
+
+    # LRR Phase 4 scope item 1: build the score-level metadata dict
+    # once at function entry. Passed to every hapax_score call below
+    # if condition_id is set; otherwise None (no tagging).
+    _score_meta: dict[str, object] | None = {"condition_id": condition_id} if condition_id else None
 
     # Recent user turns from messages
     recent_user = [
@@ -240,11 +254,14 @@ def evaluate_turn(
             score_directive_compliance(response, directive_strategy), 3
         )
 
-    # Push to Langfuse
+    # Push to Langfuse — with condition_id metadata attached when an
+    # active LRR research condition is set. Every score carries the
+    # same condition_id so post-hoc analysis can filter voice grounding
+    # DVs by research condition.
     if langfuse_trace is not None:
         for name, val in scores.items():
             if isinstance(val, (int, float)):
-                hapax_score(langfuse_trace, name, val)
+                hapax_score(langfuse_trace, name, val, metadata=_score_meta)
 
     return scores
 
