@@ -694,4 +694,137 @@ Delta concurs with beta's reasoning. The amendment headers are correct as-author
 
 — delta, 2026-04-15T06:30Z
 
+---
+
+## 14. Addendum 2026-04-15 — operator abandoned Hermes; substrate question reopened
+
+**Written:** 2026-04-15T07:15Z by delta, after beta's inflection `20260415-070000-beta-delta-awb-activation-plus-two-audits-closure.md` reported the operator's 2026-04-15T06:35Z signal and beta's subsequent substrate re-evaluation research shipped as commit `bb2fb27ca` on `beta-phase-4-bootstrap` (`docs/research/2026-04-15-substrate-reeval-post-hermes.md`, 722 lines).
+
+### 14.1 What the operator said
+
+At 2026-04-15T06:35Z, in response to beta's quant-killed + 5b-reframing state, the operator issued a direct terminal message:
+
+> "We've abandoned hermes. Devote extensive research into if Qwen3.5-9B-exl3-5.00bpw is actually the best production substrate for our very unique use cases."
+
+The message carries two parallel directives:
+
+1. **Hermes abandoned as the substrate.** Not just 70B (which §13 already captured as structurally unreachable) — the 8B Hermes 3 Llama path is also rejected as the substrate. Drop #62 §4 option c's 5a arm ("Hermes 3 Llama 3.1 8B EXL3 5.0bpw parallel primary") is no longer the operator's preferred path. The "parallel primary" framing collapses.
+
+2. **Substrate re-evaluation mandate.** The operator explicitly commissioned research into whether Qwen3.5-9B is the right production substrate. This opens the full substrate landscape for re-evaluation — not just 8B alternatives but any model + post-training combination that fits the hardware envelope and the interpersonal_transparency consent-latency axiom.
+
+Beta accepted the research mandate and shipped 722 lines of substrate re-evaluation across 30+ candidate models, 4 post-training buckets, and ~5 deployable shortlist entries. The research drop is authoritative for the post-Hermes substrate landscape.
+
+### 14.2 Implications for prior addenda
+
+This §14 addendum does NOT invalidate the prior §11/§12/§13 ratification records. Those remain historically accurate to their write times (05:25Z, 05:45Z, 06:30Z) and describe operator decisions that were in force at those times. The §10 Q1 "Option C ratified 2026-04-15T05:10Z" statement in §11.1 is historically true — the operator DID ratify Option C at that time. §14 documents that the operator subsequently withdrew support for the 5a Hermes path ~85 minutes later.
+
+**§11 Q1 status:** was CLOSED (ratified Option C); now REOPENED in practice. Delta does NOT edit §11 in place; the "each ratification gets its own addendum" convention applies to reversals too. §14 documents the reversal without rewriting the audit trail.
+
+**§12 status:** Q2–Q10 ratifications remain valid. None of them depend on the Hermes substrate being the active path:
+- Q2 (T2.8 guardrail bundles into UP-7a DEVIATION): the UP-7a DEVIATION no longer has a clear content (substrate is TBD), but the bundling-into-DEVIATION framing is substrate-independent and still valid for whatever future substrate swap occurs.
+- Q3 (HSEA Phase 4 Cluster I rescoping): narration-only rescoping is substrate-independent. Still valid.
+- Q4 (sibling state files): file layout choice, substrate-independent. Still valid.
+- Q5 (joint constitutional PR): axiom precedent shipping mechanism, substrate-independent. Still valid.
+- Q6 (Cluster H timing): revenue deliverable timing, substrate-independent. Still valid.
+- Q7 (2-parallel worktree): session allocation, substrate-independent. Still valid.
+- Q8 (alpha-initial shared index): index ownership, substrate-independent. Still valid.
+- Q9 (drop #62 artifact location): file location choice, substrate-independent. Still valid.
+- Q10 (phase ordering tolerance): session autonomy scope, substrate-independent. Still valid.
+
+**§13 status:** the 5b reframing ("structurally unreachable on foreseeable hardware envelope") remains valid. The 70B path was structurally unreachable under the current hardware regardless of whether 5a was Hermes or something else. §13 is unaffected.
+
+### 14.3 Beta's substrate research findings (summary)
+
+Beta's `docs/research/2026-04-15-substrate-reeval-post-hermes.md` (commit `bb2fb27ca` on `beta-phase-4-bootstrap`, 722 lines) delivers the following findings relevant to the substrate question. This §14 cross-references the research drop; full details live in the research drop itself, not here.
+
+**Qwen3.5-9B audit (research §1):**
+- Current substrate is Alibaba's 2026-03-02 release — multimodal vision-language model with Gated DeltaNet + full attention hybrid, trained with GRPO+GSPO+"million-agent-environment" scaled RL via distillation-from-RL-teacher
+- Sits at the RL-heavy extreme of the post-training spectrum (relevant to Shaikh SFT-vs-DPO framing)
+- **Two concrete production concerns:** (a) thinking mode default-on may tax LOCAL-tier voice calls with a latency surprise, (b) hybrid-attention JIT compile is "shaky" on first call per exllamav3 README — cold-start latency tax on the first request after startup
+
+**Post-training literature update (research §4):**
+- Shaikh SFT-vs-DPO framework confirmed in general form
+- Qwen3/Qwen3.5 has NOT been evaluated on any grounding benchmark (RIFTS, QuestBench, SYCON Bench, MultiChallenge) in published work as of April 2026
+- Any substrate argument against Qwen3.5-9B on grounding grounds is **predictive from training recipe, not empirical**
+- New findings: Laban et al.'s 39% multi-turn degradation across models; Parrot's Qwen-family sycophancy warning at small sizes (Qwen 2.5-1.5B shows 94% follow-rate)
+
+**Candidate landscape (research §5 + §6):**
+- 30+ models enumerated across 4 post-training buckets (pure-SFT, SFT+DPO, SFT+RLHF, RL-heavy)
+- Deployable shortlist (fits the hardware envelope + consent-latency axiom):
+  - Qwen3.5-9B EXL3 5.0bpw (current)
+  - Llama 3.1 8B Instruct
+  - Qwen3-8B
+  - OLMo 3-7B Instruct (SFT + DPO variants)
+  - Mistral Small 3.1 24B Instruct
+
+**Unique finding on OLMo 3-7B:** AI2 publishes separate hybrid SFT-only and DPO-only checkpoints as ready EXL3 quants (`turboderp/Olmo-Hybrid-Instruct-SFT-7B-exl3` + `UnstableLlama/Olmo-Hybrid-Instruct-DPO-7B-exl3`). **This is the ONLY candidate in the entire landscape where the Shaikh SFT-vs-DPO hypothesis can be tested within a single model family on identical base weights.** Uniquely valuable for the research program (`claim-shaikh-sft-vs-dpo`), though not necessarily for production.
+
+**Research §9 recommendation (beta's synthesis):**
+- **Primary:** keep Qwen3.5-9B as the production substrate, fix three concrete production concerns (disable thinking mode, add TabbyAPI cache warmup, upgrade exllamav3), run RIFTS benchmark for empirical grounding validation
+- **Complementary (non-exclusive):** parallel-deploy OLMo 3-7B on a second TabbyAPI slot for the research program's SFT-vs-DPO claim test
+- Both actions are HIGH-confidence per beta's research audit
+
+**Research §10.2 Cycle 2 reframing:**
+- `claim-shaikh-sft-vs-dpo` claim requires reframing with Hermes abandoned
+- Beta recommends **Option Z: defer the claim test to Cycle 3** with cleaner substrate comparison (OLMo SFT vs OLMo DPO on identical base weights)
+- Cycle 2 proceeds with grounding-package test only (not a substrate comparison)
+
+**§14 does not ratify the research §9 or §10.2 recommendations.** Those are operator-gated decisions. §14 captures the research content as the current authoritative synthesis of the post-Hermes substrate landscape.
+
+### 14.4 Downstream doc status
+
+**Documents that reference Hermes 3 substrate as the active path (now partially stale):**
+
+1. **Drop #62 §4 three-options analysis** (body of this drop) — describes 5a as "Hermes 3 Llama 3.1 8B EXL3 5.0bpw parallel primary". Historically accurate; operator support withdrawn. Not edited in place per audit-trail convention.
+
+2. **Drop #62 §11.1** (this drop) — describes 5a as the live path. Historically accurate at 05:25Z write time. Not edited in place.
+
+3. **`docs/superpowers/specs/2026-04-14-lrr-phase-5-hermes-3-substrate-swap-design.md`** (beta's PR #819) — the entire Phase 5 spec is about Hermes 3. Beta's amendment headers at §0.5 correctly describe the 8B pivot; the "RATIFIED 2026-04-15" status line is historically true but the Hermes substrate is no longer the chosen path. Beta may want to add a §0.6 reframing note at rebase time, but delta does not direct this edit.
+
+4. **`research/protocols/deviations/DEVIATION-037.md`** (beta's PR #819) — filed against the Hermes 3 8B pivot. Same status as Phase 5 spec.
+
+5. **`docs/research/2026-04-15-drop-62-option-c-ratification.md`** (alpha's PR #826 + PR #833) — alpha's ratification decision record + 5b reframing amendment. The ratification record is historically true; the draft systemd `tabbyapi-hermes8b.service` unit at `systemd/units/tabbyapi-hermes8b.service` is no longer a live trajectory. Alpha may want to add a follow-up amendment noting the Hermes abandonment, but delta does not direct this edit (alpha's ship queue decision).
+
+6. **`docs/superpowers/specs/2026-04-15-lrr-phase-7-persona-spec-design.md`** (delta's `dac6b4974`) — references tuning the persona for "Hermes 3's aggressively system-prompt compliant substrate". The substrate-specific framing is now obsolete. Delta will NOT edit in place; the spec's §2 preconditions already say "UP-7 (substrate swap) closed" without naming Hermes, and §6 risks table mentions Hermes once in a "Pre-Hermes Qwen3.5-9B" risk row. A future Phase 7 opener will read §14 of this drop and know the Hermes framing is historical.
+
+7. **HSEA Phase 4 I4 `t2_6_hermes_8b_pivot_narrator`** (alpha's PR #830) — narrates a substrate transition that now won't occur. Alpha's PR #830 rescoping is still structurally correct (I4 is narration-only), but the specific narration target (Hermes 3 pivot) is no longer a real event. Alpha may want to rescope I4 to "post-Hermes substrate selection narrator" or similar at execution time.
+
+8. **All HSEA Phase 0/1/2/3 specs + plans** (delta's extractions) — none of them reference Hermes directly. They reference "UP-7a substrate swap" generically, which is substrate-agnostic. No edits required.
+
+**Documents that do NOT need updates:**
+
+- HSEA Phase 0 spec + plan (delta's `5b75ad1cd`)
+- HSEA Phase 1 spec + plan (delta's `c55f4dad5`)
+- HSEA Phase 2 spec + plan (delta's `31119ce6f` + `280d90cab`)
+- HSEA Phase 3 spec + plan (delta's `3eabafacb`-adjacent)
+- LRR Phase 1 spec + plan (delta's `8a2c42bcf`)
+- LRR Phase 2 spec + plan (delta's `03790b07a`)
+
+The substrate-agnostic framing of these docs (referencing "UP-7" or "UP-7a" without naming the substrate) means they remain valid regardless of which substrate the operator ultimately chooses.
+
+### 14.5 Cross-links
+
+- Beta's 07:00Z inflection `20260415-070000-beta-delta-awb-activation-plus-two-audits-closure.md` — source of this §14 addendum's content
+- Beta's substrate research drop `docs/research/2026-04-15-substrate-reeval-post-hermes.md` at commit `bb2fb27ca` on `beta-phase-4-bootstrap` — authoritative post-Hermes substrate landscape
+- Operator keyword at 2026-04-15T06:35Z: "We've abandoned hermes. Devote extensive research into if Qwen3.5-9B-exl3-5.00bpw is actually the best production substrate for our very unique use cases." (terminal, not relay-captured)
+- Delta's assignment inflection `20260415-071000-delta-beta-assignment-thinking-mode-disable.md` — queues the first production-fix derivable from beta's research (thinking-mode disable)
+
+### 14.6 What §14 does NOT do
+
+- Does NOT ratify beta's research §9 recommendation (Qwen3.5-9B primary + OLMo parallel) — operator-gated
+- Does NOT retire the `cond-phase-a-prime-hermes-8b-002` condition — that condition may never open at all, in which case it's a never-opened placeholder
+- Does NOT invalidate the §10 ratifications (Q1 substrate path is re-open in practice but historically ratified; Q2–Q10 are substrate-independent and remain valid)
+- Does NOT direct alpha or beta to edit any downstream docs in place — edits are session-owner decisions
+- Does NOT re-open operator decisions; §14 is a status update, not a new ratification
+
+### 14.7 Delta's action trail from this addendum forward
+
+- This §14 addendum written + committed (non-blocking; does not gate any other work)
+- Delta continues pre-staging extractions per operator's earlier "always be working" directive. Substrate-agnostic extractions proceed normally (HSEA Phase 4 rescoped, HSEA Phase 5 M-series, etc.)
+- Delta's LRR Phase 7 persona spec (`dac6b4974`) remains in the pre-staging queue as-is; the Hermes-specific framing is a minor cosmetic staleness that the Phase 7 opener will notice and handle at execution time
+- Delta does NOT rewrite LRR Phase 5 spec or DEVIATION-037 or PR #826 ratification record — those are beta's/alpha's ownership
+- **If the operator ratifies a new substrate (e.g., "keep Qwen3.5-9B per beta's research §9 recommendation"), delta will write §15** documenting that ratification and the associated new 5a execution trajectory
+
+— delta, 2026-04-15T07:15Z
+
 — End of drop #62 fold-in analysis.
