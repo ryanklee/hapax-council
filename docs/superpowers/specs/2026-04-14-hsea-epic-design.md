@@ -28,6 +28,8 @@ The epic is corrected for drop #59's audit findings. Where drop #58 silently omi
 
 **End-state:** Legomena Live is a 24/7 livestream where Hapax visibly drafts research drops, code patches, grant applications, sponsor copy, exemplar proposals, and constitutional decisions; narrates its own anomalies and recoveries; schedules itself on the operator's biometric ultradian rhythm; reads its own past reactions as content; and proposes changes to its own prompt for operator approval — all under an operator-controlled approval gate, with every consequential action routed through `~/Documents/Personal/00-inbox/` for operator delivery. The operator is the constitutional authority for a self-executing substrate.
 
+**Cross-epic relationship (added by drop #62 fold-in).** HSEA does not own the research substrate, the persona spec, the governance amendments, the closed-loop wiring, the per-condition observability, or the substrate swap. Those are all LRR scope. HSEA's role is to (a) ship the shared content-execution primitives (governance queue, spawn budget, promote scripts), (b) ship the visibility surfaces that make LRR's work into stream content, and (c) ship the new work that LRR does not touch (clip mining, revenue preparation, M-series biometric/studio/archival, reflexive content). Drop #62 (`docs/research/2026-04-14-cross-epic-fold-in-lrr-hsea.md`) is the authoritative dependency map and the ownership declarations in §3 of drop #62 take precedence over any conflicting claim in this spec.
+
 **Scope is closed.** This epic does not add requirements beyond drop #57 + drop #59's audit corrections. It sequences everything already captured into implementable phases with explicit dependencies, gates, and exit criteria.
 
 ---
@@ -41,7 +43,7 @@ This epic supersedes or absorbs:
 | drop #57 (tactical roadmap — operator-executes) | Preserved; reframed as input to HSEA | The 38 tactics in drop #57 become touch points that Hapax executes. HSEA phases cluster the tactics by execution pattern, not by tier. |
 | drop #58 (thesis) | Preserved in audit trail | The architectural reframe (Hapax-executes-as-content) is HSEA's core thesis. Specific touch-point enumerations are reclustered and corrected per drop #59. |
 | drop #59 (audit) | Preserved | Drop #59's 10 uncovered tactics + 23 missed opportunities + corrections to file/budget/posterior claims are all absorbed as HSEA scope items. |
-| LRR epic (`docs/superpowers/specs/2026-04-14-livestream-research-ready-epic-design.md`) | Parallel, dependency-coupled | HSEA Phase 4 depends on LRR Phase 1 (PyMC 5 BEST port) having shipped. Both epics reference the research harness (condition_id, research registry, frozen files) but HSEA adds the content-visibility layer over what LRR builds. |
+| LRR epic (`docs/superpowers/specs/2026-04-14-livestream-research-ready-epic-design.md`) | Parallel, dependency-coupled; cross-mapped by drop #62 | HSEA is structurally a content-execution layer above LRR. LRR ships the substrate (registry, archive, governance, persona, observability, closed loop, substrate swap). HSEA reads all of LRR's outputs and renders them as visible drafting work routed through an operator-controlled approval queue. The two epics share five primitive families (frozen-files, condition_id, research-marker, research-registry CLI, stats.py BEST port); LRR owns all five and HSEA reads them. See `docs/research/2026-04-14-cross-epic-fold-in-lrr-hsea.md` §3 for the canonical ownership table and §5 for the unified 14-phase sequence (UP-0 through UP-13). |
 | Camera 24/7 resilience epic | Shipped, reused | HSEA Phase 2 (self-monitoring) extends the existing recovery FSM with narration; does not rebuild it. |
 | Compositor unification epic | Shipped, reused | All HSEA Cairo sources run on `CairoSourceRunner` (no streaming-thread work). |
 | Reverie source registry completion epic | Shipped, reused | HSEA Phase 5 M5 (Reverie as cognitive write channel) builds on the existing 9 expressive dimensions. |
@@ -54,16 +56,28 @@ This epic supersedes or absorbs:
 
 Drop #59's audit verified 22 specific claims from drop #58 against the codebase. Key findings informing HSEA scope:
 
-**Missing primitives (all Phase 0 work):**
-- `shared/prom_query.py` — does not exist
-- `~/hapax-state/governance-queue.jsonl` — does not exist
-- `~/hapax-state/spawn-budget.jsonl` — does not exist
-- `shared/exemplars.yaml`, `shared/antipatterns.yaml` — do not exist
-- `scripts/promote-draft.sh`, `scripts/dispatch-approved.sh` — do not exist
-- `shared/telemetry.py::hapax_span` — lacks post-emit hook (Phase 0 provides a separate append-path)
-- `scripts/check-frozen-files.py` — lacks `--probe` mode (Phase 0 extends)
-- `agents/code_drafter/` — does not exist (Cluster I / Phase 4 creates)
-- `agents/revenue/` — does not exist (Cluster H / Phase 5 creates)
+**Missing primitives (Phase 0 work, corrected per drop #62 fold-in):**
+
+HSEA Phase 0 ships:
+- `shared/prom_query.py` — does not exist (HSEA owns, 0.1)
+- `~/hapax-state/governance-queue.jsonl` — does not exist (HSEA owns, 0.2)
+- `~/hapax-state/spawn-budget.jsonl` — does not exist (HSEA owns, 0.3)
+- `scripts/promote-*.sh` + `_promote-common.sh` — do not exist (HSEA owns, 0.4)
+- Axiom precedent YAML — does not exist (HSEA drafts 0.5; LRR Phase 6 (UP-8) ships in a joint `hapax-constitution` PR)
+- `~/.cache/hapax/relay/hsea-state.yaml` — does not exist (HSEA owns, 0.6)
+
+**LRR-owned primitives (HSEA READS these, does not duplicate):**
+- `scripts/check-frozen-files.sh` / `.py` — **LRR Phase 1 (UP-1) owns.** HSEA Phase 0 adds a thin `--probe` wrapper ONLY after LRR Phase 1 merges.
+- `~/hapax-state/research-registry/` — **LRR Phase 1 (UP-1) owns.** HSEA reads via standard filesystem interface.
+- `/dev/shm/hapax-compositor/research-marker.json` — **LRR Phase 1 (UP-1) owns.** HSEA reads atomically.
+- `scripts/research-registry.py` — **LRR Phase 1 (UP-1) owns.** HSEA does not extend the CLI; new subcommands go upstream to LRR.
+- `condition_id` tagging (Qdrant + JSONL + Langfuse) — **LRR Phase 1 (UP-1) owns.** HSEA tags consume.
+- `shared/exemplars.yaml` + `shared/antipatterns.yaml` — **HSEA Phase 0 ships the empty YAML shells; LRR Phase 7 (UP-9) populates them.**
+- `stats.py` PyMC 5 BEST port — **LRR Phase 1 (UP-1 item 7) owns.** HSEA Phase 4 I1 drafter rescoped to narration-only.
+
+**Not HSEA work (previously misattributed):**
+- `agents/code_drafter/` — NOT a foundation primitive. Created in HSEA Phase 4 Cluster I, which is now **rescoped** (see §4 Phase 4) to narration-only drafters for I1-I5; only I6 (conditional) and I7 remain as code-generation drafters.
+- `agents/revenue/` — HSEA Phase 9 Cluster H creates this; no change from original spec.
 
 **Existing primitives (reused):**
 - `agents/studio_compositor/director_loop.py::ACTIVITY_CAPABILITIES` — exists with 6 activities (`react`, `chat`, `vinyl`, `study`, `observe`, `silence`). HSEA adds 7+ new activities incrementally per phase.
@@ -131,7 +145,7 @@ Derived from drops #57, #58, #59 + operator pushback sequences:
 | **1** | Visibility surfaces | Ship the 5 foundational Cairo surfaces (HUD, research state broadcaster, glass-box prompt, orchestration strip, governance queue overlay) | A·C·D·G partial | 0 | ~1,200 LOC · 2.5 d |
 | **2** | Core director activities | Extend director loop with new activities: `draft`, `reflect`, `critique`, `patch`, `compose_drop`, `synthesize`, `exemplar_review`, `verification_run`. Ship `ReflectiveMomentScorer` gate. | A·B·F foundations | 0, 1 | ~2,500 LOC · 3 d |
 | **3** | Research program orchestration | Cluster C full ship: research state broadcaster enrichment, voice session spectator event, attribution audit narration, Phase 4 PR drafter, OSF amendment drafter, publishable result composer | C | 0, 1, 2, LRR Phase 1 | ~2,800 LOC · 4 d |
-| **4** | Code drafting cluster (Cluster I — NEW) | Per-task drafters for T1.3 PyMC 5 BEST, T1.7 stimmung prior, T2.2 burst cadence, T2.6 8B pivot (3 sub-drafters), T2.8 guardrail, T4.8 YouTube tee, T4.11 ritualized states | I (new) | 0, 1, 2 | ~3,500 LOC · 5 d |
+| **4** | Code drafting cluster (Cluster I — RESCOPED per drop #62 §4) | Only I7 (T4.11 ritualized states) and I6 (T4.8 YouTube tee, if `rtmp_output.py` is not frozen) ship as code-generation drafters. I1–I5 are rescoped to **narration-only spectator drafters** that watch LRR phases land the actual code. I4 (8B pivot) is owned entirely by LRR UP-7 per the substrate-swap fold-in decision. | I (reduced scope) | 0, 1, 2, **LRR UP-1, UP-7, UP-9** | ~1,100 LOC · 2-3 d (down from 3,500 LOC · 5 d) |
 | **5** | Biometric + studio + archival triad (M-series) | M1 biometric proactive intervention, M2 retrieval-augmented operator memory, M3 studio creative-state daemon, M4 long-horizon drift detector, M5 Reverie as cognitive write channel + supporting M-series | M-series (new) | 0, 1, 2 | ~3,200 LOC · 4.5 d |
 | **6** | Content quality + clip mining | Cluster B: clipability scorer, exemplar auto-curation, anti-pattern detection, self-A/B prompt testing, clip-miner pipeline, music-aware self-observation | B | 0, 1, 2 | ~2,200 LOC · 3 d |
 | **7** | Self-monitoring + catastrophic tail | Cluster D: anomaly narration, FSM recovery narration, recurring-pattern fix proposer, alert triage, postmortem auto-drafter, DMCA pre-check, consent face redaction narration, watchdog self-expansion | D | 0, 1, 2 | ~2,800 LOC · 3.5 d |
@@ -652,6 +666,8 @@ Derived from drops #57, #58, #59 + operator pushback sequences:
 **Precedent ID:** `sp-hsea-mg-001`
 **File:** `axioms/precedents/hsea/management-governance-drafting-as-content.yaml`
 
+**PR vehicle (added by drop #62 fold-in):** This precedent ships in the same `hapax-constitution` PR as LRR Phase 6's `it-irreversible-broadcast` implication, `su-privacy-001` clarification, and `corporate_boundary` clarification. HSEA Phase 0 deliverable 0.5 drafts the YAML; LRR Phase 6 (UP-8) opens the single PR that bundles both epics' constitutional amendments. Operator review is one cycle covering all pieces, not two. This eliminates the risk of partial constitutional state between the two epics.
+
 **Precedent text:**
 
 > **Situation.** The HSEA epic proposes that Hapax draft research drops, code patches, PR bodies, revenue copy, OSF amendments, and other consequential artifacts, and that the drafting process itself be rendered as livestream content (via Cairo overlays, Sierpinski slots, and daimonion voice narration). The question: does rendering Hapax's drafting on a public livestream constitute "delivery" of the drafted artifact, such that the artifact would violate the `management_governance` separation of preparation (LLM) from delivery (operator)?
@@ -716,7 +732,8 @@ HSEA defines 9 clusters + M-series:
 
 Adapted from LRR epic's invariants pattern:
 
-- **One active phase at a time.** `~/.cache/hapax/relay/hsea-state.yaml::current_phase` is the single source of truth. Sessions check this file first.
+- **Cross-epic dependency check (added by drop #62 fold-in).** Any HSEA phase that depends on an LRR phase output (per drop #62 §3 ownership table) MUST verify the LRR phase has reached `closed` status in `lrr-state.yaml` before opening. The shared `~/.cache/hapax/relay/research-stream-state.yaml` index file is the canonical lookup for cross-epic dependencies. Session-context.sh surfaces a unified status line on onboarding: `LRR: phase N (owner) | HSEA: phase M (owner) | UP: X,Y active`.
+- **One active phase at a time.** `~/.cache/hapax/relay/hsea-state.yaml::current_phase` is the single source of truth. Sessions check this file first, then check `research-stream-state.yaml` for blocking dependencies.
 - **Phase N opens only after Phase N-1 is closed.** Exceptions: Phases 5-9 have no mutual dependencies beyond 0/1/2 and can parallelize across worktrees.
 - **Each phase is its own branch + PR** (or sequence of PRs per deliverable). Branch name: `feat/hsea-phase-N-<slug>`.
 - **Every phase writes a handoff doc** at `docs/superpowers/handoff/YYYY-MM-DD-hsea-phase-N-complete.md` on close.

@@ -23,7 +23,8 @@ This epic is too large for one session. It is structured for incremental pickup.
 
 **Invariants across all phases:**
 
-- **One active phase at a time per session.** `~/.cache/hapax/relay/hsea-state.yaml::current_phase` holds the primary phase pointer. Sessions picking up HSEA work check this file first.
+- **Read `research-stream-state.yaml` before reading `hsea-state.yaml` (added by drop #62 fold-in).** The shared index file declares cross-epic dependencies that block phase opens. HSEA phases that depend on LRR phase outputs (per drop #62 §3 ownership table) cannot open until the upstream LRR phase reaches `closed` status. The session-context.sh output surfaces unified state on onboarding.
+- **One active phase at a time per session.** `~/.cache/hapax/relay/hsea-state.yaml::current_phase` holds the primary phase pointer. Sessions picking up HSEA work check this file first, then check `research-stream-state.yaml` for cross-epic blockers.
 - **Phase N opens only after Phase N-1 is closed** (exit criteria met, PR merged, handoff written). Exceptions: Phases 5-9 parallelize across worktrees after Phase 2 closes.
 - **Each phase is its own branch + PR.** Branch name: `feat/hsea-phase-N-<slug>`. Multi-PR phases use suffixed branches: `feat/hsea-phase-N-<slug>-<deliverable>`.
 - **Every phase writes a handoff doc** at `docs/superpowers/handoff/YYYY-MM-DD-hsea-phase-N-complete.md` on close.
@@ -159,15 +160,26 @@ Phase 0 (Foundation) ─┬─> Phase 1 (Visibility) ─┬─> Phase 2 (Core Ac
 **LRR coupling:** C5 waits for LRR Phase 1; C6 waits for LRR Phase 4; C11 waits for LRR Phase 4 complete + green integrity
 **Exit criteria:** one voice grounding session orchestrated end-to-end via C2; attribution audit catches simulated fault; first auto-generated drop via C10
 
-### Phase 4 — Code Drafting Cluster (NEW)
+### Phase 4 — Code Drafting Cluster (RESCOPED per drop #62 fold-in)
 
 **Branch:** `feat/hsea-phase-4-code-drafting`
-**Duration:** 5 sessions (largest phase)
-**Ordering:** 4.1 base agent → 4.2 staging → 4.3 per-task drafters (I2, I3, I4a/b/c, I5, I6, I7 first; I1 waits for LRR Phase 1) → 4.4 promote/reject scripts → 4.5 director `patch` activity → 4.6 code_review integration
-**Capable alias task:** add `capable → claude-opus-4-6` to `shared/config.py` + `agents/_config.py` as first action
-**Frozen-files probe task:** add `--probe` mode to `scripts/check-frozen-files.py` as a separate PR before drafter deliverables can depend on it
-**Opus rate limit:** hard cap ≤3/day enforced at drafter + budget ledger
-**Exit criteria:** all 7 drafters produce valid CodePatch outputs; ≥2 patches complete draft→review→approve→promote cycle; capable alias + probe mode merged
+**Duration:** 2-3 sessions (reduced from 5 per fold-in; LRR phases own the actual code)
+**Prerequisite:** LRR UP-1 (Phase 1) must be closed AND LRR UP-7 (substrate swap, 8B pivot) must be closed AND LRR UP-9 (Phase 7 persona spec) must be closed before Phase 4 opens. Check `research-stream-state.yaml::unified_sequence` for status.
+
+**Scope after fold-in:**
+- **Code-generation drafters that ship (2):**
+  - **I7 `t4_11_ritualized_states`** — the only I-drafter that survived §4 unchanged. Four ritualized director states (Midnight/Wake/Crate/Last Call) with time-of-day gating.
+  - **I6 `t4_8_youtube_tee`** — conditional. Ships only if `rtmp_output.py` is NOT in the active research condition's frozen-files manifest (verify in UP-1). If frozen, defer to a DEVIATION cycle or reroute to LRR Phase 10 polish.
+- **Narration-only spectator drafters (5):** I1, I2, I3, I4, I5 become composite narrators that **watch LRR phases land the actual code** and draft research drops summarizing the LRR work as it lands. The original code generation for T1.3 (PyMC BEST), T1.7 (stimmung prior), T2.2 (burst cadence), T2.6 (8B pivot), T2.8 (guardrail) is owned by LRR UP-1, UP-11, UP-11, UP-7, UP-9 respectively.
+
+**Shared infrastructure tasks:**
+- Add `capable → claude-opus-4-6` alias to `shared/config.py` + `agents/_config.py`
+- `check-frozen-files.py --probe` thin wrapper (added only after LRR Phase 1 frozen-files hook has merged — HSEA does NOT drop a parallel implementation)
+- Opus rate limit: hard cap ≤3/day at budget ledger layer
+
+**LOC delta:** ~−2,400 LOC removed from Phase 4 relative to the original HSEA spec (I1-I5 no longer require their own code-generation drafter implementations). Total Phase 4 LOC: ~1,100.
+
+**Exit criteria:** I7 ships T4.11 code successfully; I6 either ships T4.8 code or is formally deferred with rationale; narration spectator drafters (I1-I5) produce research drops for ≥1 LRR phase landing; `capable` alias + probe wrapper merged.
 
 ### Phase 5 — Biometric + Studio + Archival Triad (NEW)
 
@@ -306,15 +318,39 @@ No phase abandonment. If a phase genuinely cannot ship, write an abandonment han
 
 ## 8. Cross-epic coordination
 
-**LRR + HSEA interplay:**
-- HSEA Phase 3 C5 waits for LRR Phase 1 (PyMC 5 BEST port) — Cluster I's I1 drafter can ship LRR Phase 1 itself, closing the dependency
-- HSEA Phase 3 C6 + C11 wait for LRR Phase 4 (condition_id plumbing) — LRR Phase 4 is in beta's worktree
-- HSEA Phase 7 D3 recurring-fix proposer may produce fixes for LRR-instrumented code; those must respect LRR frozen-files
+**Authoritative coordination reference:** `docs/research/2026-04-14-cross-epic-fold-in-lrr-hsea.md` (drop #62). That document contains:
+- §3: canonical shared-concept ownership table (20 shared primitives, each with a single declared owner epic)
+- §4: substrate swap resolution (70B deferred; 8B parallel pivot owned by LRR UP-7)
+- §5: unified phase sequence (14 unified phases UP-0 through UP-13)
+- §6: state file integration design (sibling files under shared index)
+- §7: resource conflict resolutions
+- §8: drop #57 tactic ownership map (22 LRR-owned, 11 HSEA-owned, 5 operational)
+
+**LRR-owned primitives HSEA must NOT duplicate:**
+- `scripts/check-frozen-files.sh` (LRR Phase 1 item 4) — HSEA adds thin probe wrapper only after LRR merges
+- `~/hapax-state/research-registry/cond-*/condition.yaml` (LRR Phase 1 item 1) — append-only by LRR
+- `/dev/shm/hapax-compositor/research-marker.json` (LRR Phase 1 item 3) — LRR's registry CLI is the only writer
+- `scripts/research-registry.py` (LRR Phase 1 item 8) — HSEA does not extend the CLI; subcommands go upstream
+- `condition_id` tagging (LRR Phase 1 items 2, 5, 9) — LRR owns backfill and enrichment
+- `stats.py` PyMC 5 BEST port (LRR Phase 1 item 7) — the drop #57 T1.3 work is LRR, not HSEA
+- `axioms/persona/hapax-livestream.yaml` (LRR Phase 7) — HSEA glass-box renders; LRR writes
+- `hapax-stream-mode` CLI + stream-mode axis (LRR Phase 6) — LRR owns
+- `ConsentGatedWriter` for Qdrant (LRR Phase 6 FINDING-R) — LRR owns
+- Per-condition Prometheus slicing (LRR Phase 10) — LRR owns; HSEA reads via `shared/prom_query.py`
+
+**HSEA-owned primitives LRR reads (reverse dependencies):**
+- `~/hapax-state/governance-queue.jsonl` (HSEA Phase 0 0.2) — LRR Phase 5 DEVIATION-037 routes through this
+- `~/hapax-state/spawn-budget.jsonl` (HSEA Phase 0 0.3) — LRR Phase 5/8/9 LLM calls must retrofit through `check_can_spawn()`
+- `scripts/promote-*.sh` (HSEA Phase 0 0.4) — LRR Phase 4 OSF artifact, Phase 6 amendments, Phase 8 objective edits all route through inbox
 
 **Session coordination:**
-- If LRR and HSEA have conflicting phase-opens (e.g., both want alpha's main worktree), LRR takes precedence (LRR is the research harness; HSEA is visibility layer)
-- Beta can open HSEA phases while alpha is on LRR work
-- Relay inflections at each phase close ensure both epics see each other's state
+- LRR takes precedence on any conflict (LRR is the substrate; HSEA is the visibility layer)
+- Alpha primary worktree: active LRR phase
+- Beta worktree: active HSEA UP-12 cluster (one at a time)
+- Delta: research-only per global CLAUDE.md subagent git safety
+- Spontaneous worktree: reserved for cross-cutting bug fixes, never for HSEA or LRR phases
+- Rebase alpha after beta merges per workspace CLAUDE.md convention
+- Relay inflections at each phase close ensure both epics see each other's state + update `research-stream-state.yaml::unified_sequence`
 
 ---
 
