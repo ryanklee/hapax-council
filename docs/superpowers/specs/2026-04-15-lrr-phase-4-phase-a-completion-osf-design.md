@@ -94,8 +94,8 @@ Complete the **Condition A control arm data collection** under Qwen3.5-9B with e
 
 ### 3.7 Condition A `collection_halt_at` marker
 - Write a `collection_halt_at: <timestamp>` field to Condition A's condition.yaml — NOT a condition close (conditions never close per P-3), but a marker that data collection for Condition A has halted in favor of Condition A' (whatever substrate ends up being that arm per §14)
-- Use LRR Phase 1 item 8 CLI: extend `research-registry.py` with `set-collection-halt <cond> <ts>` subcommand (may already exist per Phase 1 CLI work)
-- **Target files:** CLI extension if needed, condition.yaml update
+- **CLI shipped:** use `research-registry.py set-collection-halt <cond> <ts>` (or `now` for wall-clock). Shipped in **PR #845** (commit `c3d2326d9`) during delta's nightly queue refill item #44 cycle. Accepts ISO-8601 UTC timestamps (normalized to `Z` suffix), offset-aware timestamps, or the literal `now`. Refuses naive timestamps. `--force` required to overwrite an existing non-null marker. 8 unit tests in `tests/test_research_registry.py::TestSetCollectionHaltSubcommand`.
+- **Target files at Phase 4 open:** condition.yaml update only. The CLI is pre-existing — no extension needed.
 
 ---
 
