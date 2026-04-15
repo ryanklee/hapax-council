@@ -1,0 +1,42 @@
+[Unit]
+Description=TabbyAPI — EXL3 inference engine (second instance, OLMo 3-7B on :5001)
+After=network.target
+After=tabbyapi.service
+#
+# Queue #211 / drop #62 §17 Option C parallel backend deploy.
+# 2026-04-15T21:47Z priority bumped to URGENT after RIFTS baseline
+# (queue #210) found Qwen3.5-9B asks 0/435 clarifying questions on
+# the ambiguous split — insufficient as a standalone grounding
+# substrate. OLMo 3-7B is the second substrate for the claim-shaikh
+# experimental arm per beta substrate research v1 §4 + v2 §3.
+#
+# Isolation from the primary TabbyAPI:
+# - Separate working directory: ~/projects/tabbyAPI-olmo/
+# - Separate venv: ~/projects/tabbyAPI-olmo/venv (torch 2.9.0 + cu128
+#   + exllamav3 0.0.29+cu128.torch2.9.0 + xformers 0.0.33.post1)
+# - Separate port: 5001
+# - Separate GPU slice via tabbyapi-olmo.service.d/gpu-pin.conf drop-in
+#
+# Coexistence with the primary:
+# - Primary TabbyAPI (:5000) serves Qwen3.5-9B on its pinned cu128
+#   stack; unchanged by this deploy. The `After=tabbyapi.service`
+#   directive orders the two for deterministic startup, but they do
+#   NOT depend on each other at runtime.
+
+[Service]
+Type=simple
+WorkingDirectory=%h/projects/tabbyAPI-olmo
+ExecStart=%h/projects/tabbyAPI-olmo/venv/bin/python3 main.py
+# Warmup script pre-triggers the first-call JIT compile in the
+# exllamav3 path. Best-effort (- prefix = non-fatal). Same pattern
+# as the primary tabbyapi.service.
+ExecStartPost=-%h/projects/hapax-council/scripts/tabbyapi-olmo-warmup.sh
+Restart=on-failure
+RestartSec=15
+# OLMo 3-7B at 5.0bpw loads in ~30-40 s. 180 s ceiling matches the
+# primary unit for consistency + leaves headroom for the warmup.
+TimeoutStartSec=180
+Environment=PYTORCH_ALLOC_CONF=backend:cudaMallocAsync
+
+[Install]
+WantedBy=default.target
