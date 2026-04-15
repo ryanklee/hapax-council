@@ -19,7 +19,16 @@ NotifyAccess=main
 WatchdogSec=60s
 WorkingDirectory=%h/projects/hapax-council
 ExecStartPre=/usr/bin/mkdir -p %h/video-recording %h/.cache/hapax-compositor/hls
-ExecStartPre=/usr/bin/find %h/.cache/hapax-compositor/hls -type f -delete
+# LRR Phase 2 item 2 (delta queue refill 4 item #55):
+# DO NOT wipe the HLS cache on start. The hls-archive-rotate.timer +
+# agents/studio_compositor/hls_archive.py pipeline rotates stable
+# segments into ~/hapax-state/stream-archive/hls/YYYY-MM-DD/ before
+# hlssink2 drops them at max_files=15. Deleting the cache on service
+# restart races against the rotator and throws away up to a 60s window
+# of un-rotated research data on every restart (delta's dormancy
+# finding 2026-04-14-lrr-phase-2-hls-archive-dormant.md). The rotator
+# is idempotent (source→sidecar hash skip), so leftover cache entries
+# from the prior run are safely re-scanned on next rotation pass.
 ExecStartPre=%h/projects/hapax-council/scripts/studio-install-udev-rules.sh
 ExecStartPre=%h/projects/hapax-council/systemd/units/studio-camera-setup.sh
 # Phase 2 archive precheck — verifies hls-archive-rotate.timer is

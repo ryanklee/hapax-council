@@ -111,6 +111,58 @@ class TestArchivePrecheckScriptContents:
         )
 
 
+class TestCompositorDoesNotWipeHlsCacheOnStart:
+    """LRR Phase 2 item 2 (delta refill 4 item #55): the compositor
+    must NOT delete the HLS cache on ExecStartPre.
+
+    The hls-archive-rotate.timer (60s cadence) rotates stable segments
+    before hlssink2 evicts them at ``max_files=15`` (~60s playlist
+    window). If studio-compositor.service deletes the cache on every
+    start, a compositor restart inside the 60s rotation window throws
+    away up to a full window of un-rotated research segments. The
+    rotator's source→sidecar idempotency guarantees that leftover
+    entries from a prior run are safely re-scanned, so there is no
+    need to wipe the cache at all.
+
+    This test pins the fix: no ExecStartPre line in the unit file may
+    run ``find`` with ``-delete`` against the HLS cache directory.
+    Regression reference: delta 2026-04-14-lrr-phase-2-hls-archive-
+    dormant.md + delta refill 4 item #55 unblocking.
+    """
+
+    def test_no_find_delete_on_hls_cache(self) -> None:
+        body = STUDIO_SERVICE.read_text(encoding="utf-8")
+        offending_lines = [
+            line
+            for line in body.splitlines()
+            # Ignore comment lines — narrative about the removed line
+            # is allowed; only actual directives count.
+            if not line.lstrip().startswith("#")
+            and "find" in line
+            and "-delete" in line
+            and "hls" in line
+        ]
+        assert not offending_lines, (
+            "studio-compositor.service must not run `find ... -delete` "
+            "against the HLS cache — that races against hls-archive-"
+            "rotate.timer and throws away un-rotated research segments "
+            "on every compositor restart. "
+            f"Offending lines: {offending_lines!r}"
+        )
+
+    def test_hls_cache_mkdir_preserved(self) -> None:
+        """The mkdir -p directive must survive the find -delete removal."""
+        body = STUDIO_SERVICE.read_text(encoding="utf-8")
+        assert any(
+            line.startswith("ExecStartPre=/usr/bin/mkdir -p") and "hapax-compositor/hls" in line
+            for line in body.splitlines()
+        ), (
+            "studio-compositor.service must still `mkdir -p` the HLS cache "
+            "directory on ExecStartPre so hlssink2 can write segments "
+            "immediately on first start"
+        )
+
+
 class TestInstallUnitsHandlesNewTimers:
     """install-units.sh must auto-enable newly installed timers.
 
