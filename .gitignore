@@ -35,6 +35,7 @@ profiles/.quarantine/*
 # Playwright MCP cache
 .playwright-mcp/
 .claude/settings.local.json
+.claude/hookify*.local.md
 
 # Demo outputs (generated)
 output/demos/
