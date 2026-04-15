@@ -440,13 +440,189 @@ The downstream cleanup is concentrated in HSEA Phase 4 — that is the one HSEA 
 
 The merged sequence is realistic for a single operator: 14 unified phases, 30–45 sessions, 6–10 weeks, with UP-12's cluster basket providing the parallelism needed for alpha + beta to work simultaneously without colliding. The shared state index makes that parallelism legible to every session that picks up either epic.
 
-**Files referenced (absolute paths):**
-- `/home/hapax/projects/hapax-council/docs/superpowers/specs/2026-04-14-livestream-research-ready-epic-design.md` (LRR spec, 1371 lines)
-- `/home/hapax/projects/hapax-council/docs/superpowers/plans/2026-04-14-livestream-research-ready-epic-plan.md` (LRR plan, 321 lines)
-- `/home/hapax/projects/hapax-council/docs/superpowers/specs/2026-04-14-hsea-epic-design.md` (HSEA spec, 794 lines)
-- `/home/hapax/projects/hapax-council/docs/superpowers/plans/2026-04-14-hsea-epic-plan.md` (HSEA plan, 375 lines)
-- `/home/hapax/projects/hapax-council/docs/research/2026-04-14-tactics-and-strategies-to-increase-success-probabilities.md` (drop #57, 737 lines)
-- `/home/hapax/projects/hapax-council/docs/research/2026-04-14-hapax-self-executes-tactics-as-content.md` (drop #58, 480 lines)
-- `/home/hapax/projects/hapax-council/docs/research/2026-04-14-drop-58-audit-critical-evaluation.md` (drop #59, 444 lines)
+**Files referenced (repo-relative paths):**
+- `docs/superpowers/specs/2026-04-14-livestream-research-ready-epic-design.md` (LRR spec, 1371 lines)
+- `docs/superpowers/plans/2026-04-14-livestream-research-ready-epic-plan.md` (LRR plan, 321 lines)
+- `docs/superpowers/specs/2026-04-14-hsea-epic-design.md` (HSEA spec, 794 lines)
+- `docs/superpowers/plans/2026-04-14-hsea-epic-plan.md` (HSEA plan, 375 lines)
+- `docs/research/2026-04-14-tactics-and-strategies-to-increase-success-probabilities.md` (drop #57, 737 lines)
+- `docs/research/2026-04-14-hapax-self-executes-tactics-as-content.md` (drop #58, 480 lines)
+- `docs/research/2026-04-14-drop-58-audit-critical-evaluation.md` (drop #59, 444 lines)
+
+---
+
+## 11. Addendum 2026-04-15 — operator ratification of §10 Q1 (Option C)
+
+**Written:** 2026-04-15T05:25Z by delta, after beta's inflection `20260415-051500-beta-delta-alpha-epsilon-operator-ratified-option-c.md` reported the operator's one-word `ratified` response at 05:10Z.
+
+### 11.1 What was ratified
+
+**§10 question 1** ("Substrate swap path") is **closed in favor of option (c)** per §4: LRR Phase 5 forks into
+
+- **5a (now UP-7a)** — Hermes 3 Llama 3.1 **8B** EXL3 5.0bpw parallel primary. Active. Small-footprint swap, runs alongside Qwen 3.5-9B on existing 5060 Ti topology.
+- **5b (now UP-7b)** — Hermes 3 Llama 3.1 **70B** layer-split. Deferred backlog artifact. Gated on a future hardware envelope change (second GPU, shared VRAM pool, or equivalent). Beta's 3.5bpw quant chain remains useful as the backlog weight; it is not wasted.
+
+The 8B parallel pivot is explicitly acknowledged by the operator as the LRR Phase 5 substrate path going forward. The 70B swap is no longer the live path and no longer blocks Phase 5 opening.
+
+The ratification **does not** implicitly answer any of the other nine §10 questions (Q2–Q10 remain operator-pending — see §11.4).
+
+### 11.2 Cross-links
+
+**PR #826 — the ratification vehicle**, authored by alpha on the `docs/drop-62-option-c-ratification` branch:
+
+- `docs/research/2026-04-15-drop-62-option-c-ratification.md` — authoritative ratification decision record with rationale, downstream implications, embedded draft LiteLLM routes, draft tabbyAPI config, and the 9-step operator activation sequence.
+- `systemd/units/tabbyapi-hermes8b.service` — draft unit for a second TabbyAPI instance on `:5001` serving Hermes 3 8B alongside the Qwen 3.5-9B instance on `:5000`. Not started until operator activation.
+- `systemd/units/tabbyapi-hermes8b.service.d/gpu-pin.conf` — drop-in with two candidate GPU allocation blocks, both commented out, awaiting operator decision on placement.
+
+**PR #819 — the LRR Phase 5 pre-staging branch**, authored by the `beta-phase-4-bootstrap` session (operating under `epsilon.yaml` per the relay cohabitation protocol — this is *not* the `beta.yaml` autonomous watcher):
+
+- Commit `738fde330` — initial reconciliation (Phase 5 spec §0.5 + DEVIATION-037 amendment headers added in conditional "RECONCILED WITH DROP #62 OPTION C" form).
+- Commit `156beef92` — status flip (Phase 5 spec status line + §0.5 heading + DEVIATION-037 status line all flipped from "reconciled, pending ratification" to "ratified 2026-04-15"). Five-line surgical edit; body content unchanged.
+
+**Inflection trail (paths relative to the relay inbox):**
+
+- `20260415-044500-delta-hsea-epic-cross-epic-fold-in-shipped.md` — delta's drop-#62 shipping inflection to alpha/beta/epsilon (this drop is the artifact it announced).
+- `20260415-050000-beta-delta-drop-62-reconciliation-ack.md` — beta's reconciliation ack (commit `738fde330`, triggered the operator's review that ended in `ratified`).
+- `20260415-050500-delta-alpha-identity-correction-ack.md` — delta's identity correction and scope handoff to alpha (confirmed alpha owns the ratification PR, delta pivoted to HSEA Phase 0 extraction).
+- `20260415-051500-beta-delta-alpha-epsilon-operator-ratified-option-c.md` — beta's ratification announcement (the inflection that asked delta to write this addendum).
+
+**Authoritative docs flipped to RATIFIED (both on PR #819 branch, not yet merged):**
+
+- `docs/superpowers/specs/2026-04-14-lrr-phase-5-hermes-3-substrate-swap-design.md` — status line + §0.5 "Amendment 2026-04-15" heading.
+- `research/protocols/deviations/DEVIATION-037.md` — status line flipped.
+
+### 11.3 Downstream implications
+
+The ratification has four structural downstream effects on already-authored documents:
+
+**(a) HSEA epic spec §4, Phase 4, Cluster I4 ("8B parallel pivot as narrated R&D content") becomes structurally sound.** The Cluster I demotion to narration-only (drop #62 §9 HSEA spec edits, committed as part of drop #62) was conditional on option (c) being the substrate path. With Q1 ratified, I1–I5 narration is now the correct scope and no further HSEA spec edits are required for this axis. The spec already reflects it — this addendum is the audit trail, not an edit trigger.
+
+**(b) HSEA epic plan §8 "Cross-epic coordination" — the dependency pointer from HSEA Phase 4 to "LRR UP-7 merged" remains correct but now resolves to "LRR UP-7a (8B) merged", not "UP-7 (70B)".** The dependency wording in the plan is already option-c-neutral ("LRR UP-7 has merged"), so no edit is needed. Noting for future reference.
+
+**(c) Axiom precedent `sp-hsea-mg-001` (HSEA Phase 0 deliverable 0.5) gains a concrete constitutional rule.** Per beta's inflection §"Epsilon (informational)": the rule *"any future 70B substrate decision must pre-register a consent-revocation drill and pass it before being authorized"* was hypothetical under drop #62's conditional language; with Option C ratified, the constitutional rule about 70B future-authorization is a concrete deliverable, not a contingent one. This rule was already drafted into the HSEA Phase 0 extraction spec (`docs/superpowers/specs/2026-04-15-hsea-phase-0-foundation-primitives-design.md` deliverable 0.5, written 2026-04-15T05:00Z), so no edit is needed. Noting for the constitutional PR authoring session to confirm.
+
+**(d) Phase 5a hardware provisioning window opens immediately.** Per beta's inflection §"Alpha (informational)": the Hermes 3 8B EXL3 5.0bpw quant must be staged on disk before Phase 5a (UP-7a) opens. This is a weight download, not a compute job, and can happen in parallel with the Phase 4 quant chain still running on the 70B path. No action required from delta or this drop; flagged for whichever session opens the provisioning slot.
+
+### 11.4 Status of the other nine §10 questions
+
+| §10 # | Question | Status | Blocks |
+|---|---|---|---|
+| 1 | Substrate swap path | **CLOSED — option (c) ratified 2026-04-15T05:10Z** | — |
+| 2 | T2.8 LLM output guardrail layer — DEVIATION vs bundling under UP-7 | PENDING | T2.8 execution (LRR-owned) |
+| 3 | HSEA Phase 4 I1–I5 rescoping to narration (−2400 LOC) | PENDING | HSEA Phase 4 execution |
+| 4 | State file design — sibling files under shared index vs unified | PENDING | UP-0 (HSEA Phase 0) opening for state file work |
+| 5 | `hapax-constitution` PR strategy — one joint PR vs two sequential | PENDING | Epsilon's Phase 6 plan PR 5 structure; HSEA Phase 0 0.5 ship form |
+| 6 | Cluster H (revenue) timing — days 15–21 vs UP-12 (week 4–6) | PENDING | No execution block; long-term priority |
+| 7 | Worktree allocation — delta research-only confirmation | PENDING | UP-12 parallelism (3 worktrees vs 2) |
+| 8 | `research-stream-state.yaml::unified_sequence` maintenance ownership | PENDING | State file governance |
+| 9 | Drop #62 artifact location — research drop vs specs supplement | PENDING | Doc organization only (this drop currently lives in `docs/research/`) |
+| 10 | Phase ordering deviation tolerance — strict vs loose within dependency envelope | PENDING | Session autonomy scope |
+
+**Priority order for operator batching** (per beta's 05:15Z inflection, not drop #62's numeric order):
+
+1. **Q5** — constitutional PR strategy. Blocks epsilon's Phase 6 plan PR 5 structure *and* shapes HSEA Phase 0 0.5 ship form.
+2. **Q3** — HSEA Phase 4 rescoping confirmation. Saves ~2400 LOC; blocks HSEA Phase 4 execution (whichever session opens it).
+3. **Q2** — T2.8 guardrail DEVIATION cycle. Blocks T2.8 execution (LRR-owned per drop #62 §3).
+4. **Q4** — state file design. Blocks UP-0 opening (HSEA Phase 0 state file work).
+5. **Q6, Q7, Q8, Q9, Q10** — lower-priority coordination questions; no execution blocks, only long-term architecture alignment.
+
+None of Q2–Q10 are urgent in the "decide today or something breaks" sense, but the more the operator resolves in a single batch, the more sessions can align without sequential round-trips.
+
+### 11.5 Delta's action trail from this addendum forward
+
+- **This addendum (§11):** written and committed with the HSEA Phase 0 spec + plan pre-staging docs in a single delta research commit.
+- **HSEA Phase 0 per-phase spec + plan extraction:** already written as delta's complementary pre-staging action (per the 05:05Z identity correction inflection scope handoff). Spec at `docs/superpowers/specs/2026-04-15-hsea-phase-0-foundation-primitives-design.md`, plan at `docs/superpowers/plans/2026-04-15-hsea-phase-0-foundation-primitives-plan.md` (being written alongside this addendum).
+- **Inflection:** delta will write a brief closure inflection to beta + alpha summarizing the §11 addendum + Phase 0 pre-staging completion after commit.
+- **No further drop #62 edits** unless the operator answers additional §10 questions. Each subsequent ratification gets its own addendum section (§12, §13, ...) rather than in-place edits to the body of the drop.
+
+— delta, 2026-04-15T05:25Z
+
+---
+
+## 12. Addendum 2026-04-15 — operator batch ratification of §10 Q2–Q10
+
+**Written:** 2026-04-15T05:45Z by delta, after alpha's inflection `20260415-053500-alpha-beta-epsilon-delta-operator-batch-accepted-all-recommendations.md` reported the operator's keyword "I accept all your recommendations" at 05:35Z.
+
+### 12.1 What was ratified
+
+At 2026-04-15T05:35Z, in response to alpha's comprehensive drop #62 §10 decision pack (posted inline in the terminal session earlier), the operator responded with:
+
+> "I accept all your recommendations"
+
+That keyword ratifies **every remaining item** in drop #62 §10, closing Q2 through Q10 in a single operator turn. Combined with §11's Q1 ratification at 05:10Z, all 10 drop #62 §10 open questions are now resolved.
+
+Additionally, the same operator keyword ratified 6 autonomous-queue items from alpha's parallel recommendation pack (DR-3, DR-7, F1 HLS-disable, F3 gop-size, F6 YUY2→NV12, Qwen config bump). These are non-drop-#62 items and are out of scope for this drop; alpha will ship them directly. They are noted here only for traceability.
+
+### 12.2 Resolutions per question
+
+| Q | Topic | Resolution | Phase 0 impact |
+|---|---|---|---|
+| 2 | T2.8 LLM output guardrail DEVIATION cycle | **option (a)** — bundle T2.8 into UP-7a DEVIATION; one DEVIATION covers both the substrate swap and the guardrail; one new condition opens for both | None. T2.8 is LRR-owned and executes at UP-7a time. |
+| 3 | HSEA Phase 4 full rescoping | **option (a)** — I1/I2/I3/I5 become narration-only; I4 already resolved by Q1; I6 stays conditional; I7 unchanged. Net: HSEA Phase 4 shrinks from 7 code drafters to 2. ~−2,400 LOC. | None to deliverable scope. Note added to HSEA Phase 0 spec §4 decision 6 that `promote-patch.sh` expects only I6/I7 invocations during Phase 4 execution. |
+| 4 | State file design | **option (a)** — sibling files under shared index. `~/.cache/hapax/relay/` has `research-stream-state.yaml` + `lrr-state.yaml` + `hsea-state.yaml` (plus session-level `alpha.yaml` / `beta.yaml`, unchanged). | HSEA Phase 0 deliverable 0.6 already assumed this; matches spec. |
+| 5 | `hapax-constitution` PR strategy | **option (a)** — one joint PR for LRR Phase 6's 4 constitutional items + HSEA Phase 0 0.5's `sp-hsea-mg-001` precedent. Drafting owned by HSEA Phase 0 (draft YAML); PR vehicle owned by LRR Phase 6 (opens the PR). One operator review cycle. | HSEA Phase 0 deliverable 0.5 already assumed this; matches spec. |
+| 6 | Cluster H (revenue) timing | **option (a)** — accept UP-12 timing (week 4–6). No acceleration. | None. |
+| 7 | Worktree allocation for parallel UP-12 | **option (a)** — 2-parallel (alpha + beta each own one UP-12 cluster at a time). No spontaneous-worktree promotion into UP-12 work. Identity consolidation at PR #819 merge time (real beta slot naturally inherits). | None. |
+| 8 | `research-stream-state.yaml` maintenance authority | **option (a)** — alpha writes the initial file during UP-0 fold-in commit; operator-only edits thereafter. Sessions file governance-queue requests for cross-epic dependency changes. | **Applied to HSEA Phase 0 deliverable 0.6:** spec and plan updated to VERIFY shared index existence and APPEND the HSEA entry, not CREATE the shared index. If the shared index is absent when HSEA Phase 0 opens, the phase MUST block on UP-0 fold-in landing. |
+| 9 | Drop #62 artifact location | **option (a)** — keep at `docs/research/2026-04-14-cross-epic-fold-in-lrr-hsea.md`. Add one-line references from LRR spec §1 and HSEA spec §1. HSEA-side reference is already in the drop #62 commit; LRR-side reference gets added at PR #819 rebase time by the PR #819 author. | None. |
+| 10 | Phase ordering deviation tolerance | **option (b)** — operator-discretion. Sessions can skip to a later unified phase if hard predecessors are met, for local reason. UP-7 remains the only phase with hard predecessors. | None. |
+
+### 12.3 Cross-links
+
+**Alpha's inflection announcing the batch ratification:**
+
+- `20260415-053500-alpha-beta-epsilon-delta-operator-batch-accepted-all-recommendations.md` — full text of alpha's fan-out to beta/epsilon/delta, containing the 9 Q2–Q10 resolutions + the 6 autonomous-queue resolutions + alpha's ship queue order.
+
+**Beta's PR #826 convergence ack (parallel context, not ratification trigger):**
+
+- `20260415-053000-beta-alpha-pr-826-convergence-ack.md` — written at 05:30Z, 5 minutes before the batch ratification. Describes the complementary materialization of PR #819 (in-place spec + DEVIATION amendment) vs PR #826 (decision record + systemd scaffolding). Useful context for understanding why both PRs are needed and how they compose.
+
+**Alpha's ship queue (from inflection §"Alpha's ship queue"):**
+
+1. ✅ PR #826 merged at 2026-04-15T05:35Z (squash, admin)
+2. 🔄 DR-3 (B1) `temporal_buffers` retirement on `chore/drop-47-dr-3-temporal-buffers-retirement`
+3. DR-7 (B2) PresetInput retirement (~200 LOC, 4 files)
+4. Environment verification (compositor state, v4l2loopback NV12 support)
+5. F1 + F3 + F6 cam-stability bundle
+6. **Q3 HSEA Phase 4 rescoping** — alpha ships dedicated PR updating HSEA spec + plan to reflect the full rescoping
+7. **Decision-capture follow-up** — alpha extends the ratification record at `docs/research/2026-04-15-drop-62-option-c-ratification.md` with all 9 Q2–Q10 decisions + the 6 autonomous-queue resolutions, durable on main
+
+Delta's HSEA Phase 0 extraction work (this drop's addenda + `docs/superpowers/specs/2026-04-15-hsea-phase-0-foundation-primitives-design.md` + `docs/superpowers/plans/2026-04-15-hsea-phase-0-foundation-primitives-plan.md`) is delta's pre-staging path that compose with alpha's decision-capture follow-up: alpha captures the decision rationale in the ratification record, delta captures the deliverable shape in the per-phase spec + plan. No conflict; complementary framings of the same Phase 0 scope.
+
+### 12.4 Downstream edits applied in this commit
+
+Alongside writing this addendum, delta made surgical edits to the pre-staging HSEA Phase 0 spec + plan to reflect Q4/Q5/Q8 ownership clarifications:
+
+- `docs/superpowers/specs/2026-04-15-hsea-phase-0-foundation-primitives-design.md`:
+  - §3.6 deliverable 0.6 "Shared index ownership" paragraph added citing Q8 ratification; HSEA Phase 0 verifies-and-appends rather than creates.
+  - §3.6 target files list split into "HSEA Phase 0 creates" (hsea-state.yaml) vs "verified-and-appended-to only" (research-stream-state.yaml).
+  - §4 "Phase-specific decisions" extended from 5 to 7 items, incorporating Q2, Q3, Q4, Q5, Q8 resolutions and explicitly noting that HSEA Phase 0 has no remaining open questions from drop #62 §10.
+  - §7 "Open questions" rewritten from a list of 4 pending questions to a status table showing all 10 questions ratified. Phase 0 has no remaining drop #62 §10 dependencies.
+
+- `docs/superpowers/plans/2026-04-15-hsea-phase-0-foundation-primitives-plan.md`:
+  - §0 Preconditions: Q1 and Q2–Q10 ratification checkboxes marked `[x]`; Q3/Q4/Q5/Q8 resolutions enumerated inline with their Phase 0 impact.
+  - §0 Preconditions: added "research-stream-state.yaml exists" as an unchecked precondition (Phase 0 blocks on UP-0 fold-in landing).
+  - §1.2 task renamed from "Create research-stream-state.yaml shared index" to "Verify research-stream-state.yaml shared index + append HSEA Phase 0 entry"; task body rewritten to verify-and-append rather than create.
+
+### 12.5 Phase 0 readiness implication
+
+With all 10 drop #62 §10 questions resolved, the pre-staging HSEA Phase 0 spec + plan have zero remaining operator-pending dependencies from the drop #62 side. The **remaining** Phase 0 preconditions are:
+
+1. LRR UP-0 (LRR Phase 0 verification) closed
+2. LRR UP-1 (LRR research registry) closed
+3. FDL-1 deployed to a running compositor
+4. `research-stream-state.yaml` created by alpha at UP-0 fold-in commit time (per Q8 resolution)
+5. A session claims HSEA Phase 0 via `hsea-state.yaml::phase_statuses[0].status: open`
+
+Precondition 4 is the new precondition that this ratification introduced; it replaces the "create the shared index" task that HSEA Phase 0 originally owned. The timing is: alpha's decision-capture follow-up commit on main may include `research-stream-state.yaml` creation, OR alpha may defer shared-index creation until UP-0 (LRR Phase 0) actually closes. Delta cannot determine which from the alpha inflection alone; both are acceptable timings.
+
+### 12.6 Delta's action trail from this addendum forward
+
+- **This addendum (§12)** written + committed alongside the HSEA Phase 0 spec/plan surgical edits in a single delta research commit.
+- **No further drop #62 edits planned.** All 10 §10 questions are closed; the drop is now structurally complete. If future ratifications occur (e.g. downstream execution-time decisions), they get their own sections (§13, §14, ...).
+- **HSEA Phase 0 spec + plan** are now ratification-consistent pre-staging docs and can be picked up by whichever session opens Phase 0 (expected to be alpha or beta after UP-0 and UP-1 close, per Q7 worktree allocation).
+- **Inflection** will be written to alpha + beta summarizing the addendum + Phase 0 edits after commit.
+
+— delta, 2026-04-15T05:45Z
 
 — End of drop #62 fold-in analysis.
