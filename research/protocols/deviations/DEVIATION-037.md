@@ -1,0 +1,128 @@
+# Deviation Record: DEVIATION-037
+
+**Date:** 2026-04-14 (draft pre-staged) / YYYY-MM-DD (final at Phase 5 swap time)
+**Phase at time of change:** intervention-transition (Condition A → Condition A')
+**Author:** beta (draft) / alpha or operator (final, with post-swap notes filled in)
+**Status:** **DRAFT** — committed in the Phase 4 bootstrap PR for operational convenience. This DEVIATION is not filed against an executed swap until alpha (or the operator) completes §"Post-swap verification notes" at Phase 5 swap time (scope item 14 of the swap procedure).
+
+---
+
+## What Changed
+
+The underlying large language model serving the `local-fast` / `coding` / `reasoning` LiteLLM routes changed from **Qwen3.5-9B** (DPO + GRPO post-trained, EXL3 5.0 bpw, single-GPU on RTX 3090) to **Hermes 3 70B** (SFT-only post-trained, EXL3 3.0 bpw by default with 3.5 bpw fallback, layer-split across both GPUs via Option γ partition).
+
+**Pre-swap substrate:**
+- Model: `Qwen3.5-9B-exl3-5.00bpw`
+- Backend: TabbyAPI (`~/projects/tabbyAPI/config.yml` pre-swap)
+- Deployment: single-GPU on RTX 3090 (via Option α pre-partition, or GPU 1 under Option γ)
+- VRAM footprint: ~15.6 GiB of 23.6 GiB (shared with daimonion faster-whisper STT + embeddings)
+- Post-training regime: Qwen team's DPO (preference optimization) + GRPO stages
+
+**Post-swap substrate:**
+- Model: `Hermes-3-Llama-3.1-70B-EXL3-3.0bpw` (with `3.5bpw` fallback available)
+- Backend: TabbyAPI (`~/projects/tabbyAPI/config.yml` post-swap, promoted from `config.yml.hermes-draft`)
+- Deployment: layer-split across both GPUs under Option γ (`CUDA_VISIBLE_DEVICES=0,1` + `CUDA_DEVICE_ORDER=PCI_BUS_ID`)
+- VRAM footprint: ~23.5 GiB on GPU 1 (3090), ~2.75 GiB on GPU 0 (5060 Ti) for overflow slice
+- Post-training regime: NousResearch SFT-only (no DPO, no RLHF)
+- Layer split: `gpu_split: [2.75, 23.5]` — beta empirically verified the device-index-to-card mapping via PyTorch matmul test 2026-04-14T15:30Z (see `~/.cache/hapax/relay/context/2026-04-14-beta-phase-3-supplement-verified-preconditions.md` § 1). The ordering is **corrected** from the original Hermes 3 plan's `[23.5, 2.75]` which would have OOMed the 5060 Ti.
+
+**Changes touched (full list):**
+
+| File | Change |
+|---|---|
+| `~/projects/tabbyAPI/config.yml` | `model_name` swapped; `gpu_split` added; `max_seq_len` tightened to 4096 per beta's supplement |
+| `systemd/units/tabbyapi.service.d/gpu-pin.conf` | (landed Phase 3 PR #811) `CUDA_DEVICE_ORDER=PCI_BUS_ID` + `CUDA_VISIBLE_DEVICES=0,1` |
+| `systemd/units/hapax-daimonion.service.d/gpu-pin.conf` | (landed Phase 3 PR #814) `CUDA_VISIBLE_DEVICES=0` — daimonion STT + embeddings move to GPU 0 to free GPU 1 for Hermes 3 |
+| `litellm/config.yaml` | `local-fast`, `coding`, `reasoning` routes point at Hermes 3 TabbyAPI endpoint |
+| `shared/config.py` MODELS dict | Same three aliases updated; `capable` tier (Claude Opus) explicitly preserved |
+
+**Research registry transition:**
+
+- **Condition closed:** `cond-phase-a-baseline-qwen-001` → `collection_halt_at` marker written by Phase 4 lock procedure (commit pre-staged in DEVIATION-038 work)
+- **Condition opened:** `cond-phase-a-prime-hermes-NNN` via `scripts/research-registry.py open --slug phase-a-prime-hermes --substrate-model Hermes-3-Llama-3.1-70B-EXL3-3.0bpw --substrate-backend tabbyapi --claim-id claim-shaikh-sft-vs-dpo --frozen-files <same-as-Condition-A>`
+- **Research marker SHM:** `/dev/shm/hapax-compositor/research-marker.json` updated atomically; `research_marker_changes.jsonl` gains a new entry at the swap timestamp
+
+---
+
+## Why
+
+**The substrate swap IS the claim.** Per the LRR epic's Option B decision, formalize the Hermes 3 migration as a direct test of the Shaikh SFT-vs-DPO hypothesis (`claim-shaikh-sft-vs-dpo`). The original Qwen3.5-9B baseline and the Hermes 3 70B post-swap condition coexist as separate condition records in the append-only research registry (per P-3), not as sequential versions of the same experiment.
+
+**Theoretical grounding (recap from the Hermes 3 voice architecture spec):**
+
+1. **Mohapatra-Shaikh convergence.** Shaikh et al. (ACL 2025) report frontier LLMs average 23.23% on conversational grounding task-completion. Shaikh et al. (NAACL 2024) identify RLHF as a factor suppressing grounding acts — the DPO/GRPO stages optimize against preference signals that reward confident assertion over clarification. Mohapatra et al. (2024) show SFT-only pre-trained models exhibit stronger grounding behaviors than their DPO-tuned counterparts at comparable parameter counts.
+
+2. **Pre-training scale + SFT-only preservation.** Hermes 3 70B is NousResearch's SFT-only variant of Llama-3.1-70B. At 70B parameters it has substantially more pre-training scale than the 9B Qwen baseline, and its lack of DPO/GRPO stages preserves the grounding-behavior signal that Shaikh's framework predicts.
+
+3. **Null hypothesis falsification.** If Condition A' (Hermes 3) produces higher `turn_pair_coherence`, `context_anchor_success`, and `acceptance_type` DVs than Condition A (Qwen3.5-9B) at a pre-registered effect size, the Shaikh hypothesis is supported for this single-operator-system dyad. If the DVs are equivalent or regress, the hypothesis is not supported and Cycle 3 contingencies apply.
+
+**Why a DEVIATION rather than just a version bump:**
+
+Under the Cycle 2 pre-registration's frozen-file regime, the underlying LLM is part of the experimental apparatus. Changing it mid-phase would normally invalidate the ABA baseline-intervention-reversal design by introducing a confound. **Formalizing the swap as a DEVIATION reframes it as a deliberate experimental manipulation** — the pre-registered claim is now SFT-vs-DPO under identical grounding directives, not the original Phase A/B/A' design. Condition A and Condition A' become the comparison units; Phase B (intervention treatment flags) is held constant across both conditions.
+
+---
+
+## Impact on Experiment Validity
+
+**Assessment: HIGH — but SCOPED and COMPENSATED.**
+
+The swap is the largest single change the Cycle 2 experiment has seen. Unlike the metadata plumbing from DEVIATION-038 (validity impact: MINIMAL), this DEVIATION **fundamentally reframes the experiment from testing the grounding package on a single substrate to testing the grounding package across two substrates**.
+
+**What is preserved (validity-positive):**
+
+- **Grounding package implementation unchanged.** `grounding_ledger.py`, `grounding_evaluator.py`, `persona.py`, `conversational_policy.py` are all under DEVIATION-038's condition_id plumbing edit but otherwise behaviorally unchanged. The grounding directives, DU state machine, effort calibration, and acceptance classification all function identically.
+- **DVs unchanged.** `turn_pair_coherence`, `context_anchor_success`, `acceptance_type`, `activation_score`, `sentinel_retrieval` are all computed by the same `grounding_evaluator.py` code before and after the swap.
+- **BEST analysis methodology unchanged.** Comparison between Condition A and Condition A' uses the same Kruschke (2013) t-test with HDI + ROPE. Sample size targets are per-condition; there is no cross-condition pooling.
+- **Frozen-file enforcement active across the swap.** Both conditions share the same frozen-files list; the pre-commit hook continues to block unauthorized mid-swap changes.
+- **Append-only registry guarantees.** Condition A data (JSONL checksums + Qdrant snapshot + Langfuse score export) is locked by Phase 4's data integrity lock before the swap. Condition A data cannot be lost regardless of the swap's outcome.
+
+**What is not preserved (validity-negative, compensated):**
+
+- **Operator adaptation.** The operator experienced the Qwen3.5-9B substrate for the duration of Phase A collection. Post-swap, the operator's prior expectations become a confound — the operator may speak differently knowing that Hermes 3 is slower/faster/differently-trained. Compensation: single-case designs accept this class of confound as inherent to the operator-system dyad (see §3.3 of the pre-registration). The ABA reversal structure mitigates by re-testing under the original condition, but the swap eliminates that reversal (there is no "Condition A'' return to Qwen" planned).
+- **Latency increase (~1 s round-trip).** Hermes 3 generation is slower than Qwen3.5-9B. The Phase 5 exit criteria include a consent-revocation drill that gates the swap on this: if revocation round-trip increases by > 500 ms, rollback is required. Scripts/phase-5-rollback.sh automates the rollback.
+- **Cross-condition comparison requires both channels tagged.** DEVIATION-038 (prereq) ensures voice grounding DVs are tagged with `metadata.condition_id`. Without that, the voice channel would be analytically unreachable post-swap.
+
+---
+
+## Mitigation
+
+**Pre-swap:**
+- Phase 4 data integrity lock (`scripts/lock-phase-a-condition.py`) captures Condition A in three forms (JSONL checksums, Qdrant snapshot tar.gz, Langfuse score export). Condition A data cannot be lost. Pre-registered analysis can always be re-run against the locked data.
+- 3.5 bpw fallback quant is available if 3.0 bpw fails the directive compliance benchmark. Rollback to Qwen is a last resort, not a first resort.
+- Consent revocation drill + speech continuity test gate the swap on T0 governance risks before the swap is declared complete.
+
+**During swap:**
+- Research registry atomic A (`research-registry.py open`) writes the new condition + SHM marker BEFORE TabbyAPI restart. If the restart fails, the registry state is already correct for a retry.
+- Research marker file is atomically written via tmp+rename; no partial-read race.
+- TabbyAPI restart is under operator control (not a timer); the operator observes the model-load logs and can halt at any failure.
+
+**Post-swap:**
+- 10-minute Langfuse verification: new reactions must be tagged with `cond-phase-a-prime-hermes-NNN`.
+- 1-hour Prometheus verification: per-condition score counts growing in both the director reaction channel and the voice grounding DV channel.
+- 24-hour FD-leak verification: `compositor_process_fd_count` (once wired per drop #41 + pass-4 H-01) or `/proc/$pid/fd | wc -l` stable.
+- Rollback procedures (both 3.5 bpw fallback and full Qwen rollback) are documented in the Phase 5 spec §6 and automated in `scripts/phase-5-rollback.sh`.
+
+**Registers under:** claim `claim-shaikh-sft-vs-dpo`.
+
+---
+
+## Post-swap verification notes
+
+**[FILL IN AT TASK 14 of the swap procedure — by alpha or operator]**
+
+- Swap completed at: **[timestamp]**
+- bpw active: **[3.0 or 3.5]**
+- Directive compliance benchmark: **[N/5 directive, N/5 word limit]**
+- Consent revocation drill envelope: **[ms pre-migration]** → **[ms post-migration]** → **[delta ms]**
+- Speech continuity test: `compositor_audio_capture_dropped_frames_total` **[delta during 60s test]**
+- Continuous cognitive loop check: director_loop tick cadence **[observed]**
+- CAPABLE tier verification: `shared/config.py::MODELS["capable"]` resolves to **[Claude model]**
+- Research registry current: **[cond-phase-a-prime-hermes-NNN]**
+- First Condition A' Langfuse score observed at: **[timestamp]**
+- First Condition A' Qdrant reaction observed at: **[timestamp]**
+
+**Operator sign-off on the swap (required before the PR containing this DEVIATION is marked for merge):** **[signature / acknowledgment]**
+
+---
+
+**End of DEVIATION-037 draft.** Alpha / operator: when executing Phase 5, replace the `[FILL IN]` placeholders in §"Post-swap verification notes" with actual values, then commit the updated DEVIATION-037 as step 14 of the swap procedure. The draft body above does not need to change unless the swap deviates from the planned procedure.
