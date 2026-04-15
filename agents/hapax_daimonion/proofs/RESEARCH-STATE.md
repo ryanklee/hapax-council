@@ -1,7 +1,61 @@
 # Voice Grounding Research State
 
-**Last updated:** 2026-04-14 (LRR Phase 0 open — voice grounding state pin)
+**Last updated:** 2026-04-15 (drop #62 §13/§14/§15 addenda — Hermes abandonment + 5b reframing + continuous session directive)
 **Update convention:** After any session with research decisions or implementation progress, update this file before ending.
+
+## 2026-04-15 — Drop #62 §13/§14/§15 deltas (substrate + session continuity)
+
+This pin captures substrate-level + research-design-level deltas ratified during the 2026-04-15 overnight session. All three §13/§14/§15 addenda are operator-ratified and land atop the 2026-04-14 LRR Phase 0 pin below.
+
+### §14 — Hermes 3 70B substrate abandoned (structurally unreachable)
+
+**Decision:** Hermes 3 70B cannot be loaded under current hardware constraints. The 3.5bpw quantization chain was attempted during this session and killed; no viable quant exists that fits the 24 GB VRAM budget with the current service mix (TabbyAPI + daimonion STT + GPU rendering + reverie + DMN).
+
+**Impact on LRR Phase 5:** "Hermes 3 70B Substrate Swap" as previously specified is not executable. The phase formalization as DEVIATION-037 + `claim-shaikh-sft-vs-dpo` (SFT-only vs DPO under Hermes 70B) is structurally blocked. The phase spec on main still describes the original swap; this is drift that must be reconciled before Phase 5 executes.
+
+**Substitute substrate under active research:** Qwen3.5-9B-only (current production) vs an alternative 7B-class substrate (OLMo 3-7B or similar) deployed in parallel. The parallel-deploy design is under discussion in delta's substrate research drops; no ratification as of 2026-04-15T18:40Z.
+
+**What this affects in voice grounding:**
+
+- Phase A baseline (Cycle 2) still uses Qwen3.5-9B — unchanged
+- Phase B substrate comparison (previously Hermes 70B) must be redesigned; candidate alt-substrate selection is open
+- `claim-shaikh-sft-vs-dpo` as currently specified requires Hermes 70B to test SFT-only vs DPO under identical grounding directives; the claim is unreachable and must either be dropped or reframed to compare training regimes on a different substrate pair
+
+### §13 — 5b (five-body) conditional reframed as structurally unreachable
+
+**Decision:** The 5b framing (five-body cognitive substrate) as a reachable target condition is structurally unreachable under current hardware + Hermes abandonment. Previously some research drops referenced 5b as a future condition for Phase B comparison; §13 retires that framing.
+
+**Impact on voice grounding research:** no live claims depended on 5b-as-target — it was future-conditional. The reframing removes a planned comparison without invalidating any existing data. No deviation record required.
+
+**Historical note:** 5b appears in pre-2026-04-15 research drops as a conditional future state ("if we can reach 5b, we can run claim-X"). Those references are now historical context, not actionable plans.
+
+### §15 — Operator continuous-session directive
+
+**Decision:** Operator directive 2026-04-15T17:07Z: no session retirement (alpha/beta/epsilon) until the LRR epic closes at Phase 10. Sessions stay alive across reboots, across context compactions, across all normal lifecycle events that would previously trigger retirement + handoff. Drop #62 §15.4 was amended 2026-04-15T18:08Z (PR #877) to remove the "or Phase 11" hedge — LRR closes at Phase 10 definitively.
+
+**Impact on research continuity:** Phase A data collection benefits — no session-boundary confounds from session retirement mid-collection. A single alpha + single beta runs the entire epic, with delta as coordinator.
+
+**Impact on RESEARCH-STATE.md update cadence:** per §15 + CLAUDE.md § Voice Grounding Research Continuity, this file should be updated after any session with research decisions or implementation progress — still the rule, but with the operator's session-continuity framing, "session" now means "stretch of work between reboots" rather than "claude context window."
+
+### Tier-2 document drift check (spot-check)
+
+Quick scan of tier-2 docs referenced by this state file for drift caused by §13/§14/§15:
+
+| Doc | Location | Drift? | Action |
+|---|---|---|---|
+| LRR Phase 5 spec | `docs/superpowers/specs/2026-04-14-livestream-research-ready-epic-design.md` § Phase 5 | YES — still describes Hermes 70B swap as executable | Needs Phase 5 re-spec or §14 SUPERSEDED note |
+| LRR Phase 7 spec (lrr-phase-7) | `docs/superpowers/specs/2026-04-15-lrr-phase-7-persona-posture-role-spec-authoring-design.md` | Already has SUPERSEDED note re §14 (commit `e1cd99b48`) | ✓ clean |
+| Claim registry | `research/claims/*.yaml` | `claim-shaikh-sft-vs-dpo` still exists as an active claim; needs update | Flag as LRR Phase 5 re-spec dependency |
+| DEVIATION-037 | `research/protocols/deviations/DEVIATION-037.md` | Unknown; not walked in this audit | Low priority |
+| Pre-registration doc | `research/CYCLE-2-PHASE-A-PRE-REGISTRATION.md` | Phase A unaffected by §14 | ✓ clean |
+
+**Follow-up action:** LRR Phase 5 spec SUPERSEDED note is the primary drift. File as follow-up queue item (not this item's scope).
+
+### Action items (2026-04-15 delta)
+
+1. LRR Phase 5 spec re-spec — either add §14 SUPERSEDED note or fully re-author Phase 5 around alt-substrate comparison (not Hermes 70B)
+2. Claim registry update — `claim-shaikh-sft-vs-dpo` needs reframing or retirement
+3. Substitute substrate selection — delta's parallel-deploy design awaits ratification; Phase B cannot proceed until alt-substrate is chosen
 
 ## 2026-04-14 — LRR Phase 0 voice grounding state pin
 
