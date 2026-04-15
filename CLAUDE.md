@@ -210,18 +210,22 @@ PreToolUse hooks enforce branch discipline and safety at the tool-call level:
 
 Destructive command detection strips quoted strings before matching to prevent false positives from commit messages that discuss git commands.
 
-## IR Perception (Pi NoIR Edge Fleet)
+## IR Perception (Pi NoIR Edge Fleet) + wider Pi fleet
 
-3 Raspberry Pi 4s with Pi Camera Module 3 NoIR under 850nm IR flood illumination. Each runs `hapax-ir-edge` daemon: YOLOv8n (ONNX Runtime) person detection + NIR hand thresholding + adaptive screen detection. Captures via `rpicam-still`, POSTs structured JSON to council every ~3s.
+5 Raspberry Pi 4s online (3 IR + sentinel + rag + hub, verified live 2026-04-15); 1 additional Raspberry Pi 5 arriving 2026-04-16 as `hapax-ai` (Hailo AI coprocessor + ReSpeaker audio ingest). The three IR Pis each run `hapax-ir-edge` daemon: YOLOv8n (ONNX Runtime) person detection + NIR hand thresholding + adaptive screen detection, captured via `rpicam-still` under 850nm IR flood illumination, POSTing structured JSON to council every ~3s.
 
-**Pi fleet:**
-- **Pi-1** (192.168.68.78) — ir-desk, co-located with C920-desk
-- **Pi-2** (192.168.68.52) — ir-room, co-located with C920-room
-- **Pi-4** (192.168.68.53) — sentinel (health monitor, watch backup)
-- **Pi-5** (192.168.68.72) — rag-edge (document preprocessing)
-- **Pi-6** (192.168.68.74) — sync-hub + ir-overhead, co-located with C920-overhead
+**Pi fleet (role-based naming, 2026-04-15 epsilon; legacy `hapax-piN` names kept as aliases in workstation `/etc/hosts` during the transition until the weekend rename window):**
 
-**Data flow:** Pi daemon → `POST /api/pi/{role}/ir` → `~/hapax-state/pi-noir/{role}.json` → `ir_presence` backend → perception engine → `perception-state.json`. Heartbeats every 60s via `hapax-heartbeat.timer` → `POST /api/pi/{hostname}/heartbeat`. Health monitor `check_pi_fleet()` validates freshness, service status, CPU temp, memory, disk.
+- **`hapax-ir-desk`** (alias `hapax-pi1`, 192.168.68.78) — IR perception, desk (co-located with C920-desk)
+- **`hapax-ir-room`** (alias `hapax-pi2`, 192.168.68.52) — IR perception, room (co-located with C920-room)
+- **`hapax-hub`** (alias `hapax-pi6`, 192.168.68.81 — was .74 until DHCP drift in early April) — sync hub (8 sync agents offloaded from workstation) + IR perception overhead (co-located with C920-overhead) + album-identifier frame server. Memory-tight; candidate for offload relief after `hapax-ai` is online.
+- **`hapax-sentinel`** (alias `hapax-pi4`, 192.168.68.53) — health sentinel + watch backup. Underused; candidate host for Phase 6 §5 stimmung-watchdog (independent failure domain from the workstation) and Phase 10 Prometheus relay aggregator.
+- **`hapax-rag`** (alias `hapax-pi5`, 192.168.68.72) — RAG edge preprocessor + `hapax-gdrive-pull.timer`. **Pi 4 hardware** despite the legacy `pi5` alias; the role-based rename frees the `pi5` name for the actual Pi 5 arriving Thursday.
+- **`hapax-ai`** (new Thursday 2026-04-16, expected DHCP reservation 192.168.68.79) — Raspberry Pi 5 with AI HAT+ 26 TOPS (Hailo-8). Runs per-person face identity (MobileFaceNet), YOLOv8-pose body tracking, MediaPipe Hands at ~100 FPS, and streaming Whisper-small ASR with Hailo encoder offload at ~250 ms latency. ReSpeaker USB Mic Array v2.0 arriving Friday 2026-04-17 plugs into the same Pi for room ambient capture → Silero VAD → PipeWire ROC stream to workstation. Unblocks LRR Phase 6 §6 presence-detect-without-contract per-person identity, Phase 8 §11 environmental perception emphasis, Phase 9 §4 daimonion code-narration. Systemd user units + env template at `pi-edge/hapax-ai/`; PipeWire drop-in at `config/pipewire/respeaker-room-mic.conf`; first-boot + rename + verify scripts at `scripts/pi-fleet/`.
+
+**Deployment plan + runbooks:** `docs/superpowers/plans/2026-04-15-pi-fleet-livestream-deployment-plan.md`.
+
+**Data flow:** Pi daemon → `POST /api/pi/{role}/ir` → `~/hapax-state/pi-noir/{role}.json` → `ir_presence` backend → perception engine → `perception-state.json`. Heartbeats every 60s via `hapax-heartbeat.timer` → `POST /api/pi/{hostname}/heartbeat`. Health monitor `check_pi_fleet()` validates freshness, service status, CPU temp, memory, disk. `PI_FLEET` dict in `agents/health_monitor/constants.py` currently only enumerates `hapax-pi4` and `hapax-pi5` (the non-IR sentinel + rag nodes); the three IR Pis are monitored via heartbeat freshness in `edge.py` regardless. Dict update to the role-based scheme is deferred until the weekend rename window lands — see deployment plan §7.2.
 
 **Key files:**
 - `pi-edge/` — Edge daemon + heartbeat code (deployed to each Pi at `~/hapax-edge/`)
