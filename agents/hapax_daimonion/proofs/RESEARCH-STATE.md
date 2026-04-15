@@ -603,6 +603,33 @@ Major architectural expansion. 14 PRs merged (#571–#594). All work gated by DE
 
 **Impact on grounding research:** DEVIATION-040 analysis confirms zero impact. volatile_lockdown gate prevents all affordance content from reaching experiment sessions. Tool recruitment gate inactive during experiment (self.tools empty). World routing feature-flagged. Reverie and DMN operate as independent processes from voice daemon's conversation pipeline. Phase A baseline collection continues unaffected.
 
+## Session N (post-Session 23): TTS Revert — Voxtral → Kokoro 82M CPU (PR #563)
+
+**Voxtral dropped.** The Voxtral TTS API introduced in Session 18 was reverted. Root cause: Voxtral architecturally drops short phrases — the Mistral hosted API model could not reliably synthesize utterances below a minimum token count, producing truncated or empty audio for common conversational acknowledgements ("ok", "yes", "mhm", "right"). This broke the conversational cadence for hapax's high-turn-taking voice loop.
+
+**Replacement:** reverted to local Kokoro 82M on CPU (not the prior Kokoro 0.9.4 GPU variant from pre-Session 18). Kokoro 82M is an 82-million-parameter model with a ~313 MB on-disk footprint (`~/.cache/huggingface/hub/models--hexgrad--Kokoro-82M`) and ~400-500 MB in-memory footprint under normal daimonion operation (verified queue #217 at commit `8a7d0e139`, 2026-04-15).
+
+**Changes (PR #563):**
+- `agents/hapax_daimonion/tts.py` — `VoxtralTTSService` → `KokoroTTSService` (via `from kokoro import KPipeline`, `device="cpu"`)
+- `agents/hapax_daimonion/pipecat_tts.py::KokoroTTSService` restored as the pipecat pipeline's TTS service class
+- Dependency: `mistralai>=2.1.0` removed (no longer needed for Voxtral); `kokoro` added back
+- Kokoro runs on CPU with `device="cpu"` — does NOT compete with Whisper STT on GPU or TabbyAPI inference on RTX 3090
+- LiteLLM TTS route names: no change — the TTS layer is not LiteLLM-routed (local Python import)
+
+**Impact on grounding research:** same as Session 18 impact assessment — TTS is downstream of all grounding evaluation, sample rate preserved (24kHz), audio output format preserved (PCM int16 mono), `.synthesize(text, use_case)` interface preserved. Latency profile shifts back: ~100ms local warm synth (vs Voxtral's ~0.7s API streaming). Better conversational cadence restored. No grounding impact.
+
+**Voice FX chain unchanged.** The PipeWire `filter-chain` documented in council CLAUDE.md § Voice FX Chain still applies to Kokoro output (same 24kHz sink name conventions).
+
+**Stale references (flagged for non-urgent cleanup):**
+
+1. **`agents/hapax_daimonion/METADATA.yaml`** still declares `voxtral_voice_id` + `voxtral_ref_audio` as config fields. Should be renamed back to `kokoro_voice` to match the reverted implementation. Non-blocking because METADATA is declarative and the code doesn't read these field names from it.
+2. **Session 18 above in this file** documented the Kokoro → Voxtral swap as the last TTS change, which was stale without this entry explaining the revert. This entry corrects the drift.
+3. **Research drop queue #217** (commit `8a7d0e139`) provides the current Kokoro memory footprint measurement.
+
+**Proposed follow-up queue item #224 (optional):** METADATA.yaml rename `voxtral_*` → `kokoro_*`. ~5 LOC. Low priority.
+
+---
+
 ## Operator Research Preferences
 
 - Strip system to research essentials only
