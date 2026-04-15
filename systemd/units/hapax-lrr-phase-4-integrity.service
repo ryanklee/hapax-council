@@ -1,0 +1,17 @@
+[Unit]
+Description=LRR Phase 4 mid-collection integrity check (once per day)
+Documentation=file:/home/hapax/projects/hapax-council/docs/superpowers/specs/2026-04-15-lrr-phase-4-phase-a-completion-osf-design.md
+# Only run while Condition A collection is live. Spec §3.3 — the script
+# exits 3 if collection_halt_at is set, which the operator uses as the
+# signal to disable the timer at Phase 4 close.
+
+[Service]
+Type=oneshot
+ExecStart=/home/hapax/projects/hapax-council/scripts/lrr-phase-4-integrity-check.sh
+Environment=PATH=/home/hapax/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=HOME=/home/hapax
+Environment=QDRANT_URL=http://localhost:6333
+StandardOutput=journal
+StandardError=journal
+Nice=10
+SuccessExitStatus=3
