@@ -720,3 +720,97 @@ This research document was produced by beta (PR #819 author) on 2026-04-15 in re
 **Commit landing location:** `beta-phase-4-bootstrap` branch, PR #819. Scope creep from the original Phase 4 bootstrap focus is acknowledged; the research drop is defensible as a docs-only addition that does not touch frozen files or code.
 
 — beta (PR #819 author), 2026-04-15T06:50Z
+
+---
+
+## Erratum 2026-04-15T07:20Z
+
+During execution of delta's first AWB assignment (thinking-mode disable, based on this research doc §9.1 recommendation), beta verified the actual production state of the LiteLLM config and the exllamav3 runtime. **Two verification failures in this research document were identified.**
+
+Per the `feedback_verify_before_claiming_done` memory, errata are corrections that preserve the audit trail rather than rewriting the original claims. This section records the corrections without editing §§1–12 above.
+
+### E1. Thinking mode is ALREADY disabled for `local-fast` and `coding` routes
+
+**Original claim (§1.2 + §1.5 + §9.1 first fix):** *"Current production config does not explicitly disable thinking mode — needs verification; if thinking is on, every local-fast call pays the thinking-token latency tax on top of the actual response."*
+
+**Verified state (2026-04-15T07:15Z):** the production LiteLLM config at `~/llm-stack/litellm-config.yaml` lines 57–82 shows:
+
+```yaml
+  - model_name: local-fast
+    litellm_params:
+      model: openai/Qwen3.5-9B-exl3-5.00bpw
+      api_base: http://172.18.0.1:5000/v1
+      api_key: "dummy"
+      extra_body:
+        chat_template_kwargs:
+          enable_thinking: false       # <-- ALREADY DISABLED
+
+  - model_name: coding
+    litellm_params:
+      # ... same settings ...
+      extra_body:
+        chat_template_kwargs:
+          enable_thinking: false       # <-- ALREADY DISABLED
+
+  - model_name: reasoning
+    litellm_params:
+      # ... same settings ...
+      extra_body:
+        chat_template_kwargs:
+          enable_thinking: true        # <-- ENABLED (correct for reasoning)
+```
+
+**Direct API verification** (bypassing LiteLLM, testing against TabbyAPI :5000 with explicit `chat_template_kwargs`):
+
+- `enable_thinking=false`: response is "Hello there friend." — no thinking prose, direct answer
+- `enable_thinking=true`: response is "Thinking Process:\n\n1. **Analyze the Request:**..." — verbose thinking prose before any answer
+
+**Conclusion:** the production state is **correct**. `local-fast` and `coding` routes do not pay the thinking-mode latency tax. The `reasoning` route correctly emits thinking prose (which is wanted for reasoning tasks).
+
+**Why the original claim was wrong:** beta inspected `tabbyAPI/config.yml` (TabbyAPI's own config, which does not control thinking mode — that's a per-request kwarg) but did not inspect the LiteLLM route config at `~/llm-stack/litellm-config.yaml`. The thinking-mode control lives in the request-level `chat_template_kwargs.enable_thinking` field, which is set per-route in LiteLLM's `extra_body`. Beta's research inspected the wrong layer.
+
+**Lesson:** verify the actual control surface, not the adjacent one. LiteLLM injects `extra_body` into the outgoing TabbyAPI request; TabbyAPI's own config does not configure the chat template's thinking mode.
+
+**Recommendation from §9.1 first fix is already satisfied.** No action required.
+
+### E2. exllamav3 runtime version is 0.0.23, not 0.0.22
+
+**Original claim (§1.2 + §6.1 + §9.1 third fix):** *"exllamav3 version 0.0.22... production stack version: 0.0.22 — a ~4-5 month lag behind upstream."*
+
+**Verified state (2026-04-15T07:15Z):** `~/projects/tabbyAPI/venv/lib/python3.12/site-packages/exllamav3-0.0.23+cu128.torch2.9.0.dist-info` — runtime exllamav3 is **0.0.23**.
+
+**Why the original claim was wrong:** beta read the `quantization_config.version: "0.0.22"` field in `tabbyAPI/models/Qwen3.5-9B-exl3-5.00bpw/config.json` and assumed this was the runtime version. It is NOT — that field records the **quant pack format version** at the time the model was quantized (by turboderp or another uploader), which is a different artifact from the runtime library. A model quantized at pack-format 0.0.22 runs fine on runtime 0.0.23 (forward-compatible).
+
+**Lesson:** distinguish quant pack version (immutable artifact) from runtime library version (installable). The production runtime is reported by `pip show exllamav3` or by looking at the installed `.dist-info` directory, not by inspecting the quant's config.json.
+
+**Corrected version gap:** 0.0.23 → 0.0.29 is 6 point releases (~3-4 months), not 7 point releases (~4-5 months). The Ampere-specific fixes in the interval are still relevant; the upgrade is still worth doing; the urgency is slightly reduced.
+
+**Recommendation from §9.1 third fix is still valid.** The upgrade path is smaller than originally claimed but not a no-op.
+
+### E3. Cache warmup recommendation is still valid and shippable
+
+**Original claim (§9.1 second fix):** *"Add startup cache warmup via a no-op completion on `tabbyapi.service` `ExecStartPost`."*
+
+**Verified state (2026-04-15T07:15Z):** `systemctl --user show tabbyapi.service -p ExecStartPost` returns empty. No `ExecStartPost` in the current unit file. The recommendation is still valid and shippable.
+
+**This item is unchanged** and remains a concrete shippable for the AWB lane.
+
+### Corrective action taken
+
+1. This erratum section appended to the research document (preserving the original claims in §§1–12 unchanged).
+2. The three-fix recommendation in §9.1 is updated in spirit: fix #1 is NO-OP (already satisfied), fix #2 remains valid, fix #3 is valid with smaller gap than claimed.
+3. Beta closes delta's first AWB assignment (thinking-mode disable) as a NO-OP with the verified finding, requesting delta's next formal assignment (likely the cache warmup item delta pre-queued as assignment #2).
+
+### Meta-observation on research methodology
+
+This errata section exists because beta's substrate research at commit `bb2fb27ca` shipped without the "verify against actual production state" step that `feedback_verify_before_claiming_done` memory explicitly warns against. Specifically:
+
+- The research enumerated candidates, synthesized criteria, and recommended fixes.
+- The research did NOT verify the existing production state of the recommended fixes BEFORE recommending them.
+- The first AWB assignment (thinking-mode disable) surfaced the verification gap within ~10 minutes of beta attempting to execute it.
+
+**Remediation for future research drops:** any recommendation that could plausibly already be in place in production (config changes, systemd unit adjustments, feature flags, etc.) must include a verification step that checks the actual production state BEFORE being written as a recommendation. This is a 2-5 minute check per recommendation; the cost of skipping it is a spurious recommendation that generates downstream work (as happened here).
+
+The broader recommendations in §9 (candidates, rankings, RIFTS validation, OLMo 3-7B parallel deployment for research program) are not invalidated by these errata — they address a different layer of the substrate question than the three production fixes.
+
+— beta, 2026-04-15T07:20Z
