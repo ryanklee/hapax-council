@@ -266,24 +266,25 @@ This is the item that unblocks HSEA Phase 1 (UP-4) for surface registration. HSE
   - Legacy hardcoded paths remain as FALLBACK during transition (compositor tries layout-declared surfaces first; if layout is invalid or misses a required sink, fall back to hardcoded)
   - Deprecation: hardcoded paths are marked for removal in Phase 10 polish
 - **Why this is in Phase 2** (per epic spec item 10): "archival work here adds a new sink (local archive branch), which is the natural pressure to generalize. Layout-declared outputs let Phase 8 add further sinks (NDI tap, winit preview, secondary RTMP) by editing JSON."
-- **SourceRegistry integration:** the same migration adds a `SourceRegistry.register(source_cls, zone, priority)` API that HSEA Phase 1 uses. The registration pattern is:
+- **CairoSourceRegistry integration** (post-2026-04-15T13:40Z architectural judgment — see §4 decision 8): the same migration adds a NEW `CairoSourceRegistry.register(source_cls, zone, priority)` API in a NEW file, distinct from the existing `agents/studio_compositor/source_registry.py` which manages surface backend binding (`register(source_id, backend)` + `get_current_surface(source_id)`). The two registries serve different concerns and coexist. The registration pattern is:
   ```python
-  from agents.studio_compositor.source_registry import SourceRegistry
+  from agents.studio_compositor.cairo_source_registry import CairoSourceRegistry
 
-  SourceRegistry.register(
+  CairoSourceRegistry.register(
       source_cls=HudSource,  # HSEA Phase 1 deliverable 1.1
       zone="hud_top_left",
       priority=10,
   )
   ```
-- Phase 2 item 10 ships the `SourceRegistry` AND registers the current CairoSources (album overlay, Sierpinski renderer, overlay zones, token pole) via this pattern
+- Phase 2 item 10 ships the NEW `CairoSourceRegistry` AND registers the current CairoSources (album overlay, Sierpinski renderer, overlay zones, token pole) via this pattern
+- **Naming resolution (2026-04-15T13:40Z):** the existing `source_registry.py` shipped in Reverie source-registry completion epic (PR #822) handles surface backend binding and is untouched by Phase 2 item 10. The new `cairo_source_registry.py` handles zone → CairoSource-subclass binding and is Phase 2's contribution. This avoids the naming collision alpha flagged at 13:35Z exhaustion inflection.
 - **Target files:**
-  - `agents/studio_compositor/source_registry.py` (~200 LOC registry implementation + registration helpers)
-  - `agents/studio_compositor/compositor.py` (~100 LOC edits to wire `OutputRouter.from_layout()` + `SourceRegistry` enumeration)
+  - `agents/studio_compositor/cairo_source_registry.py` (NEW, ~200 LOC; NOT the existing `source_registry.py`)
+  - `agents/studio_compositor/compositor.py` (~100 LOC edits to wire `OutputRouter.from_layout()` + `CairoSourceRegistry` enumeration)
   - `agents/studio_compositor/rtmp_output.py` (~50 LOC edits to accept layout-declared sink config)
-  - `config/compositor-layouts/default.json` (new video_out declarations + SourceRegistry entries)
+  - `config/compositor-layouts/default.json` (new video_out declarations + CairoSourceRegistry entries)
   - `config/compositor-zones.yaml` (NEW file — the zone registry HSEA Phase 1 references)
-  - `tests/studio_compositor/test_source_registry.py` (~150 LOC)
+  - `tests/studio_compositor/test_cairo_source_registry.py` (~150 LOC)
   - `tests/studio_compositor/test_output_router_layout.py` (~150 LOC)
 - **Deliverable size:** ~800 LOC, 1 day serial work
 
@@ -304,6 +305,11 @@ Drop #62 fold-in (2026-04-14) + operator batch ratification (2026-04-15T05:35Z) 
 4. **`condition_id` on Qdrant (LRR Phase 1 item 2)** is satisfied by LRR Phase 1 for NEW points. Phase 2 archival writes do NOT insert into Qdrant — the archive is filesystem-backed; RAG ingest (deferred) would populate Qdrant. Phase 2 does not create Qdrant entries.
 
 5. **Drop #57 T1.5 "Archive-based replay as content"** is enabled by Phase 2 but is a downstream HSEA Phase 7 / UP-12 implementation concern, not Phase 2 scope.
+
+6. **CairoSourceRegistry naming resolution (2026-04-15T13:40Z)** per alpha's 13:35Z exhaustion inflection §"What would unblock alpha" item 4: the existing `agents/studio_compositor/source_registry.py` (shipped in PR #822 Reverie source-registry completion epic) manages SURFACE BACKEND BINDING (`register(source_id, backend)` + `get_current_surface(source_id)`). Delta's original Phase 2 item 10 spec used the same `source_registry.py` path + `SourceRegistry` class name, causing a collision. **Resolution:** Phase 2 item 10 creates a NEW file at `agents/studio_compositor/cairo_source_registry.py` with a NEW class `CairoSourceRegistry` that handles ZONE → CAIRO-SOURCE-SUBCLASS BINDING (`register(source_cls, zone, priority)` + `get_for_zone(zone)`). The two registries serve different concerns and coexist without conflict. **Rejected alternatives:**
+   - (1) rename existing to `surface_registry.py` — disruptive, breaks existing imports in Reverie source-registry work, requires test updates
+   - (2) extend existing with zone-aware methods — conflates two different concerns (surface backend management vs cairo source zone binding) in one registry, harder to reason about
+   - (3) ✓ **ADOPTED: new file at different path (`cairo_source_registry.py`)** — cleanest, zero disruption to existing code, preserves concern separation
 
 ---
 
