@@ -32,6 +32,8 @@ The epic is structured so that the substrate swap (Phase 5) is a **condition cha
 
 ## 1. Prior art + reconciled predecessors
 
+> **Cross-epic fold-in (drop #62, delta, 2026-04-14):** see `docs/research/2026-04-14-cross-epic-fold-in-lrr-hsea.md` for the authoritative LRR ↔ HSEA dependency map, shared concept ownership table, and unified phase sequence UP-0 through UP-13. LRR is the substrate (research integrity + governance + content infrastructure); HSEA (`docs/superpowers/specs/2026-04-14-hsea-epic-design.md`) is the visibility/content layer that reads LRR outputs and narrates them. Phase 5 has been forked into 5a (Hermes 3 8B parallel pivot, primary, LRR-owned) and 5b (Hermes 3 70B layer-split, deferred backlog gated on hardware envelope change) per drop #62 §4 Option C, ratified by operator 2026-04-15; see Phase 5 per-phase spec §0.5 for the reconciliation amendment.
+
 This epic supersedes or absorbs the following prior plans:
 
 | Doc | Status | Relationship |
