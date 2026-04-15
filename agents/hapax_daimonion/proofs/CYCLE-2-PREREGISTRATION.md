@@ -55,6 +55,10 @@ A-B-A (baseline → intervention → reversal).
 
 All phases share: `experiment_mode=true`, `phenomenal_stimmung_only=true`, `salience_context=false`, `screen_context=false`.
 
+**Data source (LRR Phase 4 livestream-only rule, 2026-04-14).** Under the LIVESTREAM RESEARCH READY epic, every grounding experiment observation in Phases A / B / A' is collected **exclusively while the livestream is running in research mode** with an active condition tagged in `/dev/shm/hapax-compositor/research-marker.json`. Dedicated 1-on-1 voice sessions are **not** a data source for any phase.
+
+Pre-LRR Cycle 2 Phase A dedicated-session data (~431 grounding-act pairs captured on 2026-03-21, 2026-03-24, and 2026-03-25 before the LRR research registry existed) is retired from Phase A sample counts via **DEVIATION-038**. The data remains in Langfuse for historical/pilot reference but is excluded from the pre-registered sample minimum by construction: those scores have no `metadata.condition_id` field, and every Phase A query filters on `metadata.condition_id=cond-phase-a-baseline-qwen-001`.
+
 ### 2.4 Phase Change Decision Rules
 Minimum 10 sessions per phase. Transition when minimum reached AND last 3 session means are within 20% of phase mean (stability criterion). Maximum 20 sessions per phase.
 
@@ -79,7 +83,9 @@ Minimum 10 sessions per phase. Transition when minimum reached AND last 3 sessio
 Single operator, sole user of the system. Daily voice AI user. ADHD diagnosis (relevant: pacing, dysfluency tolerance, and executive function support are part of the system's design rationale).
 
 ### 3.2 Setting
-Home office. CachyOS (Arch-based), RTX 3090, Hyprland (Wayland). Blue Yeti microphone, PreSonus Studio 24c audio interface. LiteLLM gateway routing to Claude Opus 4.6. Kokoro TTS. Faster-whisper STT (distil-large-v3).
+Home office. CachyOS (Arch-based), RTX 3090, Hyprland (Wayland). Blue Yeti microphone, PreSonus Studio 24c audio interface. LiteLLM gateway routing to TabbyAPI (Qwen3.5-9B EXL3 for Phase A baseline; Hermes 3 70B EXL3 for the Phase 5 substrate swap). Kokoro TTS. Faster-whisper STT (distil-large-v3).
+
+**Data collection context (LRR Phase 4 rule, 2026-04-14).** Grounding experiment observations are captured during **livestream runs in research mode**, not during dedicated 1-on-1 voice sessions. The operator speaks into the voice pipeline while the Legomena Live stream is running; the voice pipeline's `conversation_pipeline.py` + `grounding_evaluator.py` compute the pre-registered DVs and write them to Langfuse with `metadata.condition_id=<active condition>` so post-hoc analysis can filter scores by research condition. See `docs/superpowers/specs/2026-04-14-livestream-research-ready-epic-design.md` §Phase 4 for the full livestream-only rule. Pre-LRR dedicated-session pilot data is retired via DEVIATION-038.
 
 ### 3.3 Generalizability
 Single-case study. Results apply to this specific operator-system dyad only. Generalization requires conceptual replication on different systems and operators.
@@ -107,7 +113,7 @@ Conversational grounding package (3+1 framework):
 
 **System prompt:** Stripped to ~800-1000 tokens (`experiment_mode=true`). No tool descriptions, no profile digest, no environmental modulation. Dignity floor + minimal operator style only.
 
-Implementation: `conversation_pipeline.py`, `grounding_ledger.py`, `persona.py`, `conversational_policy.py`.
+Implementation (LRR Phase 4 updated list): `conversation_pipeline.py`, `grounding_ledger.py`, `grounding_evaluator.py`, `persona.py`, `conversational_policy.py`, `shared/research_marker.py`, `agents/studio_compositor/director_loop.py`, and the research marker SHM file at `/dev/shm/hapax-compositor/research-marker.json` written by `scripts/research-registry.py` on every `init` / `open` / `close` invocation. The research marker provides the `condition_id` that `conversation_pipeline.py` stamps on the Langfuse utterance trace and on every `hapax_score(...)` call for a voice grounding DV, so scores from the Phase A baseline can be cleanly distinguished from post-Phase-5 Condition A' data.
 
 ### 4.2 Primary Dependent Variable
 **Name:** `turn_pair_coherence`
