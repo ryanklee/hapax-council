@@ -576,3 +576,65 @@ The visual layer aggregator produces ambient parameters (`color_warmth`, `speed`
 - Intentionally decoupled from working mode (stimmung drives visual temperature, not mode)
 
 These parameters should be formalized in their own specification (parameter ranges, derivation rules, biometric thresholds) but are not part of this document's color/typography/spacing contract.
+
+---
+
+## 12. Stream Mode Considerations
+
+Logos renders inside a Tauri webview that, under Phase 8 of the Livestream Research Ready epic, may be composited into the 24/7 livestream (the Logos studio view tile). This section documents the stream-safety constraints the rest of the design language must respect on stream-visible surfaces.
+
+**Enforcement status:** Normative as of LRR Phase 6 open. The `stream-mode` axis (`off`/`private`/`public`/`public_research`), introduced in LRR Phase 6 §2, is the runtime signal that determines whether a surface is "publicly visible." Until Phase 6 lands, this section is design intent — no surface is formally gated. After Phase 6, violations are either ESLint failures (§12.4) or redaction wrapper opportunities.
+
+### 12.1 Broadcast-safe type scale
+
+On-stream text minimum is **12px**. Glyphs under ~12px lose enough high-frequency detail to become noise on H.264 at 4–8 Mbps HLS bitrates. At-desk viewing is fine at 7–8px; stream-side viewing is not.
+
+The scale:
+
+| Tier | Size | Usage |
+|------|------|-------|
+| `off-stream-counter` | 7–10px | Reserved for off-stream surfaces only. Any usage on stream-visible surfaces must be wrapped in `<RedactWhenLive>` or moved into a `.classification-inspector` scope (§7.2 exempt). |
+| `stream-minimum` | 12px | Absolute minimum for any text on a surface that may be captured. Signal labels, counters, timestamps. |
+| `stream-body` | 14px | Default body text on stream-visible surfaces. |
+| `stream-emphasis` | 18px | Headings, active labels, status strings. |
+| `stream-display` | 24px+ | Titles, marquee content, hero-mode overlays. |
+
+The 7–10px tier is not deleted — it remains available for the off-stream surfaces listed in §11.3 (excluded) and for the `.classification-inspector` scope (exempt per §7.2). Stream-visible surfaces must not use it without redaction wrapping.
+
+### 12.2 Broadcast-safe color envelope
+
+Semantic colors from §3.1 are defined at natural hex values optimized for at-desk reading. On stream-visible surfaces, a chroma ceiling applies:
+
+- Any token whose luminance exceeds 0.7 AND saturation exceeds 0.85 must be muted by 15% chroma before rendering: `color-mix(in oklch, var(--color-X) 85%, var(--color-zinc-400) 15%)`.
+- In practice, the two tokens that cross this threshold on most H.264 encoders are `red-400` (`#fb4934` Gruvbox / `#dc322f` Solarized) and `yellow-400` (`#fabd2f` Gruvbox / `#b58900` Solarized). Both mute on stream-visible surfaces.
+- Detection overlay perceptual colors (§3.8) are exempt. The operator has learned them; changing them on-stream would break recognition for operator reading and confer no meaningful benefit on stream viewers.
+- The compositor void background `#0a0a0a` is exempt. Pure black is broadcast-safe by construction.
+
+### 12.3 Animation stability
+
+Opacity-only animations with low delta (e.g. 0.3 → 0.6 over 8s) compress poorly on lossy codecs and often appear as flat frames punctuated by keyframe transitions. On stream-visible surfaces, animations must satisfy at least one of:
+
+- Opacity delta ≥ 0.5 (e.g. 0.3 → 0.8), OR
+- Position/scale delta ≥ 2px, OR
+- Color delta crossing at least one semantic boundary (green→yellow, etc.)
+
+The existing `signal-breathe-slow`/`mod`/`fast` keyframes in `hapax-logos/src/index.css` are verified stream-safe in the Phase 10 privacy regression suite's frame-diff check. `signal-breathe-crit` (0.6s + 1.15× scale pulse) is trivially stream-safe by the scale-delta criterion.
+
+### 12.4 Enforcement
+
+**Text sizes** — an ESLint custom rule `hapax-stream/text-minimum-12px` matches any `text-\[(?:\d+px)\]` class where the number is under 12 and fails the lint run. Exemptions:
+
+- Files under `hapax-logos/src/components/studio/DetectionOverlay.tsx` or `.../ClassificationInspector.tsx` (diagnostic surfaces per §7.2).
+- JSX inside a `<RedactWhenLive>` subtree (AST-checked by the rule where feasible, otherwise via an inline `// eslint-disable-next-line hapax-stream/text-minimum-12px` comment).
+
+**Colors** — `ThemeProvider` emits a dev-mode console warning if any component renders a raw hex outside the palette system. This has always been a design language rule (§8.2); Phase 6 tightens it from "convention" to "warned on boot."
+
+**Animations** — enforced by review, not runtime. The Phase 10 privacy regression suite's frame-diff check on sampled stream frames is the backstop: if a stream-visible component's rendered frames differ by less than a configurable epsilon across a 2-second window, the check flags it.
+
+### 12.5 Scope interaction with §11
+
+§11.1 lists the Logos React app as a governed surface with high compliance. §12 adds a stream-mode axis on top of the mode system: a surface can be governed (mode-compliant colors, JetBrains Mono, etc.) AND stream-unsafe (text under 12px, full-saturation red fills). Stream-safety is orthogonal to mode compliance. A stream-visible surface must satisfy both.
+
+§11.3 excluded surfaces (VS Code extension, hapax-watch, third-party Docker UIs) are out of scope for §12 because they are also out of scope for broadcast — none of them are composited into the livestream.
+
+The compositor overlays in §11.1 (studio compositor cairo sources) ARE directly composited into the stream. They must satisfy §12 even though their governance state under §11.1 is "Low — Not implemented." Phase 8 §9's Logos studio view tile is the first surface to exercise the full §12 envelope: it captures Logos output as a compositor source, and is therefore simultaneously a Logos surface and a cairo source.
