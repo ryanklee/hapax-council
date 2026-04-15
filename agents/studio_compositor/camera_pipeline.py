@@ -245,12 +245,31 @@ class CameraPipeline:
             return True
 
     def stop(self) -> None:
-        """Transition to NULL. Idempotent."""
+        """Transition to NULL. Idempotent.
+
+        Waits for the NULL transition to complete. Without this, fast
+        rebuild cycles interrupt GStreamer's async cleanup before
+        v4l2src's buffer pool releases its dmabuf handles, leaking fds
+        at ~150/min under a rebuild-thrash fault. See drop #52.
+        """
         with self._state_lock:
             if self._pipeline is None:
                 return
             Gst = self._Gst
             self._pipeline.set_state(Gst.State.NULL)
+            ret, state, pending = self._pipeline.get_state(timeout=5 * Gst.SECOND)
+            if ret == Gst.StateChangeReturn.FAILURE:
+                log.warning(
+                    "camera_pipeline %s: NULL transition failed, resources may leak",
+                    self._spec.role,
+                )
+            elif state != Gst.State.NULL:
+                log.warning(
+                    "camera_pipeline %s: NULL transition timed out at state=%s pending=%s",
+                    self._spec.role,
+                    state.value_nick,
+                    pending.value_nick if pending else "?",
+                )
             self._started = False
 
     def teardown(self) -> None:
