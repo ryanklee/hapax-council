@@ -208,26 +208,47 @@ def _load_dataset(path: Path) -> Iterator[dict[str, object]]:
 def _extract_prompt_fields(raw: dict[str, object]) -> tuple[str, str, bool]:
     """Extract (prompt_id, prompt_text, ambiguous) from a RIFTS dataset record.
 
-    Tries known field-name conventions. The actual RIFTS schema may use
-    different names; this function is the single point to update when the
-    dataset is downloaded and inspected.
+    Verified schema 2026-04-15 (microsoft/rifts parquet columns):
+    - ``instruction`` — prompt text
+    - ``label`` — gold grounding label: one of {addressing, advancing, none,
+      ambiguous}. "ambiguous" means the prompt requires clarification.
+    - ``split`` — dataset split name (test/val/train); NOT the ambiguity signal
+    - ``logits`` — classifier scores (not used by harness)
+
+    Also tolerates earlier-assumed field names for forward/backward compat.
     """
     prompt_id = str(
         raw.get("id")
         or raw.get("prompt_id")
         or raw.get("example_id")
-        or f"unknown-{hash(json.dumps(raw, sort_keys=True)) & 0xFFFF:04x}"
+        or f"rifts-{hash(json.dumps(raw, sort_keys=True, default=str)) & 0xFFFFFFFF:08x}"
     )
     prompt_text = str(
-        raw.get("prompt") or raw.get("prompt_text") or raw.get("input") or raw.get("user") or ""
+        raw.get("instruction")
+        or raw.get("prompt")
+        or raw.get("prompt_text")
+        or raw.get("input")
+        or raw.get("user")
+        or ""
     )
-    ambiguous_raw = raw.get("ambiguous") or raw.get("requires_grounding") or raw.get("split")
-    if isinstance(ambiguous_raw, bool):
-        ambiguous = ambiguous_raw
-    elif isinstance(ambiguous_raw, str):
-        ambiguous = ambiguous_raw.lower() in ("ambiguous", "true", "1", "yes", "requires_grounding")
+    # "ambiguous" label in the real RIFTS schema is THE gold ambiguity signal.
+    label = raw.get("label")
+    if isinstance(label, str) and label.lower() == "ambiguous":
+        ambiguous = True
     else:
-        ambiguous = False
+        ambiguous_raw = raw.get("ambiguous") or raw.get("requires_grounding")
+        if isinstance(ambiguous_raw, bool):
+            ambiguous = ambiguous_raw
+        elif isinstance(ambiguous_raw, str):
+            ambiguous = ambiguous_raw.lower() in (
+                "ambiguous",
+                "true",
+                "1",
+                "yes",
+                "requires_grounding",
+            )
+        else:
+            ambiguous = False
     return prompt_id, prompt_text, ambiguous
 
 
