@@ -115,37 +115,15 @@ MIN_VIDEO_DURATION = 15.0  # minimum seconds before allowing CUT
 MAX_VIDEO_DURATION = 60.0  # force CUT after this
 
 # LRR Phase 1 item 2 + 3: every reaction is tagged with the current
-# research condition_id so the JSONL + Qdrant writes carry an experimental
-# context tag. Source of truth = /dev/shm/hapax-compositor/research-marker.json
-# written by `scripts/research-registry.py open|close|init`. Reader caches
-# the value for 5 s so we don't pay a syscall per reaction in the hot path.
-_RESEARCH_MARKER_PATH = Path("/dev/shm/hapax-compositor/research-marker.json")
-_RESEARCH_MARKER_CACHE_TTL_S = 5.0
-_research_marker_cache: dict[str, float | str | None] = {
-    "loaded_at": 0.0,
-    "condition_id": None,
-}
-
-
-def _read_research_marker() -> str | None:
-    """Return the current research condition_id, cached for 5 s.
-
-    File absence + parse errors fall back to None silently. The
-    research-registry CLI atomic-writes this file via tmp+rename so a
-    racing read never sees a partial document.
-    """
-    now = time.monotonic()
-    if (now - float(_research_marker_cache["loaded_at"] or 0.0)) < _RESEARCH_MARKER_CACHE_TTL_S:
-        return _research_marker_cache["condition_id"]  # type: ignore[return-value]
-    try:
-        raw = _RESEARCH_MARKER_PATH.read_text()
-        data = json.loads(raw)
-        condition_id = data.get("condition_id") if isinstance(data, dict) else None
-    except (FileNotFoundError, json.JSONDecodeError, OSError):
-        condition_id = None
-    _research_marker_cache["condition_id"] = condition_id
-    _research_marker_cache["loaded_at"] = now
-    return condition_id
+# research condition_id so the JSONL + Qdrant writes carry an
+# experimental context tag. The reader is hoisted to
+# ``shared/research_marker.py`` (LRR Phase 4 scope item 1) so both the
+# livestream director and the voice pipeline depend on a single
+# implementation with a consistent 5-second cache and consistent
+# fail-safe semantics. Source of truth for the marker file itself is
+# ``/dev/shm/hapax-compositor/research-marker.json`` written by
+# ``scripts/research-registry.py`` on init/open/close.
+from shared.research_marker import read_research_marker as _read_research_marker  # noqa: E402
 
 
 def _get_litellm_key() -> str:
