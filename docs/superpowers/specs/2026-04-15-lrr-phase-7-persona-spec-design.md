@@ -7,7 +7,9 @@
 **Plan reference:** `docs/superpowers/plans/2026-04-15-lrr-phase-7-persona-spec-plan.md` (companion TDD checkbox plan)
 **Branch target:** `feat/lrr-phase-7-persona-spec`
 **Cross-epic authority:** `docs/research/2026-04-14-cross-epic-fold-in-lrr-hsea.md` (drop #62) — §3 row 9 axiom precedent ownership + HSEA Phase 2 (UP-10) dependency on this phase
-**Unified phase mapping:** **UP-9 Persona** (drop #62 §5): depends on UP-7 (8B substrate) + UP-8 (governance finalization); blocks UP-10 (HSEA Phase 2 core director activities); ~800 LOC
+**Unified phase mapping:** **UP-9 Persona** (drop #62 §5): depends on UP-7 (substrate swap) + UP-8 (governance finalization); blocks UP-10 (HSEA Phase 2 core director activities); ~800 LOC
+
+> **2026-04-15T07:15Z update:** the Hermes 3 substrate framing in this spec is SUPERSEDED per drop #62 §14 — the operator abandoned Hermes at 2026-04-15T06:35Z and commissioned substrate re-evaluation research (beta's `bb2fb27ca` commit on `beta-phase-4-bootstrap` / `docs/research/2026-04-15-substrate-reeval-post-hermes.md`). The "tune persona for Hermes 3's aggressive system-prompt compliance" goal is no longer operator-preferred. Phase 7 opener MUST read drop #62 §14 before starting work and reframe the persona tuning to whichever substrate is active at Phase 7 open time (most likely Qwen3.5-9B or OLMo 3-7B per beta's research §9 recommendation). The body of this spec is otherwise structurally valid — the process (YAML schema + renderer + VOLATILE-band injection + frozen-files + testing + operator sign-off) is substrate-agnostic; only the specific goal statement in §1 and the risk row mentioning "Pre-Hermes Qwen3.5-9B" in §6 contain the stale framing.
 
 ---
 
