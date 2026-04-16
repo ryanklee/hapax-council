@@ -187,6 +187,67 @@ def _get_litellm_key() -> str:
     return LITELLM_KEY
 
 
+def _render_active_objectives_block() -> str:
+    """LRR Phase 8 §3.3 — render active research objectives for the director prompt.
+
+    Reads vault-native objective files from
+    ``~/Documents/Personal/30-areas/hapax-objectives/``. Active objectives are
+    summarized with title + activities_that_advance. Returns empty string if
+    none or on any error (best-effort; must never block the director tick).
+
+    The prompt consumer uses these to bias activity selection toward paths
+    that advance the highest-priority active objective. No hard gate — just
+    signal. The legacy fixed activity ladder continues to govern when no
+    objectives are present.
+    """
+    try:
+        from pathlib import Path
+
+        from shared.frontmatter import parse_frontmatter
+        from shared.objective_schema import Objective, ObjectivePriority, ObjectiveStatus
+
+        objectives_dir = Path.home() / "Documents" / "Personal" / "30-areas" / "hapax-objectives"
+        if not objectives_dir.exists():
+            return ""
+
+        priority_rank = {
+            ObjectivePriority.high: 3,
+            ObjectivePriority.normal: 2,
+            ObjectivePriority.low: 1,
+        }
+
+        active: list[Objective] = []
+        for path in sorted(objectives_dir.glob("obj-*.md")):
+            try:
+                fm, _body = parse_frontmatter(path)
+                if not fm:
+                    continue
+                obj = Objective(**fm)
+                if obj.status == ObjectiveStatus.active:
+                    active.append(obj)
+            except Exception:
+                continue
+
+        if not active:
+            return ""
+
+        active.sort(
+            key=lambda o: (priority_rank[o.priority], -o.opened_at.timestamp()),
+            reverse=True,
+        )
+
+        lines = ["## Research Objectives"]
+        lines.append(
+            "These are your active research objectives. Prefer activities that advance them."
+        )
+        for obj in active[:3]:  # top 3 by priority + recency
+            acts = ", ".join(obj.activities_that_advance)
+            lines.append(f"- **{obj.title}** (priority: {obj.priority.value}; advance via: {acts})")
+        return "\n".join(lines)
+    except Exception:
+        return ""
+
+
 def _read_album_info() -> str:
     try:
         if ALBUM_STATE_FILE.exists():
@@ -534,6 +595,15 @@ class DirectorLoop:
             parts.append("## Recent Reactions")
             for entry in self._reaction_history[-8:]:
                 parts.append(f"- {entry}")
+
+        # ─── Research objectives (LRR Phase 8 §3.3 integration) ──
+        try:
+            objectives_block = _render_active_objectives_block()
+            if objectives_block:
+                parts.append("")
+                parts.append(objectives_block)
+        except Exception:
+            pass
 
         # ─── Role + response format ───────────────────────────────
         parts.append("")
