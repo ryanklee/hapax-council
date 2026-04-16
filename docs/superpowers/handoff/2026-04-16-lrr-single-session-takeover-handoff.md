@@ -32,7 +32,7 @@ Context: operator directed a full-scope single-session takeover of the LRR epic 
 | 1 | CLOSED | — |
 | 2 | SUBSTANTIVELY CLOSED | operator audio-archive activation (#58 runbook) |
 | 3 | CLOSED (substrate prep) | — |
-| 4 | IN-PROGRESS (time-gated) | Operator voice-session collection, 1-2 weeks |
+| 4 | IN-PROGRESS (stream-accumulation-gated) | Livestream uptime + OSF pre-reg filing; no separate voice sessions (livestream IS the research instrument) |
 | 5 | ✅ CLOSED (new today) | — |
 | 6 | SPEC+PLAN on main (+§0.5) | Author + submit the joint `hapax-constitution` PR |
 | 7 | SPEC+PLAN on main; kickoff-state drafted | Phase 6 joint PR merged first |
