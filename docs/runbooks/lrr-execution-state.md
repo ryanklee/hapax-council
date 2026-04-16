@@ -20,7 +20,7 @@ Substrate decision is **resolved**. Scenarios 1 (Qwen baseline) + 2 (OLMo-3 para
 | **1** | Research Registry Foundation | ✅ CLOSED | 2026-04-15 (PRs #840-#844) | — | — |
 | **2** | Archive + Replay as Research Instrument | ✅ CLOSED | 2026-04-15 (PRs #849-#864) | — | operator audio-archive activation (#58 runbook ready) |
 | **3** | Hardware Migration Validation | ✅ CLOSED (substrate prep) | 2026-04-15 (PR #848) + OLMo deploy 2026-04-16 | — | — |
-| **4** | Phase A Completion + OSF Pre-Registration | 🟡 IN-PROGRESS (time-gated) | 2026-04-15 (PRs #845-#852) | Operator voice sessions (~1-2 weeks) | Collect control-arm voice samples |
+| **4** | Phase A Completion + OSF Pre-Registration | 🟡 IN-PROGRESS (stream-accumulation-gated) | 2026-04-15 (PRs #845-#852) | Livestream uptime to cross Phase A capture thresholds | File OSF pre-reg; verify `stats.py` BEST on accumulated stream data |
 | **5** | Substrate Scenario 1+2 Deployment | ✅ CLOSED | 2026-04-16 (PRs #932-#936) | — | — |
 | **6** | Governance Finalization + Stream-Mode Axis | 🟡 SPEC ON MAIN (cherry-picked today) | 2026-04-16 (spec + plan + §0.5 patch applied) | None (substrate ratified) | Begin execution per plan |
 | **7** | Persona Spec Authoring (DF-1) | 🟡 SPEC ON MAIN | 2026-04-15 (spec + plan pre-existing) | None (substrate ratified, was pending) | Begin execution — persona spec authoring |
@@ -74,7 +74,7 @@ Substrate decision is **resolved**. Scenarios 1 (Qwen baseline) + 2 (OLMo-3 para
 
 | Item | Surface | Default-ship date |
 |---|---|---|
-| Phase 4 voice-session collection | Operator voice recording sessions | unscheduled (time-gated) |
+| Phase 4 OSF pre-reg filing | Operator files pre-reg on osf.io | any time; Phase A data accumulates via livestream, not separate sessions |
 | Phase 6 joint `hapax-constitution` PR authoring window | constitutional authoring session | awaiting open |
 | FINDING-S SDLC pipeline decision | `docs/research/2026-04-13/round5-unblock-and-gaps/phase-6-sdlc-pipeline-audit.md` | 2026-04-22 |
 | Scenario 2 three-variant comparison (SFT/DPO/RLVR) | model swap + test | any time; `claim-shaikh` cycle 2 |
@@ -95,6 +95,12 @@ Substrate decision is **resolved**. Scenarios 1 (Qwen baseline) + 2 (OLMo-3 para
 | #907 | Drop #62 fold-in § Queue cross-reference audit | #152 |
 | #906 | Cross-epic dependency graph + Mermaid visual | #149 |
 | #905 | Prometheus alert-rule cross-ref audit | #148 (GPU thermal finding applied in #937) |
+
+---
+
+## Constitutive framing — livestream IS the research instrument
+
+All LRR research and development happens via livestream. There are no separate "operator voice sessions," "recording sessions," or offline data collection windows distinct from stream operation. Phase A baseline (Phase 4) accumulates from chat-monitor transcripts, daimonion event logs, compositor token ledger, and stimmung time series captured during normal stream operation — not from separate studio sessions. This is the constitutive LRR commitment from the 2026-04-13 end-state statement.
 
 ---
 
