@@ -48,6 +48,75 @@ Phase 6 is also **not the place** to formalize the persona spec (DF-1). Persona 
 
 ---
 
+## 0.5 Amendment 2026-04-16 — drop #62 Q5 + §14 reconciliation
+
+> **Post-ratification reconciliation:** this spec was written at 2026-04-15T03:56Z,
+> before operator batch-ratified drop #62 §10 Q2-Q10 (2026-04-15T05:35Z) and before
+> drop #62 §14 Hermes abandonment addendum (2026-04-15T06:35Z+). The body of the spec
+> below remains structurally valid for Phase 6's 11 original scope items + §12
+> typography tier. Two reconciliations apply post-ratification.
+
+### 0.5.1 Q5 joint PR vehicle
+
+Per drop #62 §10 Q5 ratification, the constitutional PR Phase 6 opens is NOT a
+solo-LRR-Phase-6 vehicle. It is a **joint `hapax-constitution` PR** bundling
+6 constitutional changes in one operator review cycle:
+
+1. `it-irreversible-broadcast` implication (§1, this spec)
+2. `su-privacy-001` scope clarification (§8, this spec)
+3. `corporate_boundary` scope clarification (§9, this spec)
+4. `sp-hsea-mg-001` precedent (HSEA Phase 0 0.5 drafts the YAML; LRR Phase 6 bundles)
+5. `mg-drafting-visibility-001` implication (HSEA Phase 0 0.5 drafts; LRR Phase 6 bundles)
+6. `lrr-70b-reactivation-guard` implication (new — see §0.5.2)
+
+**Amendments to §1 of this spec at joint PR authoring time:**
+
+- The "Review cycle" paragraph is reframed as: "Submit as a joint PR against
+  `hapax-constitution` main, bundling HSEA Phase 0 0.5's `sp-hsea-mg-001` precedent
+  YAML + `mg-drafting-visibility-001` implication + the 70B reactivation guard rule.
+  HSEA Phase 0 drafts its two YAML files; LRR Phase 6 opens the PR. One operator
+  review cycle covers all 6 changes."
+- Target files expand: the joint PR touches `axioms/implications/` for the four LRR
+  implications (3 original + 70B guard) + `axioms/precedents/hsea/` for the HSEA
+  precedent + `axioms/implications/management-governance.yaml` for the HSEA
+  implication.
+
+### 0.5.2 §14 70B reactivation guard rule (new)
+
+Per drop #62 §14 Hermes abandonment (2026-04-15T06:35Z) + substrate research v1
+§10.1 + Phase 5 spec §0.5.4 cross-reference: the LRR Phase 6 constitutional scope
+gains a new amendment alongside `it-irreversible-broadcast`:
+
+**Rule:** *"Any future 70B substrate decision must pre-register a consent-revocation
+drill and pass it before being authorized."*
+
+**Rationale:** drop #62 §4 Option C forked LRR Phase 5 into 5a (8B parallel, primary)
+and 5b (70B, deferred backlog). Drop #62 §14 subsequently narrowed 5b from "deferred
+backlog with hardware-envelope-change hedge" to "structurally unreachable on the
+foreseeable hardware envelope" per operator's 06:20Z direction ("1 hardware env
+unlikely to change within the year"). The new rule prevents future sessions from
+reactivating the 70B path without satisfying the constitutional consent-latency
+constraint that killed it in the first place.
+
+**This rule is distinct from `sp-hsea-mg-001`.** `sp-hsea-mg-001` is HSEA Phase 0's
+drafting-as-content precedent (substrate-agnostic). The 70B reactivation guard is
+LRR Phase 6's substrate-specific amendment. Both land in the joint PR vehicle per
+Q5, but they are structurally separate.
+
+**Target file:** new `axioms/implications/lrr-70b-reactivation-guard.yaml` at joint
+PR authoring time. Added to the LRR Phase 6 scope as a **new scope item** alongside
+items 1/8/9, NOT replacing any existing item.
+
+### 0.5.3 Drift acknowledged in drop #62 §14 addendum
+
+Drop #62 §14 addendum conflates `sp-hsea-mg-001` with the 70B reactivation guard
+rule. This is a known minor drift in the addendum text. The joint PR authoring
+session should note both precedents separately regardless of how §14 is worded.
+
+— reconciliation authored by beta (LRR single-session takeover), 2026-04-16
+
+---
+
 ## 1. Goal (recap)
 
 1. `it-irreversible-broadcast.yaml` merged in `hapax-constitution` — the constitution recognizes that CDN-bound frames cannot be revoked, and this is a distinct persistence category from recording revocation.
