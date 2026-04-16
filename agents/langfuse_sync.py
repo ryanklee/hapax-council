@@ -481,9 +481,20 @@ def _write_daily_files(
         content = _format_daily_markdown(day, day_summaries, litellm_spend)
         path = LANGFUSE_DIR / f"traces-{day}.md"
         path.write_text(content, encoding="utf-8")
+
+        # Structured JSONL sidecar for programmatic consumers (queue #242
+        # Lever B refactor). MinIO blob retention dropped to 3 days, so
+        # consumers that previously polled the Langfuse API for 7-30 day
+        # windows must read this durable local store instead. One trace
+        # per line. Reader: agents/_langfuse_local.py.
+        jsonl_path = LANGFUSE_DIR / f"traces-{day}.jsonl"
+        with jsonl_path.open("w") as fh:
+            for s in day_summaries:
+                fh.write(s.model_dump_json() + "\n")
+
         written += 1
 
-    log.info("Wrote %d daily trace files to %s", written, LANGFUSE_DIR)
+    log.info("Wrote %d daily trace file pairs (md + jsonl) to %s", written, LANGFUSE_DIR)
     return written
 
 
@@ -496,8 +507,8 @@ def _prune_old_files() -> int:
     cutoff_str = cutoff.strftime("%Y-%m-%d")
     pruned = 0
 
-    for path in LANGFUSE_DIR.glob("traces-*.md"):
-        # Extract date from filename: traces-YYYY-MM-DD.md
+    for path in list(LANGFUSE_DIR.glob("traces-*.md")) + list(LANGFUSE_DIR.glob("traces-*.jsonl")):
+        # Extract date from filename: traces-YYYY-MM-DD.{md,jsonl}
         date_part = path.stem.replace("traces-", "")
         if date_part < cutoff_str:
             path.unlink()

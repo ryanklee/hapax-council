@@ -123,6 +123,75 @@ After those three, run #242's original procedure: pull the Qwen sample,
 classify each response (refusal / question-asking / hallucination /
 normal), compare rates against the RIFTS benchmark numbers from #210.
 
+## Execution log (2026-04-16T17:05-17:15Z)
+
+After operator approval of "levers 1, 2, 4" (see lever table below),
+executed in this order:
+
+**Lever 4 (one-time purge)** — first, because MinIO refused config
+writes at the inode threshold:
+
+- Initial `mc rm --recursive --force --older-than 7d` deadlocked: MinIO
+  could not allocate inodes for its own internal scratch tmp files
+  ("drive path full" on `.minio.sys/tmp` operations). Killed after
+  3 minutes of zero progress.
+- Switched to filesystem-level `find /data/minio/langfuse/events/.../trace
+  -mindepth 1 -maxdepth 1 -type d -mtime +3 -exec rm -rf {} +`. Same
+  intent, bypasses MinIO's blocked S3-API delete path. MinIO will
+  reconcile against missing `xl.meta` files on its next bucket scan.
+- Refined target after age distribution check: 0 dirs >7d, 152K dirs >5d,
+  784K dirs >3d. Picked `-mtime +3` to free ~9.4M inodes (~43% of cap).
+
+**Lever 1 (lifecycle 14d → 3d)** — once purge freed enough inodes for
+MinIO config writes (~5.4M free, 75% used):
+
+```
+mc ilm rule edit --expire-days 3 --id d7c8hep3hei00fcqjjc0 \
+   localminio/langfuse
+```
+
+Verified: `DAYS TO EXPIRE = 3`.
+
+**Lever 2 (SAMPLE_RATE 0.3 → 0.1)** — edited
+`~/llm-stack/docker-compose.yml` line 96, recreated litellm container
+via `docker compose up -d litellm`. Verified env var live in container,
+callbacks logged: `Initialized Success Callbacks - ['prometheus',
+'langfuse']`.
+
+## Defensive scaffolding (queue #242 lever B)
+
+Operator's principle: "lower retention should not = loss." Even though
+ClickHouse (Langfuse's metadata store) has no TTL and keeps trace metadata
+indefinitely (verified: 17 days of data, 7.71M observations, all consumer
+queries hit metadata not blobs), this PR also ships a durable local trace
+store as defensive infra:
+
+- `agents/langfuse_sync.py` extended to write structured
+  `traces-YYYY-MM-DD.jsonl` alongside the existing markdown summaries.
+- `agents/_langfuse_local.py` new reader module (`query_traces`,
+  `cost_by_model`, `count_by_model`, `daily_cost_trend`,
+  `filter_by_name`).
+
+Use case for the scaffolding: operator-facing replay or full input/output
+inspection of >3-day-old traces. Programmatic consumers (cost.py,
+alignment_tax_meter, scout, profiler_sources, activity_analyzer) read
+metadata only and remain unaffected by the MinIO retention drop.
+
+## Open follow-up: LiteLLM `local-fast` callback capture
+
+After the litellm restart, 30 sequential `local-fast` smoke-test calls
+returned successful responses but 0 of them landed in Langfuse via the
+callback (expected ~3 at SAMPLE_RATE=0.1). Cloud routes (claude/gemini)
+were verified working pre-restart (entries from 17:01-17:02). Possible
+causes:
+
+- LiteLLM langfuse callback may have a cold-start window after restart
+- Sample rate logic may behave differently for openai-compatible local
+  routes vs anthropic/gemini-native routes
+- Backlog drain at langfuse-worker may be silently dropping new GEN events
+
+Worth a separate diagnostic. Not blocking the lever rollout.
+
 ## Recommendations
 
 - **Shipped in this PR:** added `langfuse` to LiteLLM
