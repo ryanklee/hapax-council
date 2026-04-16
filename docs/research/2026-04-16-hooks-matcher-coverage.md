@@ -53,7 +53,7 @@ Each Claude Code PreToolUse hook's matcher + gated scope.
       "hooks": [
         {
           "type": "command",
-          "command": "/home/hapax/projects/hapax-council/hooks/scripts/axiom-scan.sh"
+          "command": "$REPO_ROOT/hooks/scripts/axiom-scan.sh"
         }
       ]
     },
@@ -62,7 +62,7 @@ Each Claude Code PreToolUse hook's matcher + gated scope.
       "hooks": [
         {
           "type": "command",
-          "command": "/home/hapax/projects/hapax-council/hooks/scripts/axiom-commit-scan.sh"
+          "command": "$REPO_ROOT/hooks/scripts/axiom-commit-scan.sh"
         }
       ]
     },
@@ -71,7 +71,7 @@ Each Claude Code PreToolUse hook's matcher + gated scope.
       "hooks": [
         {
           "type": "command",
-          "command": "/home/hapax/projects/hapax-council/hooks/scripts/pip-guard.sh"
+          "command": "$REPO_ROOT/hooks/scripts/pip-guard.sh"
         }
       ]
     },
@@ -80,7 +80,7 @@ Each Claude Code PreToolUse hook's matcher + gated scope.
       "hooks": [
         {
           "type": "command",
-          "command": "/home/hapax/projects/hapax-council/hooks/scripts/no-stale-branches.sh"
+          "command": "$REPO_ROOT/hooks/scripts/no-stale-branches.sh"
         }
       ]
     },
@@ -89,7 +89,7 @@ Each Claude Code PreToolUse hook's matcher + gated scope.
       "hooks": [
         {
           "type": "command",
-          "command": "/home/hapax/projects/hapax-council/hooks/scripts/work-resolution-gate.sh"
+          "command": "$REPO_ROOT/hooks/scripts/work-resolution-gate.sh"
         }
       ]
     },
@@ -98,7 +98,7 @@ Each Claude Code PreToolUse hook's matcher + gated scope.
       "hooks": [
         {
           "type": "command",
-          "command": "/home/hapax/projects/hapax-council/hooks/scripts/registry-guard.sh"
+          "command": "$REPO_ROOT/hooks/scripts/registry-guard.sh"
         }
       ]
     },
