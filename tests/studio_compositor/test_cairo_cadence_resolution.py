@@ -1,0 +1,74 @@
+"""Perf pass 2026-04-17 — cairo source cadence now actually honors layout JSON.
+
+Before this, ``source.rate_hz`` on the Layout schema was parsed but
+silently ignored by ``SourceRegistry._construct_cairo_runner``; every
+cairo source ran at the 10 fps default regardless of what the layout
+declared. Rate-limited sources (legibility, hothouse chrome) were
+rendering 5-10× more often than intended, burning CPU for output
+nobody saw.
+
+These tests pin the new precedence order:
+  1. ``params.fps`` (explicit override)
+  2. ``source.rate_hz`` (layout JSON authoring slot)
+  3. 30 fps for ``update_cadence="always"``
+  4. 10 fps fallback
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from agents.studio_compositor.budget import BudgetTracker
+from agents.studio_compositor.source_registry import SourceRegistry
+from shared.compositor_model import SourceSchema
+
+
+@pytest.fixture
+def registry():
+    return SourceRegistry()
+
+
+@pytest.fixture
+def budget():
+    return BudgetTracker()
+
+
+def _cairo_source(**params):
+    return SourceSchema(
+        id=params.pop("id", "test_source"),
+        kind="cairo",
+        backend="cairo",
+        params={"class_name": "ActivityHeaderCairoSource", **params.pop("class_params", {})},
+        update_cadence=params.pop("update_cadence", "always"),
+        rate_hz=params.pop("rate_hz", None),
+    )
+
+
+def test_rate_hz_from_layout_honored(registry, budget):
+    source = _cairo_source(update_cadence="rate", rate_hz=2)
+    runner = registry.construct_backend(source, budget_tracker=budget)
+    assert runner._period == pytest.approx(0.5)
+
+
+def test_params_fps_takes_precedence(registry, budget):
+    source = _cairo_source(
+        update_cadence="rate",
+        rate_hz=2,
+        class_params={"fps": 6.0},
+    )
+    runner = registry.construct_backend(source, budget_tracker=budget)
+    assert runner._period == pytest.approx(1.0 / 6.0)
+
+
+def test_update_cadence_always_defaults_30fps(registry, budget):
+    source = _cairo_source(update_cadence="always")
+    runner = registry.construct_backend(source, budget_tracker=budget)
+    assert runner._period == pytest.approx(1.0 / 30.0)
+
+
+def test_legacy_default_10fps_when_no_hints(registry, budget):
+    # If a source is neither "always" nor sets rate_hz / params.fps,
+    # the fallback lands at 10 fps (the pre-perf-pass behavior).
+    source = _cairo_source(update_cadence="on_change")
+    runner = registry.construct_backend(source, budget_tracker=budget)
+    assert runner._period == pytest.approx(0.1)
