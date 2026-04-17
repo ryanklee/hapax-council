@@ -71,6 +71,12 @@ def list_classes() -> list[str]:
 def _register_builtins() -> None:
     from agents.studio_compositor.album_overlay import AlbumOverlayCairoSource
     from agents.studio_compositor.captions_source import CaptionsCairoSource
+    from agents.studio_compositor.legibility_sources import (
+        ActivityHeaderCairoSource,
+        ChatKeywordLegendCairoSource,
+        GroundingProvenanceTickerCairoSource,
+        StanceIndicatorCairoSource,
+    )
     from agents.studio_compositor.research_marker_overlay import ResearchMarkerOverlay
     from agents.studio_compositor.sierpinski_renderer import SierpinskiCairoSource
     from agents.studio_compositor.stream_overlay import StreamOverlayCairoSource
@@ -83,6 +89,15 @@ def _register_builtins() -> None:
     # so the class is declarable from Layout JSON; operator decides when
     # to add a captions surface.
     register("CaptionsCairoSource", CaptionsCairoSource)
+    # Phase 4 legibility surfaces — volitional-director epic (PR #1017 §3.5).
+    # Make the directorial intent visible to viewers on every frame.
+    register("ActivityHeaderCairoSource", ActivityHeaderCairoSource)
+    register("StanceIndicatorCairoSource", StanceIndicatorCairoSource)
+    register("ChatKeywordLegendCairoSource", ChatKeywordLegendCairoSource)
+    register(
+        "GroundingProvenanceTickerCairoSource",
+        GroundingProvenanceTickerCairoSource,
+    )
     # Post-epic layout fix: StreamOverlayCairoSource renders the
     # preset/viewers/chat-activity three-line status strip, anchored
     # to the bottom-right of whatever canvas it is drawn into. It
