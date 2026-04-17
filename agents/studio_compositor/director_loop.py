@@ -818,6 +818,28 @@ class DirectorLoop:
         except Exception:
             pass
 
+        # ─── Layer 1b: Structured perceptual field (Phase 2 of the
+        # volitional-director epic). Every existing classifier/detector
+        # output is exposed here as first-class JSON so the grounded LLM
+        # can ground moves in specific perceptual evidence. Non-fatal on
+        # read error.
+        try:
+            from shared.perceptual_field import build_perceptual_field
+
+            pfield = build_perceptual_field(recent_reactions=list(self._reaction_history[-8:]))
+            parts.append("")
+            parts.append("## Perceptual Field")
+            parts.append(
+                "Grounded JSON of current environmental signals — ground "
+                "your choices in the specific fields below, not in abstract "
+                "mood. Keys with null values are intentionally absent."
+            )
+            parts.append("```json")
+            parts.append(pfield.model_dump_json(indent=2, exclude_none=True))
+            parts.append("```")
+        except Exception:
+            log.debug("PerceptualField build failed", exc_info=True)
+
         # ─── Layer 2: System state (TOON ~150 tokens, 40% savings) ─
         try:
             from shared.context import ContextAssembler

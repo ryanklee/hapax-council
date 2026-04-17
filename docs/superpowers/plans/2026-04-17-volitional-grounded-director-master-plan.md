@@ -74,4 +74,5 @@ Audit fixes land before Phase 1's first commit.
 - 2026-04-17 (alpha) — master plan created.
 - 2026-04-17 (alpha) — Phase 0 shipped (commit 2377fee66, BGRA fix).
 - 2026-04-17 (alpha) — self-audit run; 5 fixes applied (narrative-state.json for twitch, overlay-alpha-overrides + hero-camera-override + recent-recruitment SHM files explicit, preset_family_selector.py named, condition_id reader doc, DMN impingement cross-consumption risk flagged in spec §13).
-- *(phases 1-9 ship here)*
+- 2026-04-17 (alpha) — Phase 1 shipped (DirectorIntent + wiring, 2 commits, 31 tests). Legacy flag `HAPAX_DIRECTOR_MODEL_LEGACY=1` works; JSONL + narrative-state.json writing on every director tick.
+- *(phases 2-9 ship here)*
