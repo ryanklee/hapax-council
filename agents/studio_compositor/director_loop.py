@@ -23,7 +23,9 @@ from pathlib import Path
 from agents.studio_compositor import metrics
 from agents.studio_compositor.audio_control import SlotAudioControl
 from agents.studio_compositor.tts_client import DaimonionTtsClient
+from shared.director_intent import DirectorIntent
 from shared.persona_prompt_composer import compose_persona_prompt
+from shared.stimmung import Stance
 
 
 def _persona_legacy_mode() -> bool:
@@ -31,6 +33,84 @@ def _persona_legacy_mode() -> bool:
     hard-coded identity block in the director unified prompt."""
     value = os.environ.get("HAPAX_PERSONA_LEGACY", "").strip().lower()
     return value in {"1", "true", "yes", "on"}
+
+
+def _director_model_legacy_mode() -> bool:
+    """True when HAPAX_DIRECTOR_MODEL_LEGACY is set — reverts the director
+    output path to the pre-volitional-director {activity, react} shape.
+    Rollback flag for the volitional-grounded-director epic (PR #1017,
+    spec 2026-04-17-volitional-grounded-director-design.md §9)."""
+    value = os.environ.get("HAPAX_DIRECTOR_MODEL_LEGACY", "").strip().lower()
+    return value in {"1", "true", "yes", "on"}
+
+
+# Where the director publishes its per-tick intent for downstream consumers.
+_DIRECTOR_INTENT_JSONL = Path(
+    os.path.expanduser("~/hapax-state/stream-experiment/director-intent.jsonl")
+)
+_NARRATIVE_STATE_PATH = Path("/dev/shm/hapax-director/narrative-state.json")
+
+
+def _parse_intent_from_llm(raw: str, fallback_activity: str = "react") -> DirectorIntent:
+    """Parse an LLM response into a DirectorIntent.
+
+    Handles three shapes:
+    - Legacy ``{"activity": "...", "react": "..."}`` — construct a minimal
+      DirectorIntent with stance=NOMINAL and empty impingements.
+    - Full ``DirectorIntent``-shaped JSON — validated via Pydantic.
+    - Malformed / non-JSON — returns a silence fallback to let the loop continue.
+    """
+    text = raw.strip()
+    if not text:
+        return DirectorIntent(activity="silence", stance=Stance.NOMINAL, narrative_text="")
+    try:
+        obj = json.loads(text) if text.startswith("{") else None
+    except (json.JSONDecodeError, TypeError):
+        return DirectorIntent(activity="silence", stance=Stance.NOMINAL, narrative_text="")
+    if not isinstance(obj, dict):
+        return DirectorIntent(activity="silence", stance=Stance.NOMINAL, narrative_text="")
+    # If the response looks like a full DirectorIntent, validate it.
+    if "stance" in obj or "compositional_impingements" in obj:
+        try:
+            return DirectorIntent.model_validate(obj)
+        except Exception:
+            pass
+    # Fall back to legacy shape.
+    activity = obj.get("activity") or fallback_activity
+    narrative = obj.get("react") or ""
+    try:
+        return DirectorIntent(activity=activity, stance=Stance.NOMINAL, narrative_text=narrative)
+    except Exception:
+        return DirectorIntent(activity=fallback_activity, stance=Stance.NOMINAL, narrative_text="")
+
+
+def _emit_intent_artifacts(intent: DirectorIntent, condition_id: str) -> None:
+    """Write the intent to JSONL + the narrative-state SHM file.
+
+    Non-fatal: any IO error is logged but does not block the director loop.
+    """
+    try:
+        _DIRECTOR_INTENT_JSONL.parent.mkdir(parents=True, exist_ok=True)
+        payload = intent.model_dump_for_jsonl()
+        payload["condition_id"] = condition_id
+        payload["emitted_at"] = time.time()
+        with _DIRECTOR_INTENT_JSONL.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(payload) + "\n")
+    except Exception:
+        log.warning("director-intent JSONL write failed", exc_info=True)
+    try:
+        _NARRATIVE_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        state = {
+            "stance": str(intent.stance),
+            "activity": intent.activity,
+            "last_tick_ts": time.time(),
+            "condition_id": condition_id,
+        }
+        tmp = _NARRATIVE_STATE_PATH.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(state), encoding="utf-8")
+        tmp.replace(_NARRATIVE_STATE_PATH)
+    except Exception:
+        log.warning("narrative-state.json write failed", exc_info=True)
 
 
 def _default_tts_socket_path() -> Path:
@@ -506,16 +586,16 @@ class DirectorLoop:
                     time.sleep(1.0)
                     continue
 
-                # Parse activity choice
-                activity = "react"
-                text = result
-                try:
-                    obj = json.loads(result) if result.startswith("{") else None
-                    if obj:
-                        activity = obj.get("activity", "react")
-                        text = obj.get("react", "")
-                except (json.JSONDecodeError, TypeError):
-                    pass
+                # Phase-1: parse into DirectorIntent (legacy-shape-tolerant).
+                # HAPAX_DIRECTOR_MODEL_LEGACY bypasses the richer path —
+                # behavior is identical to pre-epic except for the extra
+                # JSONL + narrative-state emission, which is cheap and
+                # strictly additive.
+                intent = _parse_intent_from_llm(result, fallback_activity="react")
+                activity = intent.activity
+                text = intent.narrative_text
+                if not _director_model_legacy_mode():
+                    _emit_intent_artifacts(intent, condition_id=_read_research_marker() or "none")
 
                 # Handle activity
                 if activity == "silence" or not text:
