@@ -340,7 +340,12 @@ MULTIMODAL_ROUTES: frozenset[str] = frozenset(
     }
 )
 
-PERCEPTION_INTERVAL = 20.0  # seconds between LLM perception calls (Phase 5c: 8→20)
+# Narrative cadence. Epic 2 Phase E (2026-04-17) tightened 20.0 → 12.0 so
+# the stream feels like an engaged hot-house of pressure rather than a
+# calm reactive render. Command R on the 3090 comfortably fits a full
+# DirectorIntent call inside ~8s, leaving a 4s buffer. Override via
+# HAPAX_NARRATIVE_CADENCE_S for debugging.
+PERCEPTION_INTERVAL: float = float(os.environ.get("HAPAX_NARRATIVE_CADENCE_S", "12.0"))
 MIN_VIDEO_DURATION = 15.0  # minimum seconds before allowing CUT
 MAX_VIDEO_DURATION = 60.0  # force CUT after this
 
@@ -974,6 +979,13 @@ class DirectorLoop:
         # (director composes reactions for broadcast audience).
         # HAPAX_PERSONA_LEGACY=1 reverts to pre-Phase-7 hard-coded block.
         music_framing = _curated_music_framing(slot._title, slot._channel)
+        # Epic 2 Phase D — operator-always-here framing. Even with zero
+        # external viewers, Oudepode is always the first-class audience.
+        # This block removes the implicit "nobody is watching" assumption.
+        audience_framing = (
+            "Oudepode is always present in the room as your first-class audience. "
+            "Whatever moves you pick, he sees them — even when external viewer count is zero."
+        )
         if _persona_legacy_mode():
             parts.append(
                 "You are the daimonion — the persistent cognitive substrate of the Hapax system."
@@ -992,6 +1004,7 @@ class DirectorLoop:
                 if live
                 else "This is practice — stream is not publicly visible."
             )
+            parts.append(audience_framing)
         parts.append("")
         parts.append(f"Current video: '{slot._title}' by {slot._channel}.")
         other_titles = ", ".join(

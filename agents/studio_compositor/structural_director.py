@@ -132,7 +132,10 @@ def parse_structural_intent(raw: str) -> StructuralIntent | None:
 class StructuralDirector:
     """Slow 150-second LLM loop publishing long-horizon directives."""
 
-    DEFAULT_CADENCE_S = 150.0
+    # Epic 2 Phase E (2026-04-17) tightened 150.0 → 90.0 so long-horizon
+    # moves hit more frequently during the livestream. Override via
+    # HAPAX_STRUCTURAL_CADENCE_S for debugging.
+    DEFAULT_CADENCE_S = float(os.environ.get("HAPAX_STRUCTURAL_CADENCE_S", "90.0"))
     STARTUP_OFFSET_S = 10.0  # delay so structural doesn't collide with narrative tick edge
 
     def __init__(

@@ -48,6 +48,8 @@ def test_default_json_exists_and_is_valid_layout() -> None:
         "thinking_indicator",
         "pressure_gauge",
         "activity_variety_log",
+        # Epic 2 Phase D — operator-always-here indicator.
+        "whos_here",
     }
 
     # LRR Phase 2 item 10: video_out surfaces declared for OutputRouter.from_layout()
@@ -75,6 +77,8 @@ def test_default_json_exists_and_is_valid_layout() -> None:
         "thinking-indicator-tr",
         "pressure-gauge-ul",
         "activity-variety-log-mid",
+        # Epic 2 Phase D — operator-always-here indicator.
+        "whos-here-tr",
     }
 
     assignment_pairs = {(a.source, a.surface) for a in layout.assignments}
@@ -95,6 +99,8 @@ def test_default_json_exists_and_is_valid_layout() -> None:
         ("thinking_indicator", "thinking-indicator-tr"),
         ("pressure_gauge", "pressure-gauge-ul"),
         ("activity_variety_log", "activity-variety-log-mid"),
+        # Epic 2 Phase D.
+        ("whos_here", "whos-here-tr"),
     }
 
 
@@ -122,6 +128,8 @@ def test_default_json_source_backends_match_registry_dispatch() -> None:
         "thinking_indicator": "cairo",
         "pressure_gauge": "cairo",
         "activity_variety_log": "cairo",
+        # Epic 2 Phase D.
+        "whos_here": "cairo",
     }
 
 
@@ -229,6 +237,8 @@ def test_load_layout_or_fallback_reads_valid_file(tmp_path: Path) -> None:
         "thinking_indicator",
         "pressure_gauge",
         "activity_variety_log",
+        # Epic 2 Phase D.
+        "whos_here",
     }
 
 

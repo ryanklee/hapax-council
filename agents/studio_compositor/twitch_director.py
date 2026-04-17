@@ -73,6 +73,12 @@ def _read_narrative_state() -> dict:
     return {}
 
 
+_SIGNIFICANT_MAGNITUDE = 0.35  # signals above this count toward "pressure"
+_PRESSURE_FORCE_THRESHOLD = 6  # N active signals → force a compositional move
+_IDLE_VARIATION_CADENCE_S = 12.0  # gentle overlay emphasis when nothing else fires
+_CHAT_RECENT_PATH = Path("/dev/shm/hapax-compositor/chat-recent.json")
+
+
 class TwitchDirector:
     """Run deterministic compositional modulations on a short cadence."""
 
@@ -82,6 +88,9 @@ class TwitchDirector:
         self._thread: threading.Thread | None = None
         self._last_beat: float | None = None
         self._away_since: float | None = None
+        self._last_hand_zone: str | None = None
+        self._last_idle_emission: float = 0.0
+        self._last_chat_count: int = 0
 
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
@@ -153,7 +162,82 @@ class TwitchDirector:
             if self._emit_if_cool("overlay.dim.all-chrome"):
                 dispatched.append("overlay.dim.all-chrome")
 
+        # Epic 2 Phase E — hand-zone cycling: emit a camera.hero-biased
+        # preset move once per hand-zone change. Overhead hand-zone is
+        # the authoritative grounding signal for what the operator is
+        # physically doing.
+        hand_zone = field.ir.ir_hand_zone
+        if hand_zone and hand_zone != self._last_hand_zone:
+            self._last_hand_zone = hand_zone
+            if self._emit_if_cool(
+                f"preset.bias.hand-zone-{hand_zone}",
+                family="fx.family.audio-reactive",
+            ):
+                dispatched.append(f"fx.family.audio-reactive(zone:{hand_zone})")
+
+        # Epic 2 Phase E — chat-arrival pulse: on new chat message,
+        # foreground the captions overlay regardless of other state so
+        # viewers feel their messages land.
+        try:
+            if _CHAT_RECENT_PATH.exists():
+                raw = json.loads(_CHAT_RECENT_PATH.read_text(encoding="utf-8"))
+                count = len(raw) if isinstance(raw, list) else 0
+                if count > self._last_chat_count:
+                    self._last_chat_count = count
+                    if self._emit_if_cool(
+                        "overlay.foreground.captions",
+                        family="overlay.foreground.captions",
+                    ):
+                        dispatched.append("overlay.foreground.captions(chat)")
+        except Exception:
+            log.debug("chat-recent pulse failed", exc_info=True)
+
+        # Epic 2 Phase E — pressure forcing: if many signals are active
+        # simultaneously, force a compositional impingement so the
+        # narrative director doesn't stall the stream visually.
+        active = self._count_active_signals(field)
+        if active >= _PRESSURE_FORCE_THRESHOLD:
+            if self._emit_if_cool(
+                "preset.bias.pressure-discharge",
+                family="fx.family.audio-reactive",
+            ):
+                dispatched.append("fx.family.audio-reactive(pressure)")
+
+        # Epic 2 Phase E — idle variation: if nothing else fired, emit a
+        # gentle overlay emphasis every ~12s so the surface never looks
+        # static. Not random: alternates foreground/dim targets.
+        now = time.time()
+        if not dispatched and now - self._last_idle_emission > _IDLE_VARIATION_CADENCE_S:
+            self._last_idle_emission = now
+            target = "overlay.foreground.grounding-ticker"
+            if self._emit_if_cool(target, family=target):
+                dispatched.append(target)
+
         return dispatched
+
+    def _count_active_signals(self, field) -> int:
+        active = 0
+        try:
+            audio = field.audio.contact_mic.desk_energy or 0.0
+            if audio >= _SIGNIFICANT_MAGNITUDE:
+                active += 1
+            if field.audio.midi.transport_state == "PLAYING":
+                active += 1
+            if field.ir.ir_hand_zone not in (None, ""):
+                active += 1
+            if field.ir.ir_hand_activity and field.ir.ir_hand_activity >= _SIGNIFICANT_MAGNITUDE:
+                active += 1
+            if field.chat.recent_message_count > 0:
+                active += 1
+            if field.album.confidence and field.album.confidence >= 0.5:
+                active += 1
+            if field.visual.detected_action and field.visual.detected_action != "idle":
+                active += 1
+            if field.presence.state == "PRESENT":
+                active += 1
+        except Exception:
+            log.debug("pressure signal count failed", exc_info=True)
+        return active
 
     def _emit_if_cool(self, signature: str, *, family: str | None = None) -> bool:
         """Dispatch if the family's minimum-dwell has elapsed.

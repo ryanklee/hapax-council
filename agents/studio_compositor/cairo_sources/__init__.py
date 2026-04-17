@@ -77,6 +77,7 @@ def _register_builtins() -> None:
         PressureGaugeCairoSource,
         RecruitmentCandidatePanelCairoSource,
         ThinkingIndicatorCairoSource,
+        WhosHereCairoSource,
     )
     from agents.studio_compositor.legibility_sources import (
         ActivityHeaderCairoSource,
@@ -128,6 +129,8 @@ def _register_builtins() -> None:
     register("ThinkingIndicatorCairoSource", ThinkingIndicatorCairoSource)
     register("PressureGaugeCairoSource", PressureGaugeCairoSource)
     register("ActivityVarietyLogCairoSource", ActivityVarietyLogCairoSource)
+    # Epic 2 Phase D (2026-04-17) — operator-always-here audience framing.
+    register("WhosHereCairoSource", WhosHereCairoSource)
 
 
 _register_builtins()

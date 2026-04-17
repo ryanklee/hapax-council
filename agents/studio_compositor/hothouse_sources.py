@@ -429,10 +429,69 @@ class ActivityVarietyLogCairoSource(CairoSource):
             y += 14
 
 
+# ── 6. Who's here indicator (Epic 2 Phase D) ─────────────────────────────
+
+_PRESENCE_STATE = Path(os.path.expanduser("~/.cache/hapax-daimonion/presence-state.json"))
+
+
+class WhosHereCairoSource(CairoSource):
+    """Top-right mini-badge: operator presence + external viewer count.
+
+    Operator directive 2026-04-17: "even if there is no YouTube audience
+    *I* am here." The operator is always a first-class audience. This
+    surface makes that legible: a permanent "♦ operator" marker plus
+    the external-viewer count when non-zero.
+    """
+
+    def render(
+        self,
+        cr: cairo.Context,
+        canvas_w: int,
+        canvas_h: int,
+        t: float,
+        state: dict[str, Any],
+    ) -> None:
+        pal = _palette()
+        _draw_rounded_rect(cr, 0, 0, canvas_w, canvas_h, 6, pal["bg_overlay"])
+
+        presence = _safe_load_json(_PRESENCE_STATE)
+        presence_state = str(presence.get("state") or "PRESENT").upper()
+
+        external = 0
+        try:
+            stream_overlay = Path("/dev/shm/hapax-compositor/youtube-viewer-count.txt")
+            if stream_overlay.exists():
+                external = int(stream_overlay.read_text().strip() or "0")
+        except Exception:
+            external = 0
+
+        cr.select_font_face("DejaVu Sans Mono", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
+        cr.set_font_size(12)
+        # Operator is always here — but the color tells us whether presence
+        # engine confirms it (PRESENT) or not (UNCERTAIN / AWAY).
+        if presence_state == "PRESENT":
+            cr.set_source_rgba(*pal["accent_nominal"])
+        elif presence_state == "UNCERTAIN":
+            cr.set_source_rgba(*pal["accent_cautious"])
+        else:
+            cr.set_source_rgba(*pal["fg_primary"][:3], 0.6)
+        cr.move_to(8, 18)
+        cr.show_text(f"\u2666 operator ({presence_state.lower()})")
+
+        cr.set_source_rgba(*pal["fg_primary"])
+        cr.set_font_size(11)
+        cr.move_to(8, 34)
+        if external > 0:
+            cr.show_text(f"\u25cf {external} external (YouTube)")
+        else:
+            cr.show_text("\u25cb 0 external (solo)")
+
+
 __all__ = [
     "ActivityVarietyLogCairoSource",
     "ImpingementCascadeCairoSource",
     "PressureGaugeCairoSource",
     "RecruitmentCandidatePanelCairoSource",
     "ThinkingIndicatorCairoSource",
+    "WhosHereCairoSource",
 ]

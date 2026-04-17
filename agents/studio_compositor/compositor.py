@@ -210,6 +210,17 @@ _FALLBACK_LAYOUT = Layout(
                 "natural_h": 140,
             },
         ),
+        # Epic 2 Phase D (2026-04-17) — operator-always-here indicator.
+        SourceSchema(
+            id="whos_here",
+            kind="cairo",
+            backend="cairo",
+            params={
+                "class_name": "WhosHereCairoSource",
+                "natural_w": 230,
+                "natural_h": 46,
+            },
+        ),
     ],
     surfaces=[
         SurfaceSchema(
@@ -309,6 +320,12 @@ _FALLBACK_LAYOUT = Layout(
             geometry=SurfaceGeometry(kind="rect", x=440, y=540, w=400, h=140),
             z_order=24,
         ),
+        # Epic 2 Phase D — operator-always-here, top-center-right.
+        SurfaceSchema(
+            id="whos-here-tr",
+            geometry=SurfaceGeometry(kind="rect", x=1460, y=20, w=150, h=46),
+            z_order=26,
+        ),
     ],
     assignments=[
         Assignment(source="token_pole", surface="pip-ul"),
@@ -339,6 +356,8 @@ _FALLBACK_LAYOUT = Layout(
             surface="activity-variety-log-mid",
             opacity=0.90,
         ),
+        # Epic 2 Phase D assignment.
+        Assignment(source="whos_here", surface="whos-here-tr", opacity=0.92),
     ],
 )
 

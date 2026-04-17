@@ -73,6 +73,7 @@ class TestStartLayoutOnly:
             "thinking_indicator",
             "pressure_gauge",
             "activity_variety_log",
+            "whos_here",
         }
         assert {s.id for s in layout.sources} == expected_ids
         assert set(compositor.source_registry.ids()) == expected_ids
@@ -101,6 +102,7 @@ class TestStartLayoutOnly:
             "thinking_indicator",
             "pressure_gauge",
             "activity_variety_log",
+            "whos_here",
         }
 
     def test_broken_json_resolves_to_fallback(self, tmp_path: Path) -> None:
