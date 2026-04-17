@@ -7,12 +7,28 @@ from pathlib import Path
 
 from fastapi import APIRouter
 
+from logos.api.deps.stream_redaction import (
+    band_coherence,
+    band_energy,
+    band_tension,
+    is_publicly_visible,
+)
 from shared.eigenform_analysis import analyze_convergence
 from shared.sheaf_graph import build_scm_graph
 from shared.sheaf_health import compute_restriction_consistency
 from shared.topology_health import compute_topological_stability
 
 router = APIRouter(prefix="/api/stimmung", tags=["stimmung"])
+
+# LRR Phase 6 §4.A — when stream is publicly visible, only these three
+# operator-mental-state dimensions survive the redaction (banded into
+# categorical labels). The remaining 8 dims are full-fidelity numeric
+# values that read as biometric/cognitive surveillance on a broadcast.
+_BROADCAST_SAFE_BANDED_DIMS: dict[str, callable] = {
+    "operator_energy": band_energy,
+    "physiological_coherence": band_coherence,
+    "operator_stress": band_tension,
+}
 
 _SHM_STATE = Path("/dev/shm/hapax-stimmung/state.json")
 
@@ -57,7 +73,13 @@ def _build_dimensions(raw: dict) -> dict[str, dict]:
 
 @router.get("")
 async def get_stimmung() -> dict:
-    """Return structured stimmung state from /dev/shm/hapax-stimmung/state.json."""
+    """Return structured stimmung state from /dev/shm/hapax-stimmung/state.json.
+
+    LRR Phase 6 §4.A: when stream is publicly visible, replaces the 11
+    numeric dimension values with categorical bands for energy/coherence/
+    tension and omits the other 8 dimensions entirely. ``overall_stance``
+    is categorical and broadcast-safe as-is.
+    """
     raw = _read_json(_SHM_STATE)
     if raw is None:
         return {"overall_stance": "unknown", "dimensions": {}, "timestamp": 0}
@@ -66,21 +88,36 @@ async def get_stimmung() -> dict:
     overall_stance = raw.get("overall_stance", "unknown")
     timestamp = raw.get("timestamp", 0)
 
+    if is_publicly_visible():
+        banded: dict[str, dict] = {}
+        for dim_name, band_fn in _BROADCAST_SAFE_BANDED_DIMS.items():
+            dim_data = dimensions.get(dim_name)
+            if dim_data is None:
+                continue
+            label = band_fn(dim_data.get("value"))
+            banded[dim_name] = {
+                "band": label,
+                "trend": dim_data.get("trend", "stable"),
+                "freshness_s": dim_data.get("freshness_s", 0.0),
+            }
+        dimensions = banded
+
     response: dict = {
         "dimensions": dimensions,
         "overall_stance": overall_stance,
         "timestamp": timestamp,
     }
 
-    try:
-        response["sheaf_health"] = compute_restriction_consistency()
-        response["topology"] = compute_topological_stability(build_scm_graph())
-    except Exception:
-        pass
+    if not is_publicly_visible():
+        try:
+            response["sheaf_health"] = compute_restriction_consistency()
+            response["topology"] = compute_topological_stability(build_scm_graph())
+        except Exception:
+            pass
 
-    try:
-        response["eigenform"] = analyze_convergence()
-    except Exception:
-        response["eigenform"] = {"error": "analysis_failed"}
+        try:
+            response["eigenform"] = analyze_convergence()
+        except Exception:
+            response["eigenform"] = {"error": "analysis_failed"}
 
     return response
