@@ -76,7 +76,26 @@ Audit fixes land before Phase 1's first commit.
 - 2026-04-17 (alpha) — self-audit run; 5 fixes applied (narrative-state.json for twitch, overlay-alpha-overrides + hero-camera-override + recent-recruitment SHM files explicit, preset_family_selector.py named, condition_id reader doc, DMN impingement cross-consumption risk flagged in spec §13).
 - 2026-04-17 (alpha) — Phase 1 shipped (DirectorIntent + wiring, 2 commits, 31 tests). Legacy flag `HAPAX_DIRECTOR_MODEL_LEGACY=1` works; JSONL + narrative-state.json writing on every director tick.
 - 2026-04-17 (alpha) — Phase 2 shipped (PerceptualField + director-prompt integration, 1 commit, +14 tests). Every existing classifier/detector reaches the director as typed JSON inside `<Perceptual Field>` block. No new sensors.
-- *(phases 3-9 ship here)*
+- 2026-04-17 (alpha) — Phase 3a shipped (compositional catalog 26 capabilities + consumer with atomic SHM writes + 18 tests). `shared/compositional_affordances.py` + `agents/studio_compositor/compositional_consumer.py`.
+- 2026-04-17 (alpha) — Phase 3b shipped (Qdrant seeding script `scripts/seed-compositional-affordances.py`).
+- 2026-04-17 (alpha) — Phase 4 shipped (4 legibility Cairo sources — ActivityHeader, StanceIndicator, ChatKeywordLegend, GroundingProvenanceTicker — +11 tests, registered for Layout JSON).
+- 2026-04-17 (alpha) — Phase 5 shipped (TwitchDirector deterministic sub-5s modulation, +10 tests). StructuralDirector + narrative cadence 8s→20s deferred (documented in phase-5 plan).
+- 2026-04-17 (alpha) — Phase 6 shipped (consent live-egress predicate + `config/compositor-layouts/consent-safe.json` layout + 9 tests). Compositor state-reader hot-swap wiring deferred.
+- 2026-04-17 (alpha) — Phase 7 shipped (shared/director_observability.py Prometheus metrics + 6 tests, wired from director_loop).
+- 2026-04-17 (alpha) — Phase 8 shipped (DEVIATION-037 + cond-phase-a-volitional-director-001 declared; status = declared-not-yet-active pending Phase 9 rehearsal gate).
+- 2026-04-17 (alpha) — Phase 9 shipped (scripts/rehearsal-capture.sh for 30-min capture run; actual rehearsal + audit is manual follow-up).
+
+## Epic status
+
+**Core implementations:** all 9 phases shipped on branch `volitional-director` / PR #1017 across 15 commits. Total ~3200 lines of new code + 10+ test files + 10 spec/plan documents.
+
+**Deferred follow-ups** (noted in individual phase plans; ship when operator schedules):
+- Phase 3c: Director-side CompositionalImpingement emission to the pipeline. Requires operator decision on whether compositional affordances live in daimonion's pipeline or a new compositor-side pipeline instance.
+- Phase 5 StructuralDirector (150s cadence LLM) + narrative cadence shift 8s→20s. Deferred because cadence change is behaviourally load-bearing and wants a dedicated rehearsal window.
+- Phase 6 hot-swap wiring in `state.py::state_reader_loop`. The predicate + layout exist; wiring the trigger is ~5 lines once operator blesses the layout-swap mechanism.
+- Phase 9: actual 30-minute rehearsal run with `scripts/rehearsal-capture.sh`, followed by filling in the audit-report template and opening `cond-phase-a-volitional-director-001` via `scripts/research-registry.py open`.
+
+**Verification:** 75 new unit tests across the epic's shipped phases, all green. Two pre-existing unrelated failures in `test_compositor_wiring.py` (captions source on main's layout) are not introduced by this epic.
 
 ## Resumption notes (for the session that continues this epic)
 
