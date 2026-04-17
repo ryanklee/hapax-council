@@ -128,6 +128,19 @@ def get_embedding(text: str) -> list[float] | None:
         return None
 
 
+def _batch_embedder(texts: list[str]) -> list[list[float]]:
+    """Embed a batch of messages via nomic-embed for the structural analyzer.
+
+    Zero-vector fallback when ``get_embedding`` fails on any single text so
+    a single network hiccup doesn't nuke the whole batch.
+    """
+    out: list[list[float]] = []
+    for text in texts:
+        vec = get_embedding(text) if text else None
+        out.append(vec if vec else [0.0])
+    return out
+
+
 def cosine_similarity(a: list[float], b: list[float]) -> float:
     """Cosine similarity between two vectors."""
     dot = sum(x * y for x, y in zip(a, b, strict=False))
@@ -296,6 +309,40 @@ class ChatMonitor:
             if len(self.messages) < 5:
                 continue
             self._run_batch_analysis()
+            # LRR Phase 9 §3.1: publish compact structural signals to
+            # /dev/shm/hapax-chat-signals.json on the same cadence so
+            # stimmung / director-loop / attention-bid downstream readers
+            # can consume without re-running embeddings.
+            try:
+                self._publish_structural_signals()
+            except Exception:
+                log.debug("structural-signals publish failed", exc_info=True)
+
+    def _publish_structural_signals(self) -> None:
+        """Compute the Phase 9 §3.1 structural signals and publish them."""
+        try:
+            from agents.chat_monitor.sink import publish
+            from agents.chat_monitor.structural_analyzer import ChatMessage, analyze
+        except ImportError:
+            # Module not yet on sys.path (dev worktree mismatch) — silently skip.
+            log.debug("agents.chat_monitor not importable; skipping signals publish")
+            return
+
+        window = list(self.messages)[-50:]
+        if not window:
+            return
+
+        chat_messages = [
+            ChatMessage(
+                author_id=m.get("author_id") or "",
+                text=m.get("text") or "",
+                ts=float(m.get("timestamp") or 0.0),
+            )
+            for m in window
+        ]
+
+        signals = analyze(chat_messages, embedder=_batch_embedder)
+        publish(signals)
 
     def _run_batch_analysis(self) -> None:
         """Send recent chat window to LLM for structural analysis."""
