@@ -29,6 +29,12 @@ log = logging.getLogger(__name__)
 SNAPSHOT_DIR = Path("/dev/shm/hapax-compositor")
 RENDER_FPS = 10
 
+# LRR Phase 8 item 12: the ``active_when_activities`` field gates a zone on
+# whether any active research objective lists at least one of those
+# activities in its ``activities_that_advance`` list. When the gate is
+# unsatisfied the zone produces no output; the operator's other zones keep
+# rendering. Empty / missing field → always-on (preserves existing
+# behaviour for ``main`` + ``lyrics``).
 ZONES: list[dict[str, Any]] = [
     {
         "id": "main",
@@ -43,6 +49,22 @@ ZONES: list[dict[str, Any]] = [
         "randomize_position": True,
     },
     {
+        "id": "research",
+        "folder": "~/Documents/Personal/30-areas/stream-overlays/research/",
+        "suffixes": (".md", ".txt", ".ansi"),
+        "cycle_seconds": 20,
+        "x": 60,
+        "y": 240,
+        "max_width": 1000,
+        "font": "JetBrains Mono Bold 18",
+        "color": (0.90, 0.95, 1.00, 1.0),
+        "randomize_position": True,
+        # Only cycle research content when Hapax is in a study-oriented
+        # objective window; outside of that the audience doesn't need it
+        # and the main zone owns the space.
+        "active_when_activities": ("study",),
+    },
+    {
         "id": "lyrics",
         "file": "/dev/shm/hapax-compositor/track-lyrics.txt",
         "x": 1350,
@@ -54,6 +76,61 @@ ZONES: list[dict[str, Any]] = [
         "scroll_speed": 0.5,
     },
 ]
+
+
+# ── Objective-activity gate ─────────────────────────────────────────────────
+
+_ACTIVITY_CACHE_TTL_S = 5.0
+_DEFAULT_OBJECTIVES_DIR = Path.home() / "Documents" / "Personal" / "30-areas" / "hapax-objectives"
+
+
+def _read_active_objective_activities(
+    directory: Path | None = None,
+    *,
+    now_fn: Any = time.monotonic,
+) -> frozenset[str]:
+    """Return the union of ``activities_that_advance`` across active objectives.
+
+    Returns an empty set when the directory is missing or nothing is active —
+    the gate will then close for any zone with a non-empty
+    ``active_when_activities``.
+    """
+    directory = (directory or _DEFAULT_OBJECTIVES_DIR).expanduser()
+    if not directory.is_dir():
+        return frozenset()
+
+    activities: set[str] = set()
+    for md in directory.glob("*.md"):
+        raw = _read_frontmatter_block(md)
+        if raw is None:
+            continue
+        if raw.get("status") != "active":
+            continue
+        for a in raw.get("activities_that_advance", []) or []:
+            if isinstance(a, str) and a:
+                activities.add(a)
+    del now_fn  # reserved for future caching; monotonic clock is the seam
+    return frozenset(activities)
+
+
+def _read_frontmatter_block(path: Path) -> dict[str, Any] | None:
+    """Load the YAML frontmatter of an objective markdown file."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    if not text.startswith("---"):
+        return None
+    end = text.find("\n---", 3)
+    if end == -1:
+        return None
+    import yaml
+
+    try:
+        data = yaml.safe_load(text[3:end])
+    except yaml.YAMLError:
+        return None
+    return data if isinstance(data, dict) else None
 
 
 class OverlayZone:
@@ -86,9 +163,22 @@ class OverlayZone:
         self._folder_index: int = 0
         self._folder_last_scan: float = 0
         self._cycle_start: float = 0
+        # LRR Phase 8 item 12: optional activity-gate. Empty tuple = always on.
+        active_when = config.get("active_when_activities", ())
+        self._active_when_activities: tuple[str, ...] = tuple(active_when)
+        self._gate_last_check: float = 0
+        self._gate_open: bool = not self._active_when_activities
 
     def tick(self) -> None:
         now = time.monotonic()
+        if self._active_when_activities and now - self._gate_last_check > _ACTIVITY_CACHE_TTL_S:
+            active = _read_active_objective_activities()
+            self._gate_open = any(a in active for a in self._active_when_activities)
+            self._gate_last_check = now
+        if not self._gate_open:
+            self._pango_markup = ""
+            self._cached_surface = None
+            return
         if self.folder:
             self._tick_folder(now)
         elif self.file:
