@@ -57,20 +57,20 @@ class TestStartLayoutOnly:
 
         layout = compositor.layout_state.get()
         assert layout.name == "default"
-        assert {s.id for s in layout.sources} == {
+        expected_ids = {
             "token_pole",
             "album",
             "stream_overlay",
             "sierpinski",
             "reverie",
+            "activity_header",
+            "stance_indicator",
+            "chat_keyword_legend",
+            "grounding_provenance_ticker",
+            "captions",
         }
-        assert set(compositor.source_registry.ids()) == {
-            "token_pole",
-            "album",
-            "stream_overlay",
-            "sierpinski",
-            "reverie",
-        }
+        assert {s.id for s in layout.sources} == expected_ids
+        assert set(compositor.source_registry.ids()) == expected_ids
 
     def test_missing_layout_file_resolves_to_fallback(self, tmp_path: Path) -> None:
         """Missing on-disk layout must NOT stop the compositor from booting."""
@@ -86,6 +86,11 @@ class TestStartLayoutOnly:
             "stream_overlay",
             "sierpinski",
             "reverie",
+            "activity_header",
+            "stance_indicator",
+            "chat_keyword_legend",
+            "grounding_provenance_ticker",
+            "captions",
         }
 
     def test_broken_json_resolves_to_fallback(self, tmp_path: Path) -> None:
