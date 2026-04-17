@@ -181,6 +181,30 @@ def _emit_compositional_impingements(intent: DirectorIntent, condition_id: str) 
         log.warning("DMN compositional-impingement emission failed", exc_info=True)
 
 
+# JSONL rotation threshold. Rotate after ~5 MiB; keep the last 3 files.
+# Epic 2 Phase G4 — before this, director-intent.jsonl grew unbounded.
+_JSONL_ROTATE_BYTES = 5 * 1024 * 1024
+_JSONL_KEEP_ROTATED = 3
+
+
+def _maybe_rotate_jsonl(path: Path) -> None:
+    try:
+        if not path.exists() or path.stat().st_size < _JSONL_ROTATE_BYTES:
+            return
+        # Shift .N → .N+1 from the highest-numbered file down.
+        for n in range(_JSONL_KEEP_ROTATED, 0, -1):
+            older = path.with_suffix(f".jsonl.{n}")
+            newer = path.with_suffix(f".jsonl.{n + 1}")
+            if older.exists():
+                if n == _JSONL_KEEP_ROTATED:
+                    older.unlink(missing_ok=True)
+                else:
+                    older.rename(newer)
+        path.rename(path.with_suffix(".jsonl.1"))
+    except Exception:
+        log.warning("JSONL rotation failed", exc_info=True)
+
+
 def _emit_intent_artifacts(intent: DirectorIntent, condition_id: str) -> None:
     """Write the intent to JSONL + narrative-state SHM + Prometheus + DMN stream.
 
@@ -188,6 +212,7 @@ def _emit_intent_artifacts(intent: DirectorIntent, condition_id: str) -> None:
     """
     try:
         _DIRECTOR_INTENT_JSONL.parent.mkdir(parents=True, exist_ok=True)
+        _maybe_rotate_jsonl(_DIRECTOR_INTENT_JSONL)
         payload = intent.model_dump_for_jsonl()
         payload["condition_id"] = condition_id
         payload["emitted_at"] = time.time()

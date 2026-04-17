@@ -91,6 +91,9 @@ class TwitchDirector:
         self._last_hand_zone: str | None = None
         self._last_idle_emission: float = 0.0
         self._last_chat_count: int = 0
+        from agents.studio_compositor.color_resonance import ColorResonance
+
+        self._color_resonance = ColorResonance()
 
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
@@ -125,6 +128,17 @@ class TwitchDirector:
         """Run one twitch tick; return the list of capability-names dispatched."""
         field = build_perceptual_field()
         dispatched: list[str] = []
+
+        # Phase F2 — color-resonance publisher. Smooth the album cover's
+        # color temperature into /dev/shm/hapax-compositor/color-resonance.json
+        # so chrome readers can tint toward warmth when the record is
+        # warm-toned and cool when it's cool-toned.
+        try:
+            from agents.studio_compositor.color_resonance import publish
+
+            publish(self._color_resonance.tick())
+        except Exception:
+            log.debug("color resonance publish failed", exc_info=True)
 
         # MIDI-sync album pulse
         if field.audio.midi.transport_state == "PLAYING":
