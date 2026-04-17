@@ -71,6 +71,14 @@ def list_classes() -> list[str]:
 def _register_builtins() -> None:
     from agents.studio_compositor.album_overlay import AlbumOverlayCairoSource
     from agents.studio_compositor.captions_source import CaptionsCairoSource
+    from agents.studio_compositor.hothouse_sources import (
+        ActivityVarietyLogCairoSource,
+        ImpingementCascadeCairoSource,
+        PressureGaugeCairoSource,
+        RecruitmentCandidatePanelCairoSource,
+        ThinkingIndicatorCairoSource,
+        WhosHereCairoSource,
+    )
     from agents.studio_compositor.legibility_sources import (
         ActivityHeaderCairoSource,
         ChatKeywordLegendCairoSource,
@@ -112,6 +120,17 @@ def _register_builtins() -> None:
     # cairo sources). Registering here unblocks ``ResearchMarkerOverlay``
     # layout declarations without forcing a default-layout change.
     register("ResearchMarkerOverlay", ResearchMarkerOverlay)
+    # Epic 2 Phase C (2026-04-17) — hothouse pressure surfaces. Make the
+    # director's presence and recruitment pressure unavoidable on every
+    # frame. Operator directive: "evidence of ALL recruitment potential
+    # and impingement pressure".
+    register("ImpingementCascadeCairoSource", ImpingementCascadeCairoSource)
+    register("RecruitmentCandidatePanelCairoSource", RecruitmentCandidatePanelCairoSource)
+    register("ThinkingIndicatorCairoSource", ThinkingIndicatorCairoSource)
+    register("PressureGaugeCairoSource", PressureGaugeCairoSource)
+    register("ActivityVarietyLogCairoSource", ActivityVarietyLogCairoSource)
+    # Epic 2 Phase D (2026-04-17) — operator-always-here audience framing.
+    register("WhosHereCairoSource", WhosHereCairoSource)
 
 
 _register_builtins()

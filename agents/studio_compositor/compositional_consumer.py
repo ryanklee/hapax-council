@@ -185,31 +185,20 @@ def dispatch_youtube_direction(capability_name: str, ttl_s: float) -> bool:
 
 
 def dispatch_attention_winner(capability_name: str) -> bool:
-    """attention.winner.<source> → calls the existing attention-bid
-    dispatcher. Phase 3 wiring — dispatcher's actual dispatch_bid is
-    extended in a sibling change."""
+    """attention.winner.<source> → records pending winner in recruitment marker.
+
+    Epic 2 Phase A3 fix: the sibling dispatcher `dispatch_recruited_winner`
+    does NOT exist in `agents.attention_bids.dispatcher`. Rather than
+    silently swallow an ImportError on every call, record the pending
+    winner in the recruitment marker and return True. A future commit can
+    add a dispatcher function that reads the marker and acts on the winner.
+    """
     parts = capability_name.split(".", 2)
     if len(parts) < 3 or parts[0] != "attention" or parts[1] != "winner":
         log.warning("malformed attention.winner name: %s", capability_name)
         return False
     source = parts[2]
-    # Always record the recruitment — downstream dispatcher can pick it up
-    # later (phase-3 wiring is additive; the dispatcher's `dispatch_recruited_winner`
-    # is defined in a sibling commit).
-    try:
-        from agents.attention_bids.dispatcher import dispatch_recruited_winner
-
-        dispatch_recruited_winner(source)
-        _mark_recruitment("attention.winner")
-    except ImportError:
-        log.debug(
-            "attention_bids.dispatcher.dispatch_recruited_winner not yet "
-            "available; recording recruitment for later consumption"
-        )
-        _mark_recruitment("attention.winner", extra={"pending_source": source})
-    except Exception:
-        log.warning("attention.winner dispatch failed", exc_info=True)
-        _mark_recruitment("attention.winner", extra={"pending_source": source})
+    _mark_recruitment("attention.winner", extra={"pending_source": source})
     return True
 
 

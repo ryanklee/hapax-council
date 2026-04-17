@@ -19,12 +19,56 @@ functions become no-ops. Never raise into the director's tick path.
 from __future__ import annotations
 
 import logging
+from functools import lru_cache
 from typing import TYPE_CHECKING
+
+from pydantic import BaseModel
 
 if TYPE_CHECKING:
     from shared.director_intent import DirectorIntent
 
 log = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=1)
+def _grounding_signal_whitelist() -> frozenset[str]:
+    """Enumerate every dotted-path signal name reachable on PerceptualField.
+
+    The director's grounding_provenance is LLM-emitted free text; if we
+    forwarded it unbounded to a Prometheus label we would hit cardinality
+    explosion. This walks the Pydantic schema once (cached) and returns
+    the set of valid paths. Anything else is bucketed into "unrecognized".
+    """
+    from shared.perceptual_field import PerceptualField
+
+    paths: set[str] = set()
+
+    def _walk(model_cls: type[BaseModel], prefix: str) -> None:
+        for field_name, field_info in model_cls.model_fields.items():
+            dotted = f"{prefix}.{field_name}" if prefix else field_name
+            paths.add(dotted)
+            annotation = field_info.annotation
+            try:
+                if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+                    _walk(annotation, dotted)
+            except TypeError:
+                continue
+
+    _walk(PerceptualField, "")
+    return frozenset(paths)
+
+
+def canonicalize_grounding_signal(signal: str) -> str:
+    """Return `signal` if it matches a known PerceptualField path, else "unrecognized"."""
+    if not isinstance(signal, str):
+        return "unrecognized"
+    cleaned = signal.strip()
+    if not cleaned:
+        return "unrecognized"
+    if cleaned in _grounding_signal_whitelist():
+        return cleaned
+    return "unrecognized"
+
 
 _METRICS_AVAILABLE = False
 
@@ -84,7 +128,10 @@ def emit_director_intent(intent: DirectorIntent, condition_id: str) -> None:
             stance=str(intent.stance),
         ).inc()
         for signal in intent.grounding_provenance:
-            _grounding_signal_total.labels(condition_id=condition_id, signal_name=signal).inc()
+            _grounding_signal_total.labels(
+                condition_id=condition_id,
+                signal_name=canonicalize_grounding_signal(signal),
+            ).inc()
         for imp in intent.compositional_impingements:
             _compositional_impingement_total.labels(
                 condition_id=condition_id, intent_family=imp.intent_family
@@ -135,9 +182,10 @@ def emit_parse_failure(tier: str, condition_id: str) -> None:
 
 
 __all__ = [
+    "canonicalize_grounding_signal",
     "emit_director_intent",
-    "emit_twitch_move",
-    "emit_structural_intent",
-    "observe_llm_latency",
     "emit_parse_failure",
+    "emit_structural_intent",
+    "emit_twitch_move",
+    "observe_llm_latency",
 ]

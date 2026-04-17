@@ -44,7 +44,7 @@ SceneMode = Literal[
     "conversation",
     "idle-ambient",
     "mixed",
-    "research-foregrounded",
+    "research-primary",
 ]
 
 PresetFamilyHint = Literal[
@@ -132,7 +132,10 @@ def parse_structural_intent(raw: str) -> StructuralIntent | None:
 class StructuralDirector:
     """Slow 150-second LLM loop publishing long-horizon directives."""
 
-    DEFAULT_CADENCE_S = 150.0
+    # Epic 2 Phase E (2026-04-17) tightened 150.0 → 90.0 so long-horizon
+    # moves hit more frequently during the livestream. Override via
+    # HAPAX_STRUCTURAL_CADENCE_S for debugging.
+    DEFAULT_CADENCE_S = float(os.environ.get("HAPAX_STRUCTURAL_CADENCE_S", "90.0"))
     STARTUP_OFFSET_S = 10.0  # delay so structural doesn't collide with narrative tick edge
 
     def __init__(
@@ -221,7 +224,7 @@ class StructuralDirector:
         parts.append("## Response Format")
         parts.append(
             "{\n"
-            '  "scene_mode": "<desk-work|hardware-play|conversation|idle-ambient|mixed|research-foregrounded>",\n'
+            '  "scene_mode": "<desk-work|hardware-play|conversation|idle-ambient|mixed|research-primary>",\n'
             '  "preset_family_hint": "<audio-reactive|calm-textural|glitch-dense|warm-minimal>",\n'
             '  "long_horizon_direction": "<1-2 sentences>"\n'
             "}"
@@ -272,8 +275,15 @@ def _default_llm_fn(prompt: str) -> str:
         {"Content-Type": "application/json", "Authorization": f"Bearer {key}"},
     )
     started = time.time()
-    with urllib.request.urlopen(req, timeout=90) as resp:
-        data = json.loads(resp.read())
+    # Publish LLM-in-flight marker so the ThinkingIndicator Cairo source
+    # pulses while the structural tier is mid-call.
+    from agents.studio_compositor.director_loop import _LLMInFlight
+
+    with _LLMInFlight(
+        tier="structural", model=os.environ.get("HAPAX_STRUCTURAL_MODEL", "local-fast")
+    ):
+        with urllib.request.urlopen(req, timeout=90) as resp:
+            data = json.loads(resp.read())
     elapsed = time.time() - started
     try:
         from shared.director_observability import observe_llm_latency

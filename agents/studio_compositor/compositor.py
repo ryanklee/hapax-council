@@ -159,6 +159,68 @@ _FALLBACK_LAYOUT = Layout(
                 "natural_h": 40,
             },
         ),
+        # Epic 2 Phase C (2026-04-17) — hothouse pressure surfaces.
+        SourceSchema(
+            id="impingement_cascade",
+            kind="cairo",
+            backend="cairo",
+            params={
+                "class_name": "ImpingementCascadeCairoSource",
+                "natural_w": 480,
+                "natural_h": 360,
+            },
+        ),
+        SourceSchema(
+            id="recruitment_candidate_panel",
+            kind="cairo",
+            backend="cairo",
+            params={
+                "class_name": "RecruitmentCandidatePanelCairoSource",
+                "natural_w": 800,
+                "natural_h": 60,
+            },
+        ),
+        SourceSchema(
+            id="thinking_indicator",
+            kind="cairo",
+            backend="cairo",
+            params={
+                "class_name": "ThinkingIndicatorCairoSource",
+                "natural_w": 170,
+                "natural_h": 44,
+            },
+        ),
+        SourceSchema(
+            id="pressure_gauge",
+            kind="cairo",
+            backend="cairo",
+            params={
+                "class_name": "PressureGaugeCairoSource",
+                "natural_w": 300,
+                "natural_h": 52,
+            },
+        ),
+        SourceSchema(
+            id="activity_variety_log",
+            kind="cairo",
+            backend="cairo",
+            params={
+                "class_name": "ActivityVarietyLogCairoSource",
+                "natural_w": 400,
+                "natural_h": 140,
+            },
+        ),
+        # Epic 2 Phase D (2026-04-17) — operator-always-here indicator.
+        SourceSchema(
+            id="whos_here",
+            kind="cairo",
+            backend="cairo",
+            params={
+                "class_name": "WhosHereCairoSource",
+                "natural_w": 230,
+                "natural_h": 46,
+            },
+        ),
     ],
     surfaces=[
         SurfaceSchema(
@@ -232,6 +294,38 @@ _FALLBACK_LAYOUT = Layout(
             geometry=SurfaceGeometry(kind="rect", x=16, y=900, w=480, h=40),
             z_order=22,
         ),
+        # Epic 2 Phase C (2026-04-17) — hothouse pressure surfaces.
+        SurfaceSchema(
+            id="impingement-cascade-midright",
+            geometry=SurfaceGeometry(kind="rect", x=1260, y=400, w=480, h=360),
+            z_order=24,
+        ),
+        SurfaceSchema(
+            id="recruitment-candidate-top",
+            geometry=SurfaceGeometry(kind="rect", x=560, y=80, w=800, h=60),
+            z_order=24,
+        ),
+        SurfaceSchema(
+            id="thinking-indicator-tr",
+            geometry=SurfaceGeometry(kind="rect", x=1620, y=20, w=170, h=44),
+            z_order=26,
+        ),
+        SurfaceSchema(
+            id="pressure-gauge-ul",
+            geometry=SurfaceGeometry(kind="rect", x=20, y=336, w=300, h=52),
+            z_order=24,
+        ),
+        SurfaceSchema(
+            id="activity-variety-log-mid",
+            geometry=SurfaceGeometry(kind="rect", x=440, y=540, w=400, h=140),
+            z_order=24,
+        ),
+        # Epic 2 Phase D — operator-always-here, top-center-right.
+        SurfaceSchema(
+            id="whos-here-tr",
+            geometry=SurfaceGeometry(kind="rect", x=1460, y=20, w=150, h=46),
+            z_order=26,
+        ),
     ],
     assignments=[
         Assignment(source="token_pole", surface="pip-ul"),
@@ -244,6 +338,26 @@ _FALLBACK_LAYOUT = Layout(
         Assignment(source="stance_indicator", surface="stance-indicator-tr"),
         Assignment(source="chat_keyword_legend", surface="chat-legend-right"),
         Assignment(source="grounding_provenance_ticker", surface="grounding-ticker-bl"),
+        # Epic 2 Phase C hothouse assignments.
+        Assignment(
+            source="impingement_cascade",
+            surface="impingement-cascade-midright",
+            opacity=0.92,
+        ),
+        Assignment(
+            source="recruitment_candidate_panel",
+            surface="recruitment-candidate-top",
+            opacity=0.92,
+        ),
+        Assignment(source="thinking_indicator", surface="thinking-indicator-tr", opacity=0.92),
+        Assignment(source="pressure_gauge", surface="pressure-gauge-ul", opacity=0.92),
+        Assignment(
+            source="activity_variety_log",
+            surface="activity-variety-log-mid",
+            opacity=0.90,
+        ),
+        # Epic 2 Phase D assignment.
+        Assignment(source="whos_here", surface="whos-here-tr", opacity=0.92),
     ],
 )
 

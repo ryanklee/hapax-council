@@ -51,7 +51,13 @@ _DIRECTOR_INTENT_JSONL = Path(
 _NARRATIVE_STATE_PATH = Path("/dev/shm/hapax-director/narrative-state.json")
 
 
-def _parse_intent_from_llm(raw: str, fallback_activity: str = "react") -> DirectorIntent:
+def _parse_intent_from_llm(
+    raw: str,
+    fallback_activity: str = "react",
+    *,
+    condition_id: str = "unknown",
+    tier: str = "narrative",
+) -> DirectorIntent:
     """Parse an LLM response into a DirectorIntent.
 
     Handles three shapes:
@@ -59,32 +65,77 @@ def _parse_intent_from_llm(raw: str, fallback_activity: str = "react") -> Direct
       DirectorIntent with stance=NOMINAL and empty impingements.
     - Full ``DirectorIntent``-shaped JSON — validated via Pydantic.
     - Malformed / non-JSON — returns a silence fallback to let the loop continue.
+
+    Emits ``hapax_director_intent_parse_failure_total`` whenever JSON parsing
+    or full-intent validation fails; the rollback criterion
+    "≥5 parse failures per 10 min" depends on this counter.
     """
+    from shared.director_observability import emit_parse_failure
+
     text = raw.strip()
     if not text:
+        emit_parse_failure(tier=tier, condition_id=condition_id)
         return DirectorIntent(activity="silence", stance=Stance.NOMINAL, narrative_text="")
     try:
         obj = json.loads(text) if text.startswith("{") else None
     except (json.JSONDecodeError, TypeError):
+        emit_parse_failure(tier=tier, condition_id=condition_id)
         return DirectorIntent(activity="silence", stance=Stance.NOMINAL, narrative_text="")
     if not isinstance(obj, dict):
+        emit_parse_failure(tier=tier, condition_id=condition_id)
         return DirectorIntent(activity="silence", stance=Stance.NOMINAL, narrative_text="")
     # If the response looks like a full DirectorIntent, validate it.
     if "stance" in obj or "compositional_impingements" in obj:
         try:
             return DirectorIntent.model_validate(obj)
         except Exception:
-            pass
+            emit_parse_failure(tier=tier, condition_id=condition_id)
     # Fall back to legacy shape.
     activity = obj.get("activity") or fallback_activity
     narrative = obj.get("react") or ""
     try:
         return DirectorIntent(activity=activity, stance=Stance.NOMINAL, narrative_text=narrative)
     except Exception:
+        emit_parse_failure(tier=tier, condition_id=condition_id)
         return DirectorIntent(activity=fallback_activity, stance=Stance.NOMINAL, narrative_text="")
 
 
 _DMN_IMPINGEMENTS_FILE = Path("/dev/shm/hapax-dmn/impingements.jsonl")
+_LLM_IN_FLIGHT_MARKER = Path("/dev/shm/hapax-director/llm-in-flight.json")
+
+
+class _LLMInFlight:
+    """Context manager that publishes an LLM-in-flight marker for Cairo.
+
+    The ThinkingIndicator Cairo source watches this file; when it exists,
+    a sinusoidal pulse shows on-frame. On exit (success, timeout, or any
+    exception) the marker is removed so the indicator reflects reality.
+    """
+
+    def __init__(self, *, tier: str, model: str) -> None:
+        self.tier = tier
+        self.model = model
+
+    def __enter__(self) -> _LLMInFlight:
+        try:
+            _LLM_IN_FLIGHT_MARKER.parent.mkdir(parents=True, exist_ok=True)
+            payload = {
+                "tier": self.tier,
+                "model": self.model,
+                "started_at": time.time(),
+            }
+            tmp = _LLM_IN_FLIGHT_MARKER.with_suffix(".json.tmp")
+            tmp.write_text(json.dumps(payload), encoding="utf-8")
+            tmp.replace(_LLM_IN_FLIGHT_MARKER)
+        except Exception:
+            log.debug("llm-in-flight marker write failed", exc_info=True)
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        try:
+            _LLM_IN_FLIGHT_MARKER.unlink(missing_ok=True)
+        except Exception:
+            log.debug("llm-in-flight marker unlink failed", exc_info=True)
 
 
 def _emit_compositional_impingements(intent: DirectorIntent, condition_id: str) -> None:
@@ -130,6 +181,30 @@ def _emit_compositional_impingements(intent: DirectorIntent, condition_id: str) 
         log.warning("DMN compositional-impingement emission failed", exc_info=True)
 
 
+# JSONL rotation threshold. Rotate after ~5 MiB; keep the last 3 files.
+# Epic 2 Phase G4 — before this, director-intent.jsonl grew unbounded.
+_JSONL_ROTATE_BYTES = 5 * 1024 * 1024
+_JSONL_KEEP_ROTATED = 3
+
+
+def _maybe_rotate_jsonl(path: Path) -> None:
+    try:
+        if not path.exists() or path.stat().st_size < _JSONL_ROTATE_BYTES:
+            return
+        # Shift .N → .N+1 from the highest-numbered file down.
+        for n in range(_JSONL_KEEP_ROTATED, 0, -1):
+            older = path.with_suffix(f".jsonl.{n}")
+            newer = path.with_suffix(f".jsonl.{n + 1}")
+            if older.exists():
+                if n == _JSONL_KEEP_ROTATED:
+                    older.unlink(missing_ok=True)
+                else:
+                    older.rename(newer)
+        path.rename(path.with_suffix(".jsonl.1"))
+    except Exception:
+        log.warning("JSONL rotation failed", exc_info=True)
+
+
 def _emit_intent_artifacts(intent: DirectorIntent, condition_id: str) -> None:
     """Write the intent to JSONL + narrative-state SHM + Prometheus + DMN stream.
 
@@ -137,6 +212,7 @@ def _emit_intent_artifacts(intent: DirectorIntent, condition_id: str) -> None:
     """
     try:
         _DIRECTOR_INTENT_JSONL.parent.mkdir(parents=True, exist_ok=True)
+        _maybe_rotate_jsonl(_DIRECTOR_INTENT_JSONL)
         payload = intent.model_dump_for_jsonl()
         payload["condition_id"] = condition_id
         payload["emitted_at"] = time.time()
@@ -164,8 +240,13 @@ def _emit_intent_artifacts(intent: DirectorIntent, condition_id: str) -> None:
     except Exception:
         log.warning("narrative-state.json write failed", exc_info=True)
     # Phase 3c — emit compositional impingements so AffordancePipeline
-    # can recruit compositional capabilities.
-    _emit_compositional_impingements(intent, condition_id=condition_id)
+    # can recruit compositional capabilities. Gated by the legacy flag
+    # (A5): under HAPAX_DIRECTOR_MODEL_LEGACY=1 we still write JSONL +
+    # narrative-state + Prometheus above, but suppress the richer
+    # compositional feedback so the rollback is a true rollback of
+    # behavior, not of observability.
+    if not _director_model_legacy_mode():
+        _emit_compositional_impingements(intent, condition_id=condition_id)
 
 
 def _default_tts_socket_path() -> Path:
@@ -181,7 +262,15 @@ ALBUM_STATE_FILE = SHM_DIR / "album-state.json"
 FX_SNAPSHOT = SHM_DIR / "fx-snapshot.jpg"
 MEMORY_SNAPSHOT = SHM_DIR / "memory-snapshot.json"
 PLAYLIST_FILE = SHM_DIR / "playlist.json"
+# OPERATOR MUSIC TASTE — single source of truth.
+# This is Oudepode's hand-curated YouTube playlist. It is the only external
+# music source the director may pull from. No auto-recommendation, no
+# "you-might-also-like" fan-out, no algorithmic extension. If another source
+# needs to be added (e.g. a second curated playlist), add it here as a
+# tuple so the provenance of every slot is visually traceable on this line.
+# Operator directive 2026-04-17: "stick to my music taste".
 PLAYLIST_URL = "https://youtube.com/playlist?list=PL-4nvD1KwuH--sViEAFY2cHVmS6_B4CQ5"
+OPERATOR_CURATED_PLAYLIST_URLS: tuple[str, ...] = (PLAYLIST_URL,)
 
 
 def _load_playlist() -> list[dict]:
@@ -276,7 +365,12 @@ MULTIMODAL_ROUTES: frozenset[str] = frozenset(
     }
 )
 
-PERCEPTION_INTERVAL = 20.0  # seconds between LLM perception calls (Phase 5c: 8→20)
+# Narrative cadence. Epic 2 Phase E (2026-04-17) tightened 20.0 → 12.0 so
+# the stream feels like an engaged hot-house of pressure rather than a
+# calm reactive render. Command R on the 3090 comfortably fits a full
+# DirectorIntent call inside ~8s, leaving a 4s buffer. Override via
+# HAPAX_NARRATIVE_CADENCE_S for debugging.
+PERCEPTION_INTERVAL: float = float(os.environ.get("HAPAX_NARRATIVE_CADENCE_S", "12.0"))
 MIN_VIDEO_DURATION = 15.0  # minimum seconds before allowing CUT
 MAX_VIDEO_DURATION = 60.0  # force CUT after this
 
@@ -430,6 +524,52 @@ def _read_album_info() -> str:
     return "unknown"
 
 
+# Threshold: album-state confidence above which we treat vinyl as actually
+# playing. Below this (or if state is missing / stale), the prompt must not
+# claim vinyl is spinning — that's a hallucination the LLM will pick up on.
+_VINYL_CONFIDENCE_THRESHOLD = 0.5
+_VINYL_STATE_STALE_S = 300.0
+
+
+def _vinyl_is_playing() -> bool:
+    """True iff album-state.json reports a recent, high-confidence album.
+
+    album-identifier.py writes album-state.json when ACRCloud identifies the
+    vinyl that's currently playing. If the file is missing, stale, or
+    confidence is low, vinyl is not reliably playing and we must not frame
+    the livestream as "Oudepode is spinning vinyl".
+    """
+    try:
+        if not ALBUM_STATE_FILE.exists():
+            return False
+        age = time.time() - ALBUM_STATE_FILE.stat().st_mtime
+        if age > _VINYL_STATE_STALE_S:
+            return False
+        data = json.loads(ALBUM_STATE_FILE.read_text())
+        conf = float(data.get("confidence") or 0.0)
+        return conf >= _VINYL_CONFIDENCE_THRESHOLD
+    except Exception:
+        log.debug("vinyl-playing check failed", exc_info=True)
+        return False
+
+
+def _curated_music_framing(slot_title: str, slot_channel: str) -> str:
+    """One-line "what's providing music" framing — vinyl-first, YouTube fallback.
+
+    Operator directive 2026-04-17:
+      - Music featuring must work regardless of whether vinyl is playing.
+      - All music surfaces must come from Oudepode's curated taste (the
+        PLAYLIST_URL at module top), not from auto-recommendations.
+    """
+    if _vinyl_is_playing():
+        return f"Oudepode is spinning vinyl: {_read_album_info()}."
+    if slot_title:
+        # slot_channel is the YouTube channel — part of Oudepode's curated
+        # playlist so it's still "Oudepode's music taste".
+        return f"Music is playing from Oudepode's curated queue: '{slot_title}' by {slot_channel}."
+    return "No music is playing at the moment — the room is quiet."
+
+
 def _capture_snapshot_b64() -> str | None:
     """Read compositor fx-snapshot and return base64."""
     import base64
@@ -448,7 +588,9 @@ ACTIVITY_CAPABILITIES = (
     "\n"
     "- react: respond to the video content in the triangle display. What caught you?\n"
     "- chat: engage viewers in the livestream chat. Answer, respond, explain.\n"
-    "- vinyl: comment on the music. The record, the track, the production.\n"
+    "- music: comment on the music Oudepode has curated for the stream — either\n"
+    "  the vinyl he is playing (when the turntable line is present above) or the\n"
+    "  track from his curated YouTube queue. The record, the track, the production.\n"
     "- study: reflect on your own research. Clark & Brennan, phenomenology,\n"
     "  grounding theory. Think out loud about what you're learning.\n"
     "- observe: notice the composed surface. Shaders, triangle layout, visual effects.\n"
@@ -586,6 +728,46 @@ class DirectorLoop:
                 missing.append(s.slot_id)
         return missing
 
+    def _honor_youtube_direction(self) -> None:
+        """Read + act on youtube-direction.json written by compositional_consumer.
+
+        Epic 2 Phase B. Actions:
+        - ``advance-queue`` → rotate to the next active slot (mod len).
+        - ``cut-away`` → pause the active slot via its audio control.
+        - ``cut-to`` → alias for advance-queue for now (operator-intent
+          only, no target-URL resolution yet).
+
+        The file is unlinked after consumption so the direction fires
+        once and can be re-issued by the pipeline on the next tick.
+        """
+        direction_path = SHM_DIR / "youtube-direction.json"
+        if not direction_path.exists():
+            return
+        try:
+            data = json.loads(direction_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            direction_path.unlink(missing_ok=True)
+            return
+        action = str(data.get("action") or "")
+        ttl_s = float(data.get("ttl_s") or 0.0)
+        set_at = float(data.get("set_at") or 0.0)
+        # Stale directions ignored — the TTL has elapsed.
+        if ttl_s > 0 and time.time() - set_at > ttl_s:
+            direction_path.unlink(missing_ok=True)
+            return
+        log.info("youtube-direction: %s", action)
+        if action in ("advance-queue", "cut-to"):
+            new_slot = (self._active_slot + 1) % len(self._slots)
+            self._active_slot = new_slot
+        elif action == "cut-away":
+            # Leave slot as-is but mute its audio (the slot keeps playing
+            # so the camera still has content, just no sound).
+            try:
+                self._audio.set_volume(self._active_slot, 0.0)
+            except Exception:
+                log.debug("cut-away audio mute failed", exc_info=True)
+        direction_path.unlink(missing_ok=True)
+
     def _dispatch_cold_starts(self) -> list[int]:
         """Kick off playlist reloads for slots missing a frame file.
 
@@ -615,6 +797,16 @@ class DirectorLoop:
                     time.sleep(0.5)
                     continue
 
+                # Epic 2 Phase B — honor youtube-direction intents written by
+                # compositional_consumer when cam.hero etc. are recruited.
+                # The consumer writes to /dev/shm/hapax-compositor/
+                # youtube-direction.json; this call reads + acts once per
+                # direction and clears the file so directions don't loop.
+                try:
+                    self._honor_youtube_direction()
+                except Exception:
+                    log.debug("youtube-direction honor failed", exc_info=True)
+
                 # Check for finished videos — reload from playlist
                 for s in self._slots:
                     if s.check_finished():
@@ -642,15 +834,20 @@ class DirectorLoop:
                     continue
 
                 # Phase-1: parse into DirectorIntent (legacy-shape-tolerant).
-                # HAPAX_DIRECTOR_MODEL_LEGACY bypasses the richer path —
-                # behavior is identical to pre-epic except for the extra
-                # JSONL + narrative-state emission, which is cheap and
-                # strictly additive.
-                intent = _parse_intent_from_llm(result, fallback_activity="react")
+                # Observability-first (A5): JSONL + narrative-state + Prometheus
+                # emissions run regardless of HAPAX_DIRECTOR_MODEL_LEGACY. The
+                # legacy flag only suppresses compositional-impingement emission
+                # + prompt enrichment (see _emit_intent_artifacts).
+                condition_id = _read_research_marker() or "none"
+                intent = _parse_intent_from_llm(
+                    result,
+                    fallback_activity="react",
+                    condition_id=condition_id,
+                    tier="narrative",
+                )
                 activity = intent.activity
                 text = intent.narrative_text
-                if not _director_model_legacy_mode():
-                    _emit_intent_artifacts(intent, condition_id=_read_research_marker() or "none")
+                _emit_intent_artifacts(intent, condition_id=condition_id)
 
                 # Handle activity
                 if activity == "silence" or not text:
@@ -806,11 +1003,19 @@ class DirectorLoop:
         # not personification-coded prologue. Role is livestream-host
         # (director composes reactions for broadcast audience).
         # HAPAX_PERSONA_LEGACY=1 reverts to pre-Phase-7 hard-coded block.
+        music_framing = _curated_music_framing(slot._title, slot._channel)
+        # Epic 2 Phase D — operator-always-here framing. Even with zero
+        # external viewers, Oudepode is always the first-class audience.
+        # This block removes the implicit "nobody is watching" assumption.
+        audience_framing = (
+            "Oudepode is always present in the room as your first-class audience. "
+            "Whatever moves you pick, he sees them — even when external viewer count is zero."
+        )
         if _persona_legacy_mode():
             parts.append(
                 "You are the daimonion — the persistent cognitive substrate of the Hapax system."
             )
-            parts.append("This is Legomena Live. Oudepode is spinning vinyl.")
+            parts.append(f"This is Legomena Live. {music_framing}")
             parts.append("This is a live performance." if live else "This is practice.")
             parts.append("What you are: a system learning to achieve grounding.")
             parts.append("Every utterance is practice toward mutual understanding.")
@@ -818,12 +1023,13 @@ class DirectorLoop:
             parts.append(compose_persona_prompt(role_id="livestream-host"))
             parts.append("")
             parts.append("## Current situation")
-            parts.append("This is Legomena Live. Oudepode is spinning vinyl.")
+            parts.append(f"This is Legomena Live. {music_framing}")
             parts.append(
                 "This is a live performance."
                 if live
                 else "This is practice — stream is not publicly visible."
             )
+            parts.append(audience_framing)
         parts.append("")
         parts.append(f"Current video: '{slot._title}' by {slot._channel}.")
         other_titles = ", ".join(
@@ -831,7 +1037,8 @@ class DirectorLoop:
         )
         if other_titles:
             parts.append(f"Also in rotation: {other_titles}.")
-        parts.append(f"On the turntable: {album_info}.")
+        if _vinyl_is_playing():
+            parts.append(f"On the turntable: {album_info}.")
         parts.append(f"Time: {datetime.now().strftime('%H:%M')}.")
 
         # ─── Chat state ───────────────────────────────────────────
@@ -1138,7 +1345,11 @@ class DirectorLoop:
         )
 
         try:
-            with span_ctx as span, metrics_ctx as metrics_span:
+            with (
+                span_ctx as span,
+                metrics_ctx as metrics_span,
+                _LLMInFlight(tier="narrative", model=DIRECTOR_MODEL),
+            ):
                 req = urllib.request.Request(
                     LITELLM_URL,
                     body,

@@ -156,7 +156,24 @@ class SourceRegistry:
             source_obj = source_cls()
             natural_w = int(source.params.get("natural_w", 1920))
             natural_h = int(source.params.get("natural_h", 1080))
-            target_fps = float(source.params.get("fps", 10.0))
+            # Precedence for render cadence (perf pass 2026-04-17):
+            # 1. params.fps (explicit override at the source level)
+            # 2. source.rate_hz (layout JSON's ``rate_hz`` field — the
+            #    canonical authoring slot). Before this change
+            #    ``rate_hz`` was silently ignored and every cairo source
+            #    ran at 10 fps.
+            # 3. 30 fps for ``update_cadence=="always"`` (the hot sources
+            #    that actually animate).
+            # 4. 10 fps fallback.
+            params_fps = source.params.get("fps")
+            if params_fps is not None:
+                target_fps = float(params_fps)
+            elif source.rate_hz is not None:
+                target_fps = float(source.rate_hz)
+            elif source.update_cadence == "always":
+                target_fps = 30.0
+            else:
+                target_fps = 10.0
             return CairoSourceRunner(
                 source_id=source.id,
                 source=source_obj,

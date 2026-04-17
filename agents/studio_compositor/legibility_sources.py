@@ -76,6 +76,30 @@ def _read_working_mode() -> str:
     return "research"
 
 
+# Per-stream-mode accent hint (Phase F6). Drives the border color on
+# chrome surfaces so the current stream mode is legible at a glance.
+# Applied additively as a thin border on the rounded_rect background;
+# the base palette still comes from working-mode.
+_STREAM_MODE_COLOR: dict[str, tuple[float, float, float, float]] = {
+    "private": (0.522, 0.600, 0.702, 0.9),  # cool grey-blue
+    "public": (0.596, 0.591, 0.102, 0.9),  # gruvbox green
+    "public_research": (0.522, 0.601, 0.000, 0.9),  # solarized green
+    "fortress": (0.796, 0.294, 0.086, 0.9),  # red — most guarded
+    "off": (0.500, 0.500, 0.500, 0.7),  # neutral
+}
+
+
+def _stream_mode_accent() -> tuple[float, float, float, float] | None:
+    """Return the border accent color for the current stream mode, or None."""
+    try:
+        from shared.stream_mode import get_stream_mode
+
+        mode = str(get_stream_mode() or "off")
+    except Exception:
+        mode = "off"
+    return _STREAM_MODE_COLOR.get(mode)
+
+
 def _palette() -> dict:
     return _PALETTE[_read_working_mode()]
 
@@ -283,19 +307,34 @@ def _draw_rounded_rect(
     r: float,
     fill_rgba: tuple[float, float, float, float],
 ) -> None:
-    cr.new_path()
-    cr.move_to(x + r, y)
-    cr.line_to(x + w - r, y)
-    cr.arc(x + w - r, y + r, r, -1.5708, 0)
-    cr.line_to(x + w, y + h - r)
-    cr.arc(x + w - r, y + h - r, r, 0, 1.5708)
-    cr.line_to(x + r, y + h)
-    cr.arc(x + r, y + h - r, r, 1.5708, 3.1416)
-    cr.line_to(x, y + r)
-    cr.arc(x + r, y + r, r, 3.1416, 4.7124)
-    cr.close_path()
+    """Fill a rounded rectangle + paint a thin stream-mode accent border.
+
+    The border hints the current stream-mode (private/public/public_research/
+    fortress/off) in every chrome surface's outline — Phase F6.
+    """
+
+    def _build_path() -> None:
+        cr.new_path()
+        cr.move_to(x + r, y)
+        cr.line_to(x + w - r, y)
+        cr.arc(x + w - r, y + r, r, -1.5708, 0)
+        cr.line_to(x + w, y + h - r)
+        cr.arc(x + w - r, y + h - r, r, 0, 1.5708)
+        cr.line_to(x + r, y + h)
+        cr.arc(x + r, y + h - r, r, 1.5708, 3.1416)
+        cr.line_to(x, y + r)
+        cr.arc(x + r, y + r, r, 3.1416, 4.7124)
+        cr.close_path()
+
+    _build_path()
     cr.set_source_rgba(*fill_rgba)
     cr.fill()
+    border = _stream_mode_accent()
+    if border is not None:
+        _build_path()
+        cr.set_source_rgba(*border)
+        cr.set_line_width(1.5)
+        cr.stroke()
 
 
 # ── Registry registration ─────────────────────────────────────────────────

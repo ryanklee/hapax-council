@@ -1,6 +1,6 @@
 {
   "name": "default",
-  "description": "Default studio compositor layout \u2014 post-epic operator defaults. Reverie upper-right, Vitruvian Man (token_pole) upper-left, album lower-left, chat stats (stream_overlay) lower-right. These assignments are a starting point; Hapax content programming ultimately drives which sources feed which quadrants via the affordance pipeline + command registry. Phase 4/5 legibility surfaces added (activity_header, stance_indicator, chat_keyword_legend, grounding_provenance_ticker, captions_strip) per volitional-director epic \u00a73.5.",
+  "description": "Default studio compositor layout — post-epic operator defaults. Reverie upper-right, Vitruvian Man (token_pole) upper-left, album lower-left, chat stats (stream_overlay) lower-right. These assignments are a starting point; Hapax content programming ultimately drives which sources feed which quadrants via the affordance pipeline + command registry. Phase 4/5 legibility surfaces added (activity_header, stance_indicator, chat_keyword_legend, grounding_provenance_ticker, captions_strip) per volitional-director epic §3.5.",
   "sources": [
     {
       "id": "token_pole",
@@ -143,6 +143,102 @@
       "rate_hz": 5,
       "tags": [
         "legibility"
+      ]
+    },
+    {
+      "id": "impingement_cascade",
+      "kind": "cairo",
+      "backend": "cairo",
+      "params": {
+        "class_name": "ImpingementCascadeCairoSource",
+        "natural_w": 480,
+        "natural_h": 360
+      },
+      "update_cadence": "rate",
+      "rate_hz": 2,
+      "tags": [
+        "hothouse",
+        "pressure"
+      ]
+    },
+    {
+      "id": "recruitment_candidate_panel",
+      "kind": "cairo",
+      "backend": "cairo",
+      "params": {
+        "class_name": "RecruitmentCandidatePanelCairoSource",
+        "natural_w": 800,
+        "natural_h": 60
+      },
+      "update_cadence": "rate",
+      "rate_hz": 2,
+      "tags": [
+        "hothouse",
+        "authorship"
+      ]
+    },
+    {
+      "id": "thinking_indicator",
+      "kind": "cairo",
+      "backend": "cairo",
+      "params": {
+        "class_name": "ThinkingIndicatorCairoSource",
+        "natural_w": 170,
+        "natural_h": 44
+      },
+      "update_cadence": "rate",
+      "rate_hz": 6,
+      "tags": [
+        "hothouse",
+        "authorship"
+      ]
+    },
+    {
+      "id": "pressure_gauge",
+      "kind": "cairo",
+      "backend": "cairo",
+      "params": {
+        "class_name": "PressureGaugeCairoSource",
+        "natural_w": 300,
+        "natural_h": 52
+      },
+      "update_cadence": "rate",
+      "rate_hz": 2,
+      "tags": [
+        "hothouse",
+        "pressure"
+      ]
+    },
+    {
+      "id": "activity_variety_log",
+      "kind": "cairo",
+      "backend": "cairo",
+      "params": {
+        "class_name": "ActivityVarietyLogCairoSource",
+        "natural_w": 400,
+        "natural_h": 140
+      },
+      "update_cadence": "rate",
+      "rate_hz": 1,
+      "tags": [
+        "hothouse",
+        "authorship"
+      ]
+    },
+    {
+      "id": "whos_here",
+      "kind": "cairo",
+      "backend": "cairo",
+      "params": {
+        "class_name": "WhosHereCairoSource",
+        "natural_w": 230,
+        "natural_h": 46
+      },
+      "update_cadence": "rate",
+      "rate_hz": 1,
+      "tags": [
+        "hothouse",
+        "audience"
       ]
     }
   ],
@@ -344,6 +440,114 @@
       "blend_mode": "over",
       "z_order": 22,
       "update_cadence": "always"
+    },
+    {
+      "id": "impingement-cascade-midright",
+      "geometry": {
+        "kind": "rect",
+        "x": 1260,
+        "y": 400,
+        "w": 480,
+        "h": 360,
+        "mask": null,
+        "binding_name": null,
+        "target": null,
+        "render_target": null
+      },
+      "effect_chain": [],
+      "blend_mode": "over",
+      "z_order": 24,
+      "update_cadence": "rate"
+    },
+    {
+      "id": "recruitment-candidate-top",
+      "geometry": {
+        "kind": "rect",
+        "x": 560,
+        "y": 80,
+        "w": 800,
+        "h": 60,
+        "mask": null,
+        "binding_name": null,
+        "target": null,
+        "render_target": null
+      },
+      "effect_chain": [],
+      "blend_mode": "over",
+      "z_order": 24,
+      "update_cadence": "rate"
+    },
+    {
+      "id": "thinking-indicator-tr",
+      "geometry": {
+        "kind": "rect",
+        "x": 1620,
+        "y": 20,
+        "w": 170,
+        "h": 44,
+        "mask": null,
+        "binding_name": null,
+        "target": null,
+        "render_target": null
+      },
+      "effect_chain": [],
+      "blend_mode": "over",
+      "z_order": 26,
+      "update_cadence": "rate"
+    },
+    {
+      "id": "pressure-gauge-ul",
+      "geometry": {
+        "kind": "rect",
+        "x": 20,
+        "y": 336,
+        "w": 300,
+        "h": 52,
+        "mask": null,
+        "binding_name": null,
+        "target": null,
+        "render_target": null
+      },
+      "effect_chain": [],
+      "blend_mode": "over",
+      "z_order": 24,
+      "update_cadence": "rate"
+    },
+    {
+      "id": "activity-variety-log-mid",
+      "geometry": {
+        "kind": "rect",
+        "x": 440,
+        "y": 540,
+        "w": 400,
+        "h": 140,
+        "mask": null,
+        "binding_name": null,
+        "target": null,
+        "render_target": null
+      },
+      "effect_chain": [],
+      "blend_mode": "over",
+      "z_order": 24,
+      "update_cadence": "rate"
+    },
+    {
+      "id": "whos-here-tr",
+      "geometry": {
+        "kind": "rect",
+        "x": 1460,
+        "y": 20,
+        "w": 150,
+        "h": 46,
+        "mask": null,
+        "binding_name": null,
+        "target": null,
+        "render_target": null
+      },
+      "effect_chain": [],
+      "blend_mode": "over",
+      "z_order": 26,
+      "update_cadence": "rate"
     }
   ],
   "assignments": [
@@ -408,6 +612,48 @@
       "surface": "captions_strip",
       "transform": {},
       "opacity": 0.9,
+      "per_assignment_effects": []
+    },
+    {
+      "source": "impingement_cascade",
+      "surface": "impingement-cascade-midright",
+      "transform": {},
+      "opacity": 0.92,
+      "per_assignment_effects": []
+    },
+    {
+      "source": "recruitment_candidate_panel",
+      "surface": "recruitment-candidate-top",
+      "transform": {},
+      "opacity": 0.92,
+      "per_assignment_effects": []
+    },
+    {
+      "source": "thinking_indicator",
+      "surface": "thinking-indicator-tr",
+      "transform": {},
+      "opacity": 0.92,
+      "per_assignment_effects": []
+    },
+    {
+      "source": "pressure_gauge",
+      "surface": "pressure-gauge-ul",
+      "transform": {},
+      "opacity": 0.92,
+      "per_assignment_effects": []
+    },
+    {
+      "source": "activity_variety_log",
+      "surface": "activity-variety-log-mid",
+      "transform": {},
+      "opacity": 0.90,
+      "per_assignment_effects": []
+    },
+    {
+      "source": "whos_here",
+      "surface": "whos-here-tr",
+      "transform": {},
+      "opacity": 0.92,
       "per_assignment_effects": []
     }
   ]
