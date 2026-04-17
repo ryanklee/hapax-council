@@ -256,6 +256,32 @@ def _render_active_objectives_block() -> str:
         return ""
 
 
+def _read_last_override_at(path: Path) -> float:
+    """Read the ``last_override_at`` epoch from an override-state JSON.
+
+    Returns 0.0 on missing / malformed — equivalent to "no prior override
+    in this process lifetime."
+    """
+    if not path.exists():
+        return 0.0
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return 0.0
+    try:
+        return float(data.get("last_override_at", 0.0))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _write_last_override_at(path: Path, ts: float) -> None:
+    """Atomic tmp+rename write for the override-state file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps({"last_override_at": ts}, ensure_ascii=False), encoding="utf-8")
+    os.replace(tmp, path)
+
+
 def _read_album_info() -> str:
     try:
         if ALBUM_STATE_FILE.exists():
@@ -500,37 +526,18 @@ class DirectorLoop:
                     time.sleep(5.0)
                     continue
 
+                # Continuous-Loop Research Cadence §3.2 — stimmung-modulated
+                # activity-override gate. Promotes the LLM's proposed
+                # activity through the Phase 9 scorer; if guards pass and
+                # an alternate beats the proposal by ≥ override_margin,
+                # swap to the alternate BEFORE the rest of the loop runs.
+                # Falls back to the LLM's pick on any error.
+                activity = self._maybe_override_activity(activity)
+
                 if activity != self._activity:
                     log.info("Activity: %s → %s", self._activity, activity)
                     self._activity = activity
                     self._reactor.set_header(activity.upper())
-
-                # LRR Phase 9 §3.2 observability pass — compute the
-                # stimmung-modulated score for the LLM-chosen activity
-                # and emit a telemetry line. Behaviour is unchanged; the
-                # log makes the signal visible so we can tune the 0.05
-                # weight and decide whether to promote to an override.
-                try:
-                    from .activity_scoring import (
-                        score_activity,
-                        stimmung_term_for_activity_from_shm,
-                    )
-
-                    stimmung_term = stimmung_term_for_activity_from_shm(activity)
-                    score = score_activity(
-                        activity,
-                        momentary=0.8,  # assumed: LLM chose it confidently
-                        objective_alignment=0.5,
-                        stimmung_term=stimmung_term,
-                    )
-                    log.info(
-                        "activity_score activity=%s stimmung_term=%.2f composite=%.3f",
-                        activity,
-                        stimmung_term,
-                        score,
-                    )
-                except Exception:
-                    log.debug("activity scoring telemetry failed", exc_info=True)
 
                 # Speak — speech + slot advance happen in one thread
                 self._speak_activity(text, activity)
@@ -538,6 +545,112 @@ class DirectorLoop:
             except Exception:
                 log.exception("Director loop error")
             time.sleep(0.5)
+
+    def _maybe_override_activity(self, proposed: str) -> str:
+        """Apply Continuous-Loop §3.2 stimmung-modulated override gate.
+
+        Returns the final activity (proposed or overridden). On any error
+        returns ``proposed`` unchanged — override is strictly opt-in and
+        must never crash the director loop.
+        """
+        try:
+            import time as _time
+            from pathlib import Path as _Path
+
+            from agents.chat_monitor.sink import read_latest
+
+            from .activity_scoring import (
+                choose_activity_with_override,
+                engagement_from_chat_signals,
+            )
+
+            # Read current chat signals for the engagement + freshness.
+            signals = read_latest()
+            engagement = engagement_from_chat_signals(signals)
+            signals_ts = None
+            if isinstance(signals, dict):
+                try:
+                    signals_ts = float(signals.get("ts")) if signals.get("ts") is not None else None
+                except (TypeError, ValueError):
+                    signals_ts = None
+
+            # Per-activity objective alignment: 0.6 if the activity is in
+            # any active objective's activities_that_advance list, else 0.3.
+            active_activities = self._active_objective_activities()
+
+            def _alignment(activity: str) -> float:
+                return 0.6 if activity in active_activities else 0.3
+
+            # Persist last_override_at across ticks + restarts in a
+            # compact SHM file so a service restart doesn't amplify
+            # override cadence.
+            override_state_path = _Path("/dev/shm/hapax-director/override-state.json")
+            last_override_at = _read_last_override_at(override_state_path)
+            now_epoch = _time.time()
+
+            decision = choose_activity_with_override(
+                proposed,
+                momentary=0.8,  # LLM proposed it — assume confident
+                objective_alignment_fn=_alignment,
+                engagement=engagement,
+                active_chat_messages=len(active_activities),  # rough proxy
+                signals_ts=signals_ts,
+                now_epoch=now_epoch,
+                last_override_at=last_override_at,
+            )
+
+            if decision.was_override:
+                log.info(
+                    "activity_override %s→%s reason=%s scores=%s",
+                    decision.proposed_activity,
+                    decision.final_activity,
+                    decision.reason,
+                    {k: f"{v:.2f}" for k, v in decision.scores.items()},
+                )
+                _write_last_override_at(override_state_path, now_epoch)
+            else:
+                log.debug(
+                    "activity_no_override proposed=%s reason=%s",
+                    decision.proposed_activity,
+                    decision.reason,
+                )
+
+            return decision.final_activity
+        except Exception:
+            log.debug("activity override gate failed; keeping LLM choice", exc_info=True)
+            return proposed
+
+    def _active_objective_activities(self) -> set[str]:
+        """Return the union of ``activities_that_advance`` across active objectives.
+
+        Best-effort; empty set on any read / parse error.
+        """
+        try:
+            from pathlib import Path as _Path
+
+            from shared.frontmatter import parse_frontmatter
+            from shared.objective_schema import Objective, ObjectiveStatus
+
+            objectives_dir = (
+                _Path.home() / "Documents" / "Personal" / "30-areas" / "hapax-objectives"
+            )
+            if not objectives_dir.exists():
+                return set()
+
+            out: set[str] = set()
+            for path in sorted(objectives_dir.glob("obj-*.md")):
+                try:
+                    fm, _body = parse_frontmatter(path)
+                    if not fm:
+                        continue
+                    obj = Objective(**fm)
+                    if obj.status == ObjectiveStatus.active:
+                        out.update(obj.activities_that_advance)
+                except Exception:
+                    continue
+            return out
+        except Exception:
+            return set()
 
     def _build_unified_prompt(self) -> str:
         """Assemble 4-layer reactor context per enrichment spec.
