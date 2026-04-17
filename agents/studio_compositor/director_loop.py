@@ -51,7 +51,13 @@ _DIRECTOR_INTENT_JSONL = Path(
 _NARRATIVE_STATE_PATH = Path("/dev/shm/hapax-director/narrative-state.json")
 
 
-def _parse_intent_from_llm(raw: str, fallback_activity: str = "react") -> DirectorIntent:
+def _parse_intent_from_llm(
+    raw: str,
+    fallback_activity: str = "react",
+    *,
+    condition_id: str = "unknown",
+    tier: str = "narrative",
+) -> DirectorIntent:
     """Parse an LLM response into a DirectorIntent.
 
     Handles three shapes:
@@ -59,28 +65,38 @@ def _parse_intent_from_llm(raw: str, fallback_activity: str = "react") -> Direct
       DirectorIntent with stance=NOMINAL and empty impingements.
     - Full ``DirectorIntent``-shaped JSON — validated via Pydantic.
     - Malformed / non-JSON — returns a silence fallback to let the loop continue.
+
+    Emits ``hapax_director_intent_parse_failure_total`` whenever JSON parsing
+    or full-intent validation fails; the rollback criterion
+    "≥5 parse failures per 10 min" depends on this counter.
     """
+    from shared.director_observability import emit_parse_failure
+
     text = raw.strip()
     if not text:
+        emit_parse_failure(tier=tier, condition_id=condition_id)
         return DirectorIntent(activity="silence", stance=Stance.NOMINAL, narrative_text="")
     try:
         obj = json.loads(text) if text.startswith("{") else None
     except (json.JSONDecodeError, TypeError):
+        emit_parse_failure(tier=tier, condition_id=condition_id)
         return DirectorIntent(activity="silence", stance=Stance.NOMINAL, narrative_text="")
     if not isinstance(obj, dict):
+        emit_parse_failure(tier=tier, condition_id=condition_id)
         return DirectorIntent(activity="silence", stance=Stance.NOMINAL, narrative_text="")
     # If the response looks like a full DirectorIntent, validate it.
     if "stance" in obj or "compositional_impingements" in obj:
         try:
             return DirectorIntent.model_validate(obj)
         except Exception:
-            pass
+            emit_parse_failure(tier=tier, condition_id=condition_id)
     # Fall back to legacy shape.
     activity = obj.get("activity") or fallback_activity
     narrative = obj.get("react") or ""
     try:
         return DirectorIntent(activity=activity, stance=Stance.NOMINAL, narrative_text=narrative)
     except Exception:
+        emit_parse_failure(tier=tier, condition_id=condition_id)
         return DirectorIntent(activity=fallback_activity, stance=Stance.NOMINAL, narrative_text="")
 
 
@@ -164,8 +180,13 @@ def _emit_intent_artifacts(intent: DirectorIntent, condition_id: str) -> None:
     except Exception:
         log.warning("narrative-state.json write failed", exc_info=True)
     # Phase 3c — emit compositional impingements so AffordancePipeline
-    # can recruit compositional capabilities.
-    _emit_compositional_impingements(intent, condition_id=condition_id)
+    # can recruit compositional capabilities. Gated by the legacy flag
+    # (A5): under HAPAX_DIRECTOR_MODEL_LEGACY=1 we still write JSONL +
+    # narrative-state + Prometheus above, but suppress the richer
+    # compositional feedback so the rollback is a true rollback of
+    # behavior, not of observability.
+    if not _director_model_legacy_mode():
+        _emit_compositional_impingements(intent, condition_id=condition_id)
 
 
 def _default_tts_socket_path() -> Path:
@@ -642,15 +663,20 @@ class DirectorLoop:
                     continue
 
                 # Phase-1: parse into DirectorIntent (legacy-shape-tolerant).
-                # HAPAX_DIRECTOR_MODEL_LEGACY bypasses the richer path —
-                # behavior is identical to pre-epic except for the extra
-                # JSONL + narrative-state emission, which is cheap and
-                # strictly additive.
-                intent = _parse_intent_from_llm(result, fallback_activity="react")
+                # Observability-first (A5): JSONL + narrative-state + Prometheus
+                # emissions run regardless of HAPAX_DIRECTOR_MODEL_LEGACY. The
+                # legacy flag only suppresses compositional-impingement emission
+                # + prompt enrichment (see _emit_intent_artifacts).
+                condition_id = _read_research_marker() or "none"
+                intent = _parse_intent_from_llm(
+                    result,
+                    fallback_activity="react",
+                    condition_id=condition_id,
+                    tier="narrative",
+                )
                 activity = intent.activity
                 text = intent.narrative_text
-                if not _director_model_legacy_mode():
-                    _emit_intent_artifacts(intent, condition_id=_read_research_marker() or "none")
+                _emit_intent_artifacts(intent, condition_id=condition_id)
 
                 # Handle activity
                 if activity == "silence" or not text:
