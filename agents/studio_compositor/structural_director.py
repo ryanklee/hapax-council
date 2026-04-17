@@ -272,8 +272,15 @@ def _default_llm_fn(prompt: str) -> str:
         {"Content-Type": "application/json", "Authorization": f"Bearer {key}"},
     )
     started = time.time()
-    with urllib.request.urlopen(req, timeout=90) as resp:
-        data = json.loads(resp.read())
+    # Publish LLM-in-flight marker so the ThinkingIndicator Cairo source
+    # pulses while the structural tier is mid-call.
+    from agents.studio_compositor.director_loop import _LLMInFlight
+
+    with _LLMInFlight(
+        tier="structural", model=os.environ.get("HAPAX_STRUCTURAL_MODEL", "local-fast")
+    ):
+        with urllib.request.urlopen(req, timeout=90) as resp:
+            data = json.loads(resp.read())
     elapsed = time.time() - started
     try:
         from shared.director_observability import observe_llm_latency

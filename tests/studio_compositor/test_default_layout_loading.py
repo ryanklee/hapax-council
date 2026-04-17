@@ -42,6 +42,12 @@ def test_default_json_exists_and_is_valid_layout() -> None:
         "stance_indicator",
         "chat_keyword_legend",
         "grounding_provenance_ticker",
+        # Epic 2 Phase C (2026-04-17) — hothouse pressure surfaces.
+        "impingement_cascade",
+        "recruitment_candidate_panel",
+        "thinking_indicator",
+        "pressure_gauge",
+        "activity_variety_log",
     }
 
     # LRR Phase 2 item 10: video_out surfaces declared for OutputRouter.from_layout()
@@ -63,6 +69,12 @@ def test_default_json_exists_and_is_valid_layout() -> None:
         "stance-indicator-tr",
         "chat-legend-right",
         "grounding-ticker-bl",
+        # Epic 2 Phase C hothouse surfaces.
+        "impingement-cascade-midright",
+        "recruitment-candidate-top",
+        "thinking-indicator-tr",
+        "pressure-gauge-ul",
+        "activity-variety-log-mid",
     }
 
     assignment_pairs = {(a.source, a.surface) for a in layout.assignments}
@@ -77,6 +89,12 @@ def test_default_json_exists_and_is_valid_layout() -> None:
         ("stance_indicator", "stance-indicator-tr"),
         ("chat_keyword_legend", "chat-legend-right"),
         ("grounding_provenance_ticker", "grounding-ticker-bl"),
+        # Epic 2 Phase C hothouse assignments.
+        ("impingement_cascade", "impingement-cascade-midright"),
+        ("recruitment_candidate_panel", "recruitment-candidate-top"),
+        ("thinking_indicator", "thinking-indicator-tr"),
+        ("pressure_gauge", "pressure-gauge-ul"),
+        ("activity_variety_log", "activity-variety-log-mid"),
     }
 
 
@@ -98,6 +116,12 @@ def test_default_json_source_backends_match_registry_dispatch() -> None:
         "stance_indicator": "cairo",
         "chat_keyword_legend": "cairo",
         "grounding_provenance_ticker": "cairo",
+        # Epic 2 Phase C hothouse sources.
+        "impingement_cascade": "cairo",
+        "recruitment_candidate_panel": "cairo",
+        "thinking_indicator": "cairo",
+        "pressure_gauge": "cairo",
+        "activity_variety_log": "cairo",
     }
 
 
@@ -199,6 +223,12 @@ def test_load_layout_or_fallback_reads_valid_file(tmp_path: Path) -> None:
         "stance_indicator",
         "chat_keyword_legend",
         "grounding_provenance_ticker",
+        # Epic 2 Phase C hothouse additions.
+        "impingement_cascade",
+        "recruitment_candidate_panel",
+        "thinking_indicator",
+        "pressure_gauge",
+        "activity_variety_log",
     }
 
 

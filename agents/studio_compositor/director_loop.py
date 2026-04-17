@@ -101,6 +101,41 @@ def _parse_intent_from_llm(
 
 
 _DMN_IMPINGEMENTS_FILE = Path("/dev/shm/hapax-dmn/impingements.jsonl")
+_LLM_IN_FLIGHT_MARKER = Path("/dev/shm/hapax-director/llm-in-flight.json")
+
+
+class _LLMInFlight:
+    """Context manager that publishes an LLM-in-flight marker for Cairo.
+
+    The ThinkingIndicator Cairo source watches this file; when it exists,
+    a sinusoidal pulse shows on-frame. On exit (success, timeout, or any
+    exception) the marker is removed so the indicator reflects reality.
+    """
+
+    def __init__(self, *, tier: str, model: str) -> None:
+        self.tier = tier
+        self.model = model
+
+    def __enter__(self) -> _LLMInFlight:
+        try:
+            _LLM_IN_FLIGHT_MARKER.parent.mkdir(parents=True, exist_ok=True)
+            payload = {
+                "tier": self.tier,
+                "model": self.model,
+                "started_at": time.time(),
+            }
+            tmp = _LLM_IN_FLIGHT_MARKER.with_suffix(".json.tmp")
+            tmp.write_text(json.dumps(payload), encoding="utf-8")
+            tmp.replace(_LLM_IN_FLIGHT_MARKER)
+        except Exception:
+            log.debug("llm-in-flight marker write failed", exc_info=True)
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        try:
+            _LLM_IN_FLIGHT_MARKER.unlink(missing_ok=True)
+        except Exception:
+            log.debug("llm-in-flight marker unlink failed", exc_info=True)
 
 
 def _emit_compositional_impingements(intent: DirectorIntent, condition_id: str) -> None:
@@ -1222,7 +1257,11 @@ class DirectorLoop:
         )
 
         try:
-            with span_ctx as span, metrics_ctx as metrics_span:
+            with (
+                span_ctx as span,
+                metrics_ctx as metrics_span,
+                _LLMInFlight(tier="narrative", model=DIRECTOR_MODEL),
+            ):
                 req = urllib.request.Request(
                     LITELLM_URL,
                     body,
