@@ -5,11 +5,17 @@ from __future__ import annotations
 import json
 import logging
 import os
+from contextlib import nullcontext
 from pathlib import Path
 
 from openai import AsyncOpenAI
 
 from agents.hapax_daimonion.screen_models import Issue, ScreenAnalysis
+
+try:
+    from agents.telemetry.llm_call_span import llm_call_span
+except ImportError:  # telemetry optional
+    llm_call_span = None  # type: ignore[assignment]
 
 log = logging.getLogger(__name__)
 
@@ -94,29 +100,35 @@ class ScreenAnalyzer:
         if extra_context:
             system += "\n\n## Additional Context\n\n" + extra_context
 
-        response = await client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": system},
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/png;base64,{image_base64}",
-                            },
-                        },
-                        {
-                            "type": "text",
-                            "text": "Analyze this screenshot.",
-                        },
-                    ],
-                },
-            ],
-            temperature=0.1,
-            max_tokens=1024,
+        metrics_ctx = (
+            llm_call_span(model=self.model, route="screen-analyzer")
+            if llm_call_span is not None
+            else nullcontext(None)
         )
+        with metrics_ctx:
+            response = await client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system},
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/png;base64,{image_base64}",
+                                },
+                            },
+                            {
+                                "type": "text",
+                                "text": "Analyze this screenshot.",
+                            },
+                        ],
+                    },
+                ],
+                temperature=0.1,
+                max_tokens=1024,
+            )
 
         raw = response.choices[0].message.content.strip()
         # Strip markdown fences if present

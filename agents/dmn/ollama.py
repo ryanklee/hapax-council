@@ -12,8 +12,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from contextlib import nullcontext
 
 import httpx
+
+try:
+    from agents.telemetry.llm_call_span import llm_call_span
+except ImportError:  # telemetry optional
+    llm_call_span = None  # type: ignore[assignment]
 
 log = logging.getLogger("dmn.ollama")
 
@@ -45,26 +51,34 @@ CONSOLIDATION_SYSTEM = (
 
 async def _tabby_fast(prompt: str, system: str) -> str:
     """Fast path via TabbyAPI (OpenAI-compatible). Falls back to Ollama."""
+    metrics_ctx = (
+        llm_call_span(model=DMN_MODEL, route="dmn-sensory")
+        if llm_call_span is not None
+        else nullcontext(None)
+    )
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(
-                TABBY_CHAT_URL,
-                json={
-                    "model": DMN_MODEL,
-                    "messages": [
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": prompt},
-                    ],
-                    "max_tokens": 256,
-                    "temperature": 0.3,
-                    "stream": False,
-                    "chat_template_kwargs": {"enable_thinking": False},
-                },
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                return data["choices"][0]["message"]["content"].strip()
-            log.warning("TabbyAPI fast returned %d, skipping tick", resp.status_code)
+        with metrics_ctx as metrics_span:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(
+                    TABBY_CHAT_URL,
+                    json={
+                        "model": DMN_MODEL,
+                        "messages": [
+                            {"role": "system", "content": system},
+                            {"role": "user", "content": prompt},
+                        ],
+                        "max_tokens": 256,
+                        "temperature": 0.3,
+                        "stream": False,
+                        "chat_template_kwargs": {"enable_thinking": False},
+                    },
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    return data["choices"][0]["message"]["content"].strip()
+                if metrics_span is not None:
+                    metrics_span.set_outcome("refused")
+                log.warning("TabbyAPI fast returned %d, skipping tick", resp.status_code)
     except Exception as exc:
         log.warning("TabbyAPI fast unavailable (%s), skipping tick", exc)
 
@@ -73,25 +87,33 @@ async def _tabby_fast(prompt: str, system: str) -> str:
 
 async def _tabby_think(prompt: str, system: str) -> str:
     """Thinking path via TabbyAPI (with reasoning enabled). Falls back to Ollama."""
+    metrics_ctx = (
+        llm_call_span(model=DMN_MODEL, route="dmn-thinking")
+        if llm_call_span is not None
+        else nullcontext(None)
+    )
     try:
-        async with httpx.AsyncClient(timeout=180.0) as client:
-            resp = await client.post(
-                TABBY_CHAT_URL,
-                json={
-                    "model": DMN_MODEL,
-                    "messages": [
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": prompt},
-                    ],
-                    "max_tokens": 1024,
-                    "temperature": 0.3,
-                    "stream": False,
-                },
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                return data["choices"][0]["message"]["content"].strip()
-            log.warning("TabbyAPI think returned %d, skipping tick", resp.status_code)
+        with metrics_ctx as metrics_span:
+            async with httpx.AsyncClient(timeout=180.0) as client:
+                resp = await client.post(
+                    TABBY_CHAT_URL,
+                    json={
+                        "model": DMN_MODEL,
+                        "messages": [
+                            {"role": "system", "content": system},
+                            {"role": "user", "content": prompt},
+                        ],
+                        "max_tokens": 1024,
+                        "temperature": 0.3,
+                        "stream": False,
+                    },
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    return data["choices"][0]["message"]["content"].strip()
+                if metrics_span is not None:
+                    metrics_span.set_outcome("refused")
+                log.warning("TabbyAPI think returned %d, skipping tick", resp.status_code)
     except Exception as exc:
         log.warning("TabbyAPI think unavailable (%s), skipping tick", exc)
 
@@ -105,28 +127,34 @@ async def _gemini_multimodal(prompt: str, system: str, frame_b64: str) -> str:
     """Multimodal evaluative call via gemini-flash — sees the visual surface directly."""
     import os
 
+    metrics_ctx = (
+        llm_call_span(model="gemini-flash", route="dmn-multimodal")
+        if llm_call_span is not None
+        else nullcontext(None)
+    )
     try:
-        from openai import AsyncOpenAI
+        with metrics_ctx:
+            from openai import AsyncOpenAI
 
-        client = AsyncOpenAI(
-            base_url=os.environ.get("LITELLM_BASE", "http://localhost:4000"),
-            api_key=os.environ.get("LITELLM_API_KEY", ""),
-        )
-        user_content: list[dict] = [
-            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{frame_b64}"}},
-            {"type": "text", "text": prompt},
-        ]
-        resp = await client.chat.completions.create(
-            model="gemini-flash",
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user_content},
-            ],
-            temperature=0.1,
-            max_tokens=256,
-            extra_body={"thinking": {"type": "disabled", "budget_tokens": 0}},
-        )
-        return resp.choices[0].message.content.strip()
+            client = AsyncOpenAI(
+                base_url=os.environ.get("LITELLM_BASE", "http://localhost:4000"),
+                api_key=os.environ.get("LITELLM_API_KEY", ""),
+            )
+            user_content: list[dict] = [
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{frame_b64}"}},
+                {"type": "text", "text": prompt},
+            ]
+            resp = await client.chat.completions.create(
+                model="gemini-flash",
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user_content},
+                ],
+                temperature=0.1,
+                max_tokens=256,
+                extra_body={"thinking": {"type": "disabled", "budget_tokens": 0}},
+            )
+            return resp.choices[0].message.content.strip()
     except Exception as exc:
         log.warning("Gemini multimodal failed (%s), falling back to text-only", exc)
         return await _tabby_think(prompt, system)

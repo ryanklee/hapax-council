@@ -5,10 +5,16 @@ from __future__ import annotations
 import logging
 import subprocess
 import time
+from contextlib import nullcontext
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from agents.hapax_daimonion.daemon import VoiceDaemon
+
+try:
+    from agents.telemetry.llm_call_span import llm_call_span
+except ImportError:  # telemetry optional
+    llm_call_span = None  # type: ignore[assignment]
 
 log = logging.getLogger("hapax_daimonion")
 
@@ -197,28 +203,35 @@ async def handle_scan(daemon: VoiceDaemon) -> None:
         return
 
     try:
-        client = daemon.workspace_monitor._analyzer._get_client()
-        response = await client.chat.completions.create(
-            model=daemon.workspace_monitor._analyzer.model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": "Extract all text from this image. Return plain text only.",
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": f"data:image/jpeg;base64,{frame_b64}"},
-                        },
-                        {"type": "text", "text": "Extract text from this document/label."},
-                    ],
-                },
-            ],
-            temperature=0.0,
-            max_tokens=1024,
+        analyzer = daemon.workspace_monitor._analyzer
+        client = analyzer._get_client()
+        metrics_ctx = (
+            llm_call_span(model=analyzer.model, route="scan-extract")
+            if llm_call_span is not None
+            else nullcontext(None)
         )
+        with metrics_ctx:
+            response = await client.chat.completions.create(
+                model=analyzer.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "Extract all text from this image. Return plain text only.",
+                    },
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": f"data:image/jpeg;base64,{frame_b64}"},
+                            },
+                            {"type": "text", "text": "Extract text from this document/label."},
+                        ],
+                    },
+                ],
+                temperature=0.0,
+                max_tokens=1024,
+            )
         text = response.choices[0].message.content.strip()
         subprocess.run(["wl-copy", text], timeout=5)
         log.info("Scan: extracted %d chars, copied to clipboard", len(text))

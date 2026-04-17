@@ -16,8 +16,14 @@ import asyncio
 import json
 import logging
 import os
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from datetime import UTC
+
+try:
+    from agents.telemetry.llm_call_span import llm_call_span
+except ImportError:  # telemetry optional
+    llm_call_span = None  # type: ignore[assignment]
 
 log = logging.getLogger(__name__)
 
@@ -225,19 +231,25 @@ async def judge_session(turns: list[dict]) -> dict:
         if t.get("assistant"):
             conv_text += f"Assistant: {t['assistant']}\n"
 
+    metrics_ctx = (
+        llm_call_span(model="claude-sonnet", route="eval-judge")
+        if llm_call_span is not None
+        else nullcontext(None)
+    )
     try:
-        response = await litellm.acompletion(
-            model="openai/claude-sonnet",
-            messages=[
-                {"role": "system", "content": _JUDGE_PROMPT},
-                {"role": "user", "content": conv_text},
-            ],
-            max_tokens=2000,
-            temperature=0.0,
-            api_base=os.environ.get("LITELLM_API_BASE", "http://127.0.0.1:4000"),
-            api_key=os.environ.get("LITELLM_API_KEY", "not-set"),
-            timeout=30,
-        )
+        with metrics_ctx:
+            response = await litellm.acompletion(
+                model="openai/claude-sonnet",
+                messages=[
+                    {"role": "system", "content": _JUDGE_PROMPT},
+                    {"role": "user", "content": conv_text},
+                ],
+                max_tokens=2000,
+                temperature=0.0,
+                api_base=os.environ.get("LITELLM_API_BASE", "http://127.0.0.1:4000"),
+                api_key=os.environ.get("LITELLM_API_KEY", "not-set"),
+                timeout=30,
+            )
 
         content: str = response.choices[0].message.content or ""
         # Extract JSON from response

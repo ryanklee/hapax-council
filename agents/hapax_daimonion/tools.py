@@ -12,12 +12,18 @@ import os
 import subprocess
 import time
 import uuid
+from contextlib import nullcontext
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import httpx
 from openai import OpenAI
+
+try:
+    from agents.telemetry.llm_call_span import llm_call_span
+except ImportError:  # telemetry optional
+    llm_call_span = None  # type: ignore[assignment]
 from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from qdrant_client.models import FieldCondition, Filter, MatchValue
@@ -783,11 +789,17 @@ def _vision_analyze(images: list[str], question: str) -> str:
         )
     content.append({"type": "text", "text": question or "Describe what you see in detail."})
 
-    response = client.chat.completions.create(
-        model="gemini-2.0-flash",
-        messages=[{"role": "user", "content": content}],
-        max_tokens=500,
+    metrics_ctx = (
+        llm_call_span(model="gemini-2.0-flash", route="vision-tool")
+        if llm_call_span is not None
+        else nullcontext(None)
     )
+    with metrics_ctx:
+        response = client.chat.completions.create(
+            model="gemini-2.0-flash",
+            messages=[{"role": "user", "content": content}],
+            max_tokens=500,
+        )
     return response.choices[0].message.content
 
 

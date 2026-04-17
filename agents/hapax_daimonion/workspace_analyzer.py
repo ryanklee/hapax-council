@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from contextlib import nullcontext
 from pathlib import Path
 
 from openai import AsyncOpenAI
@@ -14,6 +15,11 @@ from agents.hapax_daimonion.screen_models import (
     Issue,
     WorkspaceAnalysis,
 )
+
+try:
+    from agents.telemetry.llm_call_span import llm_call_span
+except ImportError:  # telemetry optional
+    llm_call_span = None  # type: ignore[assignment]
 
 log = logging.getLogger(__name__)
 
@@ -182,12 +188,18 @@ class WorkspaceAnalyzer:
             extra_context,
         )
 
-        response = await client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            temperature=0.1,
-            max_tokens=4096,
+        metrics_ctx = (
+            llm_call_span(model=self.model, route="workspace-analyzer")
+            if llm_call_span is not None
+            else nullcontext(None)
         )
+        with metrics_ctx:
+            response = await client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=0.1,
+                max_tokens=4096,
+            )
 
         raw = response.choices[0].message.content.strip()
         if raw.startswith("```"):
