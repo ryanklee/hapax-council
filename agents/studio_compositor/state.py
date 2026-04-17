@@ -212,6 +212,70 @@ def state_reader_loop(compositor: Any) -> None:
                 else:
                     GLib.idle_add(lambda: disable_persistence(compositor))
 
+        # Phase 6 follow-up (volitional-director epic): live-video egress
+        # compose-safe hot-swap. The persistence-allowed check above guards
+        # the *recording valve*; this block additionally publishes a
+        # consent-safe-active signal so the live video output layer can
+        # swap in `consent-safe.json` when a non-operator face is detected
+        # without an active consent contract (closes axiom
+        # it-irreversible-broadcast at egress, not just persistence).
+        try:
+            from .consent_live_egress import (
+                CONSENT_SAFE_LAYOUT_NAME,
+                should_egress_compose_safe,
+            )
+
+            with compositor._overlay_state._lock:
+                od = compositor._overlay_state._data
+            compose_safe = should_egress_compose_safe(od)
+            prev = getattr(compositor, "_compose_safe_active", False)
+            if compose_safe != prev:
+                compositor._compose_safe_active = compose_safe
+                # Publish signal for layout-swap consumers (current signal-file
+                # pattern; in-process LayoutStore.set_active is also called for
+                # the existing advisory registry).
+                import json as _json
+                import time as _time
+                from pathlib import Path as _P
+
+                marker = _P("/dev/shm/hapax-compositor/consent-safe-active.json")
+                try:
+                    marker.parent.mkdir(parents=True, exist_ok=True)
+                    tmp = marker.with_suffix(".json.tmp")
+                    tmp.write_text(
+                        _json.dumps(
+                            {
+                                "active": compose_safe,
+                                "since_ts": _time.time(),
+                                "target_layout": (
+                                    CONSENT_SAFE_LAYOUT_NAME if compose_safe else "default.json"
+                                ),
+                            }
+                        ),
+                        encoding="utf-8",
+                    )
+                    tmp.replace(marker)
+                except Exception:
+                    log.debug("consent-safe-active marker write failed", exc_info=True)
+                # Advisory LayoutStore toggle — consumer code can read
+                # active_name() when available. Graceful no-op if either
+                # the target layout isn't loaded or the store is absent.
+                store = getattr(compositor, "_layout_store", None)
+                if store is not None:
+                    target = "consent-safe" if compose_safe else "default"
+                    try:
+                        if target in store.list_available():
+                            store.set_active(target)
+                    except Exception:
+                        log.debug("layout_store.set_active failed", exc_info=True)
+                log.info(
+                    "compose-safe egress %s (prev=%s)",
+                    "ACTIVE" if compose_safe else "cleared",
+                    prev,
+                )
+        except Exception:
+            log.debug("compose-safe egress block failed", exc_info=True)
+
         # Layout hot-reload every ~1s (Phase 2c — currently advisory only;
         # no rendering code consumes the active Layout yet)
         layout_check_counter += 1

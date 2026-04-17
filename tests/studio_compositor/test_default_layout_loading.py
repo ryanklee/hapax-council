@@ -36,12 +36,19 @@ def test_default_json_exists_and_is_valid_layout() -> None:
         # Continuous-Loop Research Cadence §3.4 — scientific-register
         # caption strip along the bottom of the canvas.
         "captions",
+        # Volitional-director epic Phase 4 legibility surfaces
+        # (PR #1017/§3.5 + follow-ups #1018).
+        "activity_header",
+        "stance_indicator",
+        "chat_keyword_legend",
+        "grounding_provenance_ticker",
     }
 
     # LRR Phase 2 item 10: video_out surfaces declared for OutputRouter.from_layout()
     # enumeration. The 4 pip-* quadrants are the input surfaces; the 3 video_out_*
     # surfaces are the output sinks (v4l2 loopback, RTMP, HLS).
     # Continuous-Loop §3.4 adds ``captions_strip`` as a horizontal band.
+    # Volitional-director Phase 4 adds 4 legibility surfaces.
     surface_ids = {s.id for s in layout.surfaces}
     assert surface_ids == {
         "pip-ul",
@@ -52,6 +59,10 @@ def test_default_json_exists_and_is_valid_layout() -> None:
         "video_out_v4l2_loopback",
         "video_out_rtmp_mediamtx",
         "video_out_hls_playlist",
+        "activity-header-top",
+        "stance-indicator-tr",
+        "chat-legend-right",
+        "grounding-ticker-bl",
     }
 
     assignment_pairs = {(a.source, a.surface) for a in layout.assignments}
@@ -61,6 +72,11 @@ def test_default_json_exists_and_is_valid_layout() -> None:
         ("album", "pip-ll"),
         ("stream_overlay", "pip-lr"),
         ("captions", "captions_strip"),
+        # Volitional-director Phase 4 legibility assignments.
+        ("activity_header", "activity-header-top"),
+        ("stance_indicator", "stance-indicator-tr"),
+        ("chat_keyword_legend", "chat-legend-right"),
+        ("grounding_provenance_ticker", "grounding-ticker-bl"),
     }
 
 
@@ -77,6 +93,11 @@ def test_default_json_source_backends_match_registry_dispatch() -> None:
         "sierpinski": "cairo",
         "reverie": "shm_rgba",
         "captions": "cairo",
+        # Volitional-director Phase 4 legibility sources.
+        "activity_header": "cairo",
+        "stance_indicator": "cairo",
+        "chat_keyword_legend": "cairo",
+        "grounding_provenance_ticker": "cairo",
     }
 
 
@@ -173,6 +194,11 @@ def test_load_layout_or_fallback_reads_valid_file(tmp_path: Path) -> None:
         "sierpinski",
         "reverie",
         "captions",
+        # Volitional-director Phase 4 legibility additions.
+        "activity_header",
+        "stance_indicator",
+        "chat_keyword_legend",
+        "grounding_provenance_ticker",
     }
 
 
