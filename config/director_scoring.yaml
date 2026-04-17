@@ -1,0 +1,26 @@
+# Continuous-Loop Research Cadence §3.2 — activity-override tunables.
+#
+# The director-loop calls `choose_activity_with_override()` after the LLM
+# picks an activity. These constants set the guard thresholds. Start
+# conservative; tune after each live session.
+
+# Weights sum to 1.0 by construction (pinned by test).
+momentary_weight: 0.70
+objective_weight: 0.25
+stimmung_weight: 0.05
+
+# An alternate activity must beat the LLM-proposed activity by at least
+# this much on the composite score before an override fires.
+override_margin: 0.08
+
+# The LLM-proposed activity must be at or below this composite score
+# before an override is even considered — if the LLM is confident
+# (high momentary + strong objective alignment), we don't second-guess.
+proposal_floor: 0.55
+
+# Minimum seconds between overrides. Prevents flip-flopping.
+override_cooldown_s: 60.0
+
+# Max age (seconds) for chat signals to still count in the override
+# decision. Stale signals → no override, LLM proposal stands.
+stimmung_staleness_s: 90.0
