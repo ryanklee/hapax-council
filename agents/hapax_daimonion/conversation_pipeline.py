@@ -16,7 +16,13 @@ import logging
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 from pathlib import Path
+
+try:
+    from agents.telemetry.llm_call_span import llm_call_span
+except ImportError:  # telemetry optional
+    llm_call_span = None  # type: ignore[assignment]
 
 from agents.hapax_daimonion.config import LITELLM_BASE as _voice_litellm_base
 from agents.hapax_daimonion.conversation_helpers import (
@@ -228,12 +234,21 @@ class ConversationPipeline:
                 {"role": "user", "content": prompt},
             ]
 
-            response = await litellm.acompletion(
-                model="gemini/gemini-2.5-flash-preview-04-17",  # spontaneous speech is short atmospheric — flash suffices
-                messages=messages,
-                max_tokens=80,
-                temperature=0.7,
+            metrics_ctx = (
+                llm_call_span(
+                    model="gemini-2.5-flash-preview-04-17",
+                    route="spontaneous-speech",
+                )
+                if llm_call_span is not None
+                else nullcontext(None)
             )
+            with metrics_ctx:
+                response = await litellm.acompletion(
+                    model="gemini/gemini-2.5-flash-preview-04-17",  # spontaneous speech is short atmospheric — flash suffices
+                    messages=messages,
+                    max_tokens=80,
+                    temperature=0.7,
+                )
 
             text = response.choices[0].message.content.strip()
             if text and "[silence]" not in text.lower():
@@ -1010,7 +1025,14 @@ class ConversationPipeline:
 
             kwargs["timeout"] = 15  # seconds — fail fast, don't block conversation
             _t_llm_start = time.monotonic()
-            response = await litellm.acompletion(**kwargs)
+            _conv_model_label = str(kwargs.get("model", "unknown"))
+            metrics_ctx = (
+                llm_call_span(model=_conv_model_label, route="conversation")
+                if llm_call_span is not None
+                else nullcontext(None)
+            )
+            with metrics_ctx:
+                response = await litellm.acompletion(**kwargs)
 
             full_text = ""
             accumulated = ""

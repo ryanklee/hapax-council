@@ -16,7 +16,13 @@ import json
 import logging
 import os
 import time
+from contextlib import nullcontext
 from pathlib import Path
+
+try:
+    from agents.telemetry.llm_call_span import llm_call_span
+except ImportError:  # telemetry optional
+    llm_call_span = None  # type: ignore[assignment]
 
 log = logging.getLogger("vision_observer")
 
@@ -45,16 +51,22 @@ async def _call_vision_model(frame_b64: str, narrative: str) -> str:
     ]
     if narrative:
         user_content.append({"type": "text", "text": f"The system intended to show: {narrative}"})
-    resp = await client.chat.completions.create(
-        model="gemini-flash",
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_content},
-        ],
-        temperature=0.1,
-        max_tokens=150,
-        extra_body={"thinking": {"type": "disabled", "budget_tokens": 0}},
+    metrics_ctx = (
+        llm_call_span(model="gemini-flash", route="vision-observer")
+        if llm_call_span is not None
+        else nullcontext(None)
     )
+    with metrics_ctx:
+        resp = await client.chat.completions.create(
+            model="gemini-flash",
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_content},
+            ],
+            temperature=0.1,
+            max_tokens=150,
+            extra_body={"thinking": {"type": "disabled", "budget_tokens": 0}},
+        )
     return resp.choices[0].message.content.strip()
 
 
