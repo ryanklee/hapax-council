@@ -118,6 +118,47 @@ _FALLBACK_LAYOUT = Layout(
                 "natural_h": 110,
             },
         ),
+        # Volitional-director epic Phase 4 legibility sources (PR #1017/§3.5).
+        SourceSchema(
+            id="activity_header",
+            kind="cairo",
+            backend="cairo",
+            params={
+                "class_name": "ActivityHeaderCairoSource",
+                "natural_w": 800,
+                "natural_h": 56,
+            },
+        ),
+        SourceSchema(
+            id="stance_indicator",
+            kind="cairo",
+            backend="cairo",
+            params={
+                "class_name": "StanceIndicatorCairoSource",
+                "natural_w": 100,
+                "natural_h": 40,
+            },
+        ),
+        SourceSchema(
+            id="chat_keyword_legend",
+            kind="cairo",
+            backend="cairo",
+            params={
+                "class_name": "ChatKeywordLegendCairoSource",
+                "natural_w": 160,
+                "natural_h": 400,
+            },
+        ),
+        SourceSchema(
+            id="grounding_provenance_ticker",
+            kind="cairo",
+            backend="cairo",
+            params={
+                "class_name": "GroundingProvenanceTickerCairoSource",
+                "natural_w": 480,
+                "natural_h": 40,
+            },
+        ),
     ],
     surfaces=[
         SurfaceSchema(
@@ -170,6 +211,27 @@ _FALLBACK_LAYOUT = Layout(
             geometry=SurfaceGeometry(kind="video_out", target="hls://local", render_target="main"),
             z_order=102,
         ),
+        # Volitional-director Phase 4 legibility surfaces.
+        SurfaceSchema(
+            id="activity-header-top",
+            geometry=SurfaceGeometry(kind="rect", x=560, y=16, w=800, h=56),
+            z_order=30,
+        ),
+        SurfaceSchema(
+            id="stance-indicator-tr",
+            geometry=SurfaceGeometry(kind="rect", x=1800, y=24, w=100, h=40),
+            z_order=35,
+        ),
+        SurfaceSchema(
+            id="chat-legend-right",
+            geometry=SurfaceGeometry(kind="rect", x=1760, y=400, w=160, h=400),
+            z_order=20,
+        ),
+        SurfaceSchema(
+            id="grounding-ticker-bl",
+            geometry=SurfaceGeometry(kind="rect", x=16, y=900, w=480, h=40),
+            z_order=22,
+        ),
     ],
     assignments=[
         Assignment(source="token_pole", surface="pip-ul"),
@@ -177,6 +239,11 @@ _FALLBACK_LAYOUT = Layout(
         Assignment(source="album", surface="pip-ll"),
         Assignment(source="stream_overlay", surface="pip-lr"),
         Assignment(source="captions", surface="captions_strip", opacity=0.92),
+        # Volitional-director Phase 4 assignments.
+        Assignment(source="activity_header", surface="activity-header-top"),
+        Assignment(source="stance_indicator", surface="stance-indicator-tr"),
+        Assignment(source="chat_keyword_legend", surface="chat-legend-right"),
+        Assignment(source="grounding_provenance_ticker", surface="grounding-ticker-bl"),
     ],
 )
 

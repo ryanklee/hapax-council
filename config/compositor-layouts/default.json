@@ -76,7 +76,7 @@
         "natural_w": 800,
         "natural_h": 56
       },
-      "update_cadence": "always",
+      "update_cadence": "rate",
       "rate_hz": 2,
       "tags": [
         "legibility",
@@ -92,7 +92,7 @@
         "natural_w": 100,
         "natural_h": 40
       },
-      "update_cadence": "always",
+      "update_cadence": "rate",
       "rate_hz": 2,
       "tags": [
         "legibility",
@@ -108,7 +108,7 @@
         "natural_w": 160,
         "natural_h": 400
       },
-      "update_cadence": "always",
+      "update_cadence": "rate",
       "rate_hz": 1,
       "tags": [
         "legibility"
@@ -123,7 +123,7 @@
         "natural_w": 480,
         "natural_h": 40
       },
-      "update_cadence": "always",
+      "update_cadence": "rate",
       "rate_hz": 2,
       "tags": [
         "legibility",
@@ -131,7 +131,7 @@
       ]
     },
     {
-      "id": "captions_strip",
+      "id": "captions",
       "kind": "cairo",
       "backend": "cairo",
       "params": {
@@ -139,7 +139,7 @@
         "natural_w": 1920,
         "natural_h": 120
       },
-      "update_cadence": "always",
+      "update_cadence": "rate",
       "rate_hz": 5,
       "tags": [
         "legibility"
@@ -344,24 +344,6 @@
       "blend_mode": "over",
       "z_order": 22,
       "update_cadence": "always"
-    },
-    {
-      "id": "captions-strip-bottom",
-      "geometry": {
-        "kind": "rect",
-        "x": 0,
-        "y": 960,
-        "w": 1920,
-        "h": 120,
-        "mask": null,
-        "binding_name": null,
-        "target": null,
-        "render_target": null
-      },
-      "effect_chain": [],
-      "blend_mode": "over",
-      "z_order": 25,
-      "update_cadence": "always"
     }
   ],
   "assignments": [
@@ -422,10 +404,10 @@
       "per_assignment_effects": []
     },
     {
-      "source": "captions_strip",
-      "surface": "captions-strip-bottom",
+      "source": "captions",
+      "surface": "captions_strip",
       "transform": {},
-      "opacity": 1.0,
+      "opacity": 0.9,
       "per_assignment_effects": []
     }
   ]
