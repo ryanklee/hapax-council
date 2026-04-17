@@ -22,6 +22,12 @@ from pydantic import BaseModel
 from starlette.responses import StreamingResponse
 
 from logos.api.cache import cache
+from logos.api.deps.stream_redaction import (
+    band_heart_rate,
+    band_hrv,
+    is_publicly_visible,
+    omit_if_public,
+)
 
 _graph_runtime: GraphRuntime | None = None
 _shader_registry: ShaderRegistry | None = None
@@ -561,6 +567,12 @@ async def get_perception_state():
 
     Returns operator presence, flow, emotion, interruptibility, and
     environmental sensing data.
+
+    LRR Phase 6 §4.A: when stream is publicly visible, replaces raw
+    biometric values with categorical bands (heart_rate → nominal/elevated/
+    critical; hrv → stable/reduced) and omits skin temperature + sleep
+    stage entirely. Categorical and structural fields (operator_present,
+    flow, presence_score) pass through.
     """
     import json as _json
 
@@ -570,6 +582,13 @@ async def get_perception_state():
     try:
         data = _json.loads(perc_path.read_text())
         data["available"] = True
+        if is_publicly_visible():
+            if "heart_rate_bpm" in data:
+                data["heart_rate_band"] = band_heart_rate(data.pop("heart_rate_bpm"))
+            if "hrv_ms" in data:
+                data["hrv_band"] = band_hrv(data.pop("hrv_ms"))
+            omit_if_public(data, "skin_temperature_c")
+            omit_if_public(data, "sleep_stage")
         return data
     except (_json.JSONDecodeError, OSError):
         return {"available": False, "operator_present": False, "presence_score": 0.0}

@@ -5,8 +5,10 @@ from __future__ import annotations
 import json
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+
+from logos.api.deps.stream_redaction import require_private_stream
 
 log = logging.getLogger("logos.api.profile")
 
@@ -17,9 +19,15 @@ from logos.api.routes._config import LOGOS_STATE_DIR
 PENDING_FACTS_PATH = LOGOS_STATE_DIR / "pending-facts.jsonl"
 
 
-@router.get("/{dimension}")
+@router.get("/{dimension}", dependencies=[Depends(require_private_stream)])
 async def get_dimension(dimension: str):
-    """Get facts for a specific profile dimension."""
+    """Get facts for a specific profile dimension.
+
+    LRR Phase 6 §4.A: 403 when stream is publicly visible — the per-dimension
+    facts payload contains free-text operator-modeling statements that read
+    as surveillance on a broadcast. The summary endpoint at /api/profile is
+    structural (dimension names + counts) and remains visible.
+    """
     import asyncio
 
     def _read():

@@ -11,10 +11,11 @@ from dataclasses import asdict
 from datetime import UTC
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
 from logos.api.cache import cache
+from logos.api.deps.stream_redaction import require_private_stream
 
 router = APIRouter(prefix="/api", tags=["data"])
 
@@ -128,12 +129,17 @@ async def get_accommodations():
     return _slow_response(_to_dict(cache.accommodations))
 
 
-@router.get("/management")
+@router.get("/management", dependencies=[Depends(require_private_stream)])
 async def get_management():
     """Management snapshot — team state, coaching, feedback.
 
     Council doesn't own management data (that's officium), so this
     returns an empty structure to prevent frontend 404s.
+
+    LRR Phase 6 §4.A: 403 when stream is publicly visible — even though the
+    council surface returns an empty stub, the path is reserved for any
+    future management-data overlay and must never be a public surface
+    (axiom management_governance: never broadcast individual-people data).
     """
     return _slow_response({"people": [], "coaching": [], "feedback": []})
 
