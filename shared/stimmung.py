@@ -66,6 +66,12 @@ class SystemStimmung(BaseModel):
     # Cognitive dimensions (weight 0.3 — epistemic state, lighter than infrastructure)
     grounding_quality: DimensionReading = Field(default_factory=DimensionReading)
     exploration_deficit: DimensionReading = Field(default_factory=DimensionReading)
+    # Continuous-Loop Research Cadence §3.1 — 12th dimension.
+    # Audience engagement (0-1, higher = more engaged chat) derived from
+    # the structural-analyzer SHM at /dev/shm/hapax-chat-signals.json.
+    # Weight: cognitive (0.3×) — epistemic state about the audience, not
+    # a direct physiological or infrastructure signal.
+    audience_engagement: DimensionReading = Field(default_factory=DimensionReading)
 
     # Biometric dimensions (weight 0.5 — softer thresholds, operator changes slowly)
     operator_stress: DimensionReading = Field(default_factory=DimensionReading)
@@ -123,6 +129,7 @@ _INFRA_DIMENSION_NAMES = [
 _COGNITIVE_DIMENSION_NAMES = [
     "grounding_quality",
     "exploration_deficit",
+    "audience_engagement",
 ]
 
 _BIOMETRIC_DIMENSION_NAMES = [
@@ -385,6 +392,24 @@ class StimmungCollector:
     def update_exploration(self, deficit: float) -> None:
         """Update exploration deficit (0.0 = engaged, 1.0 = system-wide boredom)."""
         self._record("exploration_deficit", max(0.0, min(1.0, deficit)))
+
+    def update_audience_engagement(self, engagement: float) -> None:
+        """Update audience-engagement reading from the chat structural analyzer.
+
+        Args:
+            engagement: 0-1 score where 1.0 = highly engaged audience. Inverted
+                for stimmung convention (where 0.0 = good, 1.0 = bad): a quiet
+                audience reads as high stimmung ``audience_engagement``
+                because from the system's perspective, the cognitive state
+                of "no audience attention" warrants a stance response
+                (e.g., shift toward ``study`` / ``silence``).
+
+        Continuous-Loop Research Cadence §3.1. Source: engagement reducer
+        over ``/dev/shm/hapax-chat-signals.json`` (producer: Phase 9 §3.1
+        structural analyzer sink).
+        """
+        value = 1.0 - max(0.0, min(1.0, engagement))
+        self._record("audience_engagement", value)
 
     def snapshot(self, now: float | None = None) -> SystemStimmung:
         """Produce a SystemStimmung from current readings."""
