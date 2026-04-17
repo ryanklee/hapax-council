@@ -336,9 +336,13 @@ def build_perceptual_field(
         tempo=perception.get("tempo"),
         transport_state=perception.get("transport_state"),
     )
+    # production_activity is a strict Literal; older perception-state payloads
+    # can contain the empty string which fails validation. Normalize to None.
+    _prod_activity_raw = perception.get("production_activity")
+    _prod_activity = _prod_activity_raw if _prod_activity_raw else None
     ingestion = StudioIngestionState(
         music_genre=perception.get("music_genre"),
-        production_activity=perception.get("production_activity"),
+        production_activity=_prod_activity,
         flow_state_score=perception.get("flow_state_score"),
     )
     vad = VadState(
