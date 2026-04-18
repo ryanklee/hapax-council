@@ -29,6 +29,42 @@ from shared.compositor_model import Layout
 log = logging.getLogger(__name__)
 
 
+def _rescale_layout(layout: Layout) -> Layout:
+    """Scale absolute pixel coordinates by ``config.LAYOUT_COORD_SCALE``.
+
+    A+ Stage 2 (2026-04-17): layouts were authored at 1920x1080 absolute
+    coordinates. When the canvas drops to 1280x720 (or any size), we
+    scale x/y/w/h uniformly by the same factor so the layout maintains
+    the same visual proportions. Only touches surfaces with numeric
+    geometry; non-rect surfaces (video_out sinks, binding-named
+    render_target) pass through unchanged.
+
+    Returns a new Layout via Pydantic model_copy; never mutates the input.
+    """
+    from .config import LAYOUT_COORD_SCALE
+
+    if abs(LAYOUT_COORD_SCALE - 1.0) < 1e-6:
+        return layout  # no-op at native resolution
+    new_surfaces = []
+    for surface in layout.surfaces:
+        geom = surface.geometry
+        # Only scale rect-like geometries with numeric x/y/w/h.
+        new_geom = geom
+        if geom.kind == "rect" and all(
+            isinstance(getattr(geom, f, None), (int, float)) for f in ("x", "y", "w", "h")
+        ):
+            new_geom = geom.model_copy(
+                update={
+                    "x": int(round(geom.x * LAYOUT_COORD_SCALE)),
+                    "y": int(round(geom.y * LAYOUT_COORD_SCALE)),
+                    "w": int(round(geom.w * LAYOUT_COORD_SCALE)),
+                    "h": int(round(geom.h * LAYOUT_COORD_SCALE)),
+                }
+            )
+        new_surfaces.append(surface.model_copy(update={"geometry": new_geom}))
+    return layout.model_copy(update={"surfaces": new_surfaces})
+
+
 def _default_layout_dir() -> Path:
     """Resolve the default layout directory.
 
@@ -165,6 +201,13 @@ class LayoutStore:
                 except (ValidationError, OSError, ValueError) as exc:
                     log.warning("Failed to load layout %s: %s", path, exc)
                     continue
+                # A+ Stage 2 (2026-04-17): rescale absolute pixel coords
+                # by LAYOUT_COORD_SCALE so existing 1920x1080-authored
+                # layout JSONs render correctly at 1280x720 (or any
+                # other canvas size). Only touches surfaces with
+                # integer/float x/y/w/h — video_out + other
+                # non-rect surfaces pass through unchanged.
+                layout = _rescale_layout(layout)
                 self._layouts[name] = layout
                 self._mtimes[name] = mtime
                 changed.append(name)
