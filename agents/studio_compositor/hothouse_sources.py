@@ -36,19 +36,20 @@ from __future__ import annotations
 
 import json
 import logging
-import math
 import os
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import cairo
+if TYPE_CHECKING:
+    import cairo
 
-from agents.studio_compositor.cairo_source import CairoSource
-from agents.studio_compositor.legibility_sources import (
-    _draw_rounded_rect,
-    _palette,
+from agents.studio_compositor.homage.rendering import (
+    active_package,
+    paint_bitchx_bg,
+    select_bitchx_font,
 )
+from agents.studio_compositor.homage.transitional_source import HomageTransitionalSource
 
 log = logging.getLogger(__name__)
 
@@ -160,16 +161,18 @@ def _read_recent_intents(n: int) -> list[dict]:
 # ── 1. Impingement cascade ───────────────────────────────────────────────
 
 
-class ImpingementCascadeCairoSource(CairoSource):
-    """Live readout of top N active perceptual signals + candidate families.
+class ImpingementCascadeCairoSource(HomageTransitionalSource):
+    """IRC-style readout of top N active perceptual signals + candidate families.
 
-    Renders as a monospace table: ``signal.path    value    → family``.
-    At 2fps the operator sees the field filling up with activity, and
-    can read which signals are within reach of the director's
-    recruitment pass even before a move fires.
+    Renders as ``* signal.path  value  → family`` lines — each line an
+    IRC join-message-flavoured entry. Muted ``*``, bright signal path,
+    accent-cyan value, accent-green family.
     """
 
-    def render(
+    def __init__(self) -> None:
+        super().__init__(source_id="impingement_cascade")
+
+    def render_content(
         self,
         cr: cairo.Context,
         canvas_w: int,
@@ -177,30 +180,36 @@ class ImpingementCascadeCairoSource(CairoSource):
         t: float,
         state: dict[str, Any],
     ) -> None:
-        pal = _palette()
-        _draw_rounded_rect(cr, 0, 0, canvas_w, canvas_h, 6, pal["bg_overlay"])
+        pkg = active_package()
+        paint_bitchx_bg(cr, canvas_w, canvas_h, pkg)
 
-        cr.set_source_rgba(*pal["fg_primary"])
-        cr.select_font_face("DejaVu Sans Mono", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
-        cr.set_font_size(11)
+        muted = pkg.resolve_colour("muted")
+        bright = pkg.resolve_colour("bright")
+        accent_cyan = pkg.resolve_colour("accent_cyan")
+        accent_green = pkg.resolve_colour("accent_green")
+
+        select_bitchx_font(cr, 11, bold=True)
+        cr.set_source_rgba(*muted)
         cr.move_to(8, 14)
-        cr.show_text("IMPINGEMENT FIELD")
+        cr.show_text("-!- impingement field")
 
-        cr.select_font_face("DejaVu Sans Mono", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL)
-        cr.set_font_size(10)
+        select_bitchx_font(cr, 10, bold=False)
         signals = _active_perceptual_signals(limit=14)
         y = 28
         for path, value, family in signals:
             if y + 12 > canvas_h:
                 break
-            cr.set_source_rgba(*pal["fg_primary"])
+            cr.set_source_rgba(*muted)
             cr.move_to(8, y)
-            cr.show_text(f"{path[:32]:<32}")
-            cr.set_source_rgba(*pal["accent_nominal"])
-            cr.move_to(192, y)
+            cr.show_text("* ")
+            cr.set_source_rgba(*bright)
+            cr.move_to(22, y)
+            cr.show_text(f"{path[:30]:<30}")
+            cr.set_source_rgba(*accent_cyan)
+            cr.move_to(200, y)
             cr.show_text(f"{value:+.2f}")
-            cr.set_source_rgba(*pal["accent_seeking"])
-            cr.move_to(248, y)
+            cr.set_source_rgba(*accent_green)
+            cr.move_to(250, y)
             cr.show_text(f"→ {family}")
             y += 12
 
@@ -208,10 +217,13 @@ class ImpingementCascadeCairoSource(CairoSource):
 # ── 2. Recruitment candidate panel ───────────────────────────────────────
 
 
-class RecruitmentCandidatePanelCairoSource(CairoSource):
-    """Last 3 recruited compositional capabilities + salience."""
+class RecruitmentCandidatePanelCairoSource(HomageTransitionalSource):
+    """IRC-style ledger of the last 3 recruited compositional capabilities."""
 
-    def render(
+    def __init__(self) -> None:
+        super().__init__(source_id="recruitment_candidate_panel")
+
+    def render_content(
         self,
         cr: cairo.Context,
         canvas_w: int,
@@ -219,17 +231,19 @@ class RecruitmentCandidatePanelCairoSource(CairoSource):
         t: float,
         state: dict[str, Any],
     ) -> None:
-        pal = _palette()
-        _draw_rounded_rect(cr, 0, 0, canvas_w, canvas_h, 6, pal["bg_overlay"])
+        pkg = active_package()
+        paint_bitchx_bg(cr, canvas_w, canvas_h, pkg)
 
-        cr.set_source_rgba(*pal["fg_primary"])
-        cr.select_font_face("DejaVu Sans Mono", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
-        cr.set_font_size(11)
+        muted = pkg.resolve_colour("muted")
+        bright = pkg.resolve_colour("bright")
+        accent_green = pkg.resolve_colour("accent_green")
+
+        select_bitchx_font(cr, 11, bold=True)
+        cr.set_source_rgba(*muted)
         cr.move_to(8, 14)
-        cr.show_text("RECENT RECRUITMENTS")
+        cr.show_text("-!- recent recruitments")
 
-        cr.select_font_face("DejaVu Sans Mono", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL)
-        cr.set_font_size(10)
+        select_bitchx_font(cr, 10, bold=False)
 
         # 2026-04-18 viewer audit: this panel used to display the LLM's
         # flowery narrative attached to each CompositionalImpingement
@@ -272,16 +286,19 @@ class RecruitmentCandidatePanelCairoSource(CairoSource):
 
         y = 28
         if not items:
-            cr.set_source_rgba(*pal["fg_primary"])
+            cr.set_source_rgba(*muted)
             cr.move_to(8, y)
-            cr.show_text("(no recent recruitments)")
+            cr.show_text("*  (no recent recruitments)")
             return
 
         for label, age_s, _last in items:
-            cr.set_source_rgba(*pal["fg_primary"])
+            cr.set_source_rgba(*muted)
             cr.move_to(8, y)
+            cr.show_text("* ")
+            cr.set_source_rgba(*bright)
+            cr.move_to(22, y)
             cr.show_text(label[:38])
-            cr.set_source_rgba(*pal["accent_nominal"])
+            cr.set_source_rgba(*accent_green)
             cr.move_to(canvas_w - 44, y)
             cr.show_text(f"{age_s:4.0f}s")
             y += 14
@@ -290,15 +307,13 @@ class RecruitmentCandidatePanelCairoSource(CairoSource):
 # ── 3. Thinking indicator ────────────────────────────────────────────────
 
 
-class ThinkingIndicatorCairoSource(CairoSource):
-    """Pulsing dot + tier label while an LLM tick is in flight.
+class ThinkingIndicatorCairoSource(HomageTransitionalSource):
+    """IRC-style thinking indicator: ``[*] TIER · model · Ns`` in-flight, ``(idle)`` otherwise."""
 
-    The director loop writes ``/dev/shm/hapax-director/llm-in-flight.json``
-    before each ``_call_activity_llm`` / structural call and deletes it
-    when the call returns. This source reads the marker and pulses.
-    """
+    def __init__(self) -> None:
+        super().__init__(source_id="thinking_indicator")
 
-    def render(
+    def render_content(
         self,
         cr: cairo.Context,
         canvas_w: int,
@@ -308,53 +323,50 @@ class ThinkingIndicatorCairoSource(CairoSource):
     ) -> None:
         info = _safe_load_json(_LLM_IN_FLIGHT)
         active = bool(info)
-        pal = _palette()
-        _draw_rounded_rect(cr, 0, 0, canvas_w, canvas_h, 6, pal["bg_overlay"])
+        pkg = active_package()
+        paint_bitchx_bg(cr, canvas_w, canvas_h, pkg)
 
-        cx = 12.0
-        cy = canvas_h / 2
+        muted = pkg.resolve_colour("muted")
+        bright = pkg.resolve_colour("bright")
+
+        cy = canvas_h / 2 + 4
+        select_bitchx_font(cr, 11, bold=True)
+
         if active:
-            # Sinusoidal alpha pulse at ~1.5 Hz; radius grows with elapsed.
             started = float(info.get("started_at") or time.time())
             elapsed = max(0.0, time.time() - started)
-            alpha = 0.5 + 0.5 * math.sin(t * 9.42)
-            cr.set_source_rgba(*pal["accent_seeking"][:3], alpha)
-            cr.arc(cx, cy, 6.0, 0, 2 * math.pi)
-            cr.fill()
             model = str(info.get("model") or "?")
             tier = str(info.get("tier") or "?")
-            cr.set_source_rgba(*pal["fg_primary"])
-            cr.select_font_face("DejaVu Sans Mono", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
-            cr.set_font_size(11)
-            cr.move_to(28, cy + 4)
+
+            # Pulsing character — IRC-style spinner via cycling glyph.
+            spinner_glyphs = ("|", "/", "-", "\\")
+            spinner = spinner_glyphs[int(t * 6) % 4]
+            cr.set_source_rgba(*muted)
+            cr.move_to(8, cy)
+            cr.show_text(f"[{spinner}] ")
+            x = 8 + cr.text_extents(f"[{spinner}] ").x_advance
+            cr.set_source_rgba(*bright)
+            cr.move_to(x, cy)
             cr.show_text(f"{tier.upper()} · {model} · {elapsed:.1f}s")
         else:
-            cr.set_source_rgba(*pal["fg_primary"][:3], 0.35)
-            cr.arc(cx, cy, 4.0, 0, 2 * math.pi)
-            cr.fill()
-            cr.select_font_face(
-                "DejaVu Sans Mono", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL
-            )
-            cr.set_font_size(11)
-            cr.move_to(28, cy + 4)
-            cr.show_text("idle")
+            cr.set_source_rgba(*muted)
+            cr.move_to(8, cy)
+            cr.show_text("[ ] (idle)")
 
 
 # ── 4. Pressure gauge ────────────────────────────────────────────────────
 
 
-class PressureGaugeCairoSource(CairoSource):
-    """Horizontal gauge: count of active perceptual signals above threshold.
-
-    The idea is to expose the field saturation: as signals fire above
-    threshold they push the gauge right; when the director acts, the
-    gauge drops because the activity "discharges" the pressure.
-    """
+class PressureGaugeCairoSource(HomageTransitionalSource):
+    """BitchX-grammar pressure gauge: ASCII block-fill bar + label."""
 
     _SIGNIFICANT_MAGNITUDE = 0.35
     _GAUGE_MAX = 12.0
 
-    def render(
+    def __init__(self) -> None:
+        super().__init__(source_id="pressure_gauge")
+
+    def render_content(
         self,
         cr: cairo.Context,
         canvas_w: int,
@@ -362,54 +374,75 @@ class PressureGaugeCairoSource(CairoSource):
         t: float,
         state: dict[str, Any],
     ) -> None:
-        pal = _palette()
-        _draw_rounded_rect(cr, 0, 0, canvas_w, canvas_h, 6, pal["bg_overlay"])
+        pkg = active_package()
+        paint_bitchx_bg(cr, canvas_w, canvas_h, pkg)
+
+        muted = pkg.resolve_colour("muted")
+        bright = pkg.resolve_colour("bright")
+        accent_green = pkg.resolve_colour("accent_green")
+        accent_yellow = pkg.resolve_colour("accent_yellow")
+        accent_red = pkg.resolve_colour("accent_red")
 
         signals = _active_perceptual_signals(limit=30)
-        active = sum(1 for _, value, _ in signals if abs(value) >= self._SIGNIFICANT_MAGNITUDE)
-        saturation = min(1.0, active / self._GAUGE_MAX)
+        n_active = sum(1 for _, value, _ in signals if abs(value) >= self._SIGNIFICANT_MAGNITUDE)
+        saturation = min(1.0, n_active / self._GAUGE_MAX)
 
-        cr.set_source_rgba(*pal["fg_primary"])
-        cr.select_font_face("DejaVu Sans Mono", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
-        cr.set_font_size(11)
+        select_bitchx_font(cr, 11, bold=True)
+        cr.set_source_rgba(*muted)
         cr.move_to(8, 16)
-        cr.show_text("PRESSURE")
+        cr.show_text("-!- pressure")
 
-        # Gauge bar
-        bar_x = 8.0
-        bar_y = 22.0
-        bar_w = canvas_w - 16.0
-        bar_h = 10.0
-        cr.set_source_rgba(*pal["fg_primary"][:3], 0.2)
-        cr.rectangle(bar_x, bar_y, bar_w, bar_h)
-        cr.fill()
-        # Color transitions nominal → seeking → warning as pressure rises.
+        # CP437 block-fill bar — ░ empty, █ filled.
+        select_bitchx_font(cr, 12, bold=False)
+        total_cells = 24
+        filled_cells = int(saturation * total_cells)
         if saturation < 0.33:
-            accent = pal["accent_nominal"]
+            accent = accent_green
         elif saturation < 0.66:
-            accent = pal["accent_seeking"]
+            accent = accent_yellow
         else:
-            accent = pal["accent_warning"]
-        cr.set_source_rgba(*accent)
-        cr.rectangle(bar_x, bar_y, bar_w * saturation, bar_h)
-        cr.fill()
+            accent = accent_red
 
-        cr.set_source_rgba(*pal["fg_primary"])
-        cr.select_font_face("DejaVu Sans Mono", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL)
-        cr.set_font_size(10)
+        bar_y = 34
+        cr.set_source_rgba(*muted)
+        cr.move_to(8, bar_y)
+        cr.show_text("[")
+        bracket_adv = cr.text_extents("[").x_advance
+
+        x = 8 + bracket_adv
+        cr.set_source_rgba(*accent)
+        cr.move_to(x, bar_y)
+        filled = "█" * filled_cells
+        cr.show_text(filled)
+        x += cr.text_extents(filled).x_advance
+
+        cr.set_source_rgba(*muted)
+        cr.move_to(x, bar_y)
+        empty = "░" * (total_cells - filled_cells)
+        cr.show_text(empty)
+        x += cr.text_extents(empty).x_advance
+
+        cr.move_to(x, bar_y)
+        cr.show_text("]")
+
+        select_bitchx_font(cr, 10, bold=False)
+        cr.set_source_rgba(*bright)
         cr.move_to(8, canvas_h - 4)
-        cr.show_text(f"{active} active · {saturation:.0%} saturated")
+        cr.show_text(f"{n_active} active · {saturation:.0%} saturated")
 
 
 # ── 5. Activity variety log ──────────────────────────────────────────────
 
 
-class ActivityVarietyLogCairoSource(CairoSource):
-    """Bottom-left ribbon of recent director activities, fading out over time."""
+class ActivityVarietyLogCairoSource(HomageTransitionalSource):
+    """IRC backscroll of recent director activities, fading with age."""
 
-    _WINDOW_S = 180.0  # show activities from the last 3 min; fade past that
+    _WINDOW_S = 180.0
 
-    def render(
+    def __init__(self) -> None:
+        super().__init__(source_id="activity_variety_log")
+
+    def render_content(
         self,
         cr: cairo.Context,
         canvas_w: int,
@@ -417,26 +450,26 @@ class ActivityVarietyLogCairoSource(CairoSource):
         t: float,
         state: dict[str, Any],
     ) -> None:
-        pal = _palette()
-        _draw_rounded_rect(cr, 0, 0, canvas_w, canvas_h, 6, pal["bg_overlay"])
+        pkg = active_package()
+        paint_bitchx_bg(cr, canvas_w, canvas_h, pkg)
 
-        cr.set_source_rgba(*pal["fg_primary"])
-        cr.select_font_face("DejaVu Sans Mono", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
-        cr.set_font_size(11)
+        muted = pkg.resolve_colour("muted")
+        bright = pkg.resolve_colour("bright")
+
+        select_bitchx_font(cr, 11, bold=True)
+        cr.set_source_rgba(*muted)
         cr.move_to(8, 14)
-        cr.show_text("RECENT MOVES")
+        cr.show_text("-!- recent moves")
 
         intents = _read_recent_intents(n=10)
         now = time.time()
-        # Deduplicate consecutive silences — a wall of silence is noise.
         deduped: list[dict] = []
         for intent in intents:
             if deduped and deduped[-1].get("activity") == intent.get("activity"):
                 continue
             deduped.append(intent)
 
-        cr.select_font_face("DejaVu Sans Mono", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL)
-        cr.set_font_size(10)
+        select_bitchx_font(cr, 10, bold=False)
         y = 28
         for intent in reversed(deduped[-6:]):
             if y + 12 > canvas_h:
@@ -446,11 +479,14 @@ class ActivityVarietyLogCairoSource(CairoSource):
             age = max(0.0, now - emitted)
             if age > self._WINDOW_S:
                 continue
-            # Linear fade from 1.0 at emission → 0.3 at WINDOW_S.
             alpha = max(0.3, 1.0 - (age / self._WINDOW_S) * 0.7)
-            cr.set_source_rgba(*pal["fg_primary"][:3], alpha)
+            cr.set_source_rgba(*muted[:3], alpha)
             cr.move_to(8, y)
-            cr.show_text(f"[{int(age):>3}s]  {activity[:24]}")
+            cr.show_text(f"[{int(age):>3}s] ")
+            x_adv = cr.text_extents(f"[{int(age):>3}s] ").x_advance
+            cr.set_source_rgba(*bright[:3], alpha)
+            cr.move_to(8 + x_adv, y)
+            cr.show_text(f"* {activity[:22]}")
             y += 14
 
 
@@ -459,16 +495,13 @@ class ActivityVarietyLogCairoSource(CairoSource):
 _PRESENCE_STATE = Path(os.path.expanduser("~/.cache/hapax-daimonion/presence-state.json"))
 
 
-class WhosHereCairoSource(CairoSource):
-    """Top-right mini-badge: operator presence + external viewer count.
+class WhosHereCairoSource(HomageTransitionalSource):
+    """IRC-style channel userlist: ``[Users(#hapax:1/N)]`` operator + viewers."""
 
-    Operator directive 2026-04-17: "even if there is no YouTube audience
-    *I* am here." The operator is always a first-class audience. This
-    surface makes that legible: a permanent "♦ operator" marker plus
-    the external-viewer count when non-zero.
-    """
+    def __init__(self) -> None:
+        super().__init__(source_id="whos_here")
 
-    def render(
+    def render_content(
         self,
         cr: cairo.Context,
         canvas_w: int,
@@ -476,8 +509,11 @@ class WhosHereCairoSource(CairoSource):
         t: float,
         state: dict[str, Any],
     ) -> None:
-        pal = _palette()
-        _draw_rounded_rect(cr, 0, 0, canvas_w, canvas_h, 6, pal["bg_overlay"])
+        pkg = active_package()
+        paint_bitchx_bg(cr, canvas_w, canvas_h, pkg)
+
+        muted = pkg.resolve_colour("muted")
+        bright = pkg.resolve_colour("bright")
 
         presence = _safe_load_json(_PRESENCE_STATE)
         presence_state = str(presence.get("state") or "PRESENT").upper()
@@ -490,26 +526,35 @@ class WhosHereCairoSource(CairoSource):
         except Exception:
             external = 0
 
-        cr.select_font_face("DejaVu Sans Mono", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
-        cr.set_font_size(12)
-        # Operator is always here — but the color tells us whether presence
-        # engine confirms it (PRESENT) or not (UNCERTAIN / AWAY).
-        if presence_state == "PRESENT":
-            cr.set_source_rgba(*pal["accent_nominal"])
-        elif presence_state == "UNCERTAIN":
-            cr.set_source_rgba(*pal["accent_cautious"])
-        else:
-            cr.set_source_rgba(*pal["fg_primary"][:3], 0.6)
-        cr.move_to(8, 18)
-        cr.show_text(f"\u2666 operator ({presence_state.lower()})")
+        presence_rgba = {
+            "PRESENT": pkg.resolve_colour("accent_green"),
+            "UNCERTAIN": pkg.resolve_colour("accent_yellow"),
+        }.get(presence_state, muted)
 
-        cr.set_source_rgba(*pal["fg_primary"])
-        cr.set_font_size(11)
+        select_bitchx_font(cr, 12, bold=True)
+        cr.set_source_rgba(*muted)
+        cr.move_to(8, 18)
+        header = f"[Users(#hapax:1/{1 + external})]"
+        cr.show_text(header)
+
+        select_bitchx_font(cr, 11, bold=False)
+        # Operator — @op nick
+        cr.set_source_rgba(*muted)
         cr.move_to(8, 34)
+        cr.show_text("@")
+        at_adv = cr.text_extents("@").x_advance
+        cr.set_source_rgba(*presence_rgba)
+        cr.move_to(8 + at_adv, 34)
+        cr.show_text(f"operator ({presence_state.lower()})")
+
         if external > 0:
-            cr.show_text(f"\u25cf {external} external (YouTube)")
-        else:
-            cr.show_text("\u25cb 0 external (solo)")
+            cr.set_source_rgba(*muted)
+            cr.move_to(8, 50)
+            cr.show_text("+")
+            plus_adv = cr.text_extents("+").x_advance
+            cr.set_source_rgba(*bright)
+            cr.move_to(8 + plus_adv, 50)
+            cr.show_text(f"viewers ({external})")
 
 
 __all__ = [
