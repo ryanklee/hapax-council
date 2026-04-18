@@ -1413,8 +1413,11 @@ class DirectorLoop:
                     len(raw_content),
                     raw_content[:200],
                 )
+                # `react` here is only for per-reaction coherence scoring
+                # below; the caller re-parses `raw_content` via
+                # _parse_intent_from_llm for the full DirectorIntent
+                # (which expects the raw JSON, not a narrative-text extract).
                 react, _ = self._parse_llm_response(raw_content.strip())
-                log.info("Parsed react (%d chars): %r", len(react), react[:80])
 
                 # Langfuse per-reaction scoring (spec: stream research infra).
                 if hapax_score is not None and span is not None:
@@ -1441,7 +1444,7 @@ class DirectorLoop:
                         comment=self._activity,
                     )
 
-                return react
+                return raw_content.strip()
         except Exception:
             log.exception("Activity LLM call failed")
             return ""
