@@ -79,7 +79,14 @@ class FallbackPipeline:
             src = Gst.ElementFactory.make("videotestsrc", f"fbsrc_{self._role_safe}")
             if src is None:
                 raise RuntimeError(f"{self._spec.role}: videotestsrc factory failed")
-            src.set_property("pattern", 18)  # ball — recognizable as non-camera
+            # A+ Stage 2 (2026-04-17): pattern=2 (black) instead of
+            # pattern=18 (bouncing ball). The fallback card doesn't need
+            # animation — it's a "no signal" indicator viewers see for
+            # 1-3 seconds while primary reacquires. Black pattern
+            # removes per-frame geometry update cost. Combined with
+            # text overlay removal below, the fallback is effectively
+            # a static black frame at 1fps.
+            src.set_property("pattern", 2)  # black
             src.set_property("is-live", True)
 
             raw_caps = Gst.ElementFactory.make("capsfilter", f"fbrawcaps_{self._role_safe}")
@@ -91,15 +98,13 @@ class FallbackPipeline:
                 ),
             )
 
-            overlay = Gst.ElementFactory.make("textoverlay", f"fbtext_{self._role_safe}")
-            role_up = self._spec.role.upper().replace("-", " ")
-            if overlay is not None:
-                overlay.set_property("text", f"CAMERA {role_up} OFFLINE")
-                overlay.set_property("font-desc", "Sans Bold 60")
-                overlay.set_property("halignment", 1)  # center
-                overlay.set_property("valignment", 4)  # center
-                overlay.set_property("line-alignment", 1)  # center
-                overlay.set_property("shaded-background", True)
+            # A+ Stage 2 (2026-04-17): textoverlay removed entirely. Pango
+            # rasterization at fallback fps was documented in the thread
+            # dump; the text was never observed on stream during normal
+            # operation (primary reacquires within 2-3s). If a "no signal"
+            # label is needed again, pre-render it once to a BGRA buffer
+            # at startup and feed it from appsrc — not per-frame Pango.
+            overlay = None
 
             convert = Gst.ElementFactory.make("videoconvert", f"fbconv_{self._role_safe}")
             convert.set_property("dither", 0)
