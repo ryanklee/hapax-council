@@ -37,18 +37,18 @@ def test_get_qdrant_grpc_returns_gated_client():
     assert isinstance(client, ConsentGatedQdrant)
 
 
-def test_grpc_raw_is_still_accessible_for_bootstrap():
+def test_grpc_raw_is_still_accessible_for_bootstrap(monkeypatch):
     from qdrant_client import QdrantClient
 
-    from shared.config import _get_qdrant_grpc_raw
+    import shared.config as _config
 
-    # _get_qdrant_grpc_raw is lru_cached; clear so earlier tests that
-    # ran under a `patch("shared.config.QdrantClient")` (and called
-    # into shared.config while the patch was active) don't bleed a
-    # cached MagicMock into this assertion. Observed on full-suite CI
-    # runs where the cache was filled while the class was mocked.
-    _get_qdrant_grpc_raw.cache_clear()
-    raw = _get_qdrant_grpc_raw()
+    # Earlier tests may have module-patched shared.config.QdrantClient
+    # without teardown. The lru_cache clear below recomputes the call —
+    # which still resolves shared.config.QdrantClient dynamically — so
+    # restoring the name is what actually makes this order-independent.
+    monkeypatch.setattr(_config, "QdrantClient", QdrantClient)
+    _config._get_qdrant_grpc_raw.cache_clear()
+    raw = _config._get_qdrant_grpc_raw()
     assert isinstance(raw, QdrantClient)
 
 
