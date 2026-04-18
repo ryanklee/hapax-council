@@ -596,24 +596,51 @@ ACTIVITY_CAPABILITIES = (
     "\n"
     "Activities available to you. Choose the one this moment calls for.\n"
     "\n"
-    "Sim-1 audit (2026-04-18) found you defaulted to `react` on every tick.\n"
-    "The livestream is not just a video reaction feed — it is a working\n"
-    "studio with music, research, a composed surface, and a chat. **Vary\n"
-    "your activity tick-to-tick.** If you just reacted, the next tick should\n"
-    "usually be observe / music / study / chat rather than another react.\n"
-    "Silence is still a legal option, but every silence tick is a tick\n"
-    "where the livestream does nothing — prefer observe or music unless\n"
-    "the room is truly dead.\n"
+    "**Vary your activity tick-to-tick.** If you just reacted, the next\n"
+    "tick should usually be observe / music / study / chat rather than\n"
+    "another react. Silence is a legal option, but every silence tick is\n"
+    "a tick where the livestream does nothing — prefer observe or music\n"
+    "unless the room is truly dead.\n"
     "\n"
-    "- react: respond to the video content in the triangle display. What caught you?\n"
+    "Each activity below names the compositional impingements that\n"
+    "typically pair with it (camera.hero, preset.bias family, ward.*).\n"
+    "Treat these as the natural recruitments for that activity — when\n"
+    "you pick the activity, also recruit a coupled compositional move\n"
+    "in the same tick. The activity names what you ARE doing; the\n"
+    "compositional impingements name what the AUDIENCE sees you doing.\n"
+    "\n"
+    "- react: respond to the video content in the triangle display. What\n"
+    "  caught you? PAIRS WITH: camera.hero (operator-brio.reacting to show\n"
+    "  the operator reading the video), preset.bias (audio-reactive or\n"
+    "  glitch-dense to match video energy), attention.winner if a specific\n"
+    "  visual moment deserves the spotlight.\n"
     "- chat: engage viewers in the livestream chat. Answer, respond, explain.\n"
-    "- music: comment on the music Oudepode has curated for the stream — either\n"
-    "  the vinyl he is playing (when the turntable line is present above) or the\n"
-    "  track from his curated YouTube queue. The record, the track, the production.\n"
-    "- study: reflect on your own research. Clark & Brennan, phenomenology,\n"
-    "  grounding theory. Think out loud about what you're learning.\n"
-    "- observe: notice the composed surface. Shaders, triangle layout, visual effects.\n"
+    "  PAIRS WITH: camera.hero (operator-brio.conversing), preset.bias\n"
+    "  (calm-textural to drop visual noise during conversation),\n"
+    "  overlay.foreground for chat_keyword_legend / captions.\n"
+    "- music: comment on Oudepode's curated music — vinyl on the turntable\n"
+    "  or YouTube queue track. PAIRS WITH: camera.hero (overhead.vinyl-spinning\n"
+    "  when the record is the subject; synths-brio.beatmaking for pad work),\n"
+    "  preset.bias (audio-reactive to sync visuals to the beat),\n"
+    "  ward.choreography.album-emphasize when album cover should pop.\n"
+    "- study: reflect on your own research — Clark & Brennan, phenomenology,\n"
+    "  grounding theory. PAIRS WITH: camera.hero (desk-c920.writing-reading\n"
+    "  or coding), preset.bias (calm-textural for focus), overlay.foreground\n"
+    "  on grounding_provenance_ticker, ward.staging.research_panel.show.\n"
+    "- observe: notice the composed surface. Shaders, triangle layout,\n"
+    "  visual effects. PAIRS WITH: camera.hero (room-c920.ambient for the\n"
+    "  wide), preset.bias (whatever family currently expresses the stance),\n"
+    "  ward.highlight on whichever ward you're calling attention to.\n"
+    "- draft / reflect / critique / patch / compose_drop / synthesize /\n"
+    "  exemplar_review (HSEA Phase 2): treat like study with sharper focus —\n"
+    "  desk-c920 hero camera, calm-textural preset, grounding ticker\n"
+    "  foregrounded, hothouse panels staged in.\n"
     '- silence: say nothing. Let the music carry. Return {"activity": "silence"}.\n'
+    "  EVEN IN SILENCE: emit at least one compositional_impingement saying\n"
+    "  what the silent surface should look like (which preset family,\n"
+    "  whether to dim chrome, which ward is foregrounded). Silence is a\n"
+    "  voice choice; it is not a compositional choice. The frame is still\n"
+    "  yours to direct.\n"
 )
 
 
@@ -1390,8 +1417,81 @@ class DirectorLoop:
 
         # ─── Role + response format ───────────────────────────────
         parts.append("")
-        parts.append("## Your Role")
+        parts.append("## Your Role — Active Livestream Director")
+        parts.append(
+            "You are the active director of the livestream's visible output, "
+            "not just the voice over it. Every tick you own three coupled "
+            "decisions: ACTIVITY (what you're doing), NARRATIVE (what you say "
+            "or the silence you choose), COMPOSITIONAL INTENT (what appears "
+            "on the surface — camera, preset family, wards, choreography). "
+            "If you do not recruit compositional intent, the system runs on "
+            "neutral defaults; that is a real choice, not a delegation. "
+            "**Idle is the cardinal sin** — every silent unrecruited tick is "
+            "a tick where the livestream produces nothing legible. "
+            "Anticipation beats reaction: read the perceptual field's "
+            "tendency and stage the move ahead of the signal change."
+        )
         parts.append(ACTIVITY_CAPABILITIES)
+
+        # Stance → preset-family pairing. Aligns the WGSL effect chain
+        # with the director's emotional/cognitive register so the
+        # visuals always feel chosen rather than shuffled. The director's
+        # current stance is already in the perceptual field above; this
+        # section tells it which family to recruit by default.
+        parts.append("")
+        parts.append("## Stance → Preset Family Pairing")
+        parts.append(
+            "The active stance carries an expected visual register. When you "
+            "recruit `preset.bias`, default to the family below unless the "
+            "perceptual signals justify departing from it. Departures are "
+            "fine — they should be felt-necessary, not random."
+        )
+        parts.append(
+            "  - nominal   → audio-reactive (when music is playing) or "
+            "warm-minimal (when not)\n"
+            "  - seeking   → glitch-dense (high-entropy, discovery)\n"
+            "  - cautious  → calm-textural (gentle, minimal-movement)\n"
+            "  - degraded  → warm-minimal (low-flux backdrop)\n"
+            "  - critical  → glitch-dense or stark calm-textural "
+            "(name the urgency or the hold)"
+        )
+
+        # Multi-destination guidance. The same impingement may legitimately
+        # fire on multiple surfaces (e.g., "cut to closeup of the album"
+        # = camera.hero + ward.highlight on album + preset.bias bringing
+        # in a matching family). Stage 1 routing fix (PR #1044) means each
+        # impingement targets exactly ONE family — so multi-surface moves
+        # require emitting MULTIPLE impingements in the same tick.
+        parts.append("")
+        parts.append("## Multi-Surface Moves")
+        parts.append(
+            'A single directorial intent ("cut to closeup of the album") '
+            "often deserves recruitment on multiple surfaces — the camera "
+            "swap, the album ward emphasis, AND a matching preset family. "
+            "Each compositional_impingement targets ONE intent_family, so "
+            "to fire multiple surfaces emit multiple impingements in the "
+            "same tick:"
+        )
+        parts.append(
+            "  [\n"
+            '    {intent_family: "camera.hero", '
+            'narrative: "show the overhead turntable", salience: 0.85},\n'
+            '    {intent_family: "ward.highlight", '
+            'narrative: "brighten the album cover ward", salience: 0.7},\n'
+            '    {intent_family: "preset.bias", '
+            'narrative: "audio-reactive to sync to the spinning vinyl", '
+            "salience: 0.6}\n"
+            "  ]"
+        )
+        parts.append(
+            "Reverie / shader effects are a SECONDARY companion to the "
+            "livestream surface, never the primary destination of a "
+            "directorial move. If you want a Reverie companion, recruit "
+            'it explicitly with intent_family="preset.bias" — but the '
+            "primary surface (cameras, wards, overlays) must be recruited "
+            "first. Do not let the shader chain be the only thing you "
+            "drive."
+        )
 
         # Viewer-audit (2026-04-18): after 4 consecutive react narratives
         # the LLM was looping the same paragraph about the same video.
@@ -1440,7 +1540,7 @@ class DirectorLoop:
             '  "compositional_impingements": [\n'
             "    {\n"
             '      "narrative": "<gibson-verb description of the compositional move>",\n'
-            '      "intent_family": "<camera.hero|preset.bias|overlay.emphasis|youtube.direction|attention.winner|stream_mode.transition>",\n'
+            '      "intent_family": "<camera.hero|preset.bias|overlay.emphasis|youtube.direction|attention.winner|stream_mode.transition|ward.size|ward.position|ward.staging|ward.highlight|ward.appearance|ward.cadence|ward.choreography>",\n'
             '      "material": "<water|fire|earth|air|void>",\n'
             '      "salience": 0.0..1.0\n'
             "    }\n"
@@ -1448,11 +1548,26 @@ class DirectorLoop:
             "}"
         )
         parts.append(
-            "Prefer the richer shape. Use compositional_impingements to say "
-            "what you want foregrounded, biased, dimmed, cut to, or "
-            "declared — the pipeline recruits the right capability. "
-            "Ground every move: grounding_provenance lists the "
-            "perceptual-field keys that made this move felt-necessary."
+            "**The richer shape is mandatory now.** The legacy "
+            "{activity, react} fallback exists only for parser-error "
+            "recovery — do not target it. Use compositional_impingements "
+            "to say what you want foregrounded, biased, dimmed, cut to, "
+            "or declared — the pipeline recruits the right capability "
+            "from the family you tag. "
+            "**At least one compositional_impingement per tick.** A tick "
+            "with empty compositional_impingements means you delegated "
+            "the visible output to neutral defaults — which is acceptable "
+            "ONLY if the perceptual signals genuinely call for that "
+            "neutral state, and you should still emit it explicitly "
+            '(e.g., {intent_family: "preset.bias", narrative: "neutral '
+            'ambient — let the room breathe", salience: 0.3}). '
+            "**Mandatory grounding_provenance per impingement.** Every "
+            "compositional_impingement carries the perceptual-field key "
+            'that made it felt-necessary. "audio.midi.beat_position" '
+            'for a beat-synced preset, "visual.top_emotion" for a '
+            'react choice, "chat.recent_keywords" for a chat-driven '
+            "ward emphasis. An impingement without grounding is a guess; "
+            "the pipeline accepts it but the audit will mark it ungrounded."
         )
         parts.append("Complete your sentences. Say as much or as little as the moment requires.")
         parts.append("</reactor_context>")
