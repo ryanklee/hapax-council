@@ -60,15 +60,17 @@ def test_params_fps_takes_precedence(registry, budget):
     assert runner._period == pytest.approx(1.0 / 6.0)
 
 
-def test_update_cadence_always_defaults_30fps(registry, budget):
+def test_update_cadence_always_defaults_10fps(registry, budget):
+    # 2026-04-17 perf pass briefly bumped "always" to 30 fps, driving
+    # studio-compositor to 214% CPU and janking the cameras. Reverted:
+    # "always" falls through to the 10 fps default alongside every
+    # other cadence that doesn't explicitly declare rate_hz/params.fps.
     source = _cairo_source(update_cadence="always")
     runner = registry.construct_backend(source, budget_tracker=budget)
-    assert runner._period == pytest.approx(1.0 / 30.0)
+    assert runner._period == pytest.approx(0.1)
 
 
-def test_legacy_default_10fps_when_no_hints(registry, budget):
-    # If a source is neither "always" nor sets rate_hz / params.fps,
-    # the fallback lands at 10 fps (the pre-perf-pass behavior).
+def test_default_10fps_when_no_hints(registry, budget):
     source = _cairo_source(update_cadence="on_change")
     runner = registry.construct_backend(source, budget_tracker=budget)
     assert runner._period == pytest.approx(0.1)
