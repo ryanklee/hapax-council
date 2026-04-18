@@ -8,6 +8,7 @@ and sensor state, calls a reasoning model, and processes the resulting fragment
 from __future__ import annotations
 
 import logging
+import re
 import time
 import uuid
 from pathlib import Path
@@ -28,6 +29,107 @@ from agents.imagination import (
 )
 
 log = logging.getLogger(__name__)
+
+# Canonical 9 expressive dimensions — must match the UniformBuffer slot
+# order in hapax-logos/src-imagination/. When the LLM emits markdown that
+# can't be validated as JSON (Command-R's default response shape), the
+# tolerant fallback parser reconstructs a fragment from regex matches
+# against the dimension names below + a `material` line + a `salience`
+# line. Without the fallback, every validation failure drops the entire
+# tick and reverie shaders receive zero modulation indefinitely.
+_DIMENSION_KEYS = (
+    "intensity",
+    "tension",
+    "depth",
+    "coherence",
+    "spectral_color",
+    "temporal_distortion",
+    "degradation",
+    "pitch_displacement",
+    "diffusion",
+)
+_MATERIAL_CHOICES = ("water", "fire", "earth", "air", "void")
+
+
+def _extract_fragment_from_markdown(text: str) -> ImaginationFragment | None:
+    """Reconstruct an ImaginationFragment from free-form markdown output.
+
+    Command-R and similar instruction-tuned models frequently ignore the
+    JSON constraint that pydantic-ai's `output_type=ImaginationFragment`
+    hands them, returning text like::
+
+        ## Imagination Fragment
+        I imagine a slow, gentle rainfall...
+
+        The material quality is **water**...
+
+        ## Expressive Dimensions
+        intensity: 0.4
+        tension: 0.0
+        ...
+
+        ## Salience
+        0.1
+
+    Rather than drop the fragment (the pre-fallback behavior, which
+    left /dev/shm/hapax-imagination/current.json with `dimensions={}`
+    for hours and starved reverie's 9-dim shader modulation), extract
+    the salvageable fields with tolerant regexes. Missing dimensions
+    default to 0.5 so shaders still get centred modulation rather than
+    zero. Returns None only when no narrative text can be recovered.
+    """
+    if not text or not text.strip():
+        return None
+    narrative = ""
+    # Pull narrative as everything up to the first "## Expressive" or
+    # "## Dimensions" header, minus the leading "## Imagination…" line.
+    narrative_match = re.split(
+        r"##\s*(?:Expressive|Dimensions|Salience|Material)", text, maxsplit=1, flags=re.IGNORECASE
+    )
+    if narrative_match:
+        head = narrative_match[0]
+        # Strip the title line if present.
+        head = re.sub(r"^#+[^\n]*\n", "", head, count=1).strip()
+        narrative = head
+    if not narrative:
+        narrative = text.strip()[:800]
+    dims: dict[str, float] = {}
+    for key in _DIMENSION_KEYS:
+        m = re.search(rf"{key}\s*[:=]\s*([0-9]*\.?[0-9]+)", text, flags=re.IGNORECASE)
+        if m:
+            try:
+                val = float(m.group(1))
+            except ValueError:
+                continue
+            dims[key] = max(0.0, min(1.0, val))
+    for key in _DIMENSION_KEYS:
+        dims.setdefault(key, 0.5)
+    material = "water"
+    m_mat = re.search(r"material[^\n]*?(water|fire|earth|air|void)", text, flags=re.IGNORECASE)
+    if m_mat:
+        material = m_mat.group(1).lower()
+    salience = 0.2
+    m_sal = re.search(r"##\s*Salience[^\n]*\n\s*([0-9]*\.?[0-9]+)", text, flags=re.IGNORECASE)
+    if m_sal is None:
+        m_sal = re.search(r"salience\s*[:=]\s*([0-9]*\.?[0-9]+)", text, flags=re.IGNORECASE)
+    if m_sal:
+        try:
+            salience = max(0.0, min(1.0, float(m_sal.group(1))))
+        except ValueError:
+            pass
+    continuation = bool(re.search(r"continuation\s*[:=]\s*(true|yes)", text, flags=re.IGNORECASE))
+    try:
+        return ImaginationFragment(
+            dimensions=dims,
+            salience=salience,
+            continuation=continuation,
+            narrative=narrative,
+            material=material,  # type: ignore[arg-type]
+        )
+    except Exception:
+        log.debug("markdown fallback still failed pydantic validation", exc_info=True)
+        return None
+
 
 # ---------------------------------------------------------------------------
 # System prompt
@@ -133,6 +235,26 @@ class ImaginationLoop:
             )
         return self._agent
 
+    def _get_text_agent(self):
+        """Lazy-init pydantic-ai Agent *without* output_type constraint.
+
+        Used as the markdown-fallback path when the structured agent's
+        JSON validation fails. Command-R (the grounded model wired to
+        `reasoning`) emits markdown by default; rather than keep losing
+        every tick, fall back to a plain text call and salvage what we
+        can via `_extract_fragment_from_markdown`.
+        """
+        if getattr(self, "_text_agent", None) is None:
+            from pydantic_ai import Agent
+
+            from agents._config import get_model
+
+            self._text_agent = Agent(
+                get_model("reasoning"),
+                system_prompt=IMAGINATION_SYSTEM_PROMPT,
+            )
+        return self._text_agent
+
     def _record_fragment(self, fragment: ImaginationFragment) -> None:
         """Append fragment to recent list, capping at MAX_RECENT_FRAGMENTS."""
         self.recent_fragments.append(fragment)
@@ -208,17 +330,41 @@ class ImaginationLoop:
             context += f"\n\nWhat appeared: {perceived}"
             self.cadence.force_accelerated(True)
 
+        fragment: ImaginationFragment | None = None
         try:
             agent = self._get_agent()
             result = await agent.run(context)
             fragment = result.output
-            self._process_fragment(fragment)
-            self.freshness.mark_published()
-            return fragment
-        except Exception:
-            log.warning("Imagination tick failed", exc_info=True)
-            self.freshness.mark_failed()
-            return None
+        except Exception as structured_exc:  # noqa: BLE001
+            log.info(
+                "imagination: pydantic-ai structured output failed (%s); falling back to "
+                "markdown extraction",
+                type(structured_exc).__name__,
+            )
+            try:
+                text_agent = self._get_text_agent()
+                text_result = await text_agent.run(context)
+                raw_text = str(getattr(text_result, "output", text_result) or "")
+                fragment = _extract_fragment_from_markdown(raw_text)
+                if fragment is None:
+                    log.warning("Imagination tick failed: markdown fallback empty")
+                    self.freshness.mark_failed()
+                    return None
+                log.info(
+                    "imagination: recovered fragment via markdown fallback "
+                    "(salience=%.2f, material=%s, dims=%d)",
+                    fragment.salience,
+                    fragment.material,
+                    len(fragment.dimensions),
+                )
+            except Exception:
+                log.warning("Imagination tick failed", exc_info=True)
+                self.freshness.mark_failed()
+                return None
+
+        self._process_fragment(fragment)
+        self.freshness.mark_published()
+        return fragment
 
 
 # ── Positive Feedback: Engagement → Imagination Acceleration ──────────────
