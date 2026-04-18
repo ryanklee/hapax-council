@@ -452,13 +452,29 @@ class CairoSourceRunner:
             cr.set_operator(cairo.OPERATOR_CLEAR)
             cr.paint()
             cr.set_operator(cairo.OPERATOR_OVER)
-            self._source.render(
-                cr,
-                self._natural_w,
-                self._natural_h,
-                t0,
-                self._source.state(),
-            )
+            # Runner-level ward modulation: every CairoSource automatically
+            # honors per-ward visibility + alpha (and any future per-source
+            # property the Cairo blit can apply) without per-source code
+            # changes. ``visible=False`` short-circuits the source's render
+            # so the surface stays transparent (gst mixer composites
+            # nothing); ``alpha < 1`` wraps the draw in a Cairo group so
+            # the entire composition fades uniformly. Each runner reads the
+            # 200ms-cached ward-properties.json — sub-ms even with 16+
+            # runners since they share the module-level cache.
+            from .ward_properties import ward_render_scope
+
+            ward_gated = False
+            with ward_render_scope(cr, self._source_id) as _ward_props:
+                if _ward_props is None:
+                    ward_gated = True
+                else:
+                    self._source.render(
+                        cr,
+                        self._natural_w,
+                        self._natural_h,
+                        t0,
+                        self._source.state(),
+                    )
             surface.flush()
         except Exception:
             log.exception("CairoSource %s render failed", self._source_id)
@@ -471,7 +487,12 @@ class CairoSourceRunner:
             self._surface_active_idx = inactive_idx
         self._frame_count += 1
         self._last_render_ms = (time.monotonic() - t0) * 1000.0
-        if self._freshness_gauge is not None:
+        # Skip the freshness publish when the ward was gated (visible=False).
+        # A transparent buffer is technically "published" but operationally
+        # it represents "deliberately hidden", not "source healthy and
+        # producing". Letting age_seconds() climb during a gated period
+        # lets the operator distinguish a gated ward from a stalled one.
+        if self._freshness_gauge is not None and not ward_gated:
             self._freshness_gauge.mark_published()
         # Phase 6 H23: push the same rendered surface into the
         # main-layer appsrc if one has been built. No-op when
