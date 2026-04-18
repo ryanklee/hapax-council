@@ -152,31 +152,19 @@ class CameraPipeline:
                 decode_queue.set_property("max-size-time", 0)
                 decode_queue.set_property("leaky", 2)  # downstream
 
-                # A+ Stage 1 (2026-04-17): prefer nvjpegdec (NVDEC hardware
-                # JPEG decoder) when available on desktop NVIDIA. Offloads
-                # all 6 cameras' JPEG decode to the NVDEC ASIC — decoded
-                # frames land in NVMM memory and flow through cudaupload
-                # with one less CPU pass. Falls back to software jpegdec
-                # if nvjpegdec is absent. Override via
-                # HAPAX_CAMERA_JPEGDEC=software to force CPU path.
-                import os as _os
-
-                _jpeg_policy = _os.environ.get("HAPAX_CAMERA_JPEGDEC", "auto").lower()
-                decoder = None
-                if _jpeg_policy in ("auto", "nvjpegdec"):
-                    decoder = Gst.ElementFactory.make("nvjpegdec", f"dec_{self._role_safe}")
-                    if decoder is not None:
-                        log.debug(
-                            "%s: using nvjpegdec (NVDEC hardware JPEG decoder)",
-                            self._spec.role,
-                        )
+                # A+ Stage 1 (2026-04-17) attempt reverted: nvjpegdec
+                # outputs `video/x-raw(memory:CUDAMemory)` which does not
+                # negotiate with the downstream CPU `videoconvert`, and
+                # v4l2src → nvjpegdec fails with error (-5) across all 6
+                # cameras in under 2 seconds. Re-enabling hardware MJPEG
+                # decode requires a caps-compatible downstream path
+                # (cudadownload → videoconvert, or a full NVMM path
+                # through cudacompositor). Deferred to Stage 2 under
+                # the broader GPU-memory-throughout rebuild. Force
+                # software jpegdec for now.
+                decoder = Gst.ElementFactory.make("jpegdec", f"dec_{self._role_safe}")
                 if decoder is None:
-                    decoder = Gst.ElementFactory.make("jpegdec", f"dec_{self._role_safe}")
-                    if decoder is None:
-                        raise RuntimeError(
-                            f"{self._spec.role}: neither nvjpegdec nor jpegdec factory succeeded"
-                        )
-                    log.debug("%s: using software jpegdec", self._spec.role)
+                    raise RuntimeError(f"{self._spec.role}: jpegdec factory failed")
 
             convert = Gst.ElementFactory.make("videoconvert", f"vc_{self._role_safe}")
             convert.set_property("dither", 0)
