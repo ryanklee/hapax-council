@@ -73,7 +73,7 @@ def canonicalize_grounding_signal(signal: str) -> str:
 _METRICS_AVAILABLE = False
 
 try:
-    from prometheus_client import Counter, Histogram
+    from prometheus_client import Counter, Gauge, Histogram
 
     _director_intent_total = Counter(
         "hapax_director_intent_total",
@@ -115,6 +115,32 @@ try:
         "hapax_random_mode_pick_total",
         "random_mode preset picks, labelled by selection path.",
         ("chosen_via",),
+    )
+    # HOMAGE framework metrics — spec §6.
+    _homage_package_active = Gauge(
+        "hapax_homage_package_active",
+        "1 if the named HOMAGE package is currently active, 0 otherwise.",
+        ("package",),
+    )
+    _homage_transition_total = Counter(
+        "hapax_homage_transition_total",
+        "HOMAGE transitions applied, labelled by package + transition kind.",
+        ("package", "transition_name"),
+    )
+    _homage_choreographer_rejection_total = Counter(
+        "hapax_homage_choreographer_rejection_total",
+        "Pending transitions the choreographer rejected, by reason.",
+        ("reason",),
+    )
+    _homage_violation_total = Counter(
+        "hapax_homage_violation_total",
+        "Paste / anti-pattern violations detected at render time.",
+        ("package", "kind"),
+    )
+    _homage_signature_artefact_emitted_total = Counter(
+        "hapax_homage_signature_artefact_emitted_total",
+        "Signature artefacts emitted, labelled by package + form.",
+        ("package", "form"),
     )
 
     _METRICS_AVAILABLE = True
@@ -186,6 +212,66 @@ def emit_parse_failure(tier: str, condition_id: str) -> None:
         log.warning("emit_parse_failure failed", exc_info=True)
 
 
+def emit_homage_package_active(package: str) -> None:
+    """Record the active HOMAGE package. Sets 1 for ``package`` and
+    0 for every previously-labelled series implicitly via Gauge."""
+    if not _METRICS_AVAILABLE:
+        return
+    try:
+        _homage_package_active.labels(package=package).set(1)
+    except Exception:
+        log.warning("emit_homage_package_active failed", exc_info=True)
+
+
+def emit_homage_package_inactive(package: str) -> None:
+    if not _METRICS_AVAILABLE:
+        return
+    try:
+        _homage_package_active.labels(package=package).set(0)
+    except Exception:
+        log.warning("emit_homage_package_inactive failed", exc_info=True)
+
+
+def emit_homage_transition(package: str, transition_name: str) -> None:
+    if not _METRICS_AVAILABLE:
+        return
+    try:
+        _homage_transition_total.labels(package=package, transition_name=transition_name).inc()
+    except Exception:
+        log.warning("emit_homage_transition failed", exc_info=True)
+
+
+def emit_homage_choreographer_rejection(reason: str) -> None:
+    if not _METRICS_AVAILABLE:
+        return
+    try:
+        _homage_choreographer_rejection_total.labels(reason=reason).inc()
+    except Exception:
+        log.warning("emit_homage_choreographer_rejection failed", exc_info=True)
+
+
+def emit_homage_violation(package: str, kind: str) -> None:
+    """Record a paste / anti-pattern violation. Kind is free-form but
+    convention follows ``AntiPatternKind`` literal (emoji, anti-aliased,
+    proportional-font, ...) plus render-time violations like
+    ``paste-without-choreographed-transition``."""
+    if not _METRICS_AVAILABLE:
+        return
+    try:
+        _homage_violation_total.labels(package=package, kind=kind).inc()
+    except Exception:
+        log.warning("emit_homage_violation failed", exc_info=True)
+
+
+def emit_homage_signature_artefact(package: str, form: str) -> None:
+    if not _METRICS_AVAILABLE:
+        return
+    try:
+        _homage_signature_artefact_emitted_total.labels(package=package, form=form).inc()
+    except Exception:
+        log.warning("emit_homage_signature_artefact failed", exc_info=True)
+
+
 def emit_random_mode_pick(chosen_via: str) -> None:
     """Record a random_mode preset pick. ``chosen_via`` is one of
     ``family=<name>``, ``fallback=neutral-ambient``, ``uniform-fallback``.
@@ -205,6 +291,12 @@ def emit_random_mode_pick(chosen_via: str) -> None:
 __all__ = [
     "canonicalize_grounding_signal",
     "emit_director_intent",
+    "emit_homage_choreographer_rejection",
+    "emit_homage_package_active",
+    "emit_homage_package_inactive",
+    "emit_homage_signature_artefact",
+    "emit_homage_transition",
+    "emit_homage_violation",
     "emit_parse_failure",
     "emit_random_mode_pick",
     "emit_structural_intent",
