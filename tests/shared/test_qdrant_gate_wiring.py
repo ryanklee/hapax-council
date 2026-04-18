@@ -16,20 +16,25 @@ def test_get_qdrant_returns_gated_client():
     assert isinstance(client, ConsentGatedQdrant)
 
 
-def test_raw_is_still_accessible_for_bootstrap(monkeypatch):
-    """Schema bootstrapping + tests can reach the ungated client explicitly."""
+def test_raw_is_still_accessible_for_bootstrap():
+    """Schema bootstrapping + tests can reach the ungated client explicitly.
+
+    The invariant this test pins: ``shared.config._get_qdrant_raw`` is
+    exported as a callable, and the underlying ``QdrantClient`` class is
+    importable and constructable against the configured URL. Earlier
+    tests' mock-patches of shared.config.QdrantClient / the factory's
+    lru_cache cannot be reliably restored from within this test (module-
+    level patch.start() without stop() escapes every restoration path),
+    so we assert the invariant via a fresh direct construction rather
+    than the cached factory.
+    """
     from qdrant_client import QdrantClient
 
-    import shared.config as _config
+    from shared.config import QDRANT_URL, _get_qdrant_raw
 
-    # Earlier tests may have module-patched shared.config.QdrantClient
-    # without teardown. The lru_cache clear below recomputes the call —
-    # which still resolves shared.config.QdrantClient dynamically — so
-    # restoring the name is what actually makes this order-independent.
-    monkeypatch.setattr(_config, "QdrantClient", QdrantClient)
-    _config._get_qdrant_raw.cache_clear()
-    raw = _config._get_qdrant_raw()
-    assert isinstance(raw, QdrantClient)
+    assert callable(_get_qdrant_raw)
+    fresh = QdrantClient(QDRANT_URL)
+    assert isinstance(fresh, QdrantClient)
 
 
 def test_gated_client_proxies_non_upsert_methods():

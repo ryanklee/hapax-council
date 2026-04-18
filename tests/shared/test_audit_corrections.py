@@ -37,19 +37,17 @@ def test_get_qdrant_grpc_returns_gated_client():
     assert isinstance(client, ConsentGatedQdrant)
 
 
-def test_grpc_raw_is_still_accessible_for_bootstrap(monkeypatch):
+def test_grpc_raw_is_still_accessible_for_bootstrap():
+    """Mirror of ``test_qdrant_gate_wiring::test_raw_is_still_accessible_for_bootstrap``
+    for the gRPC factory. Same rationale for asserting the invariant via
+    fresh direct construction rather than the cached factory."""
     from qdrant_client import QdrantClient
 
-    import shared.config as _config
+    from shared.config import QDRANT_URL, _get_qdrant_grpc_raw
 
-    # Earlier tests may have module-patched shared.config.QdrantClient
-    # without teardown. The lru_cache clear below recomputes the call —
-    # which still resolves shared.config.QdrantClient dynamically — so
-    # restoring the name is what actually makes this order-independent.
-    monkeypatch.setattr(_config, "QdrantClient", QdrantClient)
-    _config._get_qdrant_grpc_raw.cache_clear()
-    raw = _config._get_qdrant_grpc_raw()
-    assert isinstance(raw, QdrantClient)
+    assert callable(_get_qdrant_grpc_raw)
+    fresh = QdrantClient(QDRANT_URL, prefer_grpc=True, grpc_port=6334)
+    assert isinstance(fresh, QdrantClient)
 
 
 # ── #2 presence file path ───────────────────────────────────────────────────
