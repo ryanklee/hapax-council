@@ -122,6 +122,21 @@ class CairoSourceRunner:
         self._thread: threading.Thread | None = None
         self._output_surface: cairo.ImageSurface | None = None
         self._output_lock = threading.Lock()
+        # A+ Stage 3 (2026-04-17): double-buffered ImageSurface reuse.
+        # Before: the render loop allocated a fresh cairo.ImageSurface
+        # on every tick (natural_w × natural_h × 4 bytes). Across 23
+        # sources at 2-30 fps each, allocation churn on the Cairo +
+        # Python + libc allocator paths was measurable in vmstat and
+        # held the GIL on allocation. Now: two pre-allocated surfaces
+        # per runner; the render loop CLEARs + renders into the
+        # inactive one, then atomically swaps the output pointer under
+        # _output_lock. The active surface (what the streaming-thread
+        # cairooverlay callback reads) is never mutated mid-blit.
+        # Surfaces are (re)allocated only when natural_w / natural_h
+        # change via set_canvas_size for implicit-natural sources.
+        self._surfaces: list[cairo.ImageSurface] = []
+        self._surface_active_idx = 0
+        self._surface_dims: tuple[int, int] = (0, 0)
         self._frame_count = 0
         self._last_render_ms = 0.0
         # Phase 7: budget enforcement. Defaults preserve pre-Phase-7
@@ -401,11 +416,29 @@ class CairoSourceRunner:
 
         t0 = time.monotonic()
         try:
-            # Allocate at natural size (not canvas size) so sources render
-            # at their content resolution and the compositor scales to the
-            # assigned SurfaceSchema.geometry during blit.
-            surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, self._natural_w, self._natural_h)
+            # A+ Stage 3: double-buffered surfaces. The streaming-thread
+            # cairooverlay callback reads _output_surface under _output_lock;
+            # we render into the OTHER surface, then swap atomically.
+            # Surfaces are (re)allocated only when dimensions change.
+            dims = (self._natural_w, self._natural_h)
+            if self._surface_dims != dims or len(self._surfaces) < 2:
+                self._surfaces = [
+                    cairo.ImageSurface(cairo.FORMAT_ARGB32, self._natural_w, self._natural_h)
+                    for _ in range(2)
+                ]
+                self._surface_active_idx = 0
+                self._surface_dims = dims
+            # Write into the inactive buffer (whichever one the streaming
+            # thread is NOT currently pointing at).
+            inactive_idx = 1 - self._surface_active_idx
+            surface = self._surfaces[inactive_idx]
+            # Clear the reused surface to fully transparent so the new
+            # render starts from a known state (equivalent to a fresh
+            # ImageSurface which is zeroed at allocation time).
             cr = cairo.Context(surface)
+            cr.set_operator(cairo.OPERATOR_CLEAR)
+            cr.paint()
+            cr.set_operator(cairo.OPERATOR_OVER)
             self._source.render(
                 cr,
                 self._natural_w,
@@ -422,6 +455,7 @@ class CairoSourceRunner:
 
         with self._output_lock:
             self._output_surface = surface
+            self._surface_active_idx = inactive_idx
         self._frame_count += 1
         self._last_render_ms = (time.monotonic() - t0) * 1000.0
         if self._freshness_gauge is not None:

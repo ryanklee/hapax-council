@@ -345,9 +345,17 @@ class CameraPipeline:
             _, current, _ = self._pipeline.get_state(timeout=0)
             return current == Gst.State.PLAYING
 
+    # A+ Stage 3 (2026-04-17): sample one frame every N ticks into the
+    # last-good-frame cache so the fallback pipeline can render that
+    # frame instead of a black card when the primary drops. 15 @ 30fps
+    # = 2 Hz sampling — fresh enough for freeze-frame UX, cheap enough
+    # (~1.4 MiB NV12 copy 2×/sec per camera) that it doesn't add
+    # measurable load on the streaming-thread pad probe.
+    _FRAME_CACHE_SAMPLE_EVERY_N = 15
+
     def _on_buffer_probe(self, pad: Any, info: Any) -> Any:
         """GStreamer pad probe: note frame arrival, update Phase 4 metrics,
-        passthrough."""
+        sample into last-good-frame cache, passthrough."""
         self._last_frame_monotonic = time.monotonic()
         try:
             from . import metrics
@@ -355,12 +363,55 @@ class CameraPipeline:
             metrics.pad_probe_on_buffer(pad, info, self._spec.role)
         except Exception:
             log.exception("camera_pipeline %s: metrics pad probe raised", self._spec.role)
+        # A+ Stage 3: freeze-frame snapshot. Sampling counter lives on
+        # the instance so the cost is per-camera (no dict contention).
+        self._frame_cache_tick = getattr(self, "_frame_cache_tick", 0) + 1
+        if self._frame_cache_tick >= self._FRAME_CACHE_SAMPLE_EVERY_N:
+            self._frame_cache_tick = 0
+            try:
+                self._snapshot_into_frame_cache(info)
+            except Exception:
+                log.debug(
+                    "camera_pipeline %s: frame cache snapshot raised",
+                    self._spec.role,
+                    exc_info=True,
+                )
         if self._on_frame is not None:
             try:
                 self._on_frame()
             except Exception:
                 log.exception("camera_pipeline %s: on_frame callback raised", self._spec.role)
         return self._Gst.PadProbeReturn.OK
+
+    def _snapshot_into_frame_cache(self, info: Any) -> None:
+        """Copy the current NV12 buffer into ``frame_cache`` under this role.
+
+        Called from the pad probe every 15 frames. Maps the buffer for
+        read, copies into a ``bytes`` object, stores in the cache, and
+        unmaps. Never holds a reference to the GstBuffer memory across
+        the call.
+        """
+        if info is None:
+            return
+        buf = info.get_buffer()
+        if buf is None:
+            return
+        Gst = self._Gst
+        ok, map_info = buf.map(Gst.MapFlags.READ)
+        if not ok:
+            return
+        try:
+            from . import frame_cache
+
+            frame_cache.update(
+                role=self._spec.role,
+                data=map_info.data,
+                width=self._spec.width,
+                height=self._spec.height,
+                fmt="NV12",
+            )
+        finally:
+            buf.unmap(map_info)
 
     def _on_bus_message(self, bus: Any, message: Any) -> bool:
         """Handle bus messages scoped to this producer pipeline only."""

@@ -76,38 +76,34 @@ class FallbackPipeline:
             Gst = self._Gst
             pipeline = Gst.Pipeline.new(self._pipeline_name)
 
-            src = Gst.ElementFactory.make("videotestsrc", f"fbsrc_{self._role_safe}")
-            if src is None:
-                raise RuntimeError(f"{self._spec.role}: videotestsrc factory failed")
-            # A+ Stage 2 (2026-04-17): pattern=2 (black) instead of
-            # pattern=18 (bouncing ball). The fallback card doesn't need
-            # animation — it's a "no signal" indicator viewers see for
-            # 1-3 seconds while primary reacquires. Black pattern
-            # removes per-frame geometry update cost. Combined with
-            # text overlay removal below, the fallback is effectively
-            # a static black frame at 1fps.
-            src.set_property("pattern", 2)  # black
-            src.set_property("is-live", True)
+            # A+ Stage 3 (2026-04-17): freeze-frame-capable fallback.
+            # appsrc replaces videotestsrc + videoconvert. A Python
+            # thread pushes NV12 buffers to the appsrc at FALLBACK_FPS
+            # (1Hz), choosing each tick between (a) the last-good frame
+            # from frame_cache[role] — ATEM/vMix freeze-frame UX, and
+            # (b) a pre-baked black NV12 buffer if the cache is empty.
+            # No colorspace conversion in the hot path; appsrc emits
+            # NV12 directly, matching the interpipesink caps.
+            # Override via HAPAX_FALLBACK_FREEZE_FRAME=0 to force the
+            # legacy black-only behavior.
+            import os as _os
 
-            raw_caps = Gst.ElementFactory.make("capsfilter", f"fbrawcaps_{self._role_safe}")
-            raw_caps.set_property(
+            self._freeze_frame_enabled = _os.environ.get("HAPAX_FALLBACK_FREEZE_FRAME", "1") == "1"
+
+            src = Gst.ElementFactory.make("appsrc", f"fbsrc_{self._role_safe}")
+            if src is None:
+                raise RuntimeError(f"{self._spec.role}: appsrc factory failed")
+            src.set_property("is-live", True)
+            src.set_property("format", 3)  # TIME
+            src.set_property("do-timestamp", True)
+            src.set_property("block", False)
+            src.set_property(
                 "caps",
                 Gst.Caps.from_string(
-                    f"video/x-raw,format=BGRA,width={self._spec.width},"
+                    f"video/x-raw,format=NV12,width={self._spec.width},"
                     f"height={self._spec.height},framerate={self._fps}/1"
                 ),
             )
-
-            # A+ Stage 2 (2026-04-17): textoverlay removed entirely. Pango
-            # rasterization at fallback fps was documented in the thread
-            # dump; the text was never observed on stream during normal
-            # operation (primary reacquires within 2-3s). If a "no signal"
-            # label is needed again, pre-render it once to a BGRA buffer
-            # at startup and feed it from appsrc — not per-frame Pango.
-            overlay = None
-
-            convert = Gst.ElementFactory.make("videoconvert", f"fbconv_{self._role_safe}")
-            convert.set_property("dither", 0)
 
             out_caps = Gst.ElementFactory.make("capsfilter", f"fbcaps_{self._role_safe}")
             out_caps.set_property(
@@ -129,10 +125,19 @@ class FallbackPipeline:
             sink.set_property("forward-events", False)
             sink.set_property("forward-eos", False)
 
-            elements = [src, raw_caps]
-            if overlay is not None:
-                elements.append(overlay)
-            elements.extend([convert, out_caps, sink])
+            self._appsrc = src
+            self._push_thread: threading.Thread | None = None
+            self._push_stop = threading.Event()
+            # Pre-bake a black NV12 buffer at this camera's dimensions.
+            # NV12 = Y plane (w*h bytes of 0x10 = luma black) + UV plane
+            # (w*h/2 bytes of 0x80 = neutral chroma). Zero-bytes is
+            # sufficient for "visually black" in most decoders and
+            # matches what videotestsrc pattern=black would have emitted.
+            y_size = self._spec.width * self._spec.height
+            uv_size = y_size // 2
+            self._black_nv12 = bytes(y_size + uv_size)
+
+            elements = [src, out_caps, sink]
 
             for el in elements:
                 pipeline.add(el)
@@ -152,14 +157,81 @@ class FallbackPipeline:
                 return False
             Gst = self._Gst
             ret = self._pipeline.set_state(Gst.State.PLAYING)
-            return ret != Gst.StateChangeReturn.FAILURE
+            if ret == Gst.StateChangeReturn.FAILURE:
+                return False
+            # A+ Stage 3: spawn the freeze-frame push thread on first
+            # start. Idempotent — stop() joins it before returning to
+            # NULL so calling start() again restarts the thread cleanly.
+            if self._push_thread is None or not self._push_thread.is_alive():
+                self._push_stop.clear()
+                self._push_thread = threading.Thread(
+                    target=self._push_loop,
+                    daemon=True,
+                    name=f"fb-push-{self._role_safe}",
+                )
+                self._push_thread.start()
+            return True
 
     def stop(self) -> None:
         with self._state_lock:
             if self._pipeline is None:
                 return
+            # Stop the push thread before NULLing the pipeline so appsrc
+            # doesn't receive pushes mid-teardown.
+            self._push_stop.set()
+            thread = self._push_thread
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=2.0)
+        with self._state_lock:
             Gst = self._Gst
             self._pipeline.set_state(Gst.State.NULL)
+
+    def _push_loop(self) -> None:
+        """A+ Stage 3: push one NV12 buffer per tick to the appsrc.
+
+        Emits the last-good frame from ``frame_cache`` if available;
+        otherwise emits the pre-baked black NV12 buffer. Runs at
+        FALLBACK_FPS (1 Hz by default) so even the most conservative
+        visual refresh is <= 1 second of staleness.
+        """
+        from . import frame_cache
+
+        Gst = self._Gst
+        duration_ns = int(1_000_000_000 / self._fps)
+        pts = 0
+        while not self._push_stop.is_set():
+            data: bytes
+            if self._freeze_frame_enabled:
+                cached = frame_cache.get(self._spec.role)
+                if (
+                    cached is not None
+                    and cached.format == "NV12"
+                    and (cached.width == self._spec.width and cached.height == self._spec.height)
+                ):
+                    data = cached.data
+                else:
+                    data = self._black_nv12
+            else:
+                data = self._black_nv12
+            try:
+                buf = Gst.Buffer.new_wrapped(data)
+                buf.pts = pts
+                buf.duration = duration_ns
+                pts += duration_ns
+                ret = self._appsrc.emit("push-buffer", buf)
+                if ret != Gst.FlowReturn.OK:
+                    # Pipeline tearing down (FLUSHING) or appsrc paused —
+                    # back off briefly and let the stop flag end the loop.
+                    self._push_stop.wait(0.5)
+                    continue
+            except Exception:
+                log.debug(
+                    "fallback_pipeline %s push failed; will retry",
+                    self._spec.role,
+                    exc_info=True,
+                )
+            # Wait for the next tick OR an early wakeup from stop().
+            self._push_stop.wait(1.0 / self._fps)
 
     def teardown(self) -> None:
         with self._state_lock:
