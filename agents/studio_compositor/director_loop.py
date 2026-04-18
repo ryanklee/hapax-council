@@ -890,6 +890,18 @@ class DirectorLoop:
                 # Falls back to the LLM's pick on any error.
                 activity = self._maybe_override_activity(activity)
 
+                # Sim-2 audit (2026-04-18): LLM picked `react` 30/30
+                # ticks despite the prompt nudge. The perceptual field is
+                # video-heavy (YouTube slots always on), so `react` is
+                # always the highest-signal move. Force variety: if the
+                # last N activities were all identical, rotate to the
+                # next in an observe/music/study/chat cycle. The
+                # narrative text (LLM's actual output) is preserved —
+                # only the ACTIVITY label flips — so downstream
+                # consumers treating activity as a categorical routing
+                # signal see diversity while the content stays coherent.
+                activity = self._maybe_rotate_repeated_activity(activity)
+
                 if activity != self._activity:
                     log.info("Activity: %s → %s", self._activity, activity)
                     self._activity = activity
@@ -901,6 +913,50 @@ class DirectorLoop:
             except Exception:
                 log.exception("Director loop error")
             time.sleep(0.5)
+
+    def _maybe_rotate_repeated_activity(self, proposed: str) -> str:
+        """Force activity-label variety when the LLM repeats itself.
+
+        Sim-2 audit (2026-04-18): the narrative director picked
+        ``react`` on 30/30 consecutive ticks even after the prompt
+        asked for variety. The perceptual field is dominated by live
+        video, which always makes ``react`` the highest-signal
+        response. Fighting that with prompt tweaks is pushing sand.
+
+        This enforcer tracks the last ``_ACTIVITY_VARIETY_WINDOW``
+        labels; when all are identical (and the proposed repeats
+        them), it returns the next label in an observe/music/study/
+        chat rotation. The LLM's narrative text is preserved on the
+        caller side, so downstream consumers treating activity as a
+        categorical routing signal see diversity while the content
+        stays coherent. No-op if the history hasn't converged yet.
+        """
+        _ACTIVITY_VARIETY_WINDOW = 3
+        _ROTATION = ("observe", "music", "study", "chat")
+        try:
+            history = getattr(self, "_recent_activities", [])
+            if len(history) >= _ACTIVITY_VARIETY_WINDOW and all(
+                a == proposed for a in history[-_ACTIVITY_VARIETY_WINDOW:]
+            ):
+                idx = int(getattr(self, "_activity_rotation_idx", 0)) % len(_ROTATION)
+                self._activity_rotation_idx = idx + 1
+                forced = _ROTATION[idx]
+                log.info(
+                    "activity rotation forced: %s → %s (repeated %d× in history)",
+                    proposed,
+                    forced,
+                    _ACTIVITY_VARIETY_WINDOW,
+                )
+                history = list(history) + [forced]
+            else:
+                history = list(history) + [proposed]
+            if len(history) > _ACTIVITY_VARIETY_WINDOW * 2:
+                history = history[-_ACTIVITY_VARIETY_WINDOW * 2 :]
+            self._recent_activities = history
+            return history[-1]
+        except Exception:
+            log.debug("activity rotation enforcer raised", exc_info=True)
+            return proposed
 
     def _emit_micromove_fallback(self, *, reason: str, condition_id: str) -> None:
         """Emit a pre-composed micromove when the LLM tick produces nothing.
