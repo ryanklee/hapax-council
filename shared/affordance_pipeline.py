@@ -402,7 +402,20 @@ class AffordancePipeline:
         embedding = self._get_embedding(impingement)
         if embedding is None:
             return self._fallback_keyword_match(impingement)
-        candidates = self._retrieve(embedding, top_k)
+        # Stage 1 routing fix (2026-04-18): if the impingement carries an
+        # ``intent_family`` (set by the studio compositor's director on
+        # CompositionalImpingements), restrict the recruitment search to
+        # capabilities matching that family. Without this, a director
+        # "cut to closeup of turntable" tagged camera.hero could be
+        # hijacked by a Reverie satellite shader whose Gibson-verb
+        # description happened to score higher in cosine similarity.
+        # When intent_family is None (the default for non-compositional
+        # impingements like sensory deviations), recruitment falls back
+        # to the legacy global-catalog scoring behavior.
+        if impingement.intent_family:
+            candidates = self._retrieve_family(embedding, impingement.intent_family, top_k)
+        else:
+            candidates = self._retrieve(embedding, top_k)
         if not candidates:
             return []
         # Consent gate — closes the audit-surfaced enforcement gap. See
@@ -661,6 +674,89 @@ class AffordancePipeline:
             )
             for hit in results
         ]
+
+    def _retrieve_family(
+        self,
+        embedding: list[float],
+        intent_family: str,
+        top_k: int,
+    ) -> list[SelectionCandidate]:
+        """Family-restricted retrieval — Stage 1 routing fix.
+
+        Pulls a wider candidate window (5× ``top_k``) from Qdrant, then
+        keeps only candidates whose ``capability_name`` matches the
+        ``intent_family`` prefix. Returns the top-k by similarity.
+
+        Why post-filter rather than push the constraint into the Qdrant
+        query: Qdrant payloads currently store ``capability_name`` and
+        ``daemon`` but not a structured ``family`` field. Adding one
+        would require a schema migration + reseed of the affordances
+        collection. Post-filter is correct (we only ever return
+        family-matching candidates) and the wider window keeps the
+        recall ceiling generous so a low-similarity-but-only-match still
+        surfaces.
+
+        ``intent_family`` is matched as a *prefix* against
+        ``capability_name``: ``"camera.hero"`` matches
+        ``"cam.hero.overhead.vinyl-spinning"`` (after the canonical
+        ``camera.hero -> cam.hero`` family-name normalization in
+        ``_canonical_family_prefix``). ``"ward.size"`` matches every
+        ``ward.size.<ward_id>.<modifier>`` capability. Returns an empty
+        list if the family has no registered capabilities OR no
+        capabilities scored above the retrieval floor.
+        """
+        prefix = self._canonical_family_prefix(intent_family)
+        if not prefix:
+            log.debug(
+                "intent_family %s has no canonical capability prefix; "
+                "falling through to global retrieval",
+                intent_family,
+            )
+            return self._retrieve(embedding, top_k)
+        # Pull a wider window so the post-filter has material to keep.
+        wider = self._retrieve(embedding, top_k=max(top_k * 5, 50))
+        kept = [c for c in wider if c.capability_name.startswith(prefix)]
+        if not kept:
+            log.info(
+                "family-restricted retrieval (%s, prefix=%s) returned no "
+                "candidates from %d-wide window — director impingement "
+                "will not recruit anything this tick",
+                intent_family,
+                prefix,
+                len(wider),
+            )
+            return []
+        return sorted(kept, key=lambda c: -c.similarity)[:top_k]
+
+    @staticmethod
+    def _canonical_family_prefix(intent_family: str) -> str:
+        """Map ``IntentFamily`` literal to the capability-name prefix.
+
+        ``IntentFamily`` values are operator-legible names (``camera.hero``,
+        ``preset.bias``); the actual capability catalog uses tighter
+        prefixes (``cam.hero``, ``fx.family``). This map keeps the two
+        vocabularies aligned without forcing the literal to match the
+        prefix character-for-character. Unknown families return the
+        family string itself as the prefix — useful for ``ward.*``
+        families which already match their capability prefixes.
+        """
+        canonical = {
+            "camera.hero": "cam.hero.",
+            "preset.bias": "fx.family.",
+            "overlay.emphasis": "overlay.",
+            "youtube.direction": "youtube.",
+            "attention.winner": "attention.winner.",
+            "stream_mode.transition": "stream.mode.",
+        }
+        if intent_family in canonical:
+            return canonical[intent_family]
+        # ward.* families already match capability prefixes 1:1
+        # (e.g., "ward.size" → "ward.size.")
+        if intent_family.startswith("ward."):
+            return intent_family + "."
+        # Unknown — try literal-as-prefix; better than dropping the
+        # family entirely.
+        return intent_family + "."
 
     def _fallback_keyword_match(self, impingement: Impingement) -> list[SelectionCandidate]:
         metric = impingement.content.get("metric", "")

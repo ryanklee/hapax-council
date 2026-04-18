@@ -53,6 +53,15 @@ class Impingement(BaseModel, frozen=True):
     trace_id: str | None = None  # OTel trace ID (32-hex) for chronicle causal chains
     span_id: str | None = None  # OTel span ID (16-hex) for chronicle causal chains
     embedding: list[float] | None = None  # 768-dim vector for affordance retrieval
+    # Family-tagged routing: when set, the AffordancePipeline restricts its
+    # capability search to capabilities whose name starts with this prefix.
+    # Lets the studio compositor's director declare "this impingement IS a
+    # camera.hero move, do not let a Reverie satellite shader recruit it
+    # instead." Compositional impingements emitted by ``director_loop``
+    # set this to the matching ``IntentFamily`` literal (camera.hero,
+    # ward.size, ward.choreography, etc.). Non-compositional impingements
+    # leave it None for the legacy global-catalog scoring behavior.
+    intent_family: str | None = None
 
 
 def render_impingement_text(imp: Impingement) -> str:

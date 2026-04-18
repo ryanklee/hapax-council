@@ -164,6 +164,16 @@ def _emit_compositional_impingements(intent: DirectorIntent, condition_id: str) 
                 source="studio_compositor.director.compositional",
                 type=ImpingementType.SALIENCE_INTEGRATION,
                 strength=float(imp.salience),
+                # Stage 1 routing fix: promote intent_family to a first-class
+                # field on the Impingement so AffordancePipeline.select() can
+                # restrict retrieval to capabilities of that family. Without
+                # this, the director's "cut to closeup of turntable" with
+                # intent_family="camera.hero" was scoring globally and could
+                # be hijacked by a Reverie satellite shader whose Gibson-verb
+                # description happened to be cosine-close. Kept in content
+                # too for backward compatibility with any consumer reading
+                # the legacy location.
+                intent_family=imp.intent_family,
                 content={
                     "narrative": imp.narrative,
                     "intent_family": imp.intent_family,
