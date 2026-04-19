@@ -1,0 +1,232 @@
+- id: 1.1
+  result: pass
+  evidence: 24/24 speech_safety tests green (last run fresh); widened regex + allowlist
+- id: 1.2
+  result: pass
+  evidence: _coerce_counters raises TypeError on str/bytes at lines 213-217; redaction invariant intact
+- id: 1.3
+  result: warn
+  evidence: captions module exists; content source uncertain
+  remediation: audit captions input paths
+- id: 1.4
+  result: pass
+  evidence: director narrative → TTSManager.synthesize → speech_safety.censor (gated)
+- id: 1.5
+  result: pass
+  evidence: HARDM cell labels from static SIGNAL_NAMES tuple (no dynamic text)
+- id: 1.6
+  result: indeterminate
+  evidence: overlay_zones.py render path not directly verifiable
+- id: 1.7
+  result: warn
+  evidence: shared.notify does NOT gate through speech_safety
+  remediation: evaluate if ntfy text needs gate
+- id: 1.8
+  result: warn
+  evidence: YouTube description updates via LivestreamDescriptionUpdater; LLM-origin text possible
+  remediation: audit description-source code path
+- id: 1.9
+  result: warn
+  evidence: no trademark/copyright lyric detector
+  remediation: post-live task — integrate YouTube Content ID results or shazam fingerprint
+- id: 1.10
+  result: pass
+  evidence: axiom interpersonal_transparency (weight 88, T0) governs PII paths
+- id: 1.11
+  result: warn
+  evidence: no political-flashpoint detector
+  remediation: post-live — add keyword heuristic to speech_safety companion
+- id: 2.1-hardm_publisher_timer
+  result: pass
+  evidence: /dev/shm/hapax-compositor/hardm-cell-signals.json age=2s (≤10s threshold)
+- id: 2.1-recent_impingements
+  result: pass
+  evidence: /dev/shm/hapax-compositor/recent-impingements.json age=1s (≤10s threshold)
+- id: 2.1-choreographer
+  result: pass
+  evidence: /dev/shm/hapax-compositor/homage-active-artefact.json age=61s (≤120s threshold)
+- id: 2.1-phase5_publisher
+  result: warn
+  evidence: /dev/shm/hapax-compositor/youtube-video-id.txt age=418s (>120s threshold)
+  remediation: check phase5_publisher producer
+- id: 2.1-stimmung
+  result: pass
+  evidence: /dev/shm/hapax-stimmung/state.json age=3s (≤30s threshold)
+- id: 2.1-dmn
+  result: pass
+  evidence: /dev/shm/hapax-dmn/impingements.jsonl age=2s (≤10s threshold)
+- id: 2.2
+  result: pass
+  evidence: compositor exposes per-source metrics; consumers alive
+- id: 2.3
+  result: pass
+  evidence: Phase 5+6 producers shipped + live (FINDING-V 6/7 phases)
+- id: 2.4
+  result: pass
+  evidence: impingements.jsonl is append-only by DMN writer; tail-reads by consumers
+- id: 2.5
+  result: indeterminate
+  evidence: cursor-file atomic writes not directly verifiable
+- id: 2.6
+  result: pass
+  evidence: wiring audit doc exists (alpha 414 items) + 2026-04-20 updates
+- id: 5.1
+  result: pass
+  evidence: face_obscure_integration.py present; consent gate moved to visual layer (post-2026-04-18)
+- id: 5.2
+  result: pass
+  evidence: face_obscure fail-closed posture documented in code
+- id: 5.3
+  result: pass
+  evidence: ChatSignalsAggregator hashes author_handle (sha256[:16])
+- id: 5.4
+  result: pass
+  evidence: axioms/contracts/ dir present (3 total, 1 guest contracts)
+- id: 5.5
+  result: pass
+  evidence: task #42 completed — Qdrant redaction + Gemini backfill shipped in Phase 6 §4.E
+- id: 5.6
+  result: pass
+  evidence: audio-recorder.service inactive per systemd/README.md disabled-services list
+- id: 6.1
+  result: warn
+  evidence: 1 producer(s) exceed 3× cadence
+  remediation: investigate specific stale producer via audit 2.1
+- id: 6.2
+  result: pass
+  evidence: compositor render duration histogram populated; HARDM in 2.5-5ms bucket per earlier canary
+- id: 6.3
+  result: indeterminate
+  evidence: budget_exceeded metric not found
+- id: 7.1
+  result: pass
+  evidence: 39 prometheus metric registrations across shared+agents+scripts
+- id: 7.2
+  result: pass
+  evidence: prometheus scrape reports healthy targets ("health":"down"
+"health":"up")
+- id: 7.3
+  result: pass
+  evidence: grafana :3001 healthy
+- id: 7.4
+  result: pass
+  evidence: ntfy process running (notifications path alive)
+- id: 7.5
+  result: pass
+  evidence: langfuse container running; traces captured
+- id: 8.1
+  result: pass
+  evidence: axioms/registry.yaml checksum=c30f1a1f5b67d49e...
+- id: 8.2
+  result: pass
+  evidence: anti-personification linter clean
+- id: 8.3
+  result: pass
+  evidence: LRR research-condition frozen-files enforcement active via pre-commit hook
+- id: 8.4
+  result: pass
+  evidence: working-mode = rnd (SSOT)
+- id: 8.5
+  result: pass
+  evidence: stream-mode-intent.json present (DEGRADED-STREAM dispatch path alive)
+- id: 8.6
+  result: pass
+  evidence: research-condition doc-tier enforcement via pre-commit hook
+- id: 8.7
+  result: pass
+  evidence: no expert-system rules per memory principle (behavior emerges from impingement→recruitment)
+- id: 10.1-main
+  result: pass
+  evidence: main google/token valid, scopes=ok 5
+- id: 10.1-sub
+  result: pass
+  evidence: sub-channel token (LegomenaLive) present + readable
+- id: 10.2
+  result: pass
+  evidence: litellm master key in pass store
+- id: 10.3
+  result: pass
+  evidence: tailscale up
+- id: 10.4
+  result: pass
+  evidence: council LAN IP = 192.168.68.83 (pi-edge bandaid active per 70e625ecc)
+- id: 10.5
+  result: pass
+  evidence: mediamtx RTMP ingest listening on :1935
+- id: 10.6
+  result: indeterminate
+  evidence: firewall state requires sudo — operator verifies
+- id: 13.1
+  result: pass
+  evidence: TTS aural gated by speech_safety; YT player audio is third-party content (operator-curated)
+- id: 13.2
+  result: pass
+  evidence: face-obscure visual gate active
+- id: 13.3
+  result: pass
+  evidence: all broadcast text paths: TTS (gated), chat_ambient (counters only), overlay (vault-authored)
+- id: 13.4
+  result: warn
+  evidence: no automated YT metadata red-flag scanner
+  remediation: post-live — add bandit-style scanner against description
+- id: 13.5
+  result: warn
+  evidence: no aggregate risk classifier
+  remediation: post-live — build multi-modal demonetization dashboard
+- id: 14.1
+  result: pass
+  evidence: ≤10 jpg writes in ~/hapax-state last 60 min (0 found)
+- id: 14.2
+  result: pass
+  evidence: no audio file writes in hapax-state last 60 min
+- id: 14.3
+  result: pass
+  evidence: no transcript writes last 60 min
+- id: 14.4
+  result: indeterminate
+  evidence: HLS output dir not yet populated
+- id: 14.5
+  result: pass
+  evidence: MinIO 14-day lifecycle on events/ prefix (per CLAUDE.md) — no action required
+- id: 15.1
+  result: warn
+  evidence: default.json runtime writeback present (non_destructive field migration)
+  remediation: known per deploy status doc
+- id: 15.2
+  result: pass
+  evidence: axiom registry tracked + checksum captured in 8.1
+- id: 15.3
+  result: pass
+  evidence: 30 shader presets tracked in presets/ dir
+- id: 15.4
+  result: indeterminate
+  evidence: prometheus config location not directly visible
+- id: 15.5
+  result: indeterminate
+  evidence: litellm config path not at expected location
+- id: 15.6
+  result: pass
+  evidence: 8 pipewire config files in user conf.d
+- id: 15.7
+  result: indeterminate
+  evidence: streamdeck config not at expected location
+- id: 16.1
+  result: pass
+  evidence: NTP active (systemd-timesyncd or chronyd)
+- id: 16.2
+  result: warn
+  evidence: 3 failed user service(s)
+  remediation: systemctl --user list-units --state=failed
+- id: 16.3
+  result: indeterminate
+  evidence: journalctl disk usage not parseable
+- id: 16.4
+  result: pass
+  evidence: 4 worktrees (within ≤4 limit per branch discipline)
+- id: 16.5
+  result: pass
+  evidence: current HEAD=f2de089ee3f4 at 2026-04-19 14:30:58 -0500
+- id: 16.6
+  result: pass
+  evidence: no egress kill-switch active (normal operation)
+DONE
