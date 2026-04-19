@@ -129,6 +129,21 @@ def family_names() -> list[str]:
     return sorted(FAMILY_PRESETS)
 
 
+def family_for_preset(preset_name: str) -> str | None:
+    """Return the family a preset belongs to, or ``None`` if unknown.
+
+    HOMAGE Phase 6 Layer 5 — used by the FX chain's family-change
+    publisher to tag ``FXEvent(kind="preset_family_change")`` with the
+    new family name so the ward-FX reactor can route pulses per family.
+    First-match wins; preset names are unique across families by
+    convention, so the first hit is the canonical membership.
+    """
+    for family, presets in FAMILY_PRESETS.items():
+        if preset_name in presets:
+            return family
+    return None
+
+
 def presets_for_family(family: str) -> tuple[str, ...]:
     """Return the preset list for ``family``, or empty tuple if unknown."""
     return FAMILY_PRESETS.get(family, ())
@@ -357,6 +372,7 @@ def pick_and_load_mutated(
 __all__ = [
     "FAMILY_PRESETS",
     "SCENE_TAG_BIAS",
+    "family_for_preset",
     "family_names",
     "pick_and_load_mutated",
     "pick_from_family",

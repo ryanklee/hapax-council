@@ -497,6 +497,179 @@ class TestDomainPresetFamilyMapping:
 # ── helpers ──────────────────────────────────────────────────────────────
 
 
+class TestChoreographerPublishesWardEvents:
+    """Choreographer.reconcile() emits WardEvent per planned transition."""
+
+    def test_entry_plan_publishes_absent_to_entering(self, isolated_bus):
+        from agents.studio_compositor.homage.choreographer import (
+            Choreographer,
+            PlannedTransition,
+        )
+        from shared.ward_fx_bus import WardEvent, get_bus
+
+        captured: list[WardEvent] = []
+        get_bus().subscribe_ward(captured.append)
+
+        choreographer = Choreographer(
+            pending_file=isolated_bus / "pending.json",
+            uniforms_file=isolated_bus / "uniforms.json",
+            shader_reading_file=isolated_bus / "reading.json",
+            substrate_package_file=isolated_bus / "substrate.json",
+            consent_safe_flag_file=isolated_bus / "consent-safe.json",
+            voice_register_file=isolated_bus / "voice.json",
+            structural_intent_file=isolated_bus / "intent.json",
+        )
+
+        choreographer._publish_ward_events(
+            [
+                PlannedTransition(
+                    source_id="token_pole",
+                    transition="zero-cut-in",
+                    phase="entry",
+                    start_at=100.0,
+                ),
+                PlannedTransition(
+                    source_id="album",
+                    transition="ticker-scroll-out",
+                    phase="exit",
+                    start_at=100.5,
+                ),
+                PlannedTransition(
+                    source_id="stream_overlay",
+                    transition="netsplit-burst",
+                    phase="modify",
+                    start_at=101.0,
+                ),
+            ]
+        )
+
+        assert len(captured) == 3
+        assert captured[0].ward_id == "token_pole"
+        assert captured[0].transition == "ABSENT_TO_ENTERING"
+        assert captured[0].domain == "token"
+        assert captured[1].transition == "HOLD_TO_EXITING"
+        assert captured[2].transition == "HOLD_TO_EMPHASIZED"
+
+
+class TestPresetChangePublishesFamilyFxEvent:
+    """effects.try_graph_preset publishes FXEvent(preset_family_change)
+    only when the family actually changes."""
+
+    def test_same_family_preset_does_not_publish(self, isolated_bus):
+        from agents.studio_compositor import effects
+        from shared.ward_fx_bus import FXEvent, get_bus
+
+        class _FakeCompositor:
+            _fx_last_published_family = "warm-minimal"
+
+        captured: list[FXEvent] = []
+        get_bus().subscribe_fx(captured.append)
+
+        fake = _FakeCompositor()
+        effects._maybe_publish_family_change(fake, "vhs_preset", "vhs_preset")
+        assert captured == []
+
+    def test_cross_family_preset_publishes(self, isolated_bus):
+        from agents.studio_compositor import effects
+        from shared.ward_fx_bus import FXEvent, get_bus
+
+        class _FakeCompositor:
+            _fx_last_published_family: str | None = None
+
+        captured: list[FXEvent] = []
+        get_bus().subscribe_fx(captured.append)
+
+        fake = _FakeCompositor()
+        effects._maybe_publish_family_change(fake, "feedback_preset", "feedback_preset")
+        assert len(captured) == 1
+        event = captured[0]
+        assert event.kind == "preset_family_change"
+        assert event.preset_family == "audio-reactive"
+        assert fake._fx_last_published_family == "audio-reactive"
+
+    def test_unknown_preset_does_not_publish(self, isolated_bus):
+        from agents.studio_compositor import effects
+        from shared.ward_fx_bus import FXEvent, get_bus
+
+        class _FakeCompositor:
+            _fx_last_published_family: str | None = None
+
+        captured: list[FXEvent] = []
+        get_bus().subscribe_fx(captured.append)
+
+        fake = _FakeCompositor()
+        effects._maybe_publish_family_change(fake, "this_preset_is_not_catalogued", "alias")
+        assert captured == []
+
+
+class TestFxChainAudioPublishers:
+    """fx_chain._maybe_publish_audio_fx_events emits kick/spike on threshold."""
+
+    def test_kick_onset_emits_on_threshold(self, isolated_bus):
+        from agents.studio_compositor import fx_chain
+        from shared.ward_fx_bus import FXEvent, get_bus
+
+        class _FakeCompositor:
+            pass
+
+        captured: list[FXEvent] = []
+        get_bus().subscribe_fx(captured.append)
+
+        fake = _FakeCompositor()
+        fx_chain._maybe_publish_audio_fx_events(fake, {"onset_kick": 0.9})
+        kinds = [e.kind for e in captured]
+        assert "audio_kick_onset" in kinds
+
+    def test_kick_below_threshold_does_not_emit(self, isolated_bus):
+        from agents.studio_compositor import fx_chain
+        from shared.ward_fx_bus import FXEvent, get_bus
+
+        class _FakeCompositor:
+            pass
+
+        captured: list[FXEvent] = []
+        get_bus().subscribe_fx(captured.append)
+
+        fake = _FakeCompositor()
+        fx_chain._maybe_publish_audio_fx_events(fake, {"onset_kick": 0.3})
+        assert all(e.kind != "audio_kick_onset" for e in captured)
+
+    def test_kick_cooldown_enforced(self, isolated_bus):
+        from agents.studio_compositor import fx_chain
+        from shared.ward_fx_bus import FXEvent, get_bus
+
+        class _FakeCompositor:
+            pass
+
+        captured: list[FXEvent] = []
+        get_bus().subscribe_fx(captured.append)
+
+        fake = _FakeCompositor()
+        fx_chain._maybe_publish_audio_fx_events(fake, {"onset_kick": 0.9})
+        fx_chain._maybe_publish_audio_fx_events(fake, {"onset_kick": 0.9})
+        kicks = [e for e in captured if e.kind == "audio_kick_onset"]
+        # Cooldown: second call within _AUDIO_KICK_FX_COOLDOWN_S (150ms) must be suppressed.
+        assert len(kicks) == 1
+
+    def test_intensity_spike_emits_on_threshold(self, isolated_bus):
+        from agents.studio_compositor import fx_chain
+        from shared.ward_fx_bus import FXEvent, get_bus
+
+        class _FakeCompositor:
+            pass
+
+        captured: list[FXEvent] = []
+        get_bus().subscribe_fx(captured.append)
+
+        fake = _FakeCompositor()
+        fx_chain._maybe_publish_audio_fx_events(fake, {"mixer_energy": 0.85})
+        kinds = [e.kind for e in captured]
+        assert "intensity_spike" in kinds
+
+
+# ── helpers ──────────────────────────────────────────────────────────────
+
+
 def _collect_samples(histogram) -> dict[str, float]:
     """Extract sum + count from a labelled histogram child.
 
