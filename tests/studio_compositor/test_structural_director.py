@@ -119,7 +119,7 @@ class TestTickOnce:
         jsonl_lines = (tmp_path / "structural-intent.jsonl").read_text().splitlines()
         assert len(jsonl_lines) == 2
 
-    def test_intent_carries_emitted_at_and_condition(self, tmp_path):
+    def test_intent_carries_emitted_at_and_condition(self, tmp_path, monkeypatch):
         def stub_llm(prompt: str) -> str:
             return json.dumps(
                 {
@@ -128,6 +128,12 @@ class TestTickOnce:
                     "long_horizon_direction": "focused writing block",
                 }
             )
+
+        # HOMAGE Phase C2 opened `cond-phase-a-homage-active-001` and writes
+        # the SHM research-marker on a running system. Point the marker path
+        # at a nonexistent file so this unit test exercises the fallback
+        # rather than the live /dev/shm state.
+        monkeypatch.setattr(sd, "_RESEARCH_MARKER_PATH", tmp_path / "no-research-marker.json")
 
         d = sd.StructuralDirector(llm_fn=stub_llm)
         out = d.tick_once()

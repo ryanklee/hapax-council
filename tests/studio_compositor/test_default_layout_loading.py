@@ -40,7 +40,7 @@ def test_default_json_exists_and_is_valid_layout() -> None:
         # (PR #1017/§3.5 + follow-ups #1018).
         "activity_header",
         "stance_indicator",
-        "chat_keyword_legend",
+        "chat_ambient",
         "grounding_provenance_ticker",
         # Epic 2 Phase C (2026-04-17) — hothouse pressure surfaces.
         "impingement_cascade",
@@ -95,7 +95,7 @@ def test_default_json_exists_and_is_valid_layout() -> None:
         # Volitional-director Phase 4 legibility assignments.
         ("activity_header", "activity-header-top"),
         ("stance_indicator", "stance-indicator-tr"),
-        ("chat_keyword_legend", "chat-legend-right"),
+        ("chat_ambient", "chat-legend-right"),
         ("grounding_provenance_ticker", "grounding-ticker-bl"),
         # Epic 2 Phase C hothouse assignments.
         ("impingement_cascade", "impingement-cascade-midright"),
@@ -126,7 +126,7 @@ def test_default_json_source_backends_match_registry_dispatch() -> None:
         # Volitional-director Phase 4 legibility sources.
         "activity_header": "cairo",
         "stance_indicator": "cairo",
-        "chat_keyword_legend": "cairo",
+        "chat_ambient": "cairo",
         "grounding_provenance_ticker": "cairo",
         # Epic 2 Phase C hothouse sources.
         "impingement_cascade": "cairo",
@@ -266,7 +266,7 @@ def test_load_layout_or_fallback_reads_valid_file(tmp_path: Path) -> None:
         # Volitional-director Phase 4 legibility additions.
         "activity_header",
         "stance_indicator",
-        "chat_keyword_legend",
+        "chat_ambient",
         "grounding_provenance_ticker",
         # Epic 2 Phase C hothouse additions.
         "impingement_cascade",
