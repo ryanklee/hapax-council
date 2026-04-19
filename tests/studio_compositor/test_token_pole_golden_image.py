@@ -93,6 +93,14 @@ def _render_source_deterministically() -> Any:
     with (
         patch.object(tp, "LEDGER_FILE", nonexistent_ledger),
         patch.object(tp.time, "monotonic", return_value=1_000_000.0),
+        # Phase 12 flipped ``HAPAX_HOMAGE_ACTIVE`` to default-ON, which
+        # pins the FSM at ``ABSENT`` until the choreographer emits a
+        # ``ticker-scroll-in`` — yielding a transparent surface. Force
+        # the legacy paint-and-hold path so the golden captures real
+        # content; the palette-swap and FSM-state contracts are pinned
+        # separately in ``test_token_pole_palette.py`` and the
+        # transitional-source FSM tests.
+        patch.dict(os.environ, {"HAPAX_HOMAGE_ACTIVE": "0"}),
     ):
         source = tp.TokenPoleCairoSource()
         # Two ticks: first paints the background + one pulse step, the
