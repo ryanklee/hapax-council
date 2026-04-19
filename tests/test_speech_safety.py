@@ -135,6 +135,18 @@ def test_variant_niggaz_plural_is_redacted():
         assert result.was_modified is True, f"{word} not caught"
 
 
+def test_variant_y_terminal_diminutive_is_redacted():
+    # 2026-04-19 third leak: Hapax narrated "what a niggy know" during
+    # vinyl commentary. Prior regex vowel class [aeuohi]+ excluded y;
+    # widened to [aeuohiy]+ / [rzsxy]?. This test pins every y-terminal
+    # shape the widened regex must now catch.
+    # "niggery" is an archaic 19th-c racist term; test it too.
+    for word in ("niggy", "niggys", "niggie", "niggay", "niggery"):
+        result = speech_safety.censor(f"what a {word} know")
+        assert result.was_modified is True, f"{word} not caught by widened regex"
+        assert word not in result.text
+
+
 def test_allowlist_niagara_passes():
     # "Niagara Falls" must not be redacted.
     result = speech_safety.censor("we visited Niagara Falls last summer")

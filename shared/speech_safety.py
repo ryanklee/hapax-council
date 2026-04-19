@@ -153,16 +153,22 @@ _LEET_MAP: dict[str, str] = {
 #   * ``n`` (any case)
 #   * optional digit/punctuation filler (handled by leet map)
 #   * one or more ``g`` / ``q`` (q is a near-visual homoglyph)
-#   * one or more vowels (``a`` / ``e`` / ``i`` / ``u`` / ``o``) optionally
-#     interspersed with ``h`` (``niggah`` / ``nigguh`` variants) — the
-#     ``[aeuohi]+`` class covers all known phonetic spellings
+#   * one or more vowels (``a`` / ``e`` / ``i`` / ``u`` / ``o`` / ``y``)
+#     optionally interspersed with ``h`` (``niggah`` / ``nigguh`` /
+#     ``niggy`` variants) — the ``[aeuohiy]+`` class covers all known
+#     phonetic spellings including y-functioning-as-vowel forms
 #   * optional trailing ``r`` (hard-R variant) or ``z`` / ``x`` / ``s``
-#     (plural / slang plural)
-# Word boundaries on both sides to avoid intra-word FPs. Live-stream
-# 2026-04-20 leak: Hapax narrated about a rap track, gate caught one
-# ``nigga`` token but another variant (likely ``niggah`` / ``niggaz``)
-# slipped. Widened to match ALL plural endings + ``h``-terminal forms.
-_SLUR_RE = re.compile(r"\bn[i][gq]+[aeuohi]+[rzsx]?\b", re.IGNORECASE)
+#     / ``y`` (plural / slang plural / y-terminal diminutive)
+# Word boundaries on both sides to avoid intra-word FPs. Leak history:
+#   - 2026-04-20 first leak: ``nigga`` → original regex shipped.
+#   - 2026-04-20 second leak: ``niggah`` / ``niggaz`` — widened with h
+#     + z/s/x plural endings.
+#   - 2026-04-19 third leak: ``niggy`` (y-terminal diminutive; said
+#     while narrating current vinyl) — added ``y`` to both the vowel
+#     class and the terminal class. Each reactive widening confirms
+#     the regex alone cannot be the only defence — prompt-level
+#     prohibition + audio-egress filter must catch what this misses.
+_SLUR_RE = re.compile(r"\bn[i][gq]+[aeuohiy]+[rzsx]?y?\b", re.IGNORECASE)
 
 # Asterisk-fill detector. Matches obfuscated forms like ``n*gga``,
 # ``ni**a``, ``n**ga``. We collapse asterisks to letters then re-check.
