@@ -67,6 +67,29 @@ header; sensible starting point: `-30 dBFS`, `8:1`, `5 ms`, `300 ms`.
 
 Depends on the `sc4m_1916` LADSPA plugin (``swh-plugins`` on Arch).
 
+## YouTube → 24c backing ducker (CVS #145)
+
+`yt-over-24c-duck.conf` is the symmetric partner of
+`voice-over-ytube-duck.conf`: it creates a `hapax-24c-ducked` sink that
+the Python `AudioDuckingController` modulates when YouTube/React audio
+is active, so the 24c backing bed ducks under the YT content (operator
+has said "pull the backing down while the video plays").
+
+Install + verify:
+
+```fish
+cp config/pipewire/yt-over-24c-duck.conf ~/.config/pipewire/pipewire.conf.d/
+systemctl --user restart pipewire pipewire-pulse wireplumber
+pactl list short sinks | grep hapax-24c-ducked
+```
+
+Route backing sources (DAW returns, synth strip, MPC pads) through
+**Hapax 24c Ducker** via per-application audio assignment. Flip
+`HAPAX_AUDIO_DUCKING_ACTIVE=1` on the compositor unit env to enable the
+state-machine driver; the sink stays at unity gain until then.
+
+See `docs/runbooks/audio-topology.md § 5` for the full ducking matrix.
+
 ## Troubleshooting
 
 - **Sink does not appear after install:** verify `pipewire.service` and

@@ -32,6 +32,7 @@ monitor); it is not a PipeWire source.
 | `alsa_output.usb-PreSonus_Studio_24c...`                 | Studio monitors (default sink)                                 | Kokoro TTS lands here when `HAPAX_TTS_TARGET` is unset.            |
 | `hapax-voice-fx-capture` *(virtual, optional)*           | TTS FX chain (`voice-fx-chain.conf` / `voice-fx-radio.conf`)   | Installed only if operator opts in. See `config/pipewire/README.md`. |
 | `hapax-ytube-ducked` *(virtual)*                         | OBS / browser YouTube bed                                      | LADSPA sidechain; operator voice ducks the bed.                    |
+| `hapax-24c-ducked` *(virtual, optional)*                 | Studio 24c backing sources (DAW returns, synth strip)          | Driven by `AudioDuckingController` FSM; ducks backing when YT audio is active. CVS #145. |
 | `echo_cancel_sink` *(virtual)*                           | `module-echo-cancel` reference                                 | Receives default-sink audio so AEC knows what to subtract.         |
 
 ## 3. PipeWire graph
@@ -101,8 +102,53 @@ once the drop-in is installed and verified via
 | Direction                            | Trigger                                                | Target                 | Spec reference           | Status      |
 |--------------------------------------|--------------------------------------------------------|------------------------|--------------------------|-------------|
 | Operator voice → YT (embedding-gated) | `VAD && operator-voice-embedding match > 0.75`         | 3 PiP slots + YT sink  | `2026-04-18` §3.2        | deferred    |
-| YouTube → 24c operator mix           | YT sink output keys sidechain on `hapax-24c-ducked`    | 24c hardware mix       | CVS #145 §7 (new spec)   | spec needed |
+| YouTube → 24c operator mix           | YT sink output keys sidechain on `hapax-24c-ducked`    | 24c hardware mix       | CVS #145 §7              | **shipped** (flag OFF) |
 | YT loudness normalization            | `loudnorm` / `ebur128` on `hapax-ytube-ducked`          | YT bed itself          | CVS #145 §7              | spec needed |
+
+### AudioDuckingController state machine (CVS #145, feature-flagged)
+
+`agents/studio_compositor/audio_ducking.py::AudioDuckingController`
+couples operator VAD + React/YT audio activity into a 4-state FSM and
+drives both `hapax-ytube-ducked` and `hapax-24c-ducked` gains.
+
+| State          | Condition                       | YT bed gain | Backing gain |
+|----------------|---------------------------------|-------------|--------------|
+| `NORMAL`       | neither VAD nor YT active       | 1.0         | 1.0          |
+| `VOICE_ACTIVE` | VAD fires, YT silent (≤debounce)| -12 dB      | 1.0          |
+| `YT_ACTIVE`    | YT audible, VAD silent          | 1.0         | -6 dB        |
+| `BOTH_ACTIVE`  | VAD + YT both fire              | -18 dB      | 1.0          |
+
+- **Feature flag:** `HAPAX_AUDIO_DUCKING_ACTIVE=1` in the compositor
+  unit env. Default OFF — the controller still observes and publishes
+  state but dispatches no PipeWire changes.
+- **Hysteresis:** `vad_debounce_s=2.0`, `yt_debounce_s=0.5`. Brief VAD
+  drops don't flip out of `VOICE_ACTIVE`.
+- **Observability:** `hapax_audio_ducking_state{state}` Prometheus
+  gauge (one-hot).
+- **PipeWire preset:** install
+  `config/pipewire/yt-over-24c-duck.conf` to provision the
+  `hapax-24c-ducked` sink before flipping the flag on.
+
+### CVS #145 install + verify
+
+```fish
+# 1. Install the 24c ducker sink (paired with the existing ytube-ducked).
+cp config/pipewire/yt-over-24c-duck.conf ~/.config/pipewire/pipewire.conf.d/
+systemctl --user restart pipewire pipewire-pulse wireplumber
+
+# 2. Verify both sinks appear.
+pactl list short sinks | grep -E "hapax-ytube-ducked|hapax-24c-ducked"
+
+# 3. Route backing sources (DAW return, synth strip) through hapax-24c-ducked.
+#    Per-application audio assignment — no global default change required.
+
+# 4. Flip the flag (compositor systemd user unit env or shell override).
+set -Ux HAPAX_AUDIO_DUCKING_ACTIVE 1
+systemctl --user restart studio-compositor.service  # or equivalent entry point
+
+# 5. Confirm state machine output.
+curl -s http://127.0.0.1:9482/metrics | grep hapax_audio_ducking_state
+```
 
 The embedding gate (§3.2) is what transforms "VAD fires → duck" into
 "operator speech → duck". Today's path C (#1000 sidechain compressor) is
