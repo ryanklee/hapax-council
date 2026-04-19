@@ -27,6 +27,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from shared.homage_coupling import (
+    SHADER_READING_PATH,
+    ShaderCouplingReading,
+    hold_multiplier,
+    read_shader_reading,
+)
 from shared.homage_package import HomagePackage, TransitionName
 
 log = logging.getLogger(__name__)
@@ -121,11 +127,34 @@ class Choreographer:
         *,
         pending_file: Path = _PENDING_TRANSITIONS,
         uniforms_file: Path = _UNIFORMS_JSON,
+        shader_reading_file: Path = SHADER_READING_PATH,
     ) -> None:
         self._pending_file = pending_file
         self._uniforms_file = uniforms_file
+        self._shader_reading_file = shader_reading_file
         self._last_netsplit_burst_ts: float | None = None
         self._rotation_phase: float = 0.0
+
+    # ── Phase 6: shader → ward reverse-path ─────────────────────────────
+
+    def read_shader_coupling(self) -> ShaderCouplingReading | None:
+        """Poll the Phase 6 shader feedback file.
+
+        Returns ``None`` when the publisher has not written yet, the
+        file is unreadable, or its contents are malformed. Callers must
+        treat ``None`` as "default timer pacing" — never as an error.
+        """
+        return read_shader_reading(self._shader_reading_file)
+
+    def hold_pacing_multiplier(self, *, now: float) -> float:
+        """Current ward-hold pacing multiplier from shader feedback.
+
+        ``> 1.0`` → extend holds (high shader energy, let GPU breathe).
+        ``< 1.0`` → shorten holds (high drift, break feedback lock-in).
+        ``1.0``  → neutral / default timer pacing.
+        """
+        reading = self.read_shader_coupling()
+        return hold_multiplier(reading, now=now)
 
     # ── Public surface ──────────────────────────────────────────────────
 
