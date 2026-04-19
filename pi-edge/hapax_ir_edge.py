@@ -35,7 +35,7 @@ logging.basicConfig(
 )
 log = logging.getLogger("hapax-ir-edge")
 
-DEFAULT_WORKSTATION = "http://192.168.68.80:8051"
+DEFAULT_WORKSTATION = "http://192.168.68.83:8051"
 DEFAULT_CAPTURE_SIZE = (1920, 1080)
 MOTION_THRESHOLD = 0.01
 MOTION_TIMEOUT_S = 30.0
