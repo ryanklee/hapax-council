@@ -1079,39 +1079,28 @@ class DirectorLoop:
                 activity = intent.activity
                 text = intent.narrative_text
 
-                # Viewer-audit (2026-04-18): the LLM was emitting near-
-                # duplicate paragraphs tick after tick ("The tension in
-                # this deposition scene is palpable. The silence..."
-                # 6× of 10). For captions and TTS, repetition is boring.
-                # Word-Jaccard against the last 5 narratives; ≥0.6
-                # overlap means it's effectively the same thought — fall
-                # back to a micromove so the viewer gets a fresh visual
-                # instead of a restated paragraph.
-                # Music narratives use the music-only history (track-aware
-                # dedup); everything else uses the general history. The
-                # 2026-04-19 fix tightens both paths to Jaccard 0.35 +
-                # 3-shingle n-gram match against history of 15.
-                if text and self._narrative_too_similar(text, music_specific=(activity == "music")):
-                    log.info(
-                        "director narrative too similar to recent — emitting micromove fallback"
-                    )
-                    self._emit_micromove_fallback(
-                        reason="narrative_repeat", condition_id=condition_id
-                    )
-                    time.sleep(1.0)
-                    continue
+                # narrative-too-similar check retired 2026-04-19 (HOMAGE
+                # Phase F2). The rule triggered the hardcoded micromove
+                # fallback 40+ times/12h, masking a director-LLM
+                # repetition tendency that is a prompt-engineering
+                # problem, not a post-hoc filter problem. Repetition is
+                # now a recruitment choice the pipeline makes; if the
+                # operator wants anti-repetition, the fix is in the
+                # prompt (BANNED OPENERS block) or re-prompting, not a
+                # Jaccard filter that drops the LLM's answer. See
+                # docs/research/2026-04-19-expert-system-blinding-audit.md §A6.
 
-                # Sim-3 audit (2026-04-18): the activity rotation enforcer
-                # was running AFTER _emit_intent_artifacts, so the JSONL
-                # record captured the pre-rotation (monotone react) label.
-                # Rotate BEFORE emit so downstream consumers + the research
-                # log both see the rotated variety. The Continuous-Loop
-                # §3.2 stimmung-override runs first (it's content-driven,
-                # not repetition-driven), then the rotation enforcer as a
-                # repetition-breaker of last resort.
+                # activity-rotation enforcer retired 2026-04-19 (HOMAGE
+                # Phase F2). The rule fired 11+ times/12h including the
+                # pathological "music → music after 3 consecutive" case;
+                # it was mechanically rewriting the director's activity
+                # label after the pipeline had already scored it. If the
+                # LLM picks the same activity repeatedly, that is the
+                # pipeline's answer — variety comes from the impingement
+                # side, not a post-hoc rewrite. See
+                # docs/research/2026-04-19-expert-system-blinding-audit.md §A6.
                 if activity not in ("silence",) and text:
                     activity = self._maybe_override_activity(activity)
-                    activity = self._maybe_rotate_repeated_activity(activity)
                 if activity != intent.activity:
                     intent = intent.model_copy(update={"activity": activity})
 
@@ -1207,61 +1196,14 @@ class DirectorLoop:
             return set()
         return {(seq[i], seq[i + 1]) for i in range(len(seq) - k + 1)}
 
-    def _narrative_too_similar(self, candidate: str, *, music_specific: bool = False) -> bool:
-        """Return True if ``candidate`` is effectively a restatement of a
-        recent narrative.
-
-        Two-stage dedup:
-          1. Jaccard on lowercased ≥4-char word sets. Threshold 0.35.
-          2. 3-shingle n-gram match on the ordered ≥4-char word stream.
-             Catches template re-use ("the subtle beats of <track>") even
-             when the variable token (track name) drops Jaccard below
-             threshold.
-
-        ``music_specific=True`` runs the check against the music-only
-        history (``_recent_music_narratives``) so the LLM stops looping
-        on track-by-track variations even though the surrounding
-        non-music narratives are heterogeneous enough not to repeat.
-        Falls back to the general history if the music history is empty.
-        """
-        try:
-            if not candidate or len(candidate) < 40:
-                return False
-            if music_specific:
-                recent = list(getattr(self, "_recent_music_narratives", []))
-                if not recent:
-                    recent = list(getattr(self, "_recent_narratives", []))
-            else:
-                recent = list(getattr(self, "_recent_narratives", []))
-            if not recent:
-                return False
-            cand_words = self._narrative_word_set(candidate)
-            if len(cand_words) < 8:
-                return False
-            cand_shingles = self._narrative_shingles(candidate)
-            cand_bigrams = self._narrative_bigrams(candidate)
-            for prior in recent:
-                prior_words = self._narrative_word_set(prior)
-                if not prior_words:
-                    continue
-                intersection = len(cand_words & prior_words)
-                union = len(cand_words | prior_words)
-                jaccard = intersection / union if union else 0.0
-                if jaccard >= self._NARRATIVE_DEDUP_JACCARD:
-                    return True
-                if cand_shingles:
-                    prior_shingles = self._narrative_shingles(prior)
-                    if cand_shingles & prior_shingles:
-                        return True
-                if cand_bigrams:
-                    prior_bigrams = self._narrative_bigrams(prior)
-                    shared = cand_bigrams & prior_bigrams
-                    if len(shared) >= self._NARRATIVE_DEDUP_BIGRAM_MIN_MATCHES:
-                        return True
-            return False
-        except Exception:
-            log.debug("narrative similarity check raised", exc_info=True)
-            return False
+    # _narrative_too_similar retired 2026-04-19 (HOMAGE Phase F2). The
+    # Jaccard+n-gram filter second-guessed the director LLM's output
+    # and triggered the hardcoded micromove fallback 40+ times/12h. The
+    # narrative-bigram/shingle helpers above remain in place because
+    # they are cheap classmethods with no runtime cost when nobody calls
+    # them; a subsequent sweep will retire the dead cluster once the
+    # post-live F4 phase retires _emit_micromove_fallback. See
+    # docs/research/2026-04-19-expert-system-blinding-audit.md §A6.
 
     def _remember_narrative(self, text: str, *, activity: str | None = None) -> None:
         """Append a narrative to the rolling de-dupe history.
@@ -1290,49 +1232,16 @@ class DirectorLoop:
         except Exception:
             log.debug("narrative remember failed", exc_info=True)
 
-    def _maybe_rotate_repeated_activity(self, proposed: str) -> str:
-        """Force activity-label variety when the LLM repeats itself.
-
-        Sim-2 audit (2026-04-18): the narrative director picked
-        ``react`` on 30/30 consecutive ticks even after the prompt
-        asked for variety. The perceptual field is dominated by live
-        video, which always makes ``react`` the highest-signal
-        response. Fighting that with prompt tweaks is pushing sand.
-
-        This enforcer tracks the last ``_ACTIVITY_VARIETY_WINDOW``
-        labels; when all are identical (and the proposed repeats
-        them), it returns the next label in an observe/music/study/
-        chat rotation. The LLM's narrative text is preserved on the
-        caller side, so downstream consumers treating activity as a
-        categorical routing signal see diversity while the content
-        stays coherent. No-op if the history hasn't converged yet.
-        """
-        _ACTIVITY_VARIETY_WINDOW = 3
-        _ROTATION = ("observe", "music", "study", "chat")
-        try:
-            history = list(getattr(self, "_recent_activities", []))
-            recent = history[-_ACTIVITY_VARIETY_WINDOW:]
-            log.info("activity rotation check: proposed=%s recent=%s", proposed, recent)
-            if len(history) >= _ACTIVITY_VARIETY_WINDOW and all(a == proposed for a in recent):
-                idx = int(getattr(self, "_activity_rotation_idx", 0)) % len(_ROTATION)
-                self._activity_rotation_idx = idx + 1
-                forced = _ROTATION[idx]
-                log.info(
-                    "activity rotation FORCED: %s → %s (after %d consecutive)",
-                    proposed,
-                    forced,
-                    _ACTIVITY_VARIETY_WINDOW,
-                )
-                history.append(forced)
-            else:
-                history.append(proposed)
-            if len(history) > _ACTIVITY_VARIETY_WINDOW * 2:
-                history = history[-_ACTIVITY_VARIETY_WINDOW * 2 :]
-            self._recent_activities = history
-            return history[-1]
-        except Exception:
-            log.warning("activity rotation enforcer raised", exc_info=True)
-            return proposed
+    # _maybe_rotate_repeated_activity retired 2026-04-19 (HOMAGE Phase
+    # F2). The enforcer mechanically rewrote the director's activity
+    # label when the LLM repeated itself 3× in a row, cycling through
+    # observe/music/study/chat. It fired 11+ times/12h including
+    # pathological "music → music after 3 consecutive" cases where the
+    # rotation index happened to land back on the repeated label. If
+    # the LLM picks an activity repeatedly that is the pipeline's
+    # answer; variety comes from the impingement side, not a post-hoc
+    # categorical rewrite. See
+    # docs/research/2026-04-19-expert-system-blinding-audit.md §A6.
 
     def _emit_micromove_fallback(self, *, reason: str, condition_id: str) -> None:
         """Emit a pre-composed micromove when the LLM tick produces nothing.

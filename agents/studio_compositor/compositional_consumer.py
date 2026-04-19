@@ -195,15 +195,15 @@ def dispatch_camera_hero(capability_name: str, ttl_s: float) -> bool:
                 _CAMERA_MIN_DWELL_S,
             )
             return False
-    # Variety window: reject if role is in the last N picks.
-    recent_roles = [r for (_ts, r) in _CAMERA_ROLE_HISTORY[-_CAMERA_VARIETY_WINDOW:]]
-    if role in recent_roles:
-        log.info(
-            "camera.hero variety-gate: %s in recent %s, skipping",
-            role,
-            recent_roles,
-        )
-        return False
+    # Variety-window gate retired 2026-04-19 (HOMAGE Phase F1). The rule
+    # dropped 6,358/45,178 (14%) of camera.hero dispatches over 12h by
+    # rejecting any role present in the last N picks — the pipeline
+    # already recruits diverse camera.hero.* capabilities via the
+    # director's intent_family emissions, so the gate was silently
+    # overriding the pipeline's score. Dwell-gate above still prevents
+    # frenetic back-and-forth within a ~12s window; variety comes from
+    # impingement generation, not post-hoc filtering. See
+    # docs/research/2026-04-19-expert-system-blinding-audit.md §A1.
     # Vision Phase 3 (#150): per_camera_person_count hero-gate. Kills the
     # "hero camera picks empty room" regression flagged in the 2026-04-18
     # viewer-experience audit. Additive — rejects and lets the variety

@@ -373,6 +373,11 @@ def test_write_uniforms_end_to_end_produces_expected_keys(tmp_path: Path):
     with (
         mock.patch.object(_uniforms, "PLAN_FILE", plan_file),
         mock.patch.object(_uniforms, "UNIFORMS_FILE", uniforms_file),
+        # Phase A6: patch HOMAGE_SUBSTRATE_PACKAGE_FILE to a nonexistent
+        # path so this test's plan-default+chain-delta invariants aren't
+        # overridden by the live broadcast (the homage substrate-invariant
+        # damping is pinned separately in test_homage_substrate_damping.py).
+        mock.patch.object(_uniforms, "HOMAGE_SUBSTRATE_PACKAGE_FILE", tmp_path / "no-homage.json"),
         mock.patch.object(_uniforms.time, "time", return_value=FAKE_NOW),
     ):
         _uniforms.write_uniforms(
@@ -442,6 +447,8 @@ def test_write_uniforms_silence_attenuation_when_imagination_stale(tmp_path: Pat
     with (
         mock.patch.object(_uniforms, "PLAN_FILE", plan_file),
         mock.patch.object(_uniforms, "UNIFORMS_FILE", uniforms_file),
+        # Phase A6: isolate from live homage broadcast.
+        mock.patch.object(_uniforms, "HOMAGE_SUBSTRATE_PACKAGE_FILE", tmp_path / "no-homage.json"),
         mock.patch.object(_uniforms.time, "time", return_value=FAKE_NOW),
     ):
         _uniforms.write_uniforms(
@@ -473,6 +480,8 @@ def test_write_uniforms_silence_floor_when_imagination_missing(tmp_path: Path):
     with (
         mock.patch.object(_uniforms, "PLAN_FILE", plan_file),
         mock.patch.object(_uniforms, "UNIFORMS_FILE", uniforms_file),
+        # Phase A6: isolate from live homage broadcast.
+        mock.patch.object(_uniforms, "HOMAGE_SUBSTRATE_PACKAGE_FILE", tmp_path / "no-homage.json"),
     ):
         _uniforms.write_uniforms(
             None,

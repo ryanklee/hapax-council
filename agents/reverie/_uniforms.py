@@ -15,7 +15,27 @@ log = logging.getLogger("reverie.uniforms")
 
 UNIFORMS_FILE = Path("/dev/shm/hapax-imagination/uniforms.json")
 PLAN_FILE = Path("/dev/shm/hapax-imagination/pipeline/plan.json")
+HOMAGE_SUBSTRATE_PACKAGE_FILE = Path("/dev/shm/hapax-compositor/homage-substrate-package.json")
 MATERIAL_MAP = {"water": 0, "fire": 1, "earth": 2, "air": 3, "void": 4}
+
+# HOMAGE Phase A6 — substrate invariant (governance doc §3).
+# Per the reckoning §3.7 + substrate-invariant doc, when the active
+# homage package is BitchX the Reverie ``colorgrade`` pass must damp
+# saturation to ~0.40 (range 0.35-0.55) and rotate hue toward the
+# package accent (180° cyan) so Reverie reads as a tinted ground, not
+# a kaleidoscopic competitor for visual attention. The choreographer
+# publishes the palette hint at ``HOMAGE_SUBSTRATE_PACKAGE_FILE``; this
+# module honors the hint by overriding the colorgrade node's per-node
+# params after plan_defaults + chain deltas are merged, so neither the
+# base defaults (saturation=1.0) nor any chain amplification can
+# override the damping.
+#
+# The vocabulary preset's colorgrade node is keyed ``color`` (not
+# ``colorgrade``) — so the uniforms.json keys written here are
+# ``color.saturation`` / ``color.hue_rotate`` / ``color.brightness``.
+_BITCHX_COLOR_SATURATION: float = 0.40
+_BITCHX_COLOR_HUE_ROTATE: float = 180.0
+_BITCHX_COLOR_BRIGHTNESS: float = 0.85
 
 _plan_defaults_cache: dict[str, float] | None = None
 _plan_defaults_mtime: float = 0.0
@@ -74,6 +94,54 @@ def build_slot_opacities(imagination: dict | None, fallback_salience: float) -> 
 
 
 SLOT_CENTERS = {0: (0.4, 0.4), 1: (0.6, 0.4), 2: (0.4, 0.6), 3: (0.6, 0.6)}
+
+
+def _read_homage_substrate_package(path: Path | None = None) -> dict | None:
+    """Read the current homage substrate-package broadcast, if any.
+
+    Returns the parsed payload on success, ``None`` on any failure
+    (file missing, unreadable bytes, malformed JSON, non-dict payload).
+    This path is load-bearing for the Reverie substrate-invariant but
+    must never raise — missing / stale / corrupt files fall through to
+    plan defaults, which is the documented failure posture.
+    """
+    p = path or HOMAGE_SUBSTRATE_PACKAGE_FILE
+    try:
+        if not p.exists():
+            return None
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    return data
+
+
+def _apply_homage_package_damping(
+    uniforms: dict[str, float],
+    package_payload: dict | None,
+) -> None:
+    """Apply the active homage package's colorgrade damping in place.
+
+    Per the reverie-substrate-invariant governance doc §3, the reverie
+    mixer maps ``palette_accent_hue_deg`` onto the colorgrade node's
+    per-node params (hue rotation + saturation damping). When BitchX is
+    the active package this writes ``color.saturation`` / ``color.hue_rotate``
+    / ``color.brightness`` at the spec-mandated damped values so the
+    Reverie frame reads as a tinted-cyan ground rather than a
+    kaleidoscopic competitor.
+
+    Called after plan_defaults + chain_params are merged so the damping
+    is authoritative — chain deltas cannot re-amplify saturation above
+    the substrate-invariant ceiling.
+    """
+    if not package_payload:
+        return
+    package_name = package_payload.get("package")
+    if package_name == "bitchx":
+        uniforms["color.saturation"] = _BITCHX_COLOR_SATURATION
+        uniforms["color.hue_rotate"] = _BITCHX_COLOR_HUE_ROTATE
+        uniforms["color.brightness"] = _BITCHX_COLOR_BRIGHTNESS
 
 
 def update_trace(
@@ -182,6 +250,12 @@ def write_uniforms(
             if isinstance(dim_data, dict):
                 worst_infra = max(worst_infra, dim_data.get("value", 0.0))
         uniforms["signal.color_warmth"] = worst_infra
+
+    # HOMAGE Phase A6 — substrate invariant. Apply the active package's
+    # colorgrade damping AFTER plan_defaults + chain deltas so the damped
+    # saturation is authoritative (no chain amplification can override).
+    # Missing / malformed broadcast falls through without damping.
+    _apply_homage_package_damping(uniforms, _read_homage_substrate_package())
 
     # Write all scalar overrides to uniforms.json. The Rust pipeline parses this
     # as HashMap<String, f64> — non-scalar values (arrays) must be excluded or
