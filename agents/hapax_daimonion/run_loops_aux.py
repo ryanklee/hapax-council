@@ -638,6 +638,34 @@ async def sidechat_consumer_loop(daemon: VoiceDaemon) -> None:
                     except (ValueError, OSError):
                         log.debug("Sidechat link capture failed (non-fatal)", exc_info=True)
 
+                # Task #160: recognize `point-at-hardm <cell>` and emit
+                # a narrative director cue. The message still flows
+                # through the affordance pipeline so the operator sees
+                # the same recruitment trail as any other sidechat line.
+                try:
+                    from agents.studio_compositor.hardm_source import (
+                        parse_point_at_hardm,
+                        write_operator_cue,
+                    )
+
+                    hardm_cell = parse_point_at_hardm(msg.text)
+                    if hardm_cell is not None:
+                        write_operator_cue(hardm_cell)
+                        try:
+                            from shared.director_observability import (
+                                emit_hardm_operator_cue,
+                            )
+
+                            emit_hardm_operator_cue(hardm_cell)
+                        except Exception:
+                            pass
+                        log.info(
+                            "Sidechat point-at-hardm cue: cell=%d",
+                            hardm_cell,
+                        )
+                except Exception:
+                    log.debug("point-at-hardm parse failed (non-fatal)", exc_info=True)
+
                 # Task #126: `add-text <body>` / `rotate-text` commands
                 # dispatch into the Hapax-managed Pango text repo. Still
                 # flows through the affordance pipeline so the operator
