@@ -59,6 +59,12 @@ _HOMAGE_VOICE_REGISTER = Path("/dev/shm/hapax-compositor/homage-voice-register.j
 _HOMAGE_SUBSTRATE_PACKAGE = Path("/dev/shm/hapax-compositor/homage-substrate-package.json")
 _HOMAGE_CONSENT_SAFE_FLAG = Path("/dev/shm/hapax-compositor/consent-safe-active.json")
 
+# Task #135 — camera classification metadata published by the studio
+# compositor. Dict keyed by role (``brio-operator``, ``c920-overhead``, …)
+# → classification payload (semantic_role / subject_ontology / angle /
+# operator_visible / ambient_priority). Read-only for this module.
+_CAMERA_CLASSIFICATIONS = Path("/dev/shm/hapax-compositor/camera-classifications.json")
+
 
 # ── Sub-fields ────────────────────────────────────────────────────────────
 
@@ -269,6 +275,14 @@ class PerceptualField(BaseModel):
     stream_health: StreamHealthField = Field(default_factory=StreamHealthField)
     tendency: TendencyField = Field(default_factory=TendencyField)
     homage: HomageField = Field(default_factory=HomageField)
+    # Task #135 — semantic classification for each configured camera.
+    # Keyed by role (``brio-operator``, ``c920-overhead``, …) → dict with
+    # ``semantic_role``, ``subject_ontology``, ``angle``,
+    # ``operator_visible``, ``ambient_priority``. The director reads this
+    # to prefer operator-visible cameras when the operator is speaking
+    # and high-ambient-priority cameras for ambient cuts. Empty dict when
+    # the compositor hasn't published yet.
+    camera_classifications: dict[str, dict] = Field(default_factory=dict)
 
     @property
     def vinyl_playing(self) -> bool:
@@ -655,6 +669,13 @@ def build_perceptual_field(
     # ── Homage (task #115, cond-phase-a-homage-active-001) ──────────────
     homage = _read_homage()
 
+    # ── Camera classifications (task #135) ──────────────────────────────
+    # Compositor publishes once at startup; failures / missing file =
+    # empty dict (director degrades gracefully).
+    camera_classifications = _safe_load_json(_CAMERA_CLASSIFICATIONS) or {}
+    if not isinstance(camera_classifications, dict):
+        camera_classifications = {}
+
     return PerceptualField(
         audio=audio,
         visual=visual,
@@ -667,6 +688,7 @@ def build_perceptual_field(
         stream_health=StreamHealthField(),
         tendency=tendency,
         homage=homage,
+        camera_classifications=camera_classifications,
     )
 
 
