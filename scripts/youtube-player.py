@@ -713,6 +713,60 @@ _YT_AUDIO_STATE_FILE = SHM_DIR / "yt-audio-state.json"
 _yt_audio_last_written: bool | None = None
 
 
+def _active_slot_id() -> int:
+    """Slot whose audio should be audible. Defaults to 0.
+
+    Bridge policy — wiring-audit smoking gun #3: SlotAudioControl's
+    mute_all_except only fires at compositor startup, so ffmpeg
+    reconnects come up at unity volume and produce cacophony across
+    slots 0/1/2. Until alpha's systematic fix lands (re-apply mute on
+    sink-input-added events, or director-nominated slot via SHM), hold
+    slot 0 audible and mute 1/2 at every ffmpeg spawn/reconnect. Operator
+    can override via ``HAPAX_YT_ACTIVE_SLOT`` env var.
+    """
+    raw = os.environ.get("HAPAX_YT_ACTIVE_SLOT", "0").strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        return 0
+    return value if value in (0, 1, 2) else 0
+
+
+def _apply_slot_mute_policy() -> None:
+    """Mute all non-active YT sink-inputs via wpctl (idempotent).
+
+    Discovers PipeWire node IDs for youtube-audio-{0,1,2}, sets the
+    active slot to 1.0 and the others to 0.0. Safe to call on every
+    tick — wpctl set-volume is idempotent and ~10ms per call.
+    """
+    try:
+        result = subprocess.run(["pw-dump"], capture_output=True, text=True, timeout=5)
+        nodes = json.loads(result.stdout)
+    except (subprocess.TimeoutExpired, json.JSONDecodeError, OSError):
+        return
+    active = _active_slot_id()
+    for node in nodes:
+        if node.get("type") != "PipeWire:Interface:Node":
+            continue
+        props = node.get("info", {}).get("props", {})
+        media_name = props.get("media.name", "")
+        if not media_name.startswith("youtube-audio-"):
+            continue
+        try:
+            slot_id = int(media_name.rsplit("-", 1)[-1])
+        except ValueError:
+            continue
+        vol = "1.0" if slot_id == active else "0.0"
+        try:
+            subprocess.run(
+                ["wpctl", "set-volume", str(node["id"]), vol],
+                timeout=2,
+                capture_output=True,
+            )
+        except subprocess.TimeoutExpired:
+            pass
+
+
 def _publish_yt_audio_active(active: bool) -> None:
     """Atomically publish the YouTube/React audio-activity state.
 
@@ -749,6 +803,11 @@ def auto_advance_loop() -> None:
         # change-gated internally so this is cheap.
         any_playing = any(s.process is not None and s.process.poll() is None for s in slots)
         _publish_yt_audio_active(any_playing)
+        # Bridge fix for wiring-audit smoking gun #3: re-apply slot mute
+        # policy every tick so ffmpeg reconnects don't leave non-active
+        # slots at unity volume. wpctl set-volume is idempotent.
+        if any_playing:
+            _apply_slot_mute_policy()
         for slot in slots:
             with slot.lock:
                 if slot.process is not None and slot.process.poll() is not None:
