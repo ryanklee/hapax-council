@@ -1,0 +1,77 @@
+# HARDM 16-row × 16-col cell map
+# Spec: docs/superpowers/specs/2026-04-18-hardm-dot-matrix-design.md §4
+#
+# Each row binds to one real-time system signal. All 16 cells in that row
+# repeat the same signal state. Rows 0–15 cover the 16 primary signals
+# from spec §3. Families drive accent-role selection; the consumer looks
+# up family → palette role via agents.studio_compositor.hardm_source.
+#
+# Reload semantics (future): inotify-watched, hot-reload without restart.
+# For now this file documents the binding; the runtime binding is in
+# agents/studio_compositor/hardm_source.py::SIGNAL_NAMES.
+
+rows:
+  - row: 0
+    signal: midi_active
+    family: timing
+    style: pulse_on_beat
+  - row: 1
+    signal: vad_speech
+    family: operator
+    style: fill_when_true
+  - row: 2
+    signal: room_occupancy
+    family: perception
+    style: level3
+  - row: 3
+    signal: ir_person_detected
+    family: perception
+    style: fill_when_true
+  - row: 4
+    signal: watch_hr
+    family: operator
+    style: bucketed
+  - row: 5
+    signal: bt_phone
+    family: operator
+    style: fill_when_true
+  - row: 6
+    signal: kde_connect
+    family: operator
+    style: fill_when_true
+  - row: 7
+    signal: ambient_sound
+    family: perception
+    style: level3
+  - row: 8
+    signal: screen_focus
+    family: operator
+    style: fill_when_true
+  - row: 9
+    signal: director_stance
+    family: cognition
+    style: role
+  - row: 10
+    signal: consent_gate
+    family: governance
+    style: role
+  - row: 11
+    signal: stimmung_energy
+    family: cognition
+    style: level4
+  - row: 12
+    signal: shader_energy
+    family: cognition
+    style: level4
+  - row: 13
+    signal: reverie_pass
+    family: cognition
+    style: level4
+  - row: 14
+    signal: degraded_stream
+    family: governance
+    style: fill_when_true
+  - row: 15
+    signal: homage_package
+    family: governance
+    style: categorical
