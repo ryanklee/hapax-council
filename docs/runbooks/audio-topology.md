@@ -218,10 +218,55 @@ systemctl --user restart hapax-daimonion.service
 
 Daimonion falls back to the raw Yeti source (pre-AEC behavior).
 
-## 9. Related
+## 9. Rode Wireless Pro (task #133)
+
+The Rode Wireless Pro is the operator's on-body lavalier. When present,
+it becomes the authoritative voice source; on disappear, daimonion
+falls back to the Blue Yeti (AEC'd) automatically. **No daimonion
+restart** is ever required — the adapter flips a tag file which the
+STT resolver reads live with a 5 s cache.
+
+**Components:**
+
+- `agents/hapax_daimonion/rode_wireless_adapter.py` — polls
+  `pw-cli list-objects` every 5 s, writes the current source tag
+  (`rode` | `yeti` | `contact-mic`) to
+  `/dev/shm/hapax-compositor/voice-source.txt`.
+- `agents/hapax_daimonion/cpal/stt_source_resolver.py` — reads the
+  tag file (5 s cache), maps to the PipeWire node that
+  `pw-cat --record --target` accepts.
+- `systemd/units/hapax-rode-wireless-adapter.service` — user unit.
+  **Not auto-enabled.** Engage manually.
+- Prometheus gauge `hapax_voice_source{source}` (1 = active, 0 = inactive).
+
+**Engage:**
+
+```fish
+# 1. Symlink or copy the unit into the user directory.
+install -Dm644 systemd/units/hapax-rode-wireless-adapter.service \
+  ~/.config/systemd/user/hapax-rode-wireless-adapter.service
+
+# 2. Start + enable (enable only once you've confirmed it does the right thing).
+systemctl --user daemon-reload
+systemctl --user start hapax-rode-wireless-adapter.service
+journalctl --user -u hapax-rode-wireless-adapter -f
+
+# 3. Plug the Rode receiver; within ~5 s the tag file should flip.
+cat /dev/shm/hapax-compositor/voice-source.txt          # "rode"
+# Unplug — the adapter falls back to Yeti.
+cat /dev/shm/hapax-compositor/voice-source.txt          # "yeti"
+
+# 4. Enable for next boot once satisfied.
+systemctl --user enable hapax-rode-wireless-adapter.service
+```
+
+**Rollback:** `systemctl --user stop hapax-rode-wireless-adapter`
+and remove the tag file — the resolver falls back to Yeti on missing
+tag, so no daimonion state is affected.
+
+## 10. Related
 
 - Spec: `docs/superpowers/specs/2026-04-18-audio-pathways-audit-design.md`
 - Research: `/tmp/cvs-research-145.md` (ducking direction audit)
 - Voice-FX presets: `config/pipewire/README.md`
-- Follow-on #133 (Rode Wireless Pro): extends source priority list.
 - Follow-on CVS #145: symmetric YT→24c ducker + YT loudness normalization.
