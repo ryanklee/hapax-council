@@ -1,10 +1,19 @@
-"""Tiered TTS abstraction — Kokoro 82M backend (local, non-autoregressive)."""
+"""Tiered TTS abstraction — Kokoro 82M backend (local, non-autoregressive).
+
+Every TTS call passes through :func:`shared.speech_safety.censor` before
+synthesis — this is the canonical fail-closed slur gate that keeps
+Hapax's voice output demonetisation-safe and dignity-respecting. Task
+#173 ("aesthetically interesting substitution") overtakes the default
+``"friend"`` replacement when it ships; the gate itself stays.
+"""
 
 from __future__ import annotations
 
 import logging
 
 import numpy as np
+
+from shared.speech_safety import censor as _speech_safety_censor
 
 log = logging.getLogger(__name__)
 
@@ -44,12 +53,27 @@ class TTSManager:
         return self._pipeline
 
     def synthesize(self, text: str, use_case: str = "conversation") -> bytes:
-        """Synthesize text to raw PCM int16 24kHz mono bytes."""
+        """Synthesize text to raw PCM int16 24kHz mono bytes.
+
+        The input passes through :func:`shared.speech_safety.censor`
+        first — this is the canonical fail-closed slur gate. Any
+        matched token is replaced with the configured substitute
+        before Kokoro ever sees the string. The gate runs synchronously
+        on every call (CPU cost is microseconds) so there is no
+        tier / use-case path that can bypass it.
+        """
         if not text or not text.strip():
             return b""
+        redaction = _speech_safety_censor(text)
+        if redaction.was_modified:
+            log.warning(
+                "TTS pre-synth safety gate redacted %d token(s) [%s]; synthesising censored text",
+                redaction.hit_count,
+                use_case,
+            )
         tier = select_tier(use_case)
         log.debug("TTS tier=%s for use_case=%s", tier, use_case)
-        return self._synthesize_kokoro(text)
+        return self._synthesize_kokoro(redaction.text)
 
     def _synthesize_kokoro(self, text: str) -> bytes:
         """Synthesize via Kokoro, returning PCM int16 bytes."""
