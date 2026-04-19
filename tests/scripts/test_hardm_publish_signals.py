@@ -97,19 +97,32 @@ class TestPublisherWithFixtures:
         _write(
             publisher_mod._PERCEPTION_STATE,
             {
-                "midi_active": True,
-                "vad_speech": True,
-                "watch_hr_bpm": 82,
-                "bt_phone_connected": True,
+                # Keys align with the live perception-state.json schema
+                # (verified 2026-04-20): mixer_active / vad_confidence /
+                # heart_rate_bpm / operator_present / phone_kde_connected
+                # / desktop_active / person_count / ir_person_detected /
+                # audio_energy_rms.
+                "mixer_active": True,
+                "vad_confidence": 0.82,
+                "heart_rate_bpm": 82,
+                "operator_present": True,
                 "phone_kde_connected": True,
                 "desktop_active": True,
-                "room_occupancy_count": 2,
+                "person_count": 2,
                 "ir_person_detected": True,
-                "ambient_sound_level": 0.42,
+                "audio_energy_rms": 0.42,
             },
         )
         _write(publisher_mod._NARRATIVE_STATE, {"stance": "SEEKING"})
-        _write(publisher_mod._STIMMUNG_STATE, {"energy": 0.77})
+        _write(
+            publisher_mod._STIMMUNG_STATE,
+            {
+                # Stimmung wraps each dimension as
+                # ``{"value": float, "trend": str, "freshness_s": float}``.
+                "overall_stance": "seeking",
+                "operator_energy": {"value": 0.77, "trend": "stable", "freshness_s": 0.0},
+            },
+        )
         _write(
             publisher_mod._UNIFORMS_JSON,
             {"signal.homage_custom_4_0": 0.55, "signal.reverie_pass": 4.0},
