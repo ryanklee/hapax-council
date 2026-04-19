@@ -260,56 +260,64 @@ def ward_render_scope(cr: Any, ward_id: str, *, canvas_w: int = 0, canvas_h: int
     try:
         yield props
     finally:
-        if not needs_emphasis:
-            return
-        try:
-            cr.pop_group_to_source()
-            effective_alpha = max(0.0, min(1.0, props.alpha))
-            if props.scale_bump_pct > 0.001 and canvas_w > 0 and canvas_h > 0:
-                # Scale-bump renders the source content around its centre
-                # without breaking the outer dimensions. push/pop
-                # preserves the surface for the glow + border pass below.
-                scale = 1.0 + max(0.0, min(0.5, float(props.scale_bump_pct)))
-                cx = canvas_w * 0.5
-                cy = canvas_h * 0.5
-                cr.save()
-                cr.translate(cx, cy)
-                cr.scale(scale, scale)
-                cr.translate(-cx, -cy)
-                cr.paint_with_alpha(effective_alpha)
-                cr.restore()
-            else:
-                cr.paint_with_alpha(effective_alpha)
+        if needs_emphasis:
+            _finalize_ward_emphasis(cr, props, canvas_w, canvas_h)
 
-            if canvas_w <= 0 or canvas_h <= 0:
-                return
-            # Radial glow — a soft emissive border that falls off toward
-            # the ward's centre. Render-time only: we paint a strip along
-            # each edge using cairo's radial gradient. Colour is taken
-            # from glow_color_rgba so emphasis reads as warm identity,
-            # not UI highlight.
-            if props.glow_radius_px > 0.1:
-                _paint_emissive_glow(
-                    cr,
-                    float(canvas_w),
-                    float(canvas_h),
-                    float(props.glow_radius_px),
-                    props.glow_color_rgba,
-                )
-            # Border pulse — alpha-modulated rectangular stroke whose
-            # opacity tracks a sinusoid at ``border_pulse_hz`` Hz. The
-            # stroke radius is half the glow radius so the pulse rides
-            # on top of the glow as a crisp edge.
-            if props.border_pulse_hz > 0.01:
-                _paint_border_pulse(
-                    cr,
-                    float(canvas_w),
-                    float(canvas_h),
-                    float(props.border_pulse_hz),
-                    props.border_color_rgba,
-                )
-        except Exception:
-            log.debug("ward_render_scope emphasis overlay failed", exc_info=True)
+
+def _finalize_ward_emphasis(
+    cr: Any,
+    props: WardProperties,
+    canvas_w: int,
+    canvas_h: int,
+) -> None:
+    """Pop the emphasis group and paint the composited overlay.
+
+    Split out of :func:`ward_render_scope`'s ``finally`` block so
+    exceptions raised inside the ``with`` body still propagate to the
+    caller (Python's generator-based context manager re-raises from
+    ``finally`` only when the finally itself doesn't swallow). Body
+    exceptions must propagate for the compositor's error handling to
+    see render crashes; at the same time, *emphasis overlay* failures
+    must never cascade into the render path — hence the inner try.
+    """
+    try:
+        cr.pop_group_to_source()
+        effective_alpha = max(0.0, min(1.0, props.alpha))
+        if props.scale_bump_pct > 0.001 and canvas_w > 0 and canvas_h > 0:
+            # Scale-bump renders the source content around its centre
+            # without breaking the outer dimensions.
+            scale = 1.0 + max(0.0, min(0.5, float(props.scale_bump_pct)))
+            cx = canvas_w * 0.5
+            cy = canvas_h * 0.5
+            cr.save()
+            cr.translate(cx, cy)
+            cr.scale(scale, scale)
+            cr.translate(-cx, -cy)
+            cr.paint_with_alpha(effective_alpha)
+            cr.restore()
+        else:
+            cr.paint_with_alpha(effective_alpha)
+
+        if canvas_w <= 0 or canvas_h <= 0:
+            return
+        if props.glow_radius_px > 0.1:
+            _paint_emissive_glow(
+                cr,
+                float(canvas_w),
+                float(canvas_h),
+                float(props.glow_radius_px),
+                props.glow_color_rgba,
+            )
+        if props.border_pulse_hz > 0.01:
+            _paint_border_pulse(
+                cr,
+                float(canvas_w),
+                float(canvas_h),
+                float(props.border_pulse_hz),
+                props.border_color_rgba,
+            )
+    except Exception:
+        log.debug("ward_render_scope emphasis overlay failed", exc_info=True)
 
 
 def _paint_emissive_glow(
