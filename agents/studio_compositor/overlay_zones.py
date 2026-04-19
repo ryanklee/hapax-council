@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from .cairo_source import CairoSourceRunner
+from .homage.transitional_source import HomageTransitionalSource
 from .overlay_parser import parse_overlay_content
 
 if TYPE_CHECKING:
