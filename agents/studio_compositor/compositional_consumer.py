@@ -922,29 +922,64 @@ def dispatch(
 # responsiveness so the livestream visibly reacts every narrative tick.
 
 # Per-tick emphasis TTL. The ward-property entry survives for this many
-# seconds before the consumer-side expiry sweep discards it. Slightly
-# longer than the narrative cadence (default 30s) so a dropped tick
-# doesn't leave the surface flat for a whole cycle.
-_STRUCTURAL_EMPHASIS_TTL_S: float = 4.0
+# seconds before the consumer-side expiry sweep discards it.
+#
+# Phase B1 (homage-completion-plan §2): TTL is now driven by salience at
+# the call site (``ttl_s = salience * _STRUCTURAL_EMPHASIS_TTL_SCALE_S``)
+# rather than a fixed 4.0s. The scale is 5.0s so that a full-salience
+# emphasis (salience=1.0) survives five narrative-director ticks at the
+# default 1s cadence — "deeply felt" per operator directive.
+_STRUCTURAL_EMPHASIS_TTL_SCALE_S: float = 5.0
+_STRUCTURAL_EMPHASIS_TTL_S: float = 5.0  # kept as default for salience=1.0 callers
 _STRUCTURAL_PLACEMENT_TTL_S: float = 30.0
 
-# Per-tick emphasis envelope. Tuned for "visible, not cartoonish": glow
-# is strong enough to read at 720p; scale_bump is modest so the ward
-# doesn't shift its Sierpinski neighbour; border_pulse stays under the
-# flicker-fatigue threshold the operator flagged on 2026-04-18.
+# Per-tick emphasis envelope. Phase B1: operator-directive "in-your-face"
+# values per homage-completion-plan §2 / reckoning §3.4. The previous
+# envelope (glow 14 / pulse 2.2 / bump 0.12) was *already* intended to
+# be visible but was routed through `_apply_emphasis` with a
+# ``scale = salience`` multiplier which meant salience=1.0 simply landed
+# on the declared envelope. The problem the audit surfaced was that the
+# *default* ward-properties file carried only the two wards wired to the
+# legacy ward_fx coupling path (HARDM + album); nothing was writing
+# these values for narrative-director-nominated wards. B1 fixes that by
+# making `dispatch_structural_intent` write the envelope directly with
+# `border_color_rgba` set to the active homage package's per-domain
+# accent, rather than leaving the border-pulse a no-op.
 _STRUCTURAL_EMPHASIS_PROPS: dict[str, float] = {
     "alpha": 1.0,
     "glow_radius_px": 14.0,
-    "scale_bump_pct": 0.12,
-    "border_pulse_hz": 2.2,
+    "scale_bump_pct": 0.06,
+    "border_pulse_hz": 2.0,
 }
 
-# Placement-hint → WardProperties field map. ``drift_*`` hints modulate
-# the ward's ambient sine-drift so a "drift_left" hint literally translates
-# to a leftward sinusoidal breath, not a hard position snap. ``scale_*``
-# hints override the ward's ``scale`` field directly. The pulse_center
-# hint triggers a short border-pulse + scale bump at the ward's anchor.
+# Placement-hint → WardProperties field map. Phase B1 (plan §2):
+# the canonical "foreground" / "left-edge" / "recede" hints drive
+# alpha + ``position_offset_*`` directly per operator directive. The
+# legacy drift_* / scale_* / pulse_center hints remain for backwards
+# compat with older director prompts that emit those literal strings.
 _PLACEMENT_HINT_TO_PROPS: dict[str, dict[str, float | str]] = {
+    # Phase-B1 operator-directed hints. "foreground" brings the ward to
+    # full alpha with no positional shift; "left-edge" shunts it 50px
+    # left so it visibly reads as the edge of the frame; "recede"
+    # drops alpha to 0.55 so the ward remains legible but compositionally
+    # subordinate to whichever ward is currently foregrounded.
+    "foreground": {
+        "alpha": 1.0,
+        "position_offset_x": 0.0,
+        "position_offset_y": 0.0,
+    },
+    "left-edge": {
+        "position_offset_x": -50.0,
+    },
+    "right-edge": {
+        "position_offset_x": 50.0,
+    },
+    "recede": {
+        "alpha": 0.55,
+    },
+    # Legacy drift / scale / pulse hints (pre-B1). Left in place so older
+    # LLM prompts still land on a known placement spec rather than falling
+    # through to the unknown-hint log.
     "drift_left": {
         "drift_type": "sine",
         "drift_hz": 0.3,
@@ -978,6 +1013,63 @@ _PLACEMENT_HINT_TO_PROPS: dict[str, dict[str, float | str]] = {
     "scale_1.15x": {"scale": 1.15},
     "scale_1.3x": {"scale": 1.30},
 }
+
+# WardDomain → accent colour role. Mirrors the authoritative mapping
+# in ``homage/rendering.py:_DOMAIN_ACCENT_ROLE`` so the emphasis
+# border-pulse carries the ward's identity colour. Kept local (rather
+# than importing from ``homage.rendering``) to avoid a Cairo / Pango
+# import chain in the dispatcher's hot path — only a tuple lookup + a
+# lazy ``HomagePackage.resolve_colour`` call are needed at call time.
+_DOMAIN_ACCENT_ROLE: dict[str, str] = {
+    "communication": "accent_green",
+    "presence": "accent_yellow",
+    "token": "accent_cyan",
+    "music": "accent_magenta",
+    "cognition": "accent_cyan",
+    "director": "accent_yellow",
+    "perception": "accent_green",
+}
+
+
+def domain_accent_rgba(ward_id: str) -> tuple[float, float, float, float]:
+    """Resolve the homage-package accent colour for ``ward_id``'s domain.
+
+    Phase B1 helper (plan §2): the border-pulse on an emphasized ward
+    should land on the active HOMAGE package's per-domain accent so a
+    "cognition" ward pulses cyan, a "music" ward pulses magenta, etc.
+    The resolution path mirrors ``homage/rendering.py::_domain_accent``:
+
+        ward_id → ward_fx_mapping.domain_for_ward → _DOMAIN_ACCENT_ROLE
+                → HomagePackage.resolve_colour → RGBA
+
+    Fail-open: any resolution failure (unknown ward, missing package
+    registration, package palette missing the named role) returns a
+    neutral cyan ``(0.7, 0.85, 1.0, 1.0)`` so the border-pulse still
+    renders legibly rather than disappearing.
+    """
+    try:
+        from agents.studio_compositor.ward_fx_mapping import domain_for_ward
+
+        domain = domain_for_ward(ward_id)
+    except Exception:
+        log.debug("domain_accent_rgba: domain_for_ward failed for %s", ward_id, exc_info=True)
+        return (0.7, 0.85, 1.0, 1.0)
+    role = _DOMAIN_ACCENT_ROLE.get(str(domain), "accent_cyan")
+    try:
+        from agents.studio_compositor.homage import get_active_package
+
+        pkg = get_active_package()
+        if pkg is None:
+            from agents.studio_compositor.homage.bitchx import BITCHX_PACKAGE
+
+            pkg = BITCHX_PACKAGE
+        return pkg.resolve_colour(role)  # type: ignore[arg-type]
+    except Exception:
+        log.debug(
+            "domain_accent_rgba: package resolve_colour failed for %s", ward_id, exc_info=True
+        )
+        return (0.7, 0.85, 1.0, 1.0)
+
 
 # Mirror of ``shared.director_intent.WardId`` — used to gate the LLM's
 # ward name against typos. Kept in sync manually; drift between the two
@@ -1015,10 +1107,23 @@ _HOMAGE_PENDING: Path = Path("/dev/shm/hapax-compositor/homage-pending-transitio
 def _apply_emphasis(ward_id: str, salience: float = 1.0) -> None:
     """Bump a ward's highlight envelope for the structural-intent window.
 
-    ``salience`` scales the emphasis depth — at 1.0 the ward lands on
-    the full envelope defined by ``_STRUCTURAL_EMPHASIS_PROPS``; at
-    0.5 the glow + scale-bump + pulse are halved. Always writes alpha
-    at 1.0 so an emphasized ward is never simultaneously dimmed.
+    Phase B1 (homage-completion-plan §2 / reckoning §3.4): writes the
+    full aggressive envelope (glow_radius_px=14.0, border_pulse_hz=2.0,
+    scale_bump_pct=0.06, alpha=1.0) rather than the prior near-no-op
+    salience-scaled modulation. The border colour is resolved through
+    the active HOMAGE package's per-domain accent via
+    :func:`domain_accent_rgba` so an emphasized ward pulses in its
+    identity colour rather than plain white. The TTL scales linearly
+    with ``salience`` (``ttl_s = max(1.5, salience * 5.0)``) so a
+    full-salience emphasis survives five narrative-director ticks at
+    the default 1s cadence and a brief emphasis (salience<0.3) still
+    persists long enough to be visibly perceived.
+
+    Prior (pre-B1) behaviour multiplied every envelope field by
+    salience, which meant a salience=0.5 emphasis produced a 7px glow /
+    1.1Hz pulse / 0.06 bump — below the reader-visibility threshold the
+    operator flagged on 2026-04-18. B1 keeps the envelope fixed and
+    pushes the salience degree-of-freedom into TTL instead.
     """
     if ward_id not in _VALID_WARD_IDS:
         log.debug("structural_intent: skipping unknown ward_id %s", ward_id)
@@ -1033,16 +1138,20 @@ def _apply_emphasis(ward_id: str, salience: float = 1.0) -> None:
         log.debug("ward_properties import failed", exc_info=True)
         return
     current = get_specific_ward_properties(ward_id) or WardProperties()
-    scale = max(0.0, min(1.5, float(salience)))
+    clamped_salience = max(0.0, min(1.5, float(salience)))
+    # TTL floor of 1.5s so even a low-salience emphasis is visibly
+    # perceivable; ceiling falls out naturally from the salience clamp.
+    ttl_s = max(1.5, clamped_salience * _STRUCTURAL_EMPHASIS_TTL_SCALE_S)
     props = {
-        "alpha": 1.0,
-        "glow_radius_px": _STRUCTURAL_EMPHASIS_PROPS["glow_radius_px"] * scale,
-        "scale_bump_pct": _STRUCTURAL_EMPHASIS_PROPS["scale_bump_pct"] * scale,
-        "border_pulse_hz": _STRUCTURAL_EMPHASIS_PROPS["border_pulse_hz"] * scale,
+        "alpha": _STRUCTURAL_EMPHASIS_PROPS["alpha"],
+        "glow_radius_px": _STRUCTURAL_EMPHASIS_PROPS["glow_radius_px"],
+        "scale_bump_pct": _STRUCTURAL_EMPHASIS_PROPS["scale_bump_pct"],
+        "border_pulse_hz": _STRUCTURAL_EMPHASIS_PROPS["border_pulse_hz"],
+        "border_color_rgba": domain_accent_rgba(ward_id),
     }
     merged = WardProperties(**{**current.__dict__, **props})
-    set_ward_properties(ward_id, merged, _STRUCTURAL_EMPHASIS_TTL_S)
-    _mark_recruitment("structural.emphasis", extra={"ward_id": ward_id})
+    set_ward_properties(ward_id, merged, ttl_s)
+    _mark_recruitment("structural.emphasis", extra={"ward_id": ward_id, "ttl_s": ttl_s})
 
 
 def _apply_placement(ward_id: str, hint: str) -> None:
