@@ -181,7 +181,7 @@ class ImpingementCascadeCairoSource(HomageTransitionalSource):
         state: dict[str, Any],
     ) -> None:
         pkg = active_package()
-        paint_bitchx_bg(cr, canvas_w, canvas_h, pkg)
+        paint_bitchx_bg(cr, canvas_w, canvas_h, pkg, ward_id=self._source_id)
 
         muted = pkg.resolve_colour("muted")
         bright = pkg.resolve_colour("bright")
@@ -232,7 +232,7 @@ class RecruitmentCandidatePanelCairoSource(HomageTransitionalSource):
         state: dict[str, Any],
     ) -> None:
         pkg = active_package()
-        paint_bitchx_bg(cr, canvas_w, canvas_h, pkg)
+        paint_bitchx_bg(cr, canvas_w, canvas_h, pkg, ward_id=self._source_id)
 
         muted = pkg.resolve_colour("muted")
         bright = pkg.resolve_colour("bright")
@@ -324,7 +324,7 @@ class ThinkingIndicatorCairoSource(HomageTransitionalSource):
         info = _safe_load_json(_LLM_IN_FLIGHT)
         active = bool(info)
         pkg = active_package()
-        paint_bitchx_bg(cr, canvas_w, canvas_h, pkg)
+        paint_bitchx_bg(cr, canvas_w, canvas_h, pkg, ward_id=self._source_id)
 
         muted = pkg.resolve_colour("muted")
         bright = pkg.resolve_colour("bright")
@@ -375,7 +375,7 @@ class PressureGaugeCairoSource(HomageTransitionalSource):
         state: dict[str, Any],
     ) -> None:
         pkg = active_package()
-        paint_bitchx_bg(cr, canvas_w, canvas_h, pkg)
+        paint_bitchx_bg(cr, canvas_w, canvas_h, pkg, ward_id=self._source_id)
 
         muted = pkg.resolve_colour("muted")
         bright = pkg.resolve_colour("bright")
@@ -451,7 +451,7 @@ class ActivityVarietyLogCairoSource(HomageTransitionalSource):
         state: dict[str, Any],
     ) -> None:
         pkg = active_package()
-        paint_bitchx_bg(cr, canvas_w, canvas_h, pkg)
+        paint_bitchx_bg(cr, canvas_w, canvas_h, pkg, ward_id=self._source_id)
 
         muted = pkg.resolve_colour("muted")
         bright = pkg.resolve_colour("bright")
@@ -510,7 +510,7 @@ class WhosHereCairoSource(HomageTransitionalSource):
         state: dict[str, Any],
     ) -> None:
         pkg = active_package()
-        paint_bitchx_bg(cr, canvas_w, canvas_h, pkg)
+        paint_bitchx_bg(cr, canvas_w, canvas_h, pkg, ward_id=self._source_id)
 
         muted = pkg.resolve_colour("muted")
         bright = pkg.resolve_colour("bright")

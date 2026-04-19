@@ -136,10 +136,38 @@ def _fallback_package() -> HomagePackage:
     return BITCHX_PACKAGE
 
 
-def _paint_bitchx_bg(cr: cairo.Context, w: float, h: float, pkg: HomagePackage) -> None:
-    """Fill a flat CP437-style background — sharp corners, no rounded
-    rects (spec §5.5 refuses ``rounded-corners``). Thin border hints the
-    current stream mode using an accent colour."""
+def _paint_bitchx_bg(
+    cr: cairo.Context,
+    w: float,
+    h: float,
+    pkg: HomagePackage,
+    *,
+    ward_id: str | None = None,
+) -> None:
+    """Fill a CP437-style background — sharp corners, no rounded rects
+    (spec §5.5 refuses ``rounded-corners``). When ``ward_id`` is given,
+    paint the domain-tinted gradient + side-bar via the shared helper so
+    the legibility surfaces inherit the same aesthetic envelope as every
+    other homage ward (cascade-delta 2026-04-18)."""
+    if ward_id is not None:
+        try:
+            from agents.studio_compositor.homage.rendering import (
+                paint_bitchx_bg as _shared_paint_bitchx_bg,
+            )
+
+            _shared_paint_bitchx_bg(cr, w, h, pkg, ward_id=ward_id)
+            border = _stream_mode_accent()
+            if border is not None:
+                cr.save()
+                cr.set_source_rgba(*border)
+                cr.set_line_width(1.0)
+                cr.rectangle(0.5, 0.5, w - 1.0, h - 1.0)
+                cr.stroke()
+                cr.restore()
+            return
+        except Exception:
+            # Fall through to legacy path on any import / cairo error.
+            pass
     r, g, b, a = pkg.resolve_colour("background")
     cr.save()
     cr.set_source_rgba(r, g, b, a)
@@ -187,7 +215,7 @@ class ActivityHeaderCairoSource(HomageTransitionalSource):
             gloss = str(best.get("narrative", ""))[:48]
 
         pkg = get_active_package() or _fallback_package()
-        _paint_bitchx_bg(cr, canvas_w, canvas_h, pkg)
+        _paint_bitchx_bg(cr, canvas_w, canvas_h, pkg, ward_id="activity_header")
 
         muted = pkg.resolve_colour("muted")
         bright = pkg.resolve_colour("bright")
@@ -261,7 +289,7 @@ class StanceIndicatorCairoSource(HomageTransitionalSource):
         stance = str(ns.get("stance") or "nominal").lower()
 
         pkg = get_active_package() or _fallback_package()
-        _paint_bitchx_bg(cr, canvas_w, canvas_h, pkg)
+        _paint_bitchx_bg(cr, canvas_w, canvas_h, pkg, ward_id="stance_indicator")
 
         muted = pkg.resolve_colour("muted")
         stance_rgba = pkg.resolve_colour(_STANCE_ROLE.get(stance, "accent_green"))
@@ -318,7 +346,7 @@ class ChatKeywordLegendCairoSource(HomageTransitionalSource):
         state: dict[str, Any],
     ) -> None:
         pkg = get_active_package() or _fallback_package()
-        _paint_bitchx_bg(cr, canvas_w, canvas_h, pkg)
+        _paint_bitchx_bg(cr, canvas_w, canvas_h, pkg, ward_id="chat_keyword_legend")
 
         muted = pkg.resolve_colour("muted")
         bright = pkg.resolve_colour("bright")
@@ -381,7 +409,7 @@ class GroundingProvenanceTickerCairoSource(HomageTransitionalSource):
         prov = intent.get("grounding_provenance") or []
 
         pkg = get_active_package() or _fallback_package()
-        _paint_bitchx_bg(cr, canvas_w, canvas_h, pkg)
+        _paint_bitchx_bg(cr, canvas_w, canvas_h, pkg, ward_id="grounding_provenance_ticker")
 
         muted = pkg.resolve_colour("muted")
         bright = pkg.resolve_colour("bright")
