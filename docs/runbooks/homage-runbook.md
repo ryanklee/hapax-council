@@ -68,3 +68,73 @@ rm -f /dev/shm/hapax-compositor/consent-safe-active.json
     anti-pattern violations.
 - Grafana panel: `Homage — Transitions & Violations` under the
   existing director dashboard.
+
+## HARDM dot-matrix publisher (task #121 follow-up)
+
+The HARDM ward (`agents/studio_compositor/hardm_source.py`) renders a
+16×16 dot-matrix readout of 16 primary signals. It reads from
+`/dev/shm/hapax-compositor/hardm-cell-signals.json`. If that file is
+absent or stale the ward falls back to an all-idle skeleton.
+
+The file is written by the `hapax-hardm-publisher.service` oneshot,
+driven by `hapax-hardm-publisher.timer` every 2 seconds. Spec:
+`docs/superpowers/specs/2026-04-18-hardm-dot-matrix-design.md`.
+
+### Start / stop
+
+```fish
+# Start (and enable across reboots)
+systemctl --user enable --now hapax-hardm-publisher.timer
+
+# Pause publishing (ward falls back to idle within 1 s)
+systemctl --user stop hapax-hardm-publisher.timer
+
+# Fire one publish tick manually
+systemctl --user start hapax-hardm-publisher.service
+```
+
+The timer is installed via `systemd/scripts/install-units.sh` but left
+disabled-by-default; the operator must explicitly enable it as above.
+
+### Verify signals flowing
+
+```fish
+# Payload + age
+jq . /dev/shm/hapax-compositor/hardm-cell-signals.json
+stat -c '%Y' /dev/shm/hapax-compositor/hardm-cell-signals.json
+
+# Per-signal watch
+watch -n1 'jq ".signals" /dev/shm/hapax-compositor/hardm-cell-signals.json'
+
+# Service + timer liveness
+systemctl --user status hapax-hardm-publisher.timer
+journalctl --user -u hapax-hardm-publisher.service -n 20
+```
+
+All 16 keys must appear (`midi_active`, `vad_speech`, `watch_hr`,
+`bt_phone`, `kde_connect`, `screen_focus`, `room_occupancy`,
+`ir_person_detected`, `ambient_sound`, `director_stance`,
+`stimmung_energy`, `shader_energy`, `reverie_pass`, `consent_gate`,
+`degraded_stream`, `homage_package`).
+
+### Troubleshooting
+
+- **All cells idle in the ward.** Either the timer is not running
+  (`systemctl --user is-active hapax-hardm-publisher.timer`) or the
+  publisher is crashing — check `journalctl --user -u
+  hapax-hardm-publisher.service`. Missing canonical state files
+  (`perception-state.json`, `narrative-state.json`,
+  `stimmung-state.json`, `uniforms.json`, `homage-active.json`) are
+  non-fatal; they map to `False` / `None` defaults.
+- **Signals stuck / stale.** Check file mtime; if older than ~3 s the
+  ward's staleness cutoff (1 s) will flip cells to stress. Restart
+  the timer: `systemctl --user restart hapax-hardm-publisher.timer`.
+- **`consent_gate` always `null`.** The publisher imports
+  `shared.consent.ConsentRegistry` best-effort; if the import fails
+  the cell shows idle instead of stress. This is intentional
+  (publisher must never crash on optional probes) but worth
+  investigating if consent state never surfaces.
+- **Publisher crashes.** Malformed canonical state is handled
+  defensively (tests in `tests/scripts/test_hardm_publish_signals.py`
+  pin the defaults-on-malformed contract). A genuine crash is a
+  regression — attach stderr from the failing tick.
