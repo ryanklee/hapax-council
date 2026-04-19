@@ -28,6 +28,83 @@ from pydantic import BaseModel, Field
 
 log = logging.getLogger(__name__)
 
+
+# ── Pattern-1 observability counters ─────────────────────────────────────
+# Every dispatch site increments ``hapax_compositional_consumer_dispatch_total``
+# labelled by family + outcome (ok / veto / error). This is the observability
+# pair the 2026-04-20 dynamic-audit catalog §6.4 + §15 emergent-misbehavior
+# detectors require: every intent-emit path carries a happy-path counter
+# (outcome=ok) AND a violation-path counter (outcome=veto/error), so the
+# dashboard can see rate-change without waiting for a human to notice.
+#
+# Dynamic-audit catalog-2 §6.4 flagged this as the missing counter; the
+# static audit-catalog §7.1 pattern-1 meta-fix calls for every emitter to
+# ship with it. Best-effort import: when prometheus_client isn't
+# available (unit-test workers, minimal envs), counter stubs no-op so
+# the dispatch path stays hot.
+try:  # pragma: no cover — covered implicitly by any test using real metrics
+    from prometheus_client import Counter as _PromCounter
+
+    _DISPATCH_COUNTER = _PromCounter(
+        "hapax_compositional_consumer_dispatch_total",
+        "Compositional-consumer dispatches, labelled by family + outcome.",
+        labelnames=("family", "outcome"),
+    )
+except Exception:  # noqa: BLE001 — any import / registration failure → no-op
+
+    class _NoOpCounterChild:
+        def inc(self, amount: float = 1.0) -> None:  # noqa: ARG002
+            return
+
+    class _NoOpCounter:
+        def labels(self, **_kwargs: object) -> _NoOpCounterChild:
+            return _NoOpCounterChild()
+
+    _DISPATCH_COUNTER = _NoOpCounter()  # type: ignore[assignment]
+
+
+def _observe_dispatch(family: str, outcome: str) -> None:
+    """Increment the compositional-consumer dispatch counter.
+
+    ``outcome`` is one of ``ok`` (dispatch landed), ``veto`` (gate
+    rejected the dispatch — e.g., hero-gate zero-person), or ``error``
+    (exception caught upstream). Called from every dispatch function;
+    best-effort so metric-backend failures never break a director tick.
+    """
+    try:
+        _DISPATCH_COUNTER.labels(family=family, outcome=outcome).inc()
+    except Exception:  # noqa: BLE001
+        log.debug("dispatch counter inc failed for %s/%s", family, outcome, exc_info=True)
+
+
+def observe_dispatch(family: str):
+    """Decorator: wrap a ``dispatch_*`` function with the Pattern-1 counter.
+
+    Wraps a function returning ``bool``. ``True`` returns record
+    ``outcome=ok``, ``False`` returns record ``outcome=veto``, and
+    uncaught exceptions record ``outcome=error`` before re-raising.
+    The catalog §15 emergent-misbehavior detectors consume this counter
+    to alert on rate-shift (e.g., veto-rate climbing mid-stream).
+    """
+
+    def decorator(fn):
+        def wrapper(*args, **kwargs):
+            try:
+                result = fn(*args, **kwargs)
+            except Exception:
+                _observe_dispatch(family, "error")
+                raise
+            _observe_dispatch(family, "ok" if result else "veto")
+            return result
+
+        wrapper.__name__ = fn.__name__
+        wrapper.__doc__ = fn.__doc__
+        wrapper.__wrapped__ = fn  # type: ignore[attr-defined]
+        return wrapper
+
+    return decorator
+
+
 # ── SHM paths the compositor layer reads ──────────────────────────────────
 
 _HERO_CAMERA_OVERRIDE = Path("/dev/shm/hapax-compositor/hero-camera-override.json")
@@ -151,6 +228,7 @@ def _record_camera_role(role: str) -> None:
         del _CAMERA_ROLE_HISTORY[:-20]
 
 
+@observe_dispatch("camera.hero")
 def dispatch_camera_hero(capability_name: str, ttl_s: float) -> bool:
     """cam.hero.<role-slug>.<context> → hero-camera-override.json.
 
@@ -229,6 +307,7 @@ def dispatch_camera_hero(capability_name: str, ttl_s: float) -> bool:
     return True
 
 
+@observe_dispatch("preset.bias")
 def dispatch_preset_bias(capability_name: str, ttl_s: float) -> bool:
     """fx.family.<family> → recent-recruitment.json (with family + ttl).
 
@@ -260,6 +339,7 @@ _OVERLAY_TARGET_TO_WARD_ID: dict[str, str] = {
 }
 
 
+@observe_dispatch("overlay.emphasis")
 def dispatch_overlay_emphasis(
     capability_name: str,
     ttl_s: float,
@@ -327,6 +407,7 @@ def dispatch_overlay_emphasis(
     return True
 
 
+@observe_dispatch("youtube.direction")
 def dispatch_youtube_direction(capability_name: str, ttl_s: float) -> bool:
     """youtube.<action> → youtube-direction.json. Consumed by the director
     loop's slot rotator on next advance decision."""
@@ -348,6 +429,7 @@ def dispatch_youtube_direction(capability_name: str, ttl_s: float) -> bool:
     return True
 
 
+@observe_dispatch("attention.winner")
 def dispatch_attention_winner(capability_name: str) -> bool:
     """attention.winner.<source> → records pending winner in recruitment marker.
 
@@ -544,6 +626,7 @@ def dispatch_ward_staging(capability_name: str, ttl_s: float) -> bool:
     return True
 
 
+@observe_dispatch("ward.highlight")
 def dispatch_ward_highlight(
     capability_name: str,
     ttl_s: float,
@@ -791,6 +874,7 @@ def _write_ward_property(ward_id: str, ttl_s: float, **fields_) -> None:
     set_ward_properties(ward_id, update, ttl_s)
 
 
+@observe_dispatch("stream_mode.transition")
 def dispatch_stream_mode_transition(capability_name: str) -> bool:
     """stream.mode.<mode>.transition → stream-mode-intent.json. A separate
     gate (shared/stream_transition_gate.py) adjudicates whether the
