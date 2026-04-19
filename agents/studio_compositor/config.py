@@ -47,6 +47,11 @@ LAYOUT_COORD_SCALE = OUTPUT_WIDTH / 1920.0
 # Default camera config
 # ---------------------------------------------------------------------------
 
+# Task #135 — camera classification metadata. ``semantic_role`` /
+# ``subject_ontology`` / ``angle`` / ``operator_visible`` /
+# ``ambient_priority`` let the director reason about what each camera
+# points at semantically, not just by role string. The 6 production
+# cameras map to the semantic roles documented in the task spec.
 _DEFAULT_CAMERAS: list[dict[str, Any]] = [
     {
         "role": "brio-operator",
@@ -55,6 +60,11 @@ _DEFAULT_CAMERAS: list[dict[str, Any]] = [
         "height": 720,
         "input_format": "mjpeg",
         "hero": True,
+        "semantic_role": "operator-face",
+        "subject_ontology": ["person"],
+        "angle": "front",
+        "operator_visible": True,
+        "ambient_priority": 7,
     },
     {
         "role": "c920-desk",
@@ -62,6 +72,11 @@ _DEFAULT_CAMERAS: list[dict[str, Any]] = [
         "width": 1280,
         "height": 720,
         "input_format": "mjpeg",
+        "semantic_role": "operator-hands",
+        "subject_ontology": ["hands", "mpc"],
+        "angle": "oblique",
+        "operator_visible": False,
+        "ambient_priority": 5,
     },
     {
         "role": "c920-room",
@@ -69,6 +84,11 @@ _DEFAULT_CAMERAS: list[dict[str, Any]] = [
         "width": 1280,
         "height": 720,
         "input_format": "mjpeg",
+        "semantic_role": "room-wide",
+        "subject_ontology": ["room", "person"],
+        "angle": "oblique",
+        "operator_visible": True,
+        "ambient_priority": 8,
     },
     {
         "role": "c920-overhead",
@@ -76,6 +96,11 @@ _DEFAULT_CAMERAS: list[dict[str, Any]] = [
         "width": 1280,
         "height": 720,
         "input_format": "mjpeg",
+        "semantic_role": "operator-desk-topdown",
+        "subject_ontology": ["hands", "mpc", "desk"],
+        "angle": "top-down",
+        "operator_visible": False,
+        "ambient_priority": 6,
     },
     {
         "role": "brio-room",
@@ -83,6 +108,11 @@ _DEFAULT_CAMERAS: list[dict[str, Any]] = [
         "width": 1280,
         "height": 720,
         "input_format": "mjpeg",
+        "semantic_role": "outboard-gear",
+        "subject_ontology": ["eurorack", "outboard"],
+        "angle": "front",
+        "operator_visible": False,
+        "ambient_priority": 3,
     },
     {
         "role": "brio-synths",
@@ -90,6 +120,11 @@ _DEFAULT_CAMERAS: list[dict[str, Any]] = [
         "width": 1280,
         "height": 720,
         "input_format": "mjpeg",
+        "semantic_role": "turntables",
+        "subject_ontology": ["turntable", "vinyl"],
+        "angle": "top-down",
+        "operator_visible": False,
+        "ambient_priority": 4,
     },
 ]
 

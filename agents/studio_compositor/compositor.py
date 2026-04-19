@@ -546,6 +546,49 @@ class StudioCompositor:
         self._idle_start: float | None = None
         self._current_preset_name: str | None = None
 
+        # Task #135 — publish camera classification metadata so Hapax
+        # (director, reverie, daimonion) can reason semantically about
+        # each camera (operator-face / turntables / outboard-gear / etc.)
+        # Written once at construction; reload paths should call
+        # publish_camera_classifications() again.
+        try:
+            self.publish_camera_classifications()
+        except Exception:
+            log.exception("publish_camera_classifications failed (non-fatal)")
+
+    def publish_camera_classifications(self) -> dict[str, dict[str, Any]]:
+        """Write camera classification metadata to ``/dev/shm``.
+
+        Task #135. Exposes each configured camera's semantic classification
+        (``semantic_role``, ``subject_ontology``, ``angle``,
+        ``operator_visible``, ``ambient_priority``) as a dict keyed by role
+        so downstream perception (director loop, reverie mixer) can reason
+        about what each camera points at.
+
+        Atomic tmp+rename so readers never see a partial file. Safe to call
+        at startup and on config reload. Returns the published dict for
+        caller inspection (tests use it directly).
+        """
+        classifications: dict[str, dict[str, Any]] = {
+            cam.role: {
+                "semantic_role": cam.semantic_role,
+                "subject_ontology": list(cam.subject_ontology),
+                "angle": cam.angle,
+                "operator_visible": cam.operator_visible,
+                "ambient_priority": cam.ambient_priority,
+            }
+            for cam in self.config.cameras
+        }
+        try:
+            SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
+            target = SNAPSHOT_DIR / "camera-classifications.json"
+            tmp = target.with_suffix(".tmp")
+            tmp.write_text(json.dumps(classifications, indent=2))
+            tmp.rename(target)
+        except OSError:
+            log.debug("camera-classifications.json write failed", exc_info=True)
+        return classifications
+
     def _on_graph_params_changed(self, node_id: str, params: dict) -> None:
         if hasattr(self, "_slot_pipeline") and self._slot_pipeline is not None:
             self._slot_pipeline.update_node_uniforms(node_id, params)

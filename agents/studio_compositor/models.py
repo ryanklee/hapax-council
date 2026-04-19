@@ -32,7 +32,13 @@ class CameraProfile(BaseModel):
 
 
 class CameraSpec(BaseModel):
-    """A single camera source."""
+    """A single camera source.
+
+    Classification metadata (``semantic_role`` / ``subject_ontology`` /
+    ``angle`` / ``operator_visible`` / ``ambient_priority``) lets Hapax
+    (director, reverie, daimonion) reason about what each camera points at
+    semantically — not just by role string. Task #135.
+    """
 
     role: str
     device: str
@@ -41,6 +47,20 @@ class CameraSpec(BaseModel):
     input_format: str = "mjpeg"
     pixel_format: str | None = None
     hero: bool = False
+    # ── Task #135 camera classification metadata ────────────────────────
+    # All optional with sensible defaults so legacy config keeps working.
+    # ``semantic_role`` — curated vocabulary for "what this camera is for".
+    # ``subject_ontology`` — open-vocab tags describing what's in frame.
+    # ``angle`` — physical camera pose relative to the subject.
+    # ``operator_visible`` — operator's face can be seen (privacy +
+    #   director-relevant: "operator speaking → prefer operator-visible").
+    # ``ambient_priority`` — 0-10; how much this camera should get
+    #   "ambient" cuts vs. purposeful show-the-thing cuts.
+    semantic_role: str = "unspecified"
+    subject_ontology: list[str] = Field(default_factory=list)
+    angle: str = "unspecified"
+    operator_visible: bool = False
+    ambient_priority: int = 5
 
 
 class RecordingConfig(BaseModel):
