@@ -220,6 +220,21 @@ def start_compositor(compositor: Any) -> None:
 
     GLib.timeout_add(33, lambda: fx_tick_callback(compositor))  # 30fps uniform updates
 
+    # HOMAGE Phase 6 Layer 5 — instantiate the ward↔FX reactor and connect
+    # it to the bus. Must run after fx_tick_callback registration so the
+    # first tick that publishes audio-reactive FX events already has a
+    # subscriber listening. Idempotent in testing (reset_bus_for_testing
+    # drops subscribers between cases). Best-effort: a reactor failure
+    # is non-fatal — the bus still publishes, just without consumers.
+    try:
+        from agents.studio_compositor.fx_chain_ward_reactor import WardFxReactor
+
+        compositor._ward_fx_reactor = WardFxReactor()
+        compositor._ward_fx_reactor.connect()
+        log.info("ward↔FX bidirectional reactor connected")
+    except Exception:
+        log.warning("ward_fx_reactor connect failed", exc_info=True)
+
     # Phase 10 observability polish — publish BudgetTracker snapshots + the
     # degraded signal every second. Closes the dead-path finding from delta's
     # 2026-04-14 compositor frame budget forensics drop: prior to this timer

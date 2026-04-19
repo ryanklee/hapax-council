@@ -442,6 +442,10 @@ def switch_fx_source(compositor: Any, source: str) -> bool:
 
     Uses IDLE pad probe to safely modify the pipeline while PLAYING.
     Creates camera branch on-demand (lazy), tears down old one.
+
+    HOMAGE Phase 6 Layer 5 — on a real swap (source actually changes),
+    publish ``FXEvent(kind="chain_swap")`` so token_pole + activity_variety_log
+    get a brief scale bump synced to the visible source change.
     """
     if not hasattr(compositor, "_fx_input_selector"):
         return False
@@ -449,6 +453,17 @@ def switch_fx_source(compositor: Any, source: str) -> bool:
         return True  # already active
     if getattr(compositor, "_fx_switching", False):
         return False  # switch in progress
+
+    # HOMAGE Phase 6 Layer 5: chain swap event. Publish immediately
+    # (before the IDLE probe fires) so the reactor ward-property write
+    # happens concurrently with the visible switch. Best-effort; a bus
+    # failure must never block the camera switch.
+    try:
+        from shared.ward_fx_bus import FXEvent, get_bus
+
+        get_bus().publish_fx(FXEvent(kind="chain_swap"))
+    except Exception:
+        log.debug("ward_fx_bus publish_fx (chain_swap) failed", exc_info=True)
 
     Gst = compositor._Gst
     input_sel = compositor._fx_input_selector
@@ -679,6 +694,62 @@ def fx_tick_callback(compositor: Any) -> bool:
         if alpha is not None:
             flash_pad.set_property("alpha", alpha)
 
+    # HOMAGE Phase 6 Layer 5: publish audio-driven FX events so wards
+    # can react on the beat. Edge-triggered with short cooldowns so we
+    # emit one event per kick / one event per sustained intensity band,
+    # not an event per frame.
+    _maybe_publish_audio_fx_events(compositor, cached_audio)
+
     # Facade tick() hooks removed in Phase 9 Task 29. Cairo sources now
     # tick autonomously on their CairoSourceRunner background threads.
     return True
+
+
+# HOMAGE Phase 6 Layer 5 cooldowns. The fx_tick_callback runs at ~30Hz,
+# but wards only need one event per kick and one per intensity window.
+# These constants hold the edge-trigger thresholds + minimum inter-event
+# spacing. Tuned so a typical 120 BPM kick (2Hz, 500ms between kicks)
+# emits one event per kick without ever emitting more than one per 150ms.
+_AUDIO_KICK_FX_THRESHOLD: float = 0.6
+_AUDIO_KICK_FX_COOLDOWN_S: float = 0.15
+_INTENSITY_SPIKE_FX_THRESHOLD: float = 0.75
+_INTENSITY_SPIKE_FX_COOLDOWN_S: float = 0.8
+
+
+def _maybe_publish_audio_fx_events(compositor: Any, audio: dict[str, float]) -> None:
+    """Publish audio-reactive FX events on edge-triggered thresholds.
+
+    HOMAGE Phase 6 Layer 5 — consumed by the ward-FX reactor to push a
+    ``scale_bump_pct`` / ``border_pulse_hz`` onto audio-reactive wards.
+    Best-effort: import failures and publish exceptions are swallowed
+    so the rendering hot path stays crash-safe.
+    """
+    if not audio:
+        return
+    try:
+        from shared.ward_fx_bus import FXEvent, get_bus
+    except Exception:
+        log.debug("ward_fx_bus import failed; skipping audio publish", exc_info=True)
+        return
+    now = time.monotonic()
+
+    kick_strength = float(audio.get("onset_kick", 0.0))
+    last_kick = getattr(compositor, "_fx_ward_kick_last_pub", 0.0)
+    if kick_strength >= _AUDIO_KICK_FX_THRESHOLD and (now - last_kick) >= _AUDIO_KICK_FX_COOLDOWN_S:
+        compositor._fx_ward_kick_last_pub = now
+        try:
+            get_bus().publish_fx(FXEvent(kind="audio_kick_onset"))
+        except Exception:
+            log.debug("ward_fx_bus publish_fx (audio_kick_onset) failed", exc_info=True)
+
+    mixer_energy = float(audio.get("mixer_energy", 0.0))
+    last_spike = getattr(compositor, "_fx_ward_spike_last_pub", 0.0)
+    if (
+        mixer_energy >= _INTENSITY_SPIKE_FX_THRESHOLD
+        and (now - last_spike) >= _INTENSITY_SPIKE_FX_COOLDOWN_S
+    ):
+        compositor._fx_ward_spike_last_pub = now
+        try:
+            get_bus().publish_fx(FXEvent(kind="intensity_spike"))
+        except Exception:
+            log.debug("ward_fx_bus publish_fx (intensity_spike) failed", exc_info=True)

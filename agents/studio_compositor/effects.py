@@ -56,7 +56,15 @@ def init_graph_runtime(compositor: Any) -> Any:
 
 
 def try_graph_preset(compositor: Any, name: str) -> bool:
-    """Try to load a graph-based preset. Returns True if found and loaded."""
+    """Try to load a graph-based preset. Returns True if found and loaded.
+
+    HOMAGE Phase 6 Layer 5 — on a successful load, when the preset's
+    family (see ``preset_family_selector.family_for_preset``) differs
+    from the compositor's last-published family, publish a
+    ``FXEvent(kind="preset_family_change", preset_family=<new>)`` to the
+    ward↔FX bus so ward Cairo sources can react with an accent pulse.
+    Same-family reloads are silent.
+    """
     candidates = [name]
     alias = GRAPH_PRESET_ALIASES.get(name)
     if alias:
@@ -77,10 +85,41 @@ def try_graph_preset(compositor: Any, name: str) -> bool:
                     graph = merge_default_modulations(graph)
                     compositor._graph_runtime.load_graph(graph)
                     log.info("Activated graph preset: %s (file: %s)", name, candidate)
+                    _maybe_publish_family_change(compositor, name, candidate)
                     return True
                 except Exception:
                     log.warning("Failed to load graph preset %s", candidate, exc_info=True)
     return False
+
+
+def _maybe_publish_family_change(compositor: Any, name: str, candidate: str) -> None:
+    """Publish ``FXEvent(kind="preset_family_change")`` when the family changes.
+
+    Best-effort: any failure — bus import error, unknown preset, missing
+    compositor attribute — falls open silently. Preset → family lookup
+    tries the requested name first, then the resolved-from-alias
+    candidate, so both legacy aliases and canonical filenames are
+    classified correctly.
+    """
+    try:
+        from agents.studio_compositor.preset_family_selector import family_for_preset
+        from shared.ward_fx_bus import FXEvent, get_bus
+    except Exception:
+        log.debug("ward_fx_bus import failed; skipping family change publish", exc_info=True)
+        return
+    family = family_for_preset(name) or family_for_preset(candidate)
+    if family is None:
+        # Uncatalogued preset: don't publish a family change. The slot
+        # selector simply stays on its last-known family for routing.
+        return
+    last = getattr(compositor, "_fx_last_published_family", None)
+    if last == family:
+        return
+    compositor._fx_last_published_family = family
+    try:
+        get_bus().publish_fx(FXEvent(kind="preset_family_change", preset_family=family))
+    except Exception:
+        log.debug("ward_fx_bus publish_fx failed", exc_info=True)
 
 
 def merge_default_modulations(graph: Any) -> Any:

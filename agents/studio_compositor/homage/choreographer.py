@@ -57,6 +57,15 @@ _SUBSTRATE_PACKAGE_FILE: Path = Path("/dev/shm/hapax-compositor/homage-substrate
 # or malformed file → default "sequential". Path matches
 # ``structural_director.py::_STRUCTURAL_INTENT_PATH``.
 _STRUCTURAL_INTENT_FILE: Path = Path("/dev/shm/hapax-structural/intent.json")
+# Cascade-delta (2026-04-18): narrative-tier per-tick rotation-mode override.
+# The narrative director (30s cadence) writes here; the choreographer
+# prefers this value when it's recent (≤60s) so the fast director can
+# drive rotation strategy without waiting for the slow structural tier's
+# 90s cadence. Stale / missing → fall back to the structural file.
+_NARRATIVE_STRUCTURAL_INTENT_FILE: Path = Path(
+    "/dev/shm/hapax-compositor/narrative-structural-intent.json"
+)
+_NARRATIVE_STRUCTURAL_MAX_AGE_S: float = 60.0
 # Phase 7 (task #113): voice register file. Read by
 # ``agents.hapax_daimonion.cpal.register_bridge`` before each TTS
 # emission. Choreographer writes on every package swap — including the
@@ -191,6 +200,7 @@ class Choreographer:
         consent_safe_flag_file: Path = _CONSENT_SAFE_FLAG_FILE,
         voice_register_file: Path = _VOICE_REGISTER_FILE,
         structural_intent_file: Path = _STRUCTURAL_INTENT_FILE,
+        narrative_structural_intent_file: Path = _NARRATIVE_STRUCTURAL_INTENT_FILE,
         source_registry: object | None = None,
         rng: random.Random | None = None,
     ) -> None:
@@ -201,6 +211,7 @@ class Choreographer:
         self._consent_safe_flag_file = consent_safe_flag_file
         self._voice_register_file = voice_register_file
         self._structural_intent_file = structural_intent_file
+        self._narrative_structural_intent_file = narrative_structural_intent_file
         # Optional SourceRegistry handle (duck-typed). When provided, the
         # choreographer cross-checks registered backend instances against
         # ``HomageSubstrateSource`` so per-instance substrate declarations
@@ -391,6 +402,13 @@ class Choreographer:
         # Metrics (spec §6) — best-effort, non-fatal.
         self._emit_metrics(package, planned, rejections)
 
+        # HOMAGE Phase 6 Layer 5 — publish WardEvent per planned
+        # transition so the ward↔FX reactor can bias preset families /
+        # flash bloom / modulate spectral_color in sync with each FSM
+        # transition. Runs before _compute_payload so the reactor has
+        # time to respond before the rotation_phase rolls over.
+        self._publish_ward_events(planned)
+
         # Coupling payload (spec §4.6) — publish even on empty plan so
         # shader energy decays cleanly rather than sticking at its last
         # non-zero value.
@@ -398,6 +416,52 @@ class Choreographer:
         self._publish_payload(package, payload)
 
         return ReconcileResult(tuple(planned), tuple(rejections), payload)
+
+    # ── Phase 6 Layer 5: ward-event pubsub ─────────────────────────────
+
+    def _publish_ward_events(self, planned: list[PlannedTransition]) -> None:
+        """Publish one ``WardEvent`` per planned transition to the ward↔FX bus.
+
+        The choreographer is the single arbiter of FSM transitions, so
+        publishing here guarantees the bus sees every FSM boundary
+        exactly once per reconcile tick. Phase mapping:
+
+        - ``entry``  → ``ABSENT_TO_ENTERING``
+        - ``exit``   → ``HOLD_TO_EXITING``
+        - ``modify`` → ``HOLD_TO_EMPHASIZED`` (netsplit-burst / topic-change
+          / mode-change are all "emphasis moments" from the ward's view).
+
+        Best-effort: import and publish failures are swallowed so the
+        coupling-payload publish below always runs.
+        """
+        if not planned:
+            return
+        try:
+            from agents.studio_compositor.ward_fx_mapping import domain_for_ward
+            from shared.ward_fx_bus import WardEvent, get_bus
+        except Exception:
+            log.debug("ward_fx_bus import failed; skipping ward event publish", exc_info=True)
+            return
+        bus = get_bus()
+        for plan in planned:
+            if plan.phase == "entry":
+                transition = "ABSENT_TO_ENTERING"
+            elif plan.phase == "exit":
+                transition = "HOLD_TO_EXITING"
+            else:  # modify
+                transition = "HOLD_TO_EMPHASIZED"
+            domain = domain_for_ward(plan.source_id)
+            event = WardEvent(
+                ward_id=plan.source_id,
+                transition=transition,  # type: ignore[arg-type]
+                domain=domain,
+                intensity=0.75 if plan.phase in ("entry", "modify") else 0.5,
+                ts=plan.start_at,
+            )
+            try:
+                bus.publish_ward(event)
+            except Exception:
+                log.debug("ward_fx_bus publish_ward failed for %s", plan.source_id, exc_info=True)
 
     # ── Internals ───────────────────────────────────────────────────────
 
@@ -499,31 +563,90 @@ class Choreographer:
     def _read_rotation_mode(
         self,
     ) -> Literal["sequential", "random", "weighted_by_salience", "paused"]:
-        """Read ``homage_rotation_mode`` from the structural intent file.
+        """Read ``homage_rotation_mode`` from the intent files.
 
-        Fails open to ``"sequential"`` in every non-happy-path case:
-        missing file, unreadable bytes, malformed JSON, non-dict payload,
-        missing field, or unknown mode value. The choreographer never
-        crashes because the structural director crashed.
+        Prefers the narrative-tier per-tick override (30s cadence) when
+        it's fresher than ``_NARRATIVE_STRUCTURAL_MAX_AGE_S``; otherwise
+        falls back to the slow structural director's choice (90s
+        cadence); otherwise returns the active default.
+
+        Cascade-delta (2026-04-18): changed the ultimate default from
+        ``"sequential"`` to ``"weighted_by_salience"``. Operator directive:
+        the homage surface must show "unavoidable evidence of active
+        thoughtful manipulation"; sequential idles as a static overlay
+        when producers are sparse, whereas weighted-by-salience at least
+        foregrounds the ward that was most-recently-impinged. Set
+        ``HAPAX_HOMAGE_DEFAULT_ROTATION`` to restore the prior default.
+
+        Fails open to the active default in every non-happy-path case:
+        missing files, unreadable bytes, malformed JSON, non-dict
+        payloads, missing fields, or unknown mode values.
+        """
+        default_mode = self._default_rotation_mode()
+
+        # 1) Narrative-tier per-tick override (fresher signal wins).
+        narrative_mode = self._read_rotation_mode_from(
+            self._narrative_structural_intent_file,
+            max_age_s=_NARRATIVE_STRUCTURAL_MAX_AGE_S,
+        )
+        if narrative_mode is not None:
+            return narrative_mode
+
+        # 2) Slow structural director.
+        structural_mode = self._read_rotation_mode_from(
+            self._structural_intent_file,
+            max_age_s=None,  # structural file's cadence is slower; no staleness cutoff
+        )
+        if structural_mode is not None:
+            return structural_mode
+
+        return default_mode
+
+    @staticmethod
+    def _default_rotation_mode() -> Literal[
+        "sequential", "random", "weighted_by_salience", "paused"
+    ]:
+        """Ambient rotation default when no intent file exists."""
+        override = (os.environ.get("HAPAX_HOMAGE_DEFAULT_ROTATION") or "").strip().lower()
+        if override in ("sequential", "random", "weighted_by_salience", "paused"):
+            return override  # type: ignore[return-value]
+        return "weighted_by_salience"
+
+    def _read_rotation_mode_from(
+        self,
+        path: Path,
+        *,
+        max_age_s: float | None,
+    ) -> Literal["sequential", "random", "weighted_by_salience", "paused"] | None:
+        """Parse a rotation-mode out of an intent file.
+
+        Returns ``None`` when the file is missing, stale beyond
+        ``max_age_s``, unreadable, malformed, or carries an unknown
+        mode value. The caller cascades through its candidate sources.
         """
         try:
-            if not self._structural_intent_file.exists():
-                return "sequential"
-            raw = self._structural_intent_file.read_text(encoding="utf-8")
+            if not path.exists():
+                return None
+            raw = path.read_text(encoding="utf-8")
         except Exception:
-            log.debug("structural-intent read failed", exc_info=True)
-            return "sequential"
+            log.debug("rotation-mode read failed for %s", path, exc_info=True)
+            return None
         try:
             data = json.loads(raw)
         except Exception:
-            log.debug("structural-intent json decode failed", exc_info=True)
-            return "sequential"
+            log.debug("rotation-mode JSON decode failed for %s", path, exc_info=True)
+            return None
         if not isinstance(data, dict):
-            return "sequential"
-        mode = data.get("homage_rotation_mode", "sequential")
+            return None
+        if max_age_s is not None:
+            updated_at = data.get("updated_at") or data.get("emitted_at")
+            if isinstance(updated_at, (int, float)):
+                if (time.time() - float(updated_at)) > max_age_s:
+                    return None
+        mode = data.get("homage_rotation_mode")
         if mode in ("sequential", "random", "weighted_by_salience", "paused"):
             return mode  # type: ignore[return-value]
-        return "sequential"
+        return None
 
     def _compute_payload(
         self,
