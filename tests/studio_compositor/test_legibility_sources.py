@@ -269,17 +269,53 @@ class TestBitchXGrammarApplied:
         assert active is BITCHX_PACKAGE
 
     def test_activity_header_uses_line_start_marker(self, tmp_path):
+        """Phase A3: chevron marker + activity token now render via
+        ``paint_emissive_glyph`` (per-glyph emissive), not Pango. Gloss
+        still goes through Pango. Verify via the emissive-glyph call
+        log."""
+        from unittest.mock import patch
+
         _write_narrative_state(tmp_path, activity="react")
-        _write_intent(tmp_path, impingements=[])
-        _, spy = _render(ls.ActivityHeaderCairoSource, 800, 60)
-        assert any(BITCHX_PACKAGE.grammar.line_start_marker in c for c in spy.show_text_calls)
-        assert any("REACT" in c for c in spy.show_text_calls)
+        _write_intent(
+            tmp_path,
+            impingements=[{"narrative": "grounded", "salience": 1.0}],
+        )
+        glyph_log: list[str] = []
+        real_glyph = ls.paint_emissive_glyph
+
+        def _spy_glyph(cr_arg, x, y, glyph, font_size, role_rgba, **kw):
+            glyph_log.append(glyph)
+            return real_glyph(cr_arg, x, y, glyph, font_size, role_rgba, **kw)
+
+        with patch.object(ls, "paint_emissive_glyph", _spy_glyph):
+            _render(ls.ActivityHeaderCairoSource, 800, 60)
+
+        marker_chars = {ch for ch in BITCHX_PACKAGE.grammar.line_start_marker if ch != " "}
+        assert marker_chars.issubset(set(glyph_log)), (
+            f"marker chars {marker_chars} not in emissive glyph log {glyph_log}"
+        )
+        for ch in "REACT":
+            assert ch in glyph_log, f"missing emissive glyph for '{ch}' in {glyph_log}"
 
     def test_stance_indicator_uses_irc_mode_change_format(self, tmp_path):
+        """Phase A3: stance indicator renders brackets + ``+H`` +
+        stance label as emissive glyphs."""
+        from unittest.mock import patch
+
         _write_narrative_state(tmp_path, stance="seeking")
-        _, spy = _render(ls.StanceIndicatorCairoSource, 180, 32)
-        assert any("+H" in c for c in spy.show_text_calls)
-        assert any("SEEKING" in c for c in spy.show_text_calls)
+        glyph_log: list[str] = []
+        real_glyph = ls.paint_emissive_glyph
+
+        def _spy_glyph(cr_arg, x, y, glyph, font_size, role_rgba, **kw):
+            glyph_log.append(glyph)
+            return real_glyph(cr_arg, x, y, glyph, font_size, role_rgba, **kw)
+
+        with patch.object(ls, "paint_emissive_glyph", _spy_glyph):
+            _render(ls.StanceIndicatorCairoSource, 180, 32)
+        for ch in "+H":
+            assert ch in glyph_log, f"missing emissive glyph for '{ch}'"
+        for ch in "SEEKING":
+            assert ch in glyph_log, f"missing emissive glyph for '{ch}'"
 
     def test_chat_keyword_legend_uses_topic_line_format(self, tmp_path):
         _, spy = _render(ls.ChatKeywordLegendCairoSource, 200, 200)
@@ -287,9 +323,23 @@ class TestBitchXGrammarApplied:
         assert any("#homage" in c for c in spy.show_text_calls)
 
     def test_grounding_ticker_uses_join_format(self, tmp_path):
+        """Phase A3: ``*`` line-start is now a ``paint_emissive_point``
+        centre dot, not a Pango star. Signal name still goes through
+        Pango. Verify both."""
+        from unittest.mock import patch
+
         _write_intent(tmp_path, prov=["audio.midi.beat_position"])
-        _, spy = _render(ls.GroundingProvenanceTickerCairoSource, 600, 24)
-        assert any(c.startswith("* ") for c in spy.show_text_calls)
+        point_count = {"n": 0}
+        real_point = ls.paint_emissive_point
+
+        def _spy_point(*a, **k):
+            point_count["n"] += 1
+            return real_point(*a, **k)
+
+        with patch.object(ls, "paint_emissive_point", _spy_point):
+            _, spy = _render(ls.GroundingProvenanceTickerCairoSource, 600, 24)
+        assert point_count["n"] >= 1, "missing emissive point for ticker line-start"
+        assert any("audio.midi.beat_position" in c for c in spy.show_text_calls)
 
     def test_grounding_ticker_empty_renders_ungrounded_marker(self, tmp_path):
         _, spy = _render(ls.GroundingProvenanceTickerCairoSource, 600, 24)
@@ -298,21 +348,41 @@ class TestBitchXGrammarApplied:
 
 class TestNoRoundedRectChrome:
     """Anti-pattern refusal — BitchX grammar forbids rounded corners
-    (spec §5.5). The migrated wards must not invoke Cairo arc calls for
-    background chrome — sharp rectangles only."""
+    (spec §5.5). Phase A3 broke the naive "no ``cr.arc`` calls" pin
+    because emissive halos legitimately paint radial gradients (bounded
+    via an arc). The new invariant: **no rounded-rect background chrome**
+    — i.e. ``_paint_bitchx_bg`` must not invoke ``cr.arc`` even though
+    the content render may.
+    """
 
     @pytest.mark.parametrize(
         "cls",
         [
             ls.ActivityHeaderCairoSource,
+            ls.StanceIndicatorCairoSource,
             ls.ChatKeywordLegendCairoSource,
             ls.GroundingProvenanceTickerCairoSource,
         ],
     )
-    def test_no_arcs_in_chrome(self, cls):
-        _, spy = _render(cls, 400, 60)
-        assert spy.arc_calls == 0
+    def test_bg_chrome_has_no_arcs(self, cls, tmp_path):
+        from unittest.mock import patch
 
-    def test_stance_indicator_no_arcs(self):
-        _, spy = _render(ls.StanceIndicatorCairoSource, 400, 60)
-        assert spy.arc_calls == 0
+        import cairo
+
+        surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, 400, 60)
+        cr = _SpyContext(surface)
+
+        real_bg = ls._paint_bitchx_bg
+        arcs_during_bg = {"n": 0}
+
+        def _bg_with_arc_spy(cr_arg, w, h, pkg, **kwargs):
+            before = cr_arg.arc_calls
+            real_bg(cr_arg, w, h, pkg, **kwargs)
+            arcs_during_bg["n"] += cr_arg.arc_calls - before
+
+        with patch.object(ls, "_paint_bitchx_bg", _bg_with_arc_spy):
+            src = cls()
+            src.render(cr, 400, 60, t=0.0, state={})
+        assert arcs_during_bg["n"] == 0, (
+            f"{cls.__name__} bg chrome invoked {arcs_during_bg['n']} arcs"
+        )

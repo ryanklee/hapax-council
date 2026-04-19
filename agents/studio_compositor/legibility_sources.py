@@ -1,33 +1,37 @@
 """Legibility Cairo sources — on-frame authorship indicators.
 
 Phase 4 of the volitional-grounded-director epic (PR #1017, spec §3.5).
-Phase 4 of the HOMAGE epic (spec §4.10): these four sources are the
-first to inherit :class:`HomageTransitionalSource`, rendering their
-content under the active HomagePackage's grammar (BitchX grammar as
-the default package):
+Phase 4 of the HOMAGE epic (spec §4.10) migrated these sources to
+:class:`HomageTransitionalSource`. Phase A5 swapped Cairo's toy
+``cr.show_text`` calls for Pango via :mod:`text_render` so Px437 IBM
+VGA 8x16 resolves through fontconfig.
 
-- :class:`ActivityHeaderCairoSource` — ``»»» [ACTIVITY | gloss]``
-- :class:`StanceIndicatorCairoSource` — IRC mode-change flash
-  (``[+H <stance>]``) — grey brackets, bright mode flag, accent stance.
-- :class:`ChatKeywordLegendCairoSource` — IRC topic line
-  (``-!- Topic (#homage): <keyword>, <keyword>, ...``).
-- :class:`GroundingProvenanceTickerCairoSource` — IRC backscroll of
-  ``* <signal> has joined`` / ``(ungrounded)`` when empty.
+**Phase A3 (this revision): emissive rewrite.** Every text path renders
+through the shared :mod:`homage.emissive_base` primitives — structural
+chars (chevrons, brackets, stars) via :func:`paint_emissive_glyph`
+centre-dot + halo, and narrative text (gloss, meaning, signal names)
+via :func:`text_render.render_text` for Px437 legibility. Structural
+state changes (activity flip, stance flip) paint a 200 ms
+inverse-flash across the ward; grounding ticker entries slide in; and
+the stance label pulses at the stance-indexed Hz rate from
+:data:`STANCE_HZ`. The four sources are:
+
+- :class:`ActivityHeaderCairoSource` — ``>>> [ACTIVITY | gloss]``
+  with optional ``:: [ROTATION:<mode>]`` when rotation is non-default
+- :class:`StanceIndicatorCairoSource` — ``[+H <stance>]`` with pulse
+- :class:`GroundingProvenanceTickerCairoSource` — ``* <signal>`` rows
+  with slide-in / breathing empty state
+- :class:`ChatKeywordLegendCairoSource` — legacy alias kept for
+  Phase 10 backcompat (B5 binds ``chat_ambient`` to ``ChatAmbientWard``
+  in ``default.json``, so this class renders only if a legacy layout
+  is used)
 
 Every source reads ``/dev/shm/hapax-director/narrative-state.json`` or
 ``~/hapax-state/stream-experiment/director-intent.jsonl``. Readers are
 wrapped in try/except; absent files render neutral/empty states.
 
-When ``HAPAX_HOMAGE_ACTIVE=0`` (default until Phase 12) the transition
-FSM is bypassed and ``render_content()`` runs every tick — so these
-sources render in BitchX grammar already, even without the choreographer
-in the loop. When the flag flips on in Phase 12, transition FSM gates
-rendering on choreographer-emitted entries/exits.
-
-Typography: the BitchX package declares Px437 IBM VGA 8x16; Pango falls
-back to DejaVu Sans Mono when Px437 is not installed. Palette comes from
-the active package (``get_active_package()``) via role resolution —
-no hardcoded hex.
+Palette comes from the active HomagePackage (``get_active_package()``)
+via role resolution — no hardcoded hex.
 """
 
 from __future__ import annotations
@@ -39,6 +43,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from agents.studio_compositor.homage import get_active_package
+from agents.studio_compositor.homage.emissive_base import (
+    STANCE_HZ,
+    paint_breathing_alpha,
+    paint_emissive_glyph,
+    paint_emissive_point,
+    paint_scanlines,
+)
 from agents.studio_compositor.homage.transitional_source import HomageTransitionalSource
 from shared.homage_package import HomagePackage
 
@@ -86,6 +97,36 @@ _STANCE_ROLE: dict[str, str] = {
 }
 
 
+# Rotation-mode → colour role for the optional ``[ROTATION:<mode>]`` token
+# appended to the activity header. Plan §A3 spec tokens plus the
+# choreographer's existing enum space. Unknown values fall through to
+# ``muted``.
+_ROTATION_MODE_ROLE: dict[str, str] = {
+    # Plan §1.3 tokens
+    "steady": "muted",
+    "deliberate": "accent_cyan",
+    "rapid": "accent_yellow",
+    "burst": "accent_red",
+    # Choreographer legacy tokens
+    "sequential": "muted",
+    "paused": "muted",
+    "random": "accent_cyan",
+    "weighted_by_salience": "accent_yellow",
+}
+
+# Rotation modes that are "default" and therefore do NOT trigger the
+# ``:: [ROTATION:<mode>]`` suffix on the activity header.
+_ROTATION_MODE_DEFAULT: frozenset[str] = frozenset({"steady", "weighted_by_salience"})
+
+
+# Inverse-flash envelope — triggered by activity / stance change. 200 ms
+# window with linear alpha falloff. Plan §A3 ("mode-change vocab").
+_INVERSE_FLASH_DURATION_S: float = 0.200
+
+# Breathing alpha frequency for the ungrounded ticker state.
+_UNGROUNDED_BREATH_HZ: float = 0.3
+
+
 def _read_narrative_state() -> dict:
     try:
         if _NARRATIVE_STATE.exists():
@@ -110,15 +151,36 @@ def _read_latest_intent() -> dict:
     return {}
 
 
-def _bitchx_font_description(size: int, *, bold: bool = False) -> str:
-    """Return a Pango font-description string for the active package.
+def _read_rotation_mode() -> str | None:
+    """Read the active ``homage_rotation_mode`` from the intent files.
 
-    Phase A5 (homage-completion-plan §3.3): text rendering now routes
-    through Pango (:func:`text_render.render_text`) instead of Cairo's
-    toy ``select_font_face`` API, so ``Px437 IBM VGA 8x16`` resolves
-    through fontconfig rather than silently falling back to DejaVu
-    Sans Mono.
+    Mirrors :class:`HomageChoreographer._read_rotation_mode` for the
+    ward's purposes. Returns ``None`` on any failure; callers interpret
+    that as "default, don't surface".
     """
+    paths: tuple[Path, ...] = (
+        Path(
+            os.path.expanduser("~/hapax-state/stream-experiment/narrative-structural-intent.json")
+        ),
+        Path(os.path.expanduser("~/hapax-state/stream-experiment/structural-intent.json")),
+    )
+    for path in paths:
+        try:
+            if not path.exists():
+                continue
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                continue
+            mode = data.get("homage_rotation_mode")
+            if isinstance(mode, str) and mode:
+                return mode
+        except Exception:
+            log.debug("rotation-mode read failed for %s", path, exc_info=True)
+    return None
+
+
+def _bitchx_font_description(size: int, *, bold: bool = False) -> str:
+    """Return a Pango font-description string for the active package."""
     pkg = get_active_package() or _fallback_package()
     weight = " Bold" if bold else ""
     return f"{pkg.typography.primary_font_family}{weight} {int(size)}"
@@ -133,16 +195,7 @@ def _draw_pango(
     font_description: str,
     color_rgba: tuple[float, float, float, float],
 ) -> float:
-    """Render ``text`` at ``(x, y)`` via Pango. Return advance width.
-
-    The ``y`` coordinate matches the Cairo baseline convention used by
-    the legacy ``cr.show_text`` calls: Pango's ``move_to(x, y)`` places
-    the layout's top-left at ``y``, so we back off by the layout
-    height to approximate baseline-at-y behaviour. Good enough for
-    visual parity with the prior Cairo toy renders; exact baseline
-    parity is not required because every source draws a fresh line
-    (no overstrike).
-    """
+    """Render ``text`` at ``(x, y)`` via Pango. Return advance width."""
     from agents.studio_compositor.text_render import (
         TextStyle,
         measure_text,
@@ -160,8 +213,7 @@ def _draw_pango(
 
 
 def _fallback_package() -> HomagePackage:
-    """Return the compiled-in BitchX package when registry resolution fails
-    (tests in isolation, consent-safe layout for the chrome path)."""
+    """Return the compiled-in BitchX package when registry resolution fails."""
     from agents.studio_compositor.homage.bitchx import BITCHX_PACKAGE
 
     return BITCHX_PACKAGE
@@ -175,11 +227,7 @@ def _paint_bitchx_bg(
     *,
     ward_id: str | None = None,
 ) -> None:
-    """Fill a CP437-style background — sharp corners, no rounded rects
-    (spec §5.5 refuses ``rounded-corners``). When ``ward_id`` is given,
-    paint the domain-tinted gradient + side-bar via the shared helper so
-    the legibility surfaces inherit the same aesthetic envelope as every
-    other homage ward (cascade-delta 2026-04-18)."""
+    """Fill a CP437-style background — sharp corners, no rounded rects."""
     if ward_id is not None:
         try:
             from agents.studio_compositor.homage.rendering import (
@@ -197,7 +245,6 @@ def _paint_bitchx_bg(
                 cr.restore()
             return
         except Exception:
-            # Fall through to legacy path on any import / cairo error.
             pass
     r, g, b, a = pkg.resolve_colour("background")
     cr.save()
@@ -213,20 +260,100 @@ def _paint_bitchx_bg(
     cr.restore()
 
 
+def _paint_inverse_flash(
+    cr: cairo.Context,
+    w: float,
+    h: float,
+    rgba: tuple[float, float, float, float],
+    *,
+    alpha: float,
+) -> None:
+    """Paint a translucent rectangle covering the ward at ``alpha``."""
+    if alpha <= 0.0:
+        return
+    r, g, b, _a = rgba
+    cr.save()
+    cr.set_source_rgba(r, g, b, max(0.0, min(1.0, alpha)))
+    cr.rectangle(0, 0, w, h)
+    cr.fill()
+    cr.restore()
+
+
+def _flash_alpha(t: float, flash_started_at: float | None) -> float:
+    """Return the inverse-flash alpha at ``t`` given the flash start time.
+
+    Linear decay over ``_INVERSE_FLASH_DURATION_S``. 0.0 when no flash
+    is active or the window has elapsed. Peak alpha is 0.45.
+    """
+    if flash_started_at is None:
+        return 0.0
+    dt = t - flash_started_at
+    if dt < 0.0 or dt >= _INVERSE_FLASH_DURATION_S:
+        return 0.0
+    return 0.45 * (1.0 - dt / _INVERSE_FLASH_DURATION_S)
+
+
+def _emissive_structural(
+    cr: cairo.Context,
+    text: str,
+    x: float,
+    y: float,
+    *,
+    role_rgba: tuple[float, float, float, float],
+    font_size: float,
+    t: float,
+    phase_base: float = 0.0,
+    shimmer_hz: float = 0.5,
+) -> float:
+    """Render ``text`` as a run of emissive glyphs + return advance width."""
+    from agents.studio_compositor.text_render import TextStyle, measure_text
+
+    style = TextStyle(
+        text=text,
+        font_description=_bitchx_font_description(int(font_size), bold=True),
+        color_rgba=role_rgba,
+    )
+    total_w, _h = measure_text(cr, style)
+
+    n = max(1, len(text))
+    per_cell = float(total_w) / float(n)
+    for i, ch in enumerate(text):
+        if ch == " ":
+            continue
+        cx = x + per_cell * i
+        phase = phase_base + i * 0.31
+        paint_emissive_glyph(
+            cr,
+            x=cx,
+            y=y,
+            glyph=ch,
+            font_size=font_size,
+            role_rgba=role_rgba,
+            t=t,
+            phase=phase,
+            shimmer_hz=shimmer_hz,
+        )
+    return float(total_w)
+
+
 # ── 1. Activity header ────────────────────────────────────────────────────
 
 
 class ActivityHeaderCairoSource(HomageTransitionalSource):
     """Top-center strip under BitchX grammar.
 
-    Rendered form: ``»»» [ACTIVITY | gloss]`` where the chevron line-start
-    marker and brackets+pipe use the package's muted (grey) role, the
-    activity token uses the bright (identity) role, and the gloss uses
-    terminal_default.
+    Rendered form: ``>>> [ACTIVITY | gloss]`` — chevron marker, brackets,
+    and activity token render as emissive point-of-light glyphs. Gloss
+    renders via Pango for legibility. On activity change, a 200 ms
+    inverse-flash overlays the whole ward. When ``homage_rotation_mode``
+    is non-default, append ``:: [ROTATION:<mode>]`` with the rotation
+    token coloured by mode.
     """
 
     def __init__(self) -> None:
         super().__init__(source_id="activity_header")
+        self._last_activity: str | None = None
+        self._activity_flash_started_at: float | None = None
 
     def render_content(
         self,
@@ -238,43 +365,104 @@ class ActivityHeaderCairoSource(HomageTransitionalSource):
     ) -> None:
         ns = _read_narrative_state()
         intent = _read_latest_intent()
-        activity = (ns.get("activity") or intent.get("activity") or "—").upper()
+        activity = str(ns.get("activity") or intent.get("activity") or "—").upper()
         gloss = ""
         imps = intent.get("compositional_impingements") or []
         if imps:
             best = max(imps, key=lambda i: i.get("salience", 0.0))
             gloss = str(best.get("narrative", ""))[:48]
 
+        if self._last_activity is not None and activity != self._last_activity:
+            self._activity_flash_started_at = t
+        self._last_activity = activity
+
         pkg = get_active_package() or _fallback_package()
         _paint_bitchx_bg(cr, canvas_w, canvas_h, pkg, ward_id="activity_header")
+        paint_scanlines(
+            cr,
+            canvas_w,
+            canvas_h,
+            role_rgba=pkg.resolve_colour("muted"),
+            every_n_rows=4,
+            alpha=0.07,
+            row_height_px=14.0,
+        )
 
         muted = pkg.resolve_colour("muted")
         bright = pkg.resolve_colour("bright")
         content = pkg.resolve_colour("terminal_default")
 
-        bold_font = _bitchx_font_description(18, bold=True)
-        body_font = _bitchx_font_description(13, bold=False)
+        bold_size = 16.0
+        body_font = _bitchx_font_description(14, bold=False)
         x = 12.0
-        y = 28.0
+        y = 30.0
 
-        # »»» line-start marker (muted)
         marker = pkg.grammar.line_start_marker + " "
-        x += _draw_pango(cr, marker, x, y, font_description=bold_font, color_rgba=muted)
-
-        # Opening bracket (muted)
-        x += _draw_pango(cr, "[", x, y, font_description=bold_font, color_rgba=muted)
-
-        # Activity (bright)
-        x += _draw_pango(cr, activity, x, y, font_description=bold_font, color_rgba=bright)
-
+        x += _emissive_structural(
+            cr, marker, x, y, role_rgba=muted, font_size=bold_size, t=t, phase_base=0.0
+        )
+        x += _emissive_structural(
+            cr, "[", x, y, role_rgba=muted, font_size=bold_size, t=t, phase_base=0.5
+        )
+        x += _emissive_structural(
+            cr,
+            activity,
+            x,
+            y,
+            role_rgba=bright,
+            font_size=bold_size,
+            t=t,
+            phase_base=1.1,
+            shimmer_hz=0.7,
+        )
         if gloss:
-            # pipe separator (muted)
-            x += _draw_pango(cr, " | ", x, y, font_description=bold_font, color_rgba=muted)
-            # gloss (content, slightly smaller non-bold)
+            x += _emissive_structural(
+                cr, " | ", x, y, role_rgba=muted, font_size=bold_size, t=t, phase_base=2.0
+            )
             x += _draw_pango(cr, gloss, x, y - 2, font_description=body_font, color_rgba=content)
+        x += _emissive_structural(
+            cr, "]", x, y, role_rgba=muted, font_size=bold_size, phase_base=2.7, t=t
+        )
 
-        # Closing bracket (muted)
-        _draw_pango(cr, "]", x, y, font_description=bold_font, color_rgba=muted)
+        rotation_mode = _read_rotation_mode()
+        if rotation_mode and rotation_mode not in _ROTATION_MODE_DEFAULT:
+            rotation_role = _ROTATION_MODE_ROLE.get(rotation_mode, "muted")
+            rotation_rgba = pkg.resolve_colour(rotation_role)  # type: ignore[arg-type]
+            x += _emissive_structural(
+                cr,
+                " :: [ROTATION:",
+                x,
+                y,
+                role_rgba=muted,
+                font_size=bold_size,
+                t=t,
+                phase_base=3.3,
+            )
+            x += _emissive_structural(
+                cr,
+                rotation_mode.upper(),
+                x,
+                y,
+                role_rgba=rotation_rgba,
+                font_size=bold_size,
+                t=t,
+                phase_base=4.0,
+                shimmer_hz=0.8,
+            )
+            x += _emissive_structural(
+                cr,
+                "]",
+                x,
+                y,
+                role_rgba=muted,
+                font_size=bold_size,
+                t=t,
+                phase_base=4.6,
+            )
+
+        alpha = _flash_alpha(t, self._activity_flash_started_at)
+        if alpha > 0.0:
+            _paint_inverse_flash(cr, canvas_w, canvas_h, bright, alpha=alpha)
 
 
 # ── 2. Stance indicator ───────────────────────────────────────────────────
@@ -283,13 +471,16 @@ class ActivityHeaderCairoSource(HomageTransitionalSource):
 class StanceIndicatorCairoSource(HomageTransitionalSource):
     """Top-right badge: ``[+H <stance>]`` in IRC mode-change format.
 
-    Grey ``[``, muted ``+H`` flag (literal HOMAGE flag), stance-coloured
-    label, grey ``]``. No coloured dot — the stance colour IS on the
-    label itself (spec §5.1 identity colouring).
+    Emissive glyphs throughout — brackets and ``+H`` in muted, stance
+    label in the stance's accent role. The label glyphs pulse at the
+    stance-indexed breathing rate from :data:`STANCE_HZ`. On stance
+    change, a 200 ms inverse-flash overlays the whole ward.
     """
 
     def __init__(self) -> None:
         super().__init__(source_id="stance_indicator")
+        self._last_stance: str | None = None
+        self._stance_flash_started_at: float | None = None
 
     def render_content(
         self,
@@ -302,22 +493,55 @@ class StanceIndicatorCairoSource(HomageTransitionalSource):
         ns = _read_narrative_state()
         stance = str(ns.get("stance") or "nominal").lower()
 
+        if self._last_stance is not None and stance != self._last_stance:
+            self._stance_flash_started_at = t
+        self._last_stance = stance
+
         pkg = get_active_package() or _fallback_package()
         _paint_bitchx_bg(cr, canvas_w, canvas_h, pkg, ward_id="stance_indicator")
+        paint_scanlines(
+            cr,
+            canvas_w,
+            canvas_h,
+            role_rgba=pkg.resolve_colour("muted"),
+            every_n_rows=4,
+            alpha=0.07,
+            row_height_px=12.0,
+        )
 
         muted = pkg.resolve_colour("muted")
-        stance_rgba = pkg.resolve_colour(_STANCE_ROLE.get(stance, "accent_green"))
+        stance_role_name = _STANCE_ROLE.get(stance, "accent_green")
+        stance_rgba = pkg.resolve_colour(stance_role_name)  # type: ignore[arg-type]
+        pulse_hz = STANCE_HZ.get(stance, 1.0)
 
-        font = _bitchx_font_description(13, bold=True)
-        y = canvas_h / 2 + 5
-        x = 8.0
+        font_size = 12.0
+        y = canvas_h / 2 + 4
+        x = 6.0
 
-        x += _draw_pango(cr, "[+H ", x, y, font_description=font, color_rgba=muted)
-        x += _draw_pango(cr, stance.upper(), x, y, font_description=font, color_rgba=stance_rgba)
-        _draw_pango(cr, "]", x, y, font_description=font, color_rgba=muted)
+        x += _emissive_structural(
+            cr, "[+H ", x, y, role_rgba=muted, font_size=font_size, t=t, phase_base=0.0
+        )
+        x += _emissive_structural(
+            cr,
+            stance.upper(),
+            x,
+            y,
+            role_rgba=stance_rgba,
+            font_size=font_size,
+            t=t,
+            phase_base=0.6,
+            shimmer_hz=pulse_hz,
+        )
+        _emissive_structural(
+            cr, "]", x, y, role_rgba=muted, font_size=font_size, t=t, phase_base=1.3
+        )
+
+        alpha = _flash_alpha(t, self._stance_flash_started_at)
+        if alpha > 0.0:
+            _paint_inverse_flash(cr, canvas_w, canvas_h, stance_rgba, alpha=alpha)
 
 
-# ── 3. Chat keyword legend ────────────────────────────────────────────────
+# ── 3. Chat keyword legend (legacy alias post-B5) ─────────────────────────
 
 
 _CHAT_KEYWORDS: list[tuple[str, str]] = [
@@ -333,9 +557,12 @@ _CHAT_KEYWORDS: list[tuple[str, str]] = [
 class ChatKeywordLegendCairoSource(HomageTransitionalSource):
     """Side strip: IRC-style channel topic line listing chat keywords.
 
-    Rendered form (first line, muted): ``-!- Topic (#homage):``. Each
-    subsequent line is a keyword+meaning pair — bright keyword, muted
-    separator, terminal_default meaning.
+    Phase B5 swapped the ``chat_ambient`` layout binding to
+    :class:`ChatAmbientWard`; this class stays registered as the legacy
+    alias in case a custom layout still names ``chat_keyword_legend``.
+    Rendered form: first line is the IRC topic header (with an emissive
+    bullet); subsequent lines are keyword + meaning pairs with the
+    keyword rendered as per-glyph emissive and the meaning via Pango.
     """
 
     def __init__(self) -> None:
@@ -351,6 +578,15 @@ class ChatKeywordLegendCairoSource(HomageTransitionalSource):
     ) -> None:
         pkg = get_active_package() or _fallback_package()
         _paint_bitchx_bg(cr, canvas_w, canvas_h, pkg, ward_id="chat_keyword_legend")
+        paint_scanlines(
+            cr,
+            canvas_w,
+            canvas_h,
+            role_rgba=pkg.resolve_colour("muted"),
+            every_n_rows=4,
+            alpha=0.06,
+            row_height_px=12.0,
+        )
 
         muted = pkg.resolve_colour("muted")
         bright = pkg.resolve_colour("bright")
@@ -360,15 +596,36 @@ class ChatKeywordLegendCairoSource(HomageTransitionalSource):
         header_font = _bitchx_font_description(11, bold=True)
         body_font = _bitchx_font_description(10, bold=False)
 
-        tx = 8.0
+        tx = 6.0
+        paint_emissive_point(
+            cr,
+            cx=tx + 3.0,
+            cy=12.0,
+            role_rgba=muted,
+            t=t,
+            phase=0.0,
+            centre_radius_px=1.8,
+            halo_radius_px=4.0,
+            outer_glow_radius_px=6.0,
+            shimmer_hz=0.5,
+        )
+        tx = 14.0
         tx += _draw_pango(cr, "-!- Topic (", tx, 16, font_description=header_font, color_rgba=muted)
         tx += _draw_pango(cr, "#homage", tx, 16, font_description=header_font, color_rgba=accent)
         _draw_pango(cr, "):", tx, 16, font_description=header_font, color_rgba=muted)
 
-        y = 36
-        for keyword, meaning in _CHAT_KEYWORDS[:8]:
-            kw_advance = _draw_pango(
-                cr, keyword, 8, y, font_description=body_font, color_rgba=bright
+        y = 32
+        for idx, (keyword, meaning) in enumerate(_CHAT_KEYWORDS[:8]):
+            kw_advance = _emissive_structural(
+                cr,
+                keyword,
+                8,
+                y,
+                role_rgba=bright,
+                font_size=10.0,
+                t=t,
+                phase_base=idx * 0.43,
+                shimmer_hz=0.6,
             )
             sep_advance = _draw_pango(
                 cr,
@@ -386,22 +643,39 @@ class ChatKeywordLegendCairoSource(HomageTransitionalSource):
                 font_description=body_font,
                 color_rgba=content,
             )
-            y += 15
+            y += 14
 
 
 # ── 4. Grounding provenance ticker ────────────────────────────────────────
 
 
 class GroundingProvenanceTickerCairoSource(HomageTransitionalSource):
-    """Bottom-left diagnostic: IRC backscroll of ``* <signal> has joined``.
+    """Bottom-left diagnostic: ``* <signal>`` rows with slide-in entries.
 
-    When grounding_provenance is empty (``*  (ungrounded)``), the line
-    uses the muted role to signal the UNGROUNDED state without alarming
-    chrome.
+    The ``*`` line-start renders as a 3 px emissive centre dot in the
+    muted role (point of light). Signal names render via Pango in the
+    bright role for legibility. When no provenance is available, the
+    ward shows ``*  (ungrounded)`` in muted, with the label's alpha
+    breathing at 0.3 Hz so even the empty state shows life.
+
+    New entries slide in from the left over a 400 ms envelope,
+    triggered by a change in the provenance hash.
     """
 
     def __init__(self) -> None:
         super().__init__(source_id="grounding_provenance_ticker")
+        self._last_prov_hash: int | None = None
+        self._prov_change_started_at: float | None = None
+
+    def _slide_progress(self, t: float) -> float:
+        if self._prov_change_started_at is None:
+            return 1.0
+        dt = t - self._prov_change_started_at
+        if dt >= 0.4:
+            return 1.0
+        if dt <= 0.0:
+            return 0.0
+        return dt / 0.4
 
     def render_content(
         self,
@@ -413,30 +687,92 @@ class GroundingProvenanceTickerCairoSource(HomageTransitionalSource):
     ) -> None:
         intent = _read_latest_intent()
         prov = intent.get("grounding_provenance") or []
+        prov_list = [str(s) for s in prov[:6]]
+
+        prov_hash = hash(tuple(prov_list))
+        if self._last_prov_hash is not None and prov_hash != self._last_prov_hash:
+            self._prov_change_started_at = t
+        self._last_prov_hash = prov_hash
 
         pkg = get_active_package() or _fallback_package()
         _paint_bitchx_bg(cr, canvas_w, canvas_h, pkg, ward_id="grounding_provenance_ticker")
+        paint_scanlines(
+            cr,
+            canvas_w,
+            canvas_h,
+            role_rgba=pkg.resolve_colour("muted"),
+            every_n_rows=4,
+            alpha=0.06,
+            row_height_px=12.0,
+        )
 
         muted = pkg.resolve_colour("muted")
         bright = pkg.resolve_colour("bright")
-        content = pkg.resolve_colour("terminal_default")
 
-        font = _bitchx_font_description(10, bold=False)
+        font = _bitchx_font_description(11, bold=False)
         y = canvas_h / 2 + 4
         x = 8.0
 
-        if not prov:
-            _draw_pango(cr, "*  (ungrounded)", x, y, font_description=font, color_rgba=muted)
+        if not prov_list:
+            breath = paint_breathing_alpha(
+                t,
+                hz=_UNGROUNDED_BREATH_HZ,
+                baseline=0.55,
+                amplitude=0.25,
+                phase=0.0,
+            )
+            paint_emissive_point(
+                cr,
+                cx=x + 3.0,
+                cy=y - 4.0,
+                role_rgba=muted,
+                t=t,
+                phase=0.0,
+                baseline_alpha=0.6,
+                centre_radius_px=1.8,
+                halo_radius_px=4.0,
+                outer_glow_radius_px=6.0,
+                shimmer_hz=_UNGROUNDED_BREATH_HZ,
+            )
+            r, g, b, _a = muted
+            _draw_pango(
+                cr,
+                "  (ungrounded)",
+                x + 10.0,
+                y,
+                font_description=font,
+                color_rgba=(r, g, b, breath),
+            )
             return
 
-        # IRC join format: "* <signal> has joined" — one per signal, up to 6.
-        for signal in prov[:6]:
-            s = str(signal)
-            x += _draw_pango(cr, "* ", x, y, font_description=font, color_rgba=muted)
-            x += _draw_pango(cr, s, x, y, font_description=font, color_rgba=bright)
-            x += _draw_pango(cr, "  ", x, y, font_description=font, color_rgba=content)
+        slide = self._slide_progress(t)
+        slide_x_offset = (1.0 - slide) * -30.0
+
+        for idx, signal in enumerate(prov_list):
             if x > canvas_w - 80:
                 break
+            paint_emissive_point(
+                cr,
+                cx=x + slide_x_offset + 3.0,
+                cy=y - 4.0,
+                role_rgba=muted,
+                t=t,
+                phase=idx * 0.27,
+                centre_radius_px=1.8,
+                halo_radius_px=4.5,
+                outer_glow_radius_px=6.5,
+                shimmer_hz=0.6,
+            )
+            x += 10.0
+            advance = _draw_pango(
+                cr,
+                signal,
+                x + slide_x_offset,
+                y,
+                font_description=font,
+                color_rgba=bright,
+            )
+            x += advance + 8.0
 
 
 # ── Back-compat helpers for pre-HOMAGE wards (retire in Phase 11) ────────
