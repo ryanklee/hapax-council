@@ -1,0 +1,18 @@
+[Unit]
+Description=Rode Wireless Pro detection + auto-routing adapter
+Documentation=file:///home/hapax/projects/hapax-council/docs/runbooks/audio-topology.md
+After=pipewire.service pipewire-pulse.service
+Wants=pipewire.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/hapax/projects/hapax-council
+ExecStart=/home/hapax/projects/hapax-council/.venv/bin/python -m agents.hapax_daimonion.rode_wireless_adapter
+Restart=always
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=hapax-rode-wireless-adapter
+
+[Install]
+WantedBy=default.target
