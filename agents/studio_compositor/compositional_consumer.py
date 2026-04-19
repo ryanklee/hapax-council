@@ -1130,20 +1130,31 @@ def dispatch_structural_intent(intent) -> dict[str, int]:
 
     # Publish the rotation-mode override for the choreographer. Atomic
     # so the choreographer never sees a half-written override.
+    #
+    # Write on EVERY call — even when ``homage_rotation_mode`` is None —
+    # so the file's mtime + ``updated_at`` reflect actual director
+    # cadence. The choreographer's ``_read_rotation_mode_from`` already
+    # treats missing / unknown mode values as "no narrative override"
+    # and falls through to the slow structural tier. Previously this
+    # write was gated on a valid rotation_mode, which left the file
+    # hours stale whenever the LLM emitted structural_intent without an
+    # explicit rotation choice — operators reading file mtime could not
+    # distinguish "director is silent" from "director ran but did not
+    # override rotation this tick" (blinding-defaults-audit §3
+    # ceremonial-defaults-2, expert-system-blinding-audit §5.1).
     rotation_mode = data.get("homage_rotation_mode")
-    if isinstance(rotation_mode, str) and rotation_mode in (
-        "sequential",
-        "random",
-        "weighted_by_salience",
-        "paused",
+    if not (
+        isinstance(rotation_mode, str)
+        and rotation_mode in ("sequential", "random", "weighted_by_salience", "paused")
     ):
-        _atomic_write_json(
-            Path("/dev/shm/hapax-compositor/narrative-structural-intent.json"),
-            {
-                "homage_rotation_mode": rotation_mode,
-                "updated_at": time.time(),
-            },
-        )
+        rotation_mode = None
+    _atomic_write_json(
+        Path("/dev/shm/hapax-compositor/narrative-structural-intent.json"),
+        {
+            "homage_rotation_mode": rotation_mode,
+            "updated_at": time.time(),
+        },
+    )
 
     for ward_id in data.get("ward_emphasis") or []:
         if not isinstance(ward_id, str):
