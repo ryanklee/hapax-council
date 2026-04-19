@@ -709,11 +709,46 @@ def get_status() -> dict:
 MAX_URL_RETRY = 2
 
 
+_YT_AUDIO_STATE_FILE = SHM_DIR / "yt-audio-state.json"
+_yt_audio_last_written: bool | None = None
+
+
+def _publish_yt_audio_active(active: bool) -> None:
+    """Atomically publish the YouTube/React audio-activity state.
+
+    Mirror of ``agents.studio_compositor.audio_ducking.set_yt_audio_active``
+    — duplicated inline to avoid the agents/ import path under system
+    Python. Only writes when the boolean changes, keeping the tmp+rename
+    churn minimal.
+
+    The AudioDuckingController watches this file to flip its
+    ``yt_active`` gauge and drive voice-vs-music ducking. Before this
+    hook shipped, the file had no producer (wiring-audit §2.6 / §9.4,
+    smoking gun #4) so ducking state was stuck at ``normal=1`` forever.
+    """
+    global _yt_audio_last_written
+    if active == _yt_audio_last_written:
+        return
+    try:
+        _YT_AUDIO_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = _YT_AUDIO_STATE_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps({"yt_audio_active": bool(active)}))
+        tmp.replace(_YT_AUDIO_STATE_FILE)
+        _yt_audio_last_written = bool(active)
+    except OSError as exc:
+        log.debug("yt-audio-state write failed: %s", exc)
+
+
 def auto_advance_loop() -> None:
     """Watch for ffmpeg exits across all slots."""
     retry_counts: dict[int, int] = {i: 0 for i in range(len(slots))}
     while True:
         time.sleep(1)
+        # Publish yt_audio_active state on every tick so
+        # AudioDuckingController sees the truth. The publisher is
+        # change-gated internally so this is cheap.
+        any_playing = any(s.process is not None and s.process.poll() is None for s in slots)
+        _publish_yt_audio_active(any_playing)
         for slot in slots:
             with slot.lock:
                 if slot.process is not None and slot.process.poll() is not None:
