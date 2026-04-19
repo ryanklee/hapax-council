@@ -202,4 +202,79 @@ BITCHX_PACKAGE = HomagePackage(
 )
 
 
-__all__ = ["BITCHX_PACKAGE"]
+# ── Consent-safe variant ──────────────────────────────────────────────────
+# Phase 12 / task #120. Applied when ``consent_live_egress`` flips the
+# compositor into ``consent-safe`` layout (guest detected, no active
+# contract). All identity accent colours collapse to muted grey, all
+# signature artefacts are stripped, and the author tag is neutralised.
+# This is the axiom ``it-irreversible-broadcast`` safety posture —
+# HOMAGE may continue running structurally (so the compositor doesn't
+# re-architect mid-stream) but emits nothing that could carry operator
+# identity into the broadcast.
+
+_BITCHX_CONSENT_SAFE_PALETTE = _BITCHX_PALETTE.model_copy(
+    update={
+        # Every accent role collapses to the same muted grey as the
+        # punctuation skeleton. No bright identity, no coloured accents.
+        "bright": _BITCHX_PALETTE.muted,
+        "accent_cyan": _BITCHX_PALETTE.muted,
+        "accent_magenta": _BITCHX_PALETTE.muted,
+        "accent_green": _BITCHX_PALETTE.muted,
+        "accent_yellow": _BITCHX_PALETTE.muted,
+        "accent_red": _BITCHX_PALETTE.muted,
+        "accent_blue": _BITCHX_PALETTE.muted,
+        # Content body also drops to muted — no mIRC-contract foreground.
+        "terminal_default": _BITCHX_PALETTE.muted,
+    }
+)
+
+
+_BITCHX_CONSENT_SAFE_SIGNATURE = _BITCHX_SIGNATURE.model_copy(
+    update={
+        "author_tag": "by Hapax/bitchx-consent-safe",
+        # Stretch cadences: with zero artefacts in the corpus this is
+        # mostly cosmetic, but if downstream rotation timers read the
+        # cadence they land on the longest interval.
+        "rotation_cadence_s_steady": 180.0,
+        "rotation_cadence_s_deliberate": 360.0,
+        "rotation_cadence_s_rapid": 60.0,
+    }
+)
+
+
+BITCHX_CONSENT_SAFE_PACKAGE = HomagePackage(
+    name="bitchx_consent_safe",
+    version="1.0.0",
+    description=(
+        "BitchX consent-safe variant — grammar/typography/transitions "
+        "preserved; palette collapsed to a pure-grey skeleton; signature "
+        "artefact corpus stripped. Engaged when the consent gate flips "
+        "the compositor into consent-safe layout (axiom "
+        "it-irreversible-broadcast)."
+    ),
+    grammar=_BITCHX_GRAMMAR,
+    typography=_BITCHX_TYPOGRAPHY,
+    palette=_BITCHX_CONSENT_SAFE_PALETTE,
+    transition_vocabulary=_BITCHX_TRANSITIONS,
+    coupling_rules=_BITCHX_COUPLING,
+    signature_conventions=_BITCHX_CONSENT_SAFE_SIGNATURE,
+    voice_register_default=VoiceRegister.TEXTMODE,
+    signature_artefacts=(),
+    refuses_anti_patterns=frozenset(
+        [
+            "emoji",
+            "anti-aliased",
+            "proportional-font",
+            "flat-ui-chrome",
+            "iso-8601-timestamp",
+            "rounded-corners",
+            "right-aligned-timestamp",
+            "fade-transition",
+            "swiss-grid-motd",
+            "box-draw-inline-rule",
+        ]
+    ),
+)
+
+
+__all__ = ["BITCHX_CONSENT_SAFE_PACKAGE", "BITCHX_PACKAGE"]

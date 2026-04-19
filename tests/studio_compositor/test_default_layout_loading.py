@@ -50,6 +50,8 @@ def test_default_json_exists_and_is_valid_layout() -> None:
         "activity_variety_log",
         # Epic 2 Phase D — operator-always-here indicator.
         "whos_here",
+        # HOMAGE follow-on #121 (2026-04-18) — HARDM dot-matrix avatar.
+        "hardm_dot_matrix",
     }
 
     # LRR Phase 2 item 10: video_out surfaces declared for OutputRouter.from_layout()
@@ -79,6 +81,8 @@ def test_default_json_exists_and_is_valid_layout() -> None:
         "activity-variety-log-mid",
         # Epic 2 Phase D — operator-always-here indicator.
         "whos-here-tr",
+        # HOMAGE follow-on #121 — HARDM dot-matrix surface (upper-right).
+        "hardm-dot-matrix-ur",
     }
 
     assignment_pairs = {(a.source, a.surface) for a in layout.assignments}
@@ -101,6 +105,8 @@ def test_default_json_exists_and_is_valid_layout() -> None:
         ("activity_variety_log", "activity-variety-log-mid"),
         # Epic 2 Phase D.
         ("whos_here", "whos-here-tr"),
+        # HOMAGE follow-on #121 — HARDM dot-matrix avatar.
+        ("hardm_dot_matrix", "hardm-dot-matrix-ur"),
     }
 
 
@@ -130,6 +136,8 @@ def test_default_json_source_backends_match_registry_dispatch() -> None:
         "activity_variety_log": "cairo",
         # Epic 2 Phase D.
         "whos_here": "cairo",
+        # HOMAGE follow-on #121 — HARDM dot-matrix avatar.
+        "hardm_dot_matrix": "cairo",
     }
 
 
@@ -239,6 +247,8 @@ def test_load_layout_or_fallback_reads_valid_file(tmp_path: Path) -> None:
         "activity_variety_log",
         # Epic 2 Phase D.
         "whos_here",
+        # HOMAGE follow-on #121 — HARDM dot-matrix avatar.
+        "hardm_dot_matrix",
     }
 
 

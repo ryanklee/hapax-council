@@ -221,6 +221,17 @@ _FALLBACK_LAYOUT = Layout(
                 "natural_h": 46,
             },
         ),
+        # HOMAGE follow-on #121 (2026-04-18) — HARDM dot-matrix avatar.
+        SourceSchema(
+            id="hardm_dot_matrix",
+            kind="cairo",
+            backend="cairo",
+            params={
+                "class_name": "HardmDotMatrix",
+                "natural_w": 256,
+                "natural_h": 256,
+            },
+        ),
     ],
     surfaces=[
         SurfaceSchema(
@@ -326,6 +337,12 @@ _FALLBACK_LAYOUT = Layout(
             geometry=SurfaceGeometry(kind="rect", x=1460, y=20, w=150, h=46),
             z_order=26,
         ),
+        # HOMAGE #121 HARDM dot-matrix — upper-right corner.
+        SurfaceSchema(
+            id="hardm-dot-matrix-ur",
+            geometry=SurfaceGeometry(kind="rect", x=1600, y=20, w=256, h=256),
+            z_order=28,
+        ),
     ],
     assignments=[
         Assignment(source="token_pole", surface="pip-ul"),
@@ -358,6 +375,8 @@ _FALLBACK_LAYOUT = Layout(
         ),
         # Epic 2 Phase D assignment.
         Assignment(source="whos_here", surface="whos-here-tr", opacity=0.92),
+        # HOMAGE #121 HARDM assignment.
+        Assignment(source="hardm_dot_matrix", surface="hardm-dot-matrix-ur", opacity=0.92),
     ],
 )
 

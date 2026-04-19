@@ -57,6 +57,11 @@ def _render(src_cls, w=800, h=60):
 def _redirect_paths(monkeypatch, tmp_path):
     monkeypatch.setattr(ls, "_NARRATIVE_STATE", tmp_path / "narrative-state.json")
     monkeypatch.setattr(ls, "_DIRECTOR_INTENT_JSONL", tmp_path / "director-intent.jsonl")
+    # Phase 12 flipped HAPAX_HOMAGE_ACTIVE to default-ON, which makes
+    # HomageTransitionalSource subclasses start in ABSENT state. These
+    # tests pin feature-flag-OFF behaviour (legacy paint-and-hold), so
+    # set the flag explicitly here.
+    monkeypatch.setenv("HAPAX_HOMAGE_ACTIVE", "0")
     return tmp_path
 
 

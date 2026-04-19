@@ -71,6 +71,7 @@ def list_classes() -> list[str]:
 def _register_builtins() -> None:
     from agents.studio_compositor.album_overlay import AlbumOverlayCairoSource
     from agents.studio_compositor.captions_source import CaptionsCairoSource
+    from agents.studio_compositor.hardm_source import HardmDotMatrix
     from agents.studio_compositor.hothouse_sources import (
         ActivityVarietyLogCairoSource,
         ImpingementCascadeCairoSource,
@@ -131,6 +132,9 @@ def _register_builtins() -> None:
     register("ActivityVarietyLogCairoSource", ActivityVarietyLogCairoSource)
     # Epic 2 Phase D (2026-04-17) — operator-always-here audience framing.
     register("WhosHereCairoSource", WhosHereCairoSource)
+    # HOMAGE follow-on #121 (2026-04-18) — HARDM dot-matrix avatar readout.
+    # 16×16 signal grid, upper-right (1600, 20), 256×256.
+    register("HardmDotMatrix", HardmDotMatrix)
 
 
 _register_builtins()

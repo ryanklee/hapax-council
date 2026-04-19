@@ -42,7 +42,8 @@ def homage_on(monkeypatch):
 
 @pytest.fixture
 def homage_off(monkeypatch):
-    monkeypatch.delenv("HAPAX_HOMAGE_ACTIVE", raising=False)
+    # Phase 12 flipped the default-ON; explicit disable required now.
+    monkeypatch.setenv("HAPAX_HOMAGE_ACTIVE", "0")
 
 
 class TestFeatureFlagOff:

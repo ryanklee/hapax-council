@@ -8,9 +8,10 @@ applies the package's concurrency rules, emits the ordered plan via
 publishes the 4-float shader coupling payload into
 ``/dev/shm/hapax-imagination/uniforms.json``.
 
-Feature-flag: when ``HAPAX_HOMAGE_ACTIVE=0`` (default until Phase 12)
-``reconcile()`` returns an empty plan and emits nothing — the legacy
-paint-and-hold path stays in control.
+Feature-flag: as of Phase 12 (task #120, 2026-04-18) the flag defaults
+to ON. Setting ``HAPAX_HOMAGE_ACTIVE=0`` (or any falsy value: ``false``,
+``no``, ``off``) short-circuits ``reconcile()`` back to the legacy
+paint-and-hold path for emergency rollback.
 
 Observability counters are emitted from
 ``shared/director_observability.py`` so the per-condition slicing
@@ -22,6 +23,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import random
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -37,18 +39,49 @@ from shared.homage_coupling import (
     hold_multiplier,
     read_shader_reading,
 )
-from shared.homage_package import HomagePackage, TransitionName
+from shared.homage_package import (
+    HomagePackage,
+    SignatureArtefact,
+    TransitionName,
+)
 
 log = logging.getLogger(__name__)
 
 _PENDING_TRANSITIONS: Path = Path("/dev/shm/hapax-compositor/homage-pending-transitions.json")
 _UNIFORMS_JSON: Path = Path("/dev/shm/hapax-imagination/uniforms.json")
 _SUBSTRATE_PACKAGE_FILE: Path = Path("/dev/shm/hapax-compositor/homage-substrate-package.json")
+# Phase 12: the consent-live-egress guard writes this file when it flips
+# the compositor into consent-safe layout. The choreographer reads it
+# every reconcile tick and, when present, swaps the active package for
+# its consent-safe variant (pure-grey palette, empty artefact corpus).
+# Intentionally co-located with the other /dev/shm/hapax-compositor/
+# state files so a single wipe restores the default layout.
+_CONSENT_SAFE_FLAG_FILE: Path = Path("/dev/shm/hapax-compositor/consent-safe-active.json")
+# Phase 12: signature artefact rotation cadence is tracked per-source
+# so multiple choreographer instances can co-exist in tests without
+# racing on the random selection. The intensity-boost window is short
+# (one reconcile tick) — the Cairo sources do the actual rendering of
+# the selected artefact text; the choreographer only chooses and
+# announces.
+_ARTEFACT_INTENSITY_ACTIVE: float = 1.0
+_ARTEFACT_INTENSITY_IDLE: float = 0.0
 
 
 def _feature_flag_active() -> bool:
-    value = os.environ.get("HAPAX_HOMAGE_ACTIVE", "").strip().lower()
-    return value in ("1", "true", "yes", "on")
+    """Phase 12 default-ON. Unset env or any truthy value → active.
+
+    Explicit disable requires ``HAPAX_HOMAGE_ACTIVE=0`` (or ``false``,
+    ``no``, ``off``) — the rollback escape hatch. This inversion is
+    load-bearing: operators who wipe env vars (or services that lose
+    their environment) must still land in HOMAGE, not in paint-and-hold.
+    """
+    raw = os.environ.get("HAPAX_HOMAGE_ACTIVE")
+    if raw is None:
+        return True
+    value = raw.strip().lower()
+    if value == "":
+        return True
+    return value not in ("0", "false", "no", "off")
 
 
 RejectionReason = Literal[
@@ -134,12 +167,15 @@ class Choreographer:
         uniforms_file: Path = _UNIFORMS_JSON,
         shader_reading_file: Path = SHADER_READING_PATH,
         substrate_package_file: Path = _SUBSTRATE_PACKAGE_FILE,
+        consent_safe_flag_file: Path = _CONSENT_SAFE_FLAG_FILE,
         source_registry: object | None = None,
+        rng: random.Random | None = None,
     ) -> None:
         self._pending_file = pending_file
         self._uniforms_file = uniforms_file
         self._shader_reading_file = shader_reading_file
         self._substrate_package_file = substrate_package_file
+        self._consent_safe_flag_file = consent_safe_flag_file
         # Optional SourceRegistry handle (duck-typed). When provided, the
         # choreographer cross-checks registered backend instances against
         # ``HomageSubstrateSource`` so per-instance substrate declarations
@@ -148,6 +184,19 @@ class Choreographer:
         self._last_netsplit_burst_ts: float | None = None
         self._rotation_phase: float = 0.0
         self._last_package_broadcast: str | None = None
+        # Phase 12: signature-artefact rotation state.
+        #   * ``_rng`` — injected for deterministic tests; defaults to
+        #     system-random so production behaviour remains pseudo-random.
+        #   * ``_last_rotation_cycle`` — integer index of the last
+        #     rotation window an artefact was emitted for. We emit once
+        #     per window to prevent artefact spam when ``reconcile()``
+        #     runs faster than the configured rotation cadence.
+        #   * ``_last_emitted_artefact`` — retained for observability /
+        #     tests; Cairo consumers read ``homage-active-artefact.json``
+        #     (published below) rather than touching the choreographer.
+        self._rng: random.Random = rng if rng is not None else random.Random()
+        self._last_rotation_cycle: int = -1
+        self._last_emitted_artefact: SignatureArtefact | None = None
 
     # ── Phase 6: shader → ward reverse-path ─────────────────────────────
 
@@ -178,12 +227,36 @@ class Choreographer:
         *,
         now: float | None = None,
     ) -> ReconcileResult:
-        """Read pending transitions, plan the tick, publish coupling."""
+        """Read pending transitions, plan the tick, publish coupling.
+
+        Phase 12 behaviour additions:
+        - If the consent-safe flag file is present, swap ``package`` for
+          its registered consent-safe variant before any reconciliation.
+          When the flag clears, the next tick reverts to the caller's
+          original package. The swap happens in one place so every
+          downstream code path (substrate broadcast, coupling payload,
+          artefact emission) inherits the restricted palette.
+        - After concurrency reconciliation, roll the signature-artefact
+          rotation. When the rotation cycle advances, select a random
+          artefact from the package's corpus and publish the selection
+          for Cairo consumers.
+        """
         clock = time.monotonic() if now is None else now
 
         if not _feature_flag_active():
             payload = CoupledPayload(0.0, 0.0, 0.0, 0.0)
             return ReconcileResult((), (), payload)
+
+        # Phase 12: consent-safe override. Rechecked every tick so that
+        # the guard can flip in and out without restarting the
+        # compositor. Explicit failure posture: if the resolver cannot
+        # find the consent-safe variant, keep the caller-supplied
+        # package — this matches the ``None``-fallback path downstream
+        # wards already handle safely.
+        if self._consent_safe_active():
+            safe = self._resolve_consent_safe_package()
+            if safe is not None:
+                package = safe
 
         pending = self._read_pending()
         # Consume: the choreographer owns these after read.
@@ -315,20 +388,28 @@ class Choreographer:
         Bands:
         - active_transition_energy: 1.0 while any plan entry is live;
           decays linearly to 0 over 0.5s after completion.
-        - palette_accent_hue_deg: fixed per package (BitchX cyan ≈ 180°).
-        - signature_artefact_intensity: 0 unless an artefact just
-          rotated (publisher sets this via a separate SHM hint file
-          in Phase 8).
+        - palette_accent_hue_deg: fixed per package (BitchX cyan ≈ 180°;
+          consent-safe variant → 0° since every accent collapses to
+          muted grey).
+        - signature_artefact_intensity: 1.0 on the reconcile tick that
+          just rolled into a new rotation cycle and successfully chose
+          an artefact from the package's corpus. 0 otherwise.
         - rotation_phase: monotonically increasing [0, 1] clock with
           the package's steady cadence.
         """
         energy = 1.0 if planned else 0.0
-        # mIRC 11 cyan maps to ~180°; other packages override.
+        # mIRC 11 cyan maps to ~180°; consent-safe + other packages 0°.
         hue = 180.0 if package.name == "bitchx" else 0.0
-        intensity = 0.0
         cadence = package.signature_conventions.rotation_cadence_s_steady
         if cadence > 0:
             self._rotation_phase = (now % cadence) / cadence
+            cycle = int(now // cadence)
+        else:
+            cycle = self._last_rotation_cycle
+
+        emitted = self._maybe_emit_signature_artefact(package, cycle=cycle)
+        intensity = _ARTEFACT_INTENSITY_ACTIVE if emitted else _ARTEFACT_INTENSITY_IDLE
+
         return CoupledPayload(energy, hue, intensity, self._rotation_phase)
 
     def _publish_payload(self, package: HomagePackage, payload: CoupledPayload) -> None:
@@ -429,6 +510,121 @@ class Choreographer:
             emit_homage_choreographer_substrate_skip(source_id)
         except Exception:
             log.debug("homage substrate-skip metric emission failed", exc_info=True)
+
+    # ── Phase 12: consent-safe + signature artefact emission ────────────
+
+    def _consent_safe_active(self) -> bool:
+        """Return True when the consent-safe flag file is present.
+
+        The consent-live-egress guard writes this file (atomic tmp+rename)
+        when it flips the compositor into compose-safe layout. Missing
+        file or unreadable contents both resolve to False — fail-open
+        here means the grey variant only engages on an explicit signal,
+        not on every I/O hiccup. The HOMAGE feature flag still gates
+        everything above this call.
+        """
+        try:
+            return self._consent_safe_flag_file.exists()
+        except Exception:
+            log.debug("consent-safe flag existence check raised", exc_info=True)
+            return False
+
+    def _resolve_consent_safe_package(self) -> HomagePackage | None:
+        """Look up the registered consent-safe variant.
+
+        Deferred import to avoid the choreographer importing its own
+        package during ``agents.studio_compositor.homage`` bootstrap.
+        """
+        try:
+            from agents.studio_compositor.homage import get_consent_safe_package
+
+            return get_consent_safe_package()
+        except Exception:
+            log.debug("consent-safe package lookup failed", exc_info=True)
+            return None
+
+    def _maybe_emit_signature_artefact(
+        self,
+        package: HomagePackage,
+        *,
+        cycle: int,
+    ) -> SignatureArtefact | None:
+        """Roll artefact selection once per rotation cycle.
+
+        Returns the selected artefact (and publishes it) when the cycle
+        index advances, else ``None``. An empty corpus (e.g., the
+        consent-safe variant) is a no-op — we still bump the cycle
+        counter so the next tick won't re-roll, but emit nothing.
+        """
+        if cycle == self._last_rotation_cycle:
+            return None
+        self._last_rotation_cycle = cycle
+
+        corpus = package.signature_artefacts
+        if not corpus:
+            # Consent-safe / empty-corpus packages: intentional silence.
+            self._last_emitted_artefact = None
+            return None
+
+        try:
+            weights = [max(0.0, float(a.weight)) for a in corpus]
+            if sum(weights) <= 0:
+                chosen = self._rng.choice(corpus)
+            else:
+                chosen = self._rng.choices(corpus, weights=weights, k=1)[0]
+        except Exception:
+            log.debug("artefact selection raised", exc_info=True)
+            return None
+
+        self._last_emitted_artefact = chosen
+        self._publish_active_artefact(package, chosen)
+        self._emit_artefact_metric(package, chosen)
+        return chosen
+
+    def _publish_active_artefact(
+        self,
+        package: HomagePackage,
+        artefact: SignatureArtefact,
+    ) -> None:
+        """Write the selected artefact to SHM for Cairo consumers.
+
+        Atomic tmp+rename. Lives under ``/dev/shm/hapax-compositor/``
+        alongside other HOMAGE state. Cairo sources poll this file;
+        they do not subscribe to the choreographer directly.
+        """
+        try:
+            target = self._substrate_package_file.parent
+            target.mkdir(parents=True, exist_ok=True)
+            out = target / "homage-active-artefact.json"
+            payload = {
+                "package": package.name,
+                "content": artefact.content,
+                "form": artefact.form,
+                "author_tag": artefact.author_tag,
+                "weight": artefact.weight,
+            }
+            tmp = out.with_suffix(out.suffix + ".tmp")
+            tmp.write_text(json.dumps(payload), encoding="utf-8")
+            tmp.replace(out)
+        except Exception:
+            log.debug("failed to publish active artefact", exc_info=True)
+
+    def _emit_artefact_metric(
+        self,
+        package: HomagePackage,
+        artefact: SignatureArtefact,
+    ) -> None:
+        """Increment the Prometheus artefact counter. Best-effort."""
+        try:
+            from shared.director_observability import emit_homage_signature_artefact
+        except Exception:
+            return
+        try:
+            emit_homage_signature_artefact(package.name, artefact.form)
+        except Exception:
+            log.debug("homage signature artefact metric failed", exc_info=True)
+
+    # ── Phase 11b: substrate-source palette broadcast ───────────────────
 
     def broadcast_package_to_substrates(
         self,

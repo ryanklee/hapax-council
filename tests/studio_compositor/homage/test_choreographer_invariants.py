@@ -27,7 +27,8 @@ def homage_on(monkeypatch):
 
 @pytest.fixture
 def homage_off(monkeypatch):
-    monkeypatch.delenv("HAPAX_HOMAGE_ACTIVE", raising=False)
+    # Phase 12 flipped the default-ON; explicit disable required now.
+    monkeypatch.setenv("HAPAX_HOMAGE_ACTIVE", "0")
 
 
 @pytest.fixture
@@ -35,6 +36,9 @@ def choreographer(tmp_path: Path) -> Choreographer:
     return Choreographer(
         pending_file=tmp_path / "homage-pending.json",
         uniforms_file=tmp_path / "uniforms.json",
+        # Phase 12: isolate from any live /dev/shm consent-safe flag so
+        # CI / dev-machine residue can't flip the reconciled package.
+        consent_safe_flag_file=tmp_path / "consent-safe-none.json",
     )
 
 
