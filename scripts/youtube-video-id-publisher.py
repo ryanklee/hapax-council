@@ -24,7 +24,10 @@ import time
 from pathlib import Path
 
 from shared.freshness_gauge import FreshnessGauge
-from shared.google_auth import get_google_credentials
+from shared.google_auth import (
+    YOUTUBE_STREAMING_TOKEN_PASS_KEY,
+    get_google_credentials,
+)
 from shared.youtube_broadcast_resolver import (
     publish_broadcast_id,
     resolve_active_broadcast_id,
@@ -53,7 +56,23 @@ def main() -> int:
     signal.signal(signal.SIGTERM, _handle_signal)
     signal.signal(signal.SIGINT, _handle_signal)
 
-    creds = get_google_credentials(_YOUTUBE_SCOPES)
+    # Prefer the scoped sub-channel token; fall back to the main-account
+    # token if the operator hasn't minted the sub-channel token yet.
+    # Falling back makes the failure mode observable (liveStreamingNotEnabled
+    # 403 on main channel) rather than crashing silently.
+    creds = get_google_credentials(
+        _YOUTUBE_SCOPES,
+        pass_key=YOUTUBE_STREAMING_TOKEN_PASS_KEY,
+        interactive=False,
+    )
+    if creds is None:
+        log.warning(
+            "no token at %s — falling back to default google/token. "
+            "Run `uv run python scripts/mint-google-token.py` to mint the "
+            "sub-channel token.",
+            YOUTUBE_STREAMING_TOKEN_PASS_KEY,
+        )
+        creds = get_google_credentials(_YOUTUBE_SCOPES, interactive=False)
     if creds is None:
         log.error("no Google credentials available — cannot resolve broadcast id")
         return 1
