@@ -99,6 +99,48 @@ def _read_stance() -> str:
     return "nominal"
 
 
+# FINDING-V Phase 6: narrowed-salience impingement feed written by
+# ``scripts/recent-impingements-producer.py``. Cascade consumer prefers
+# this when present, falls back to ``_active_perceptual_signals`` when
+# absent so a producer outage is zero-downtime.
+_RECENT_IMPINGEMENTS = Path("/dev/shm/hapax-compositor/recent-impingements.json")
+_RECENT_IMPINGEMENTS_MAX_AGE_S: float = 10.0
+
+
+def _recent_impingements_overlay(limit: int) -> list[tuple[str, float, str]] | None:
+    """Return the narrowed-salience impingement top-N, or ``None``.
+
+    ``None`` means "producer is not publishing" — callers should fall
+    back to the raw perception walk. Entries older than
+    :data:`_RECENT_IMPINGEMENTS_MAX_AGE_S` are also treated as producer-
+    down; cascade rendering stale "just grabbed my attention" signals
+    would mis-represent Hapax's current focus.
+    """
+    data = _safe_load_json(_RECENT_IMPINGEMENTS)
+    if not isinstance(data, dict):
+        return None
+    generated_at = data.get("generated_at")
+    if isinstance(generated_at, (int, float)):
+        if (time.time() - float(generated_at)) > _RECENT_IMPINGEMENTS_MAX_AGE_S:
+            return None
+    entries = data.get("entries")
+    if not isinstance(entries, list):
+        return None
+    out: list[tuple[str, float, str]] = []
+    for entry in entries[:limit]:
+        if not isinstance(entry, dict):
+            continue
+        path = entry.get("path")
+        value = entry.get("value")
+        family = entry.get("family")
+        if not isinstance(path, str) or not isinstance(value, (int, float)):
+            continue
+        out.append((path, float(value), str(family or "—")))
+    if not out:
+        return None
+    return out
+
+
 def _active_perceptual_signals(limit: int = 10) -> list[tuple[str, float, str]]:
     """Scan perception + stimmung state, return top-N signal/value/family triples.
 
@@ -275,7 +317,13 @@ class ImpingementCascadeCairoSource(HomageTransitionalSource):
         stance = _read_stance()
         hz = stance_hz(stance)
 
-        signals = _active_perceptual_signals(limit=14)
+        # FINDING-V Phase 6: prefer the narrowed-salience overlay when
+        # the producer is publishing; fall back to the raw perception
+        # walk otherwise. The overlay gives operator-salience semantics
+        # ("what just grabbed Hapax's attention") rather than raw "what
+        # is currently present in perception state".
+        overlay = _recent_impingements_overlay(limit=14)
+        signals = overlay if overlay is not None else _active_perceptual_signals(limit=14)
         row_h = 20
         y0 = 34
         font_desc = select_bitchx_font_pango(cr, 11, bold=False)

@@ -1,0 +1,23 @@
+[Unit]
+Description=Hapax Recent-Impingements Producer (cascade ward salience overlay)
+After=network-online.target
+Wants=network-online.target
+OnFailure=notify-failure@%n.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/hapax/projects/hapax-council
+ExecStart=/home/hapax/projects/hapax-council/.venv/bin/python /home/hapax/projects/hapax-council/scripts/recent-impingements-producer.py
+Environment=PATH=/home/hapax/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=HOME=/home/hapax
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=hapax-recent-impingements
+MemoryMax=128M
+CPUQuota=5%
+
+[Install]
+WantedBy=default.target
