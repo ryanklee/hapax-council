@@ -50,6 +50,13 @@ log = logging.getLogger(__name__)
 _PENDING_TRANSITIONS: Path = Path("/dev/shm/hapax-compositor/homage-pending-transitions.json")
 _UNIFORMS_JSON: Path = Path("/dev/shm/hapax-imagination/uniforms.json")
 _SUBSTRATE_PACKAGE_FILE: Path = Path("/dev/shm/hapax-compositor/homage-substrate-package.json")
+# Phase 8 (task #114): structural director publish path. The
+# choreographer reads ``homage_rotation_mode`` from this file every
+# reconcile tick so the structural director (slow 90s cadence) can drive
+# the rotation strategy without narrative-tick coupling. Missing, stale,
+# or malformed file → default "sequential". Path matches
+# ``structural_director.py::_STRUCTURAL_INTENT_PATH``.
+_STRUCTURAL_INTENT_FILE: Path = Path("/dev/shm/hapax-structural/intent.json")
 # Phase 7 (task #113): voice register file. Read by
 # ``agents.hapax_daimonion.cpal.register_bridge`` before each TTS
 # emission. Choreographer writes on every package swap — including the
@@ -100,11 +107,19 @@ RejectionReason = Literal[
 
 @dataclass(frozen=True, slots=True)
 class PendingTransition:
-    """One entry in the pending-transitions queue."""
+    """One entry in the pending-transitions queue.
+
+    Phase 8 (task #114): ``salience`` is an optional [0.0, 1.0] relevance
+    score producers can attach. Defaults to ``0.0`` when absent so
+    ``sequential`` / ``random`` rotation modes are unaffected.
+    ``weighted_by_salience`` rotation mode sorts pending entries by this
+    field descending before applying concurrency limits.
+    """
 
     source_id: str
     transition: TransitionName
     enqueued_at: float
+    salience: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -175,6 +190,7 @@ class Choreographer:
         substrate_package_file: Path = _SUBSTRATE_PACKAGE_FILE,
         consent_safe_flag_file: Path = _CONSENT_SAFE_FLAG_FILE,
         voice_register_file: Path = _VOICE_REGISTER_FILE,
+        structural_intent_file: Path = _STRUCTURAL_INTENT_FILE,
         source_registry: object | None = None,
         rng: random.Random | None = None,
     ) -> None:
@@ -184,6 +200,7 @@ class Choreographer:
         self._substrate_package_file = substrate_package_file
         self._consent_safe_flag_file = consent_safe_flag_file
         self._voice_register_file = voice_register_file
+        self._structural_intent_file = structural_intent_file
         # Optional SourceRegistry handle (duck-typed). When provided, the
         # choreographer cross-checks registered backend instances against
         # ``HomageSubstrateSource`` so per-instance substrate declarations
@@ -270,6 +287,13 @@ class Choreographer:
         # Consume: the choreographer owns these after read.
         self._clear_pending()
 
+        # Phase 8 (task #114): fetch the structural director's rotation
+        # mode so the FSM-advancing slice can be gated (paused) or
+        # re-ordered (weighted_by_salience) without the structural
+        # director owning any choreographer state. ``sequential`` is the
+        # default when the intent file is missing/malformed/old.
+        rotation_mode = self._read_rotation_mode()
+
         # HOMAGE #124 — substrate filter. Sources flagged as always-on
         # (``HomageSubstrateSource``, e.g. Reverie) never enter the FSM
         # so we drop their pending entries before the entry/exit/modify
@@ -295,6 +319,17 @@ class Choreographer:
         planned: list[PlannedTransition] = []
         rejections: list[Rejection] = []
 
+        # Phase 8: ``paused`` rotation mode. Drop every pending transition
+        # this tick — no planned moves, no rejections (the rejection set
+        # is reserved for the concurrency / feature-flag axes). Substrate
+        # broadcast + coupling payload still publish below so Reverie
+        # keeps its palette and shader energy decays cleanly.
+        if rotation_mode == "paused":
+            payload = self._compute_payload(package, planned, clock)
+            self._publish_payload(package, payload)
+            self._emit_metrics(package, planned, rejections)
+            return ReconcileResult(tuple(planned), tuple(rejections), payload)
+
         entries = [p for p in pending if p.transition in _ENTRY]
         exits = [p for p in pending if p.transition in _EXIT]
         modifies = [p for p in pending if p.transition in _MODIFY]
@@ -308,6 +343,15 @@ class Choreographer:
 
         for p in unknown:
             rejections.append(Rejection(p.source_id, p.transition, "unknown-transition"))
+
+        # Phase 8: ``weighted_by_salience`` sorts entries/exits (highest
+        # salience first) before the concurrency slice so the most-
+        # salient wards win under contention. ``random`` and
+        # ``sequential`` leave order as-is — producers fix the queue
+        # order, the concurrency slice does the rest.
+        if rotation_mode == "weighted_by_salience":
+            entries = sorted(entries, key=lambda p: p.salience, reverse=True)
+            exits = sorted(exits, key=lambda p: p.salience, reverse=True)
 
         max_entries = package.transition_vocabulary.max_simultaneous_entries
         max_exits = package.transition_vocabulary.max_simultaneous_exits
@@ -375,11 +419,17 @@ class Choreographer:
                 and transition
                 and isinstance(enqueued_at, (int, float))
             ):
+                raw_salience = entry.get("salience", 0.0)
+                if isinstance(raw_salience, (int, float)):
+                    salience = max(0.0, min(1.0, float(raw_salience)))
+                else:
+                    salience = 0.0
                 out.append(
                     PendingTransition(
                         source_id=source_id,
                         transition=transition,  # type: ignore[arg-type]
                         enqueued_at=float(enqueued_at),
+                        salience=salience,
                     )
                 )
         return out
@@ -390,6 +440,37 @@ class Choreographer:
                 self._pending_file.unlink()
         except Exception:
             log.debug("failed to clear homage-pending-transitions", exc_info=True)
+
+    # ── Phase 8: structural-director rotation-mode readback ────────────
+
+    def _read_rotation_mode(
+        self,
+    ) -> Literal["sequential", "random", "weighted_by_salience", "paused"]:
+        """Read ``homage_rotation_mode`` from the structural intent file.
+
+        Fails open to ``"sequential"`` in every non-happy-path case:
+        missing file, unreadable bytes, malformed JSON, non-dict payload,
+        missing field, or unknown mode value. The choreographer never
+        crashes because the structural director crashed.
+        """
+        try:
+            if not self._structural_intent_file.exists():
+                return "sequential"
+            raw = self._structural_intent_file.read_text(encoding="utf-8")
+        except Exception:
+            log.debug("structural-intent read failed", exc_info=True)
+            return "sequential"
+        try:
+            data = json.loads(raw)
+        except Exception:
+            log.debug("structural-intent json decode failed", exc_info=True)
+            return "sequential"
+        if not isinstance(data, dict):
+            return "sequential"
+        mode = data.get("homage_rotation_mode", "sequential")
+        if mode in ("sequential", "random", "weighted_by_salience", "paused"):
+            return mode  # type: ignore[return-value]
+        return "sequential"
 
     def _compute_payload(
         self,
