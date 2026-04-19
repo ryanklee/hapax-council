@@ -123,6 +123,24 @@ def compose_persona_prompt(
         from shared.anti_personification_linter import lint_text
 
         lint_text(out, path="<compose_persona_prompt>", lint_mode="fail")
+        # Fail-closed slur-prohibition sentinel (research doc
+        # docs/research/2026-04-20-prompt-level-slur-prohibition-design.md
+        # §5.1). The full persona fragment MUST carry the broadcast-safety
+        # invariant clause OR a compressed-variant strip that references
+        # the substitute pool. If either surface loses the clause via a
+        # careless edit, startup fails loudly instead of silently shipping
+        # an un-prohibited LLM prompt to broadcast-critical services.
+        # Compressed fragment is voice-only at LOCAL tier; it inherits
+        # from the downstream ``speech_safety`` gate rather than carrying
+        # the clause itself — scope-check on the full fragment only.
+        if not compressed and "Broadcast-safety absolute invariant — slurs" not in out:
+            raise AssertionError(
+                "compose_persona_prompt: slur-prohibition sentinel missing from "
+                "the persona fragment. Restore the 'Broadcast-safety absolute "
+                "invariant — slurs.' clause in "
+                "axioms/persona/hapax-description-of-being.prompt.md before "
+                "any LLM route consumes this output."
+            )
     return out
 
 
