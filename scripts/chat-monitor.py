@@ -202,6 +202,43 @@ class ChatMonitor:
             self._contribution_ledger = None
             log.debug("ChatContributionLedger unavailable", exc_info=True)
 
+        # FINDING-V Phase 2 (plan §2): fold ChatSignalsAggregator into
+        # chat-monitor so the ChatAmbientWard finally gets live data.
+        # The aggregator maintains the rolling 60 s T4 window + the
+        # per-tier classification ledger; a background thread drives
+        # compute_signals + write_shm every 30 s onto
+        # /dev/shm/hapax-chat-signals.json. Zero per-author state:
+        # author handles are sha256-hashed at the boundary and the
+        # ``ChatAmbientWard._coerce_counters`` guard rejects any string
+        # value upstream. Old _publish_structural_signals path remains
+        # as a deprecated alias (plan Q5 default) until +30 days.
+        try:
+            from agents.studio_compositor.chat_classifier import (
+                classify_chat_message as _classify,
+            )
+            from agents.studio_compositor.chat_queues import (
+                ChatMessage as _T4ChatMessage,
+            )
+            from agents.studio_compositor.chat_queues import (
+                StructuralSignalQueue,
+            )
+            from agents.studio_compositor.chat_signals import ChatSignalsAggregator
+
+            self._signal_queue = StructuralSignalQueue(window_seconds=60.0)
+            self._signals_aggregator = ChatSignalsAggregator(self._signal_queue)
+            self._classify_chat = _classify
+            self._t4_message_cls = _T4ChatMessage
+            log.info(
+                "ChatSignalsAggregator enabled — /dev/shm/hapax-chat-signals.json "
+                "will publish every 30 s (Phase 2 fold)"
+            )
+        except Exception:
+            self._signal_queue = None
+            self._signals_aggregator = None
+            self._classify_chat = None
+            self._t4_message_cls = None
+            log.debug("ChatSignalsAggregator unavailable", exc_info=True)
+
     def start(self) -> None:
         """Start monitoring chat."""
         self._running = True
@@ -209,6 +246,12 @@ class ChatMonitor:
 
         # Start batch analysis thread
         threading.Thread(target=self._batch_loop, daemon=True).start()
+
+        # FINDING-V Phase 2: publish ChatSignals on a 30 s cadence so
+        # the ChatAmbientWard can render fresh counters. Separate thread
+        # from _batch_loop (which runs at 120 s for LLM analysis).
+        if self._signals_aggregator is not None:
+            threading.Thread(target=self._chat_signals_publish_loop, daemon=True).start()
 
         # Main chat reading loop
         try:
@@ -314,6 +357,46 @@ class ChatMonitor:
             except Exception:
                 log.debug("PresetReactor failed on message", exc_info=True)
 
+        # FINDING-V Phase 2: feed the ChatSignalsAggregator so the
+        # ChatAmbientWard gets live counters. The aggregator hashes
+        # author handles at the boundary and stores only (ts, tier,
+        # short_hash) tuples; raw text never reaches it. Best-effort:
+        # a failure here must not break the upstream token pole or
+        # preset reactor paths.
+        if (
+            self._classify_chat is not None
+            and self._signals_aggregator is not None
+            and self._signal_queue is not None
+            and text
+        ):
+            try:
+                classification = self._classify_chat(text)
+                # Record every classification for tier aggregates (T0-T6
+                # all contribute to the per-tier event ledger; only T4
+                # messages enter the rolling 60s queue for rate metrics).
+                self._signals_aggregator.record_classification(
+                    ts=float(timestamp),
+                    tier=classification.tier,
+                    author_handle=author_id or "",
+                )
+                # Only T4 (structural_signal) messages belong in the
+                # StructuralSignalQueue — that's the rolling 60s window
+                # used for message_rate_per_min + entropy + novelty.
+                from agents.studio_compositor.chat_classifier import ChatTier
+
+                if classification.tier == ChatTier.T4_STRUCTURAL_SIGNAL:
+                    self._signal_queue.push(
+                        self._t4_message_cls(
+                            text="",  # aggregator never reads text
+                            author_handle=author_id or "",
+                            ts=float(timestamp),
+                            classification=classification,
+                            embedding=None,
+                        )
+                    )
+            except Exception:
+                log.debug("ChatSignalsAggregator record failed", exc_info=True)
+
         # Task #146: chat-contribution ledger. Feed each message, then
         # check rising-edge threshold to trigger the token-pole cascade
         # via the ledger JSON. Author name never leaves the ledger; it's
@@ -413,14 +496,34 @@ class ChatMonitor:
             if len(self.messages) < 5:
                 continue
             self._run_batch_analysis()
-            # LRR Phase 9 §3.1: publish compact structural signals to
-            # /dev/shm/hapax-chat-signals.json on the same cadence so
-            # stimmung / director-loop / attention-bid downstream readers
-            # can consume without re-running embeddings.
+            # LEGACY LRR Phase 9 §3.1 path — kept behind the new Phase 2
+            # aggregator as a fallback for 30 days (plan Q5 default).
+            # The new aggregator in _chat_signals_publish_loop is the
+            # canonical publisher to /dev/shm/hapax-chat-signals.json;
+            # this path will be excised after the bake-off window.
+            if self._signals_aggregator is None:
+                try:
+                    self._publish_structural_signals()
+                except Exception:
+                    log.debug("structural-signals publish failed", exc_info=True)
+
+    def _chat_signals_publish_loop(self) -> None:
+        """FINDING-V Phase 2: tick the ChatSignalsAggregator + write SHM.
+
+        30 s cadence. Calls ``compute_signals`` + ``write_shm`` on every
+        tick regardless of message rate — even an empty window publishes
+        zero-rate ChatSignals so the ChatAmbientWard shows an explicit
+        idle state (no stale counters, no fallback to empty).
+        """
+        while self._running:
+            time.sleep(30)
+            if self._signals_aggregator is None:
+                return
             try:
-                self._publish_structural_signals()
+                signals = self._signals_aggregator.compute_signals(now=time.time())
+                self._signals_aggregator.write_shm(signals)
             except Exception:
-                log.debug("structural-signals publish failed", exc_info=True)
+                log.debug("ChatSignalsAggregator publish failed", exc_info=True)
 
     def _publish_structural_signals(self) -> None:
         """Compute the Phase 9 §3.1 structural signals and publish them."""
