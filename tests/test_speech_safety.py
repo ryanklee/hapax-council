@@ -47,7 +47,23 @@ def test_primary_slur_is_redacted():
     assert result.was_modified is True
     assert result.hit_count == 1
     assert _primary() not in result.text
-    assert speech_safety.REDACTION_SUBSTITUTE in result.text
+    # The substitute is picked from the pool — verify the output contains
+    # one of the pool members.
+    assert any(sub in result.text for sub in speech_safety.REDACTION_SUBSTITUTE_POOL)
+
+
+def test_substitute_pick_is_deterministic():
+    """Same offending token → same substitute, replay-stable."""
+    a = speech_safety.pick_substitute("nigga")
+    b = speech_safety.pick_substitute("nigga")
+    assert a == b
+    # And comes from the pool.
+    assert a in speech_safety.REDACTION_SUBSTITUTE_POOL
+
+
+def test_substitute_pool_has_multiple_options():
+    """Rotation is real — pool is at least 3 members."""
+    assert len(speech_safety.REDACTION_SUBSTITUTE_POOL) >= 3
 
 
 def test_plural_form_is_redacted():
@@ -154,7 +170,9 @@ def test_tts_manager_applies_gate(monkeypatch):
     mgr.synthesize(f"hapax says {_primary()}", use_case="conversation")
     assert len(received) == 1
     assert _primary() not in received[0]
-    assert speech_safety.REDACTION_SUBSTITUTE in received[0]
+    # Any pool member is acceptable — the rotation is deterministic but
+    # the test shouldn't hard-pin a specific word.
+    assert any(sub in received[0] for sub in speech_safety.REDACTION_SUBSTITUTE_POOL)
 
 
 def test_tts_manager_passes_clean_text_unchanged(monkeypatch):

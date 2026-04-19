@@ -34,16 +34,72 @@ an allow-list of substring matches that share letters but not etymology.
 from __future__ import annotations
 
 import logging
+import os
 import re
 import unicodedata
 from dataclasses import dataclass
 
 log = logging.getLogger(__name__)
 
-# Replacement inserted in place of any matched slur token. Single word,
-# same syllable count as the shortest form of the target so the Kokoro
-# voice's prosody does not stutter at the boundary.
-REDACTION_SUBSTITUTE: str = "friend"
+# Replacement pool for matched slur tokens. Task #173 asked for an
+# "aesthetically interesting, not run-of-the-mill" substitution —
+# KMD / MF-DOOM register. Pool picks bias toward archaic, literary,
+# and dictionary-obscure words that preserve the two-syllable cadence
+# of the target so Kokoro prosody degrades gracefully. Cultural load
+# is kept neutral: no words with identifiable political, religious,
+# or in-group connotation. All are ≥8th-century English word stock
+# or well-integrated loans. The pick is deterministic per call site
+# (hash of the matched span) so the same offending utterance always
+# receives the same substitute — replay-stable.
+#
+# Operator override: set the ``HAPAX_SPEECH_SUBSTITUTE_POOL`` env var
+# to a comma-separated list to replace the default pool at startup.
+# Empty / invalid override falls through to the default.
+_DEFAULT_SUBSTITUTE_POOL: tuple[str, ...] = (
+    "kinsman",  # archaic; "kin" (OE cynn) + "-man"
+    "kindred",  # OE "gecynd" — of the same stock
+    "brethren",  # archaic plural of brother, used formally
+    "yokefellow",  # 16th-c. "one yoked to another" — Shakespeare usage
+    "compadre",  # Spanish loan, fully integrated in English
+    "comrade",  # Middle French via Spanish; benign in the US register
+)
+
+# Exposed for introspection / tests. The active pool is finalised at
+# module-import time and does not re-read the env var mid-process.
+REDACTION_SUBSTITUTE_POOL: tuple[str, ...] = (
+    tuple(
+        w.strip()
+        for w in (os.environ.get("HAPAX_SPEECH_SUBSTITUTE_POOL", "").split(","))
+        if w.strip()
+    )
+    or _DEFAULT_SUBSTITUTE_POOL
+)
+
+# Backwards-compat alias: the original constant name. Evaluates to the
+# first pool member so any caller that doesn't use ``pick_substitute``
+# still gets a sensible default. Task #173 callers should migrate to
+# the picker.
+REDACTION_SUBSTITUTE: str = REDACTION_SUBSTITUTE_POOL[0]
+
+
+def pick_substitute(offending: str) -> str:
+    """Deterministically select a substitute from the active pool.
+
+    The pick is ``hash(offending) % len(pool)``. Using the matched span
+    (lowercased) as the hash input means the same slur token in the
+    same utterance always substitutes to the same word, so re-running
+    a recorded transcript does not re-shuffle the redactions.
+    """
+    if not REDACTION_SUBSTITUTE_POOL:
+        return REDACTION_SUBSTITUTE
+    # Stable hash: md5 of the lowercased offending token. Cryptographic
+    # strength is not required; the only goal is replay-stability.
+    import hashlib
+
+    digest = hashlib.md5(offending.casefold().encode("utf-8")).digest()  # noqa: S324 — not for security
+    idx = digest[0] % len(REDACTION_SUBSTITUTE_POOL)
+    return REDACTION_SUBSTITUTE_POOL[idx]
+
 
 # Allow-list: words whose letter sequences overlap the slur but whose
 # etymology is unrelated. Matched word-forms ending in any of these are
@@ -207,8 +263,14 @@ def censor(text: str) -> RedactionResult:
 
     if detected_spans:
         # Apply substitutions right-to-left so earlier spans don't shift.
+        # Each offending span gets a deterministic pick from the pool
+        # (task #173 aesthetic rotation). Same slur token in the same
+        # utterance always maps to the same substitute for replay
+        # stability.
         for start, end in sorted(detected_spans, key=lambda s: s[0], reverse=True):
-            working = working[:start] + REDACTION_SUBSTITUTE + working[end:]
+            offending = working[start:end]
+            substitute = pick_substitute(offending)
+            working = working[:start] + substitute + working[end:]
             hits += 1
 
     # ── Asterisk pass: detect obfuscated tokens with *s ───────────────
@@ -242,7 +304,7 @@ def censor(text: str) -> RedactionResult:
             return tok
         if _expansion_matches_slur(tok):
             hits += 1
-            return REDACTION_SUBSTITUTE
+            return pick_substitute(tok)
         return tok
 
     working = _ASTERISK_TOKEN_RE.sub(_asterisk_sub, working)
