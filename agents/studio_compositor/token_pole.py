@@ -415,42 +415,83 @@ class TokenPoleCairoSource(HomageTransitionalSource):
         pkg = _resolve_package()
         palette = pkg.palette
 
-        # --- Flat dark terminal card --------------------------------------
-        # Spec §5.5 refuses ``rounded-corners``; replace the prior sepia
-        # rounded rect with a flat rectangle in the package's
-        # ``background`` role. Near-black, α≈0.9 so the shader surface
-        # still breathes through.
-        bg_r, bg_g, bg_b, bg_a = palette.background
-        cr.set_source_rgba(bg_r, bg_g, bg_b, bg_a)
-        cr.rectangle(0, 0, NATURAL_SIZE, NATURAL_SIZE)
-        cr.fill()
+        # Phase A4 (homage-completion-plan §2): the token-pole is now a
+        # point-of-light emissive surface. Smiley face DELETED; token
+        # glyph is centre dot + halo + outer bloom; spiral guide is 32
+        # emissive points along the path; particles route through
+        # ``paint_emissive_point``; status row + cascade marker render
+        # through Pango Px437 via ``text_render``.
+        from .homage.emissive_base import (
+            paint_emissive_bg,
+            paint_emissive_point,
+            paint_emissive_stroke,
+            stance_hz,
+        )
 
-        # --- Vitruvian Man (transparent PNG, full alpha — ink lines pop) ---
+        t_now = time.monotonic()
+        stance = self._read_stance()
+        pulse_hz = stance_hz(stance, fallback=1.0)
+
+        # --- Gruvbox ground (emissive base) -------------------------------
+        # Spec §5.5 refuses ``rounded-corners`` — flat background. Use the
+        # package's ``background`` role so consent-safe variant collapses
+        # to its muted flavour.
+        bg_r, bg_g, bg_b, bg_a = palette.background
+        paint_emissive_bg(cr, NATURAL_SIZE, NATURAL_SIZE, ground_rgba=(bg_r, bg_g, bg_b, bg_a))
+
+        # --- Vitruvian engraving ------------------------------------------
+        # Per success-def §1.2: paint the PNG at alpha=0.55 multiplied with
+        # ``terminal_default × shimmer`` — reads as a grey engraving, not
+        # sepia ink. The package-scoped tint ensures a palette swap carries
+        # the figure.
         if self._bg_surface is not None:
+            from .homage.emissive_base import paint_breathing_alpha
+
+            shimmer = paint_breathing_alpha(t_now, hz=pulse_hz, phase=0.0)
+            td_r, td_g, td_b, _ = palette.terminal_default
             cr.save()
             sw = self._bg_surface.get_width()
             sh = self._bg_surface.get_height()
             scale = NATURAL_SIZE / max(sw, sh) if max(sw, sh) > 0 else 1
             cr.scale(scale, scale)
             cr.set_source_surface(self._bg_surface, 0, 0)
-            cr.paint_with_alpha(1.0)
+            cr.paint_with_alpha(0.55 * shimmer)
+            cr.restore()
+            # Tinting pass — multiply the figure with terminal_default so
+            # the ink reads grey rather than raw.
+            cr.save()
+            cr.set_operator(__import__("cairo").OPERATOR_MULTIPLY)
+            cr.set_source_rgba(td_r, td_g, td_b, 0.55 * shimmer)
+            cr.rectangle(0, 0, NATURAL_SIZE, NATURAL_SIZE)
+            cr.fill()
             cr.restore()
 
-        # --- Spiral guide line (muted grey skeleton) ----------------------
-        muted_r, muted_g, muted_b, _ = palette.muted
-        cr.set_source_rgba(muted_r, muted_g, muted_b, 0.30)
-        cr.set_line_width(1.0)
-        for i, (x, y) in enumerate(self._spiral):
-            if i == 0:
-                cr.move_to(x, y)
-            else:
-                cr.line_to(x, y)
-        cr.stroke()
+        # --- Spiral guide — 32 emissive points along the path -------------
+        # Reimplemented from the former 250-point line stroke. The muted
+        # role keeps the skeleton grey; phase offsets de-synchronise the
+        # shimmer so the path breathes without strobing.
+        muted_rgba = pkg.resolve_colour("muted")
+        spiral_samples = 32
+        step = max(1, NUM_POINTS // spiral_samples)
+        for i in range(0, NUM_POINTS, step):
+            sx, sy = self._spiral[i]
+            paint_emissive_point(
+                cr,
+                sx,
+                sy,
+                muted_rgba,
+                t=t_now,
+                phase=i * 0.19,
+                baseline_alpha=0.45,
+                centre_radius_px=1.2,
+                halo_radius_px=3.0,
+                outer_glow_radius_px=4.5,
+                shimmer_hz=pulse_hz,
+            )
 
-        # --- Trail — muted→bright gradient via accent hops ----------------
+        # --- Trail — muted→bright gradient via accent emissive strokes ----
         idx = int(self._position * (NUM_POINTS - 1))
         if idx > 1:
-            cr.set_line_width(3.5)
             trail_rgba = tuple(pkg.resolve_colour(role) for role in _TRAIL_ROLES)  # type: ignore[arg-type]
             num_c = len(trail_rgba)
             for i in range(1, idx):
@@ -462,176 +503,252 @@ class TokenPoleCairoSource(HomageTransitionalSource):
                 r = c0[0] + (c1[0] - c0[0]) * f
                 g = c0[1] + (c1[1] - c0[1]) * f
                 b = c0[2] + (c1[2] - c0[2]) * f
-                alpha = 0.15 + 0.65 * (progress**1.5)
-                cr.set_source_rgba(r, g, b, alpha)
+                a = c0[3] + (c1[3] - c0[3]) * f
+                baseline = 0.15 + 0.65 * (progress**1.5)
                 x0, y0 = self._spiral[i - 1]
-                x, y = self._spiral[i]
-                cr.move_to(x0, y0)
-                cr.line_to(x, y)
-                cr.stroke()
+                x1, y1 = self._spiral[i]
+                paint_emissive_stroke(
+                    cr,
+                    x0,
+                    y0,
+                    x1,
+                    y1,
+                    (r, g, b, a),
+                    t=t_now,
+                    phase=i * 0.13,
+                    baseline_alpha=baseline,
+                    width_px=2.0,
+                    shimmer_hz=pulse_hz,
+                )
 
-        # --- Token glyph (bright identity ring, terminal body) ------------
+        # --- Token glyph — centre dot + halo + outer bloom ----------------
+        # Success-def §1.2: centre dot (accent_yellow), halo (accent_magenta
+        # α=0.45), outer bloom (accent_yellow α=0.12). No cheeks. No eyes.
+        # No smile. Reads as a point of light at the navel.
         if idx < len(self._spiral):
             gx, gy = self._spiral[idx]
         else:
             gx = NATURAL_SIZE * SPIRAL_CENTER_X
             gy = NATURAL_SIZE * SPIRAL_CENTER_Y
 
-        pulse_r = math.sin(self._pulse) * 2
-        bounce_y = math.sin(self._pulse * 1.7) * 1.5
-        glyph_r = 11 + pulse_r
+        pulse_r = math.sin(self._pulse) * 1.5
+        bounce_y = math.sin(self._pulse * 1.7) * 1.0
+        glyph_cx = gx
+        glyph_cy = gy + bounce_y
 
-        ring_r, ring_g, ring_b, _ = palette.accent_magenta
-        body_r, body_g, body_b, _ = palette.accent_yellow
-        inner_r, inner_g, inner_b, _ = palette.bright
-        cheek_r, cheek_g, cheek_b, _ = palette.accent_red
+        accent_yellow = pkg.resolve_colour("accent_yellow")
+        accent_magenta = pkg.resolve_colour("accent_magenta")
+        bright_rgba = pkg.resolve_colour("bright")
+        # Outer bloom — accent_yellow at low alpha.
+        ay_r, ay_g, ay_b, ay_a = accent_yellow
+        paint_emissive_point(
+            cr,
+            glyph_cx,
+            glyph_cy,
+            (ay_r, ay_g, ay_b, ay_a * 0.12),
+            t=t_now,
+            phase=0.0,
+            baseline_alpha=1.0,
+            centre_radius_px=0.0,
+            halo_radius_px=0.0,
+            outer_glow_radius_px=22.0 + pulse_r,
+            shimmer_hz=pulse_hz,
+        )
+        # Halo — accent_magenta α=0.45.
+        am_r, am_g, am_b, am_a = accent_magenta
+        paint_emissive_point(
+            cr,
+            glyph_cx,
+            glyph_cy,
+            (am_r, am_g, am_b, am_a * 0.45),
+            t=t_now,
+            phase=math.pi / 3.0,
+            baseline_alpha=1.0,
+            centre_radius_px=0.0,
+            halo_radius_px=14.0 + pulse_r,
+            outer_glow_radius_px=0.0,
+            shimmer_hz=pulse_hz,
+        )
+        # Centre dot — accent_yellow at full alpha. Slim sparkle trail
+        # in bright, emissive.
+        paint_emissive_point(
+            cr,
+            glyph_cx,
+            glyph_cy,
+            accent_yellow,
+            t=t_now,
+            phase=0.0,
+            baseline_alpha=1.0,
+            centre_radius_px=4.0 + pulse_r * 0.5,
+            halo_radius_px=8.0,
+            outer_glow_radius_px=0.0,
+            shimmer_hz=pulse_hz,
+        )
 
-        # Sparkle trail — bright identity, thinning
+        # Sparkle trail — bright, thinning, emissive.
         for i in range(1, 4):
             trail_idx = max(0, idx - i * 5)
             if trail_idx < len(self._spiral):
                 tx, ty = self._spiral[trail_idx]
-                sr = (4 - i) * 1.5
-                cr.set_source_rgba(inner_r, inner_g, inner_b, 0.6 - i * 0.15)
-                cr.arc(tx, ty, sr, 0, 2 * math.pi)
-                cr.fill()
+                br_r, br_g, br_b, br_a = bright_rgba
+                paint_emissive_point(
+                    cr,
+                    tx,
+                    ty,
+                    (br_r, br_g, br_b, br_a * (0.60 - i * 0.15)),
+                    t=t_now,
+                    phase=i * 0.27,
+                    baseline_alpha=1.0,
+                    centre_radius_px=max(0.5, (4 - i) * 1.0),
+                    halo_radius_px=max(1.0, (4 - i) * 2.0),
+                    outer_glow_radius_px=0.0,
+                    shimmer_hz=pulse_hz,
+                )
 
-        # Outer glow (accent_magenta, low alpha)
-        cr.set_source_rgba(ring_r, ring_g, ring_b, 0.25)
-        cr.arc(gx, gy + bounce_y, glyph_r + 8, 0, 2 * math.pi)
-        cr.fill()
-
-        # Identity ring
-        cr.set_source_rgba(ring_r, ring_g, ring_b, 0.70)
-        cr.set_line_width(2.5)
-        cr.arc(gx, gy + bounce_y, glyph_r + 2, 0, 2 * math.pi)
-        cr.stroke()
-
-        # Body — accent_yellow (mIRC 8 highlight)
-        cr.set_source_rgba(body_r, body_g, body_b, 0.95)
-        cr.arc(gx, gy + bounce_y, glyph_r, 0, 2 * math.pi)
-        cr.fill()
-
-        # Center — bright identity
-        cr.set_source_rgba(inner_r, inner_g, inner_b, 0.85)
-        cr.arc(gx, gy + bounce_y, glyph_r * 0.55, 0, 2 * math.pi)
-        cr.fill()
-
-        # Cheeks — accent_red, half-alpha
-        cr.set_source_rgba(cheek_r, cheek_g, cheek_b, 0.50)
-        cr.arc(gx - 5, gy + bounce_y + 2, 3, 0, 2 * math.pi)
-        cr.fill()
-        cr.arc(gx + 5, gy + bounce_y + 2, 3, 0, 2 * math.pi)
-        cr.fill()
-
-        # Eyes + smile — muted (terminal-monochrome face on a bright ring)
-        cr.set_source_rgba(muted_r, muted_g, muted_b, 1.0)
-        cr.arc(gx - 3.5, gy + bounce_y - 2, 1.5, 0, 2 * math.pi)
-        cr.fill()
-        cr.arc(gx + 3.5, gy + bounce_y - 2, 1.5, 0, 2 * math.pi)
-        cr.fill()
-
-        cr.set_line_width(1.2)
-        cr.arc(gx, gy + bounce_y + 1, 3.5, 0.2, math.pi - 0.2)
-        cr.stroke()
-
-        # --- Particles ----------------------------------------------------
-        # Phase 2 of the source-registry completion epic dropped the old
-        # Goal / Explosion-count / Token-count labels because they used
-        # to live in the canvas margin just outside the overlay card,
-        # which no longer exists once the source renders into a
-        # self-contained 300×300 surface. The ledger state is still
-        # tracked in ``_threshold`` / ``_explosions`` / ``_total_tokens``
-        # so a future inside-the-card label layout can render them
-        # without re-plumbing state.
-        #
-        # Particle colour is resolved per-frame via the active palette;
-        # a mid-flight package swap recolours particles already in flight.
+        # --- Particles — emissive points, role-resolved colour -------------
+        # Mid-flight package swap recolours particles already in flight.
         for p in self._particles:
             role = _EXPLOSION_ROLES[p.role_index]
-            pr, pg, pb, _ = pkg.resolve_colour(role)  # type: ignore[arg-type]
-            cr.set_source_rgba(pr, pg, pb, p.alpha)
-            cr.arc(p.x, p.y, p.size, 0, 2 * math.pi)
-            cr.fill()
+            pr, pg, pb, pa = pkg.resolve_colour(role)  # type: ignore[arg-type]
+            paint_emissive_point(
+                cr,
+                p.x,
+                p.y,
+                (pr, pg, pb, pa * p.alpha),
+                t=t_now,
+                phase=p.born % math.tau,
+                baseline_alpha=1.0,
+                centre_radius_px=max(0.5, p.size * 0.4),
+                halo_radius_px=max(1.0, p.size * 0.9),
+                outer_glow_radius_px=max(1.2, p.size * 1.4),
+                shimmer_hz=pulse_hz,
+            )
+
+        # --- Status row (Px437) ------------------------------------------
+        # Per success-def: ``>>> [TOKEN | <value>/<threshold>]`` rendered
+        # through Pango via text_render so Px437 IBM VGA 8x16 resolves via
+        # fontconfig rather than Cairo's toy fallback.
+        self._draw_status_row(cr, pkg)
 
         # --- Task #146: chat-contribution emoji cascade ------------------
-        # The cascade draws on top of the particle system so it wins
-        # z-order. Pango is preferred (Noto Color Emoji fallback); when
-        # absent we degrade gracefully to Cairo's text toy API so CI
-        # without Pango doesn't explode.
         self._draw_emoji_cascade(cr)
         self._draw_cascade_marker(cr, pkg)
+
+    def _read_stance(self) -> str:
+        """Read the current stimmung stance ("nominal" on any failure).
+
+        Wrapped in a best-effort try so the render path never crashes
+        over a missing /dev/shm file or an import-time dependency.
+        """
+        try:
+            from shared.stimmung import read_stimmung  # type: ignore[import-not-found]
+
+            raw = read_stimmung()
+            if isinstance(raw, dict):
+                return str(raw.get("overall_stance", "nominal"))
+        except Exception:
+            pass
+        return "nominal"
+
+    def _draw_status_row(self, cr: Any, pkg: Any) -> None:
+        """Render the top-row ``>>> [TOKEN | <value>/<threshold>]`` strip.
+
+        Uses the active package's line-start marker + Px437 typography
+        via Pango; degrades gracefully to no-op when Pango is missing
+        (CI-safe).
+        """
+        try:
+            from .homage.rendering import select_bitchx_font_pango
+            from .text_render import TextStyle, render_text
+        except Exception:
+            return
+        try:
+            marker = getattr(pkg.grammar, "line_start_marker", ">>>")
+            value = max(0, int(self._total_tokens))
+            threshold = max(1, int(self._threshold) if self._threshold else 1)
+            muted = pkg.resolve_colour(pkg.grammar.punctuation_colour_role)
+            bright = pkg.resolve_colour(pkg.grammar.identity_colour_role)
+            # Render marker in muted, rest in bright — split for Pango so
+            # the grammar survives the palette swap.
+            font_desc = select_bitchx_font_pango(cr, 11, bold=True)
+            marker_style = TextStyle(
+                text=f"{marker} ",
+                font_description=font_desc,
+                color_rgba=muted,
+            )
+            render_text(cr, marker_style, x=6.0, y=2.0)
+            # Approximate x-advance: Px437 is a fixed 8-wide cell; 4 glyphs.
+            body_style = TextStyle(
+                text=f"[TOKEN | {value}/{threshold}]",
+                font_description=font_desc,
+                color_rgba=bright,
+            )
+            render_text(cr, body_style, x=6.0 + 8.0 * (len(marker) + 1), y=2.0)
+        except Exception:
+            log.debug("token-pole status row render failed", exc_info=True)
 
     def _draw_emoji_cascade(self, cr: Any) -> None:
         """Draw active emoji-spew glyphs using Pango (Noto Color Emoji).
 
-        Falls back to Cairo's toy text API when Pango typelibs are
-        unavailable (CI). No-op when the cascade isn't armed.
+        Phase A4: no Cairo toy-text fallback — every text path goes
+        through Pango. No-op when Pango is unavailable (CI).
         """
         if not self.emoji_spew.active or not self.emoji_spew.emoji:
             return
         try:
             from .text_render import _HAS_PANGO
 
-            if _HAS_PANGO:
-                import gi
-
-                gi.require_version("Pango", "1.0")
-                gi.require_version("PangoCairo", "1.0")
-                from gi.repository import Pango, PangoCairo
-
-                for e in self.emoji_spew.emoji:
-                    layout = PangoCairo.create_layout(cr)
-                    font = Pango.FontDescription.from_string(f"Noto Color Emoji {int(e.size)}")
-                    layout.set_font_description(font)
-                    layout.set_text(e.glyph, -1)
-                    cr.save()
-                    cr.move_to(e.x, e.y)
-                    # PangoCairo doesn't honour source-rgba alpha via
-                    # set_source_rgba alone; push a group for the alpha
-                    # multiply.
-                    cr.push_group()
-                    PangoCairo.show_layout(cr, layout)
-                    cr.pop_group_to_source()
-                    cr.paint_with_alpha(e.alpha)
-                    cr.restore()
+            if not _HAS_PANGO:
                 return
+            import gi
+
+            gi.require_version("Pango", "1.0")
+            gi.require_version("PangoCairo", "1.0")
+            from gi.repository import Pango, PangoCairo
+
+            for e in self.emoji_spew.emoji:
+                layout = PangoCairo.create_layout(cr)
+                font = Pango.FontDescription.from_string(f"Noto Color Emoji {int(e.size)}")
+                layout.set_font_description(font)
+                layout.set_text(e.glyph, -1)
+                cr.save()
+                cr.move_to(e.x, e.y)
+                # PangoCairo doesn't honour source-rgba alpha via
+                # set_source_rgba alone; push a group for the alpha
+                # multiply.
+                cr.push_group()
+                PangoCairo.show_layout(cr, layout)
+                cr.pop_group_to_source()
+                cr.paint_with_alpha(e.alpha)
+                cr.restore()
         except Exception:
             log.debug("emoji cascade Pango path failed", exc_info=True)
 
-        # --- Cairo toy-text fallback ------------------------------------
-        for e in self.emoji_spew.emoji:
-            cr.save()
-            cr.set_font_size(e.size)
-            cr.set_source_rgba(1.0, 1.0, 1.0, e.alpha)
-            cr.move_to(e.x, e.y + e.size)
-            cr.show_text(e.glyph)
-            cr.restore()
-
     def _draw_cascade_marker(self, cr: Any, pkg: Any) -> None:
-        """Draw ``#{n} FROM {count}`` banner at the top of the panel."""
+        """Draw ``#{n} FROM {count}`` banner at the top of the panel.
+
+        Phase A4: renders through Pango Px437 via
+        :func:`select_bitchx_font_pango`; drops the hardcoded
+        ``JetBrains Mono Bold 12`` font that bypassed fontconfig.
+        """
         marker = self.emoji_spew.marker_text()
         if marker is None:
             return
         try:
+            from .homage.rendering import select_bitchx_font_pango
             from .text_render import TextStyle, render_text
 
-            bright = pkg.palette.bright
+            bright = pkg.resolve_colour(pkg.grammar.identity_colour_role)
+            font_desc = select_bitchx_font_pango(cr, 12, bold=True)
             style = TextStyle(
                 text=marker,
-                font_description="JetBrains Mono Bold 12",
+                font_description=font_desc,
                 color_rgba=bright,
                 outline_offsets=(),
             )
-            render_text(cr, style, x=6.0, y=4.0)
+            render_text(cr, style, x=6.0, y=20.0)
         except Exception:
-            # Fallback to toy font so CI without Pango still paints.
-            cr.save()
-            cr.set_font_size(12)
-            cr.set_source_rgba(1.0, 1.0, 1.0, 0.9)
-            cr.move_to(6, 16)
-            cr.show_text(marker)
-            cr.restore()
+            log.debug("cascade marker Pango render failed", exc_info=True)
 
 
 # The pre-Phase-9 ``TokenPole`` facade has been removed. Rendering now

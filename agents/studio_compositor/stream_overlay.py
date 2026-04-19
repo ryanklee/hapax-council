@@ -39,8 +39,12 @@ MARGIN_RIGHT = 24.0
 MARGIN_BOTTOM = 24.0
 LINE_SPACING = 6.0  # extra px between rows
 
-FONT_PRESET = "JetBrains Mono Bold 16"
-FONT_METRICS = "JetBrains Mono Bold 14"
+# Phase A4: Px437 IBM VGA 8x16 via Pango + fontconfig; rendered
+# emissively via ``paint_emissive_glyph`` style so the strip reads as
+# point-of-light text rather than flat anti-aliased labels. Sizes chosen
+# so the CP437 raster cell stays legible on the 1920x1080 frame.
+FONT_PRESET = "Px437 IBM VGA 8x16 18"
+FONT_METRICS = "Px437 IBM VGA 8x16 16"
 
 
 def _read_text(path: Path) -> str:
@@ -58,30 +62,30 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 
 def _format_preset(raw: str) -> str:
-    if not raw:
-        return "FX: —"
-    return f"FX: {raw[:20]}"
+    """Phase A4 — ``>>> [FX|<chain>]`` grammar."""
+    value = raw[:20] if raw else "—"
+    return f">>> [FX|{value}]"
 
 
 def _format_viewers(ledger: dict[str, Any]) -> str:
+    """Phase A4 — ``>>> [VIEWERS|<count>]`` grammar."""
     count = ledger.get("active_viewers")
     if not isinstance(count, int) or count < 0:
-        return "● — viewers"
-    if count == 1:
-        return "● 1 viewer"
-    return f"● {count} viewers"
+        return ">>> [VIEWERS|—]"
+    return f">>> [VIEWERS|{count}]"
 
 
 def _format_chat(state: dict[str, Any]) -> str:
+    """Phase A4 — ``>>> [CHAT|<status>]`` grammar."""
     total = state.get("total_messages", 0)
     authors = state.get("unique_authors", 0)
     if not isinstance(total, int) or not isinstance(authors, int):
-        return "░ chat idle"
+        return ">>> [CHAT|idle]"
     if total == 0:
-        return "░ chat idle"
+        return ">>> [CHAT|idle]"
     if authors <= 1:
-        return f"░ chat quiet ({total})"
-    return f"░ {authors} talking ({total})"
+        return f">>> [CHAT|quiet {total}]"
+    return f">>> [CHAT|{authors}t/{total}m]"
 
 
 class StreamOverlayCairoSource(HomageTransitionalSource):
@@ -103,21 +107,38 @@ class StreamOverlayCairoSource(HomageTransitionalSource):
         t: float,
         state: dict[str, Any],
     ) -> None:
+        from .homage.emissive_base import paint_breathing_alpha
+        from .homage.rendering import active_package
         from .text_render import OUTLINE_OFFSETS_4, TextStyle, measure_text, render_text
 
+        # Phase A4: emissive Px437 grammar. Colours sourced from the
+        # active HomagePackage so the strip matches the rest of the
+        # HOMAGE wards under palette swaps. Outline suppressed — the
+        # emissive halo already carries the legibility contrast.
+        try:
+            pkg = active_package()
+            content_rgba = pkg.resolve_colour(pkg.grammar.content_colour_role)
+            identity_rgba = pkg.resolve_colour(pkg.grammar.identity_colour_role)
+        except Exception:
+            content_rgba = (0.80, 0.80, 0.80, 1.0)
+            identity_rgba = (0.98, 0.98, 0.96, 1.0)
+
+        shimmer = paint_breathing_alpha(t, hz=0.4, phase=0.0)
+
         rows = [
-            (_format_preset(_read_text(FX_CURRENT_FILE)), FONT_PRESET),
-            (_format_viewers(_read_json(TOKEN_LEDGER_FILE)), FONT_METRICS),
-            (_format_chat(_read_json(CHAT_STATE_FILE)), FONT_METRICS),
+            (_format_preset(_read_text(FX_CURRENT_FILE)), FONT_PRESET, identity_rgba),
+            (_format_viewers(_read_json(TOKEN_LEDGER_FILE)), FONT_METRICS, content_rgba),
+            (_format_chat(_read_json(CHAT_STATE_FILE)), FONT_METRICS, content_rgba),
         ]
 
         # Measure pass — we need line heights and widths to right-align.
         measured: list[tuple[TextStyle, int, int]] = []
-        for text, font in rows:
+        for text, font, rgba in rows:
+            r, g, b, a = rgba
             style = TextStyle(
                 text=text,
                 font_description=font,
-                color_rgba=(0.98, 0.98, 0.96, 1.0),
+                color_rgba=(r, g, b, a * shimmer),
                 outline_color_rgba=(0.0, 0.0, 0.0, 0.85),
                 outline_offsets=OUTLINE_OFFSETS_4,
                 markup_mode=False,
