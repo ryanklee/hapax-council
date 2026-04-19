@@ -18,9 +18,10 @@ Subclasses implement ``render_content(cr, canvas_w, canvas_h, t, state)``.
 The base's ``render()`` wraps it with FSM dispatch + package-aware
 grammar application.
 
-Feature-flag: when ``HAPAX_HOMAGE_ACTIVE=0`` (default until Phase 12)
-the transition state remains ``hold`` and the base dispatches to
-``render_content()`` directly — existing paint-and-hold behaviour.
+Feature-flag: as of Phase 12 (task #120, 2026-04-18) the flag defaults
+to ON. Setting ``HAPAX_HOMAGE_ACTIVE=0`` (or any falsy value) keeps the
+transition state pinned at ``hold`` and dispatches directly to
+``render_content()`` — the paint-and-hold emergency rollback path.
 """
 
 from __future__ import annotations
@@ -50,9 +51,19 @@ class TransitionState(StrEnum):
 
 
 def _feature_flag_active() -> bool:
-    """Read ``HAPAX_HOMAGE_ACTIVE``. Default False until Phase 12."""
-    value = os.environ.get("HAPAX_HOMAGE_ACTIVE", "").strip().lower()
-    return value in ("1", "true", "yes", "on")
+    """Read ``HAPAX_HOMAGE_ACTIVE``. Phase 12 default-ON.
+
+    Unset env (or any truthy value) → active. Explicit disable requires
+    ``HAPAX_HOMAGE_ACTIVE=0`` (or ``false``, ``no``, ``off``). Must stay
+    in lock-step with ``choreographer._feature_flag_active``.
+    """
+    raw = os.environ.get("HAPAX_HOMAGE_ACTIVE")
+    if raw is None:
+        return True
+    value = raw.strip().lower()
+    if value == "":
+        return True
+    return value not in ("0", "false", "no", "off")
 
 
 class HomageTransitionalSource(CairoSource):

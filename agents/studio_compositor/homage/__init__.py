@@ -34,6 +34,9 @@ log = logging.getLogger(__name__)
 
 _ACTIVE_FILE: Final[Path] = Path("/dev/shm/hapax-compositor/homage-active.json")
 _DEFAULT_PACKAGE_NAME: Final[str] = "bitchx"
+# Phase 12: the consent-safe variant the choreographer falls back to when
+# the consent gate flips to compose-safe. Registered below at import time.
+CONSENT_SAFE_PACKAGE_NAME: Final[str] = "bitchx_consent_safe"
 
 _registry: dict[str, HomagePackage] = {}
 _lock = threading.Lock()
@@ -102,6 +105,25 @@ def get_active_package(*, consent_safe: bool = False) -> HomagePackage | None:
     return pkg
 
 
+def get_consent_safe_package() -> HomagePackage | None:
+    """Return the registered consent-safe package variant.
+
+    Phase 12 introduced ``bitchx_consent_safe`` — BitchX grammar with
+    every accent colour collapsed to muted grey and the signature
+    artefact corpus stripped. The choreographer uses this variant when
+    the consent gate flips the compositor into compose-safe layout, so
+    HOMAGE keeps running structurally without emitting anything that
+    could carry operator identity into the broadcast.
+
+    Returns ``None`` if the variant was never registered (e.g., a
+    compositor build that stripped the consent-safe module). Callers
+    should treat that as "hard-disable HOMAGE" rather than silently
+    falling back to the coloured default — the safer posture under the
+    ``it-irreversible-broadcast`` axiom.
+    """
+    return get_package(CONSENT_SAFE_PACKAGE_NAME)
+
+
 def set_active_package(name: str) -> None:
     """Write ``name`` into the active-package SHM file atomically.
 
@@ -117,15 +139,22 @@ def set_active_package(name: str) -> None:
     tmp.replace(_ACTIVE_FILE)
 
 
-# Register the built-in BitchX package at import time.
-from agents.studio_compositor.homage.bitchx import BITCHX_PACKAGE  # noqa: E402
+# Register the built-in BitchX packages at import time.
+from agents.studio_compositor.homage.bitchx import (  # noqa: E402
+    BITCHX_CONSENT_SAFE_PACKAGE,
+    BITCHX_PACKAGE,
+)
 
 register_package(BITCHX_PACKAGE)
+register_package(BITCHX_CONSENT_SAFE_PACKAGE)
 
 
 __all__ = [
+    "BITCHX_CONSENT_SAFE_PACKAGE",
     "BITCHX_PACKAGE",
+    "CONSENT_SAFE_PACKAGE_NAME",
     "get_active_package",
+    "get_consent_safe_package",
     "get_package",
     "register_package",
     "registered_package_names",

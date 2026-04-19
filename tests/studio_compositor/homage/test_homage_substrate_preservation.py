@@ -46,6 +46,8 @@ def choreographer(tmp_path: Path) -> Choreographer:
         pending_file=tmp_path / "homage-pending.json",
         uniforms_file=tmp_path / "uniforms.json",
         substrate_package_file=tmp_path / "homage-substrate-package.json",
+        # Phase 12: isolate from any live /dev/shm consent-safe flag.
+        consent_safe_flag_file=tmp_path / "consent-safe-none.json",
     )
 
 
