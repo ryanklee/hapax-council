@@ -14,6 +14,7 @@ from . import (  # noqa: F401
     docker,
     edge,
     endpoints,
+    exploration,
     gpu,
     latency,
     models_ollama,

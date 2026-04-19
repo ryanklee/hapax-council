@@ -54,6 +54,34 @@ PresetFamilyHint = Literal[
     "warm-minimal",
 ]
 
+# HOMAGE Phase 8 (task #114): rotation strategy the structural director
+# emits to drive the HOMAGE choreographer's ward-rotation behaviour.
+#
+# Values:
+#   * ``sequential``           — default; choreographer applies transitions
+#                                in pending-queue order (pre-Phase 8).
+#   * ``random``               — transitions remain eligible but are not
+#                                pre-sorted (choreographer leaves ordering
+#                                to its concurrency-limit slice).
+#   * ``weighted_by_salience`` — sort pending entry/exit transitions by
+#                                ``salience`` descending before the
+#                                concurrency-limit slice so the
+#                                most-salient wards win under contention.
+#   * ``paused``               — choreographer drops all transitions this
+#                                tick (substrate broadcast + coupling
+#                                payload still publish; only the FSM
+#                                advance stops).
+#
+# Spec §4.13 lists a complementary cadence family (steady/deliberate/
+# rapid/burst); those compose with the strategy modes here once the
+# cadence multiplier lands.
+HomageRotationMode = Literal[
+    "sequential",
+    "random",
+    "weighted_by_salience",
+    "paused",
+]
+
 
 class StructuralIntent(BaseModel):
     scene_mode: SceneMode
@@ -64,6 +92,15 @@ class StructuralIntent(BaseModel):
             "1-2 sentence direction the narrative director reads as "
             "context on its next tick. Stays in effect for ~150s until "
             "superseded."
+        ),
+    )
+    homage_rotation_mode: HomageRotationMode = Field(
+        default="sequential",
+        description=(
+            "HOMAGE Phase 8 (task #114). Drives the choreographer's "
+            "ward-rotation strategy: sequential (default), random, "
+            "weighted_by_salience, or paused. Default is sequential so "
+            "pre-existing structural intents deserialize without change."
         ),
     )
     emitted_at: float = Field(default_factory=time.time)
@@ -226,8 +263,17 @@ class StructuralDirector:
             "{\n"
             '  "scene_mode": "<desk-work|hardware-play|conversation|idle-ambient|mixed|research-primary>",\n'
             '  "preset_family_hint": "<audio-reactive|calm-textural|glitch-dense|warm-minimal>",\n'
-            '  "long_horizon_direction": "<1-2 sentences>"\n'
+            '  "long_horizon_direction": "<1-2 sentences>",\n'
+            '  "homage_rotation_mode": "<sequential|random|weighted_by_salience|paused>"\n'
             "}"
+        )
+        parts.append(
+            "``homage_rotation_mode`` is optional (defaults to "
+            "``sequential``). Use ``paused`` to quiet ward rotation "
+            "during delicate operator work; ``weighted_by_salience`` to "
+            "let the highest-salience ward win under contention; "
+            "``random`` when you want the choreographer's concurrency "
+            "slice to pick freely."
         )
         parts.append(
             "Ground your scene_mode in what the PerceptualField actually "
@@ -298,6 +344,7 @@ def _default_llm_fn(prompt: str) -> str:
 
 
 __all__ = [
+    "HomageRotationMode",
     "StructuralDirector",
     "StructuralIntent",
     "parse_structural_intent",

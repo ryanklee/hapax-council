@@ -142,8 +142,15 @@ class VisualLayerAggregator:
         self._ambient_fetch_done: bool = False
         self._epoch: int = 0
 
-        # Stimmung: system self-state
-        self._stimmung_collector = StimmungCollector(enable_exploration=False)
+        # Stimmung: system self-state.
+        # VLA is the canonical owner of the StimmungCollector (only
+        # instantiation site in the daemon tree). enable_exploration=True so
+        # it publishes /dev/shm/hapax-exploration/stimmung.json every
+        # snapshot() tick (~5s).
+        # REGRESSION-2 (2026-04-18): had been False under the mistaken
+        # assumption that a primary writer existed elsewhere; none did, so
+        # stimmung.json went stale for ~22h.
+        self._stimmung_collector = StimmungCollector(enable_exploration=True)
         self._stimmung: SystemStimmung | None = None
         self._grounding_ledger = None
 
@@ -155,10 +162,15 @@ class VisualLayerAggregator:
         # Predictive cache: pre-computed visual states
         self._predictive_cache = PredictiveCache()
 
-        # Multi-scale temporal aggregator
+        # Multi-scale temporal aggregator.
+        # TemporalBandFormatter: VLA is the only instantiation site, so it
+        # owns the component="temporal_bands" exploration writer. Setting
+        # enable_exploration=True prevents a stalled
+        # /dev/shm/hapax-exploration/temporal_bands.json (REGRESSION-2,
+        # 2026-04-18).
         self._multi_scale = MultiScaleAggregator()
         self._temporal_formatter = TemporalBandFormatter(
-            protention_engine=self._protention, enable_exploration=False
+            protention_engine=self._protention, enable_exploration=True
         )
 
         # Local perception ring
