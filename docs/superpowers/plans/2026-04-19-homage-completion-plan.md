@@ -727,6 +727,98 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 
 ### Family B — Director->ward signal-flow wiring
 
+#### Phase B0: Narrative structural_intent write-path verification (BLOCKER)
+
+**Scope:**
+- AUDIT the path `StructuralDirectorLLM → NarrativeStructuralIntent →
+  director-intent.jsonl serializer → /dev/shm/hapax-compositor/narrative-
+  structural-intent.json → compositional_consumer.dispatch_structural_intent`.
+  Per `docs/research/2026-04-19-blinding-defaults-audit.md` §ceremonial-
+  defaults-2 and `docs/research/2026-04-19-expert-system-blinding-audit.md`:
+  **994/994 of the last director-intent.jsonl records carry no
+  `structural_intent` key at all**, and `narrative-structural-intent.json`
+  writes are hours-stale. B1 and B2 below write into a consumer that
+  never fires unless this path is restored.
+- `shared/director_intent.py:381-390` — verify the serializer (likely
+  `model_dump` / `DirectorIntent.to_jsonl` path) does NOT drop empty
+  containers. If `structural_intent` is emitted as `None` or `{}` and
+  the serializer uses `exclude_defaults=True` or `exclude_none=True`,
+  the field silently disappears.
+- `agents/studio_compositor/narrative_director.py` (or wherever the
+  structural LLM call lives) — confirm the LLM is actually asked to
+  emit `structural_intent` on every tick AND the emitted value is
+  non-empty (populates `homage_rotation_mode`, `ward_emphasis`,
+  `ward_dispatch`, `ward_retire`, or `placement_bias`).
+- `/dev/shm/hapax-compositor/narrative-structural-intent.json` —
+  confirm the file is being written every N seconds (matches the
+  narrative-director cadence). Fix the staleness bug if not.
+- Tests: `tests/studio_compositor/test_structural_intent_emission.py`
+  — pin that a director tick produces a JSONL record with a
+  non-empty `structural_intent` object AND that
+  `narrative-structural-intent.json` is updated.
+
+**Description:** This is a reconnaissance + repair phase. Without
+this, every B-family phase ships into a dead consumer. Execution
+sequence for the subagent: (1) grep + trace the write path, (2) run
+one director tick in isolation, (3) observe what's emitted at each
+stage, (4) identify the drop, (5) fix it, (6) pin with tests.
+
+Potential drop sites (most to least likely):
+- Pydantic `model_dump(exclude_none=True)` or `exclude_defaults=True`
+  dropping empty container fields
+- Serializer writing `structural_intent` but consumer reading the
+  wrong key path
+- Narrative director LLM not being invoked on the structural prompt
+- LLM invoked but returning empty JSON in the `structural_intent` field
+- Field populated in memory but not persisted to JSONL (race condition)
+
+**Blocking dependencies:** None (diagnostic).
+
+**Parallel-safe siblings:** All A-family, B1, B2, B4 (which read the
+intent), C-family, D-family. B3 does not depend on this path.
+
+**Blocks:** B1, B2, B4 cannot be declared functionally complete until
+B0 lands. If B0 finds the path is sound (i.e., structural_intent IS
+being written but was mis-observed in the audit), document and close
+B0 as a no-op.
+
+**Success criteria:**
+- `tail -5 ~/hapax-state/stream-experiment/director-intent.jsonl |
+  jq '.structural_intent' ` returns non-null objects with at least
+  one populated field across the last 5 records
+- `stat --format=%Y /dev/shm/hapax-compositor/narrative-structural-intent.json`
+  returns a timestamp within the last 60 seconds during an active
+  director session
+- Unit tests pin the emission behaviour (end-to-end mock: LLM returns
+  a populated `structural_intent`, serializer preserves it, JSONL
+  contains the key)
+
+**Estimated LOC:** 150-400 (audit + likely 1-3 file fixes). Size: M.
+
+**Commit message template:**
+
+```
+fix(homage): restore narrative structural_intent write path
+
+Per docs/research/2026-04-19-blinding-defaults-audit.md + expert-
+system-blinding-audit.md, 994/994 of the last director-intent.jsonl
+records carried no structural_intent key, and narrative-structural-
+intent.json writes were hours-stale. B1/B2 ward-properties writes
+depend on this consumer firing.
+
+Root cause: <pydantic exclude_none drop | LLM call gap | serializer
+race — fill in from audit>. Fix: <describe>.
+
+Tests pin end-to-end emission (LLM → JSONL → /dev/shm).
+
+Phase B0 of homage-completion-plan. Closes blinding-defaults §2 and
+expert-system-blinding §recruitment-gap-1.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+```
+
+---
+
 #### Phase B1: Ward-property manager driven aggressively by structural intent
 
 **Scope:**
@@ -1405,6 +1497,191 @@ recent commit log (anti-repetition, vinyl, sidechat CPAL routing).
 
 ---
 
+### Family F — Expert-system rule + default retirement (parallel with main wave)
+
+Three delete-only phases shipped alongside A/B/C/D. The full retirement
+scope from the two audits (`docs/research/2026-04-19-expert-system-
+blinding-audit.md` + `2026-04-19-blinding-defaults-audit.md`) is LARGER
+— 14 Category A rules + 18 Category A defaults — but most retirement
+work requires new recruitment capability before the rule can safely
+come out. This family carves out the ZERO-BLOCKER retirements: rules
+that can be deleted immediately because the pipeline is already
+scoring them correctly and the rule is only discarding the answer.
+
+F3-F5 below are documented but DEFERRED POST-LIVE because they need
+new capability registration (silence, micromove) or architectural work
+(speech_production recruitment path restoration) before the gate can
+come out safely.
+
+#### Phase F1: Retire `camera.hero` variety-gate
+
+**Scope:**
+- `agents/studio_compositor/compositional_consumer.py:198-206` — delete
+  the variety-gate block that checks "c920-desk in recent [...], skipping"
+  and silently drops the dispatch.
+- Evidence from `docs/research/2026-04-19-expert-system-blinding-audit.md`:
+  **6,358 / 45,178 (14%) of all compositional dispatches in the last
+  12h** were silently dropped by this gate, after the recruitment
+  pipeline had already produced a score. The pipeline's answer was
+  "use this camera"; the gate overrode it.
+- Tests: `tests/studio_compositor/test_compositional_consumer.py` — add
+  regression test asserting that an impingement producing a camera.hero
+  recruitment score above threshold produces a hero-camera write even
+  when the same camera was recently hero'd.
+- Pin: `hapax_compositor_variety_gate_skips_total` (if it exists as a
+  metric) should trend to zero post-retirement.
+
+**Description:** Smallest possible rule retirement. The pipeline
+already recruits `camera.hero.<id>` capabilities correctly; this gate
+throws away the answer because of a hardcoded "don't-repeat" bias. If
+the operator wants varied hero cameras, the impingement-generation
+side should emit diverse `camera.hero.*` impingements (which it
+already does via the director's intent_family emissions); the
+consumer should not second-guess the pipeline.
+
+**Blocking dependencies:** None (delete-only).
+
+**Parallel-safe siblings:** All.
+
+**Success criteria:**
+- `rg 'variety-gate' agents/studio_compositor/compositional_consumer.py`
+  returns empty
+- Pipeline produces hero-camera dispatches at the pipeline's actual
+  recruitment rate (post-retirement baseline: expect ~14% bump in
+  camera-hero write frequency)
+- Regression test pins the retirement (an artificial "just-used" input
+  still produces the dispatch)
+
+**Estimated LOC:** -20 / +40 (delete + test). Size: S.
+
+**Commit message template:**
+
+```
+refactor(compositor): retire camera.hero variety-gate (expert-system rule)
+
+Per docs/research/2026-04-19-expert-system-blinding-audit.md §A1:
+variety-gate at compositional_consumer.py:198-206 silently dropped
+6,358/45,178 (14%) of camera.hero dispatches over 12h — the pipeline
+scored them, the gate threw the answer away. Delete-only retirement;
+no replacement impingement shape needed (pipeline already recruits
+diverse camera.hero.* capabilities via director intent_family).
+
+Phase F1 of homage-completion-plan.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+```
+
+---
+
+#### Phase F2: Retire `narrative-too-similar` + `activity-rotation` rules
+
+**Scope:**
+- `agents/studio_compositor/director_loop.py:1210-1264` — delete the
+  `narrative-too-similar` check that rejects a narrative emission if
+  it resembles recent ones and falls back to a 7-step hardcoded
+  `_emit_micromove_fallback` cycle.
+- `agents/studio_compositor/director_loop.py:1293-1335` — delete the
+  activity-rotation enforcer that fires `music → music after 3
+  consecutive` (evidence: fired 11+ times/12h with the absurd
+  self-rotation, per blinding audit §A6).
+- Evidence: the micromove fallback fired **40+ times / 12h**; the
+  activity rotation fired **11+ times / 12h** including the pathological
+  `music→music after 3 consecutive` case. The micromove cycle is
+  7 hardcoded tuples at `director_loop.py:1337-1464` — this phase does
+  NOT delete that block (F4 post-live deletes it once capabilities are
+  registered); it only removes the CALL SITES that trigger the fallback.
+- The `_emit_micromove_fallback` method body stays (F4 post-live
+  retirement). The triggers are what die.
+- Tests: `tests/studio_compositor/test_director_loop_rules_retired.py`
+  — assert that a director tick producing a similar narrative no
+  longer routes through `_emit_micromove_fallback`; the narrative
+  either ships as-is or the LLM is re-prompted (preferred: ship
+  as-is — repetition is a recruitment choice the pipeline made).
+
+**Description:** Two delete-only rule retirements in the same file.
+The narrative-too-similar rule is the operator's loudest complaint
+("Hapax says the same stupid thing over and over"); it's masking the
+director-LLM's repetition tendency, which is a prompt-engineering
+problem not a post-hoc filter problem. The activity-rotation rule is
+mechanically nonsensical at best (rotating music to music).
+
+Per the audit:
+> Suggested first-pass retirement: A1 variety-gate, A11 hardcoded
+> structural emphasis envelope, A6 narrative-too-similar + micromove
+> cycle.
+
+F1 retires A1. F2 retires A6 (call site). A11 is addressed by B1
+(aggressive emphasis values replace the envelope).
+
+**Blocking dependencies:** None.
+
+**Parallel-safe siblings:** All.
+
+**Success criteria:**
+- `rg 'narrative-too-similar|activity-rotation' agents/studio_compositor/director_loop.py`
+  returns 0 live call sites (grep should return only the doc/comment
+  references about why they were removed)
+- `_emit_micromove_fallback` is no longer called from the director
+  tick path
+- Regression test pinning the retirement: similar-narrative input does
+  NOT fall through to micromove emission
+
+**Estimated LOC:** -120 / +50 (delete + test). Size: S-M.
+
+**Commit message template:**
+
+```
+refactor(director): retire narrative-too-similar + activity-rotation rules
+
+Per docs/research/2026-04-19-expert-system-blinding-audit.md §A6:
+narrative-too-similar triggered micromove-fallback 40+ times/12h;
+activity-rotation fired 11+ times/12h including absurd music→music
+self-rotation. Both are expert-system filters second-guessing the
+director LLM. Repetition is a prompt problem, not a post-hoc filter
+problem.
+
+This phase removes the CALL SITES only. The _emit_micromove_fallback
+method body is preserved for F4 post-live retirement (requires
+capability registration).
+
+Phase F2 of homage-completion-plan.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+```
+
+---
+
+#### Phases F3, F4, F5 (POST-LIVE — not dispatched in this wave)
+
+Not dispatched with the tonight wave. Documented here so the
+retirement work is visible and reachable.
+
+- **F3: `silence.*` capability family registration + retire
+  `_silence_hold_impingement`.** Requires registering a new capability
+  domain in `shared/compositional_affordances.py` so the parser-failure
+  path's emitted impingement can recruit against `silence.hold`,
+  `silence.surrender`, `silence.wait`. Until then the silence-hold
+  fallback stays so the surface doesn't go void on parse failure.
+- **F4: Director-micromove capability registry + retire the 7 hardcoded
+  micromove tuples.** Registers the 7 tuples in
+  `director_loop.py:1337-1464` as 7 named capabilities in
+  `affordances/micromove/*.json` so the AffordancePipeline can recruit
+  one per `director.micromove_request` impingement. F2 removed the call
+  sites; F4 deletes the dead body.
+- **F5: Restore `speech_production` recruitment path + retire
+  `should_surface` hardcoded thresholds.** `run_loops_aux.py:445-449`
+  scores speech via the pipeline then discards the score ("CPAL owns
+  it"); CPAL's `should_surface` at `impingement_adapter.py:101-105`
+  uses hardcoded thresholds. Post-live work: route pipeline-scored
+  speech directly into CPAL's `should_surface`, retire the thresholds.
+
+F3/F4/F5 are tracked as follow-up issues (#163 companion; open as
+needed). Operator's governance directive ("no expert-system rules")
+implies these DO eventually retire; this plan ships the non-blocker
+subset tonight.
+
+---
+
 ### Family E — Deploy + acceptance
 
 #### Phase E1: Deploy to running compositor + Phase 10 rehearsal walkthrough
@@ -1446,13 +1723,14 @@ deploy + walkthrough.
 
 ```
                   PARALLEL BATCH 1 (no deps)
-                  A1, A5, A6, B1, B2, B5, B6,
-                  C1, C2, D1, D2, D3
+                  A1, A5, A6, B0, B5, B6,
+                  C1, C2, D1, D2, D3,
+                  F1, F2
                                 |
                                 v
                   PARALLEL BATCH 2
-                  (need A1+A5)
-                  A2, A3, A4
+                  (need A1+A5; B1+B2 need B0)
+                  A2, A3, A4, B1, B2
                                 |
                                 v
                   PARALLEL BATCH 3
@@ -1471,6 +1749,21 @@ deploy + walkthrough.
                   TERMINAL
                   E1 — deploy + rehearsal
 ```
+
+**Audit-reconciled dependency notes (added post-plan-v1):**
+- **B0 is a blocker for B1 and B2.** Per `docs/research/2026-04-19-
+  blinding-defaults-audit.md`, 994/994 director-intent records carry
+  no `structural_intent` field; B1/B2 write into a consumer that
+  never fires without B0's fix. B0 ships in batch 1 alongside B5/B6
+  and promotes B1/B2 to batch 2.
+- **F1 and F2 are delete-only retirements.** Per the expert-system
+  blinding audit, the variety-gate discards 14% of camera-hero
+  recruitments and the narrative-too-similar rule triggers the
+  hardcoded micromove fallback 40+ times/12h. Both ship in batch 1.
+- **F3/F4/F5 are post-live.** They require new capability
+  registration (silence, micromove) or an architectural change
+  (speech_production recruitment path), which does not fit the
+  tonight window.
 
 ### Critical path
 
@@ -1637,6 +1930,16 @@ Designed so the operator can mark "PASS" / "FLAG" / "BLOCK" per item.
 24. [ ] No personification violations in compositor journal
         (`journalctl --user -u studio-compositor.service -n 200 |
         grep -i personif` empty)
+
+### Audit-reconciled rule retirement
+
+25a. [ ] `tail -5 ~/hapax-state/stream-experiment/director-intent.jsonl
+         | jq '.structural_intent'` returns non-null objects with at
+         least one populated field (B0 verification)
+25b. [ ] `rg 'variety-gate' agents/studio_compositor/compositional_consumer.py`
+         returns 0 live call sites (F1 verification)
+25c. [ ] `rg 'narrative-too-similar|activity-rotation' agents/studio_compositor/director_loop.py`
+         returns 0 live call sites (F2 verification)
 
 ### Operator declaration
 
