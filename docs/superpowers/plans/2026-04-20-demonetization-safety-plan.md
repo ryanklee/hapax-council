@@ -9,15 +9,14 @@ branch: hotfix/fallback-layout-assignment
 related:
   - docs/research/2026-04-19-demonetization-safety-design.md (research source)
   - docs/research/2026-04-19-content-programming-layer-design.md (programmes, task #164)
-  - docs/research/2026-04-19-youtube-content-visibility-design.md (adjacent YouTube surface)
-  - docs/governance/consent-safe-gate-retirement.md (sibling fail-closed gate precedent)
-  - shared/governance/consent.py (capability-level axiom-gate precedent)
-  - shared/governance/consent_gate.py (runtime candidate filter precedent)
-  - agents/studio_compositor/face_obscure_integration.py (egress-level fail-closed precedent)
-  - scripts/lint_personification.py (build-time governance gate precedent, task #155)
+  - docs/research/2026-04-19-youtube-content-visibility-design.md (adjacent surface)
+  - docs/governance/consent-safe-gate-retirement.md (sibling gate precedent)
+  - shared/governance/consent.py, shared/governance/consent_gate.py (axiom-gate precedents)
+  - agents/studio_compositor/face_obscure_integration.py (egress fail-closed precedent)
+  - scripts/lint_personification.py (build-time governance gate, task #155)
   - shared/affordance.py (OperationalProperties — declaration site)
   - shared/compositional_affordances.py (capability catalog)
-  - scripts/youtube-player.py (half-speed hack retirement target, task #66)
+  - scripts/youtube-player.py (half-speed hack retirement, task #66)
   - docs/superpowers/plans/2026-04-19-homage-completion-plan.md (format reference)
   - memories: feedback_no_expert_system_rules, project_programmes_enable_grounding,
     feedback_hapax_authors_programmes, feedback_grounding_exhaustive
@@ -28,26 +27,22 @@ operator-directive-load-bearing: |
 
 # De-monetization Safety Gate — Implementation Plan
 
-## §0. Scope, intent, and what this plan IS NOT
+## §0. Scope, intent, and what this plan is NOT
 
 This plan implements the architectural design in
 `docs/research/2026-04-19-demonetization-safety-design.md` as a sequence
 of dispatchable phases under delta orchestration. The work lands
-post-live — this is the iteration that follows the HOMAGE go-live — and
-closes the §165 directive "at no point should any content ever be a
-red-flag for de-monetization."
+post-live — after the HOMAGE go-live — and closes the §165 directive.
 
 ### 0.1 What this plan IS
 
-A **governance-axiom-level fail-closed filter**, implemented as a sibling
-to `shared/governance/consent.py::contract_check` and
-`agents/studio_compositor/face_obscure_integration.py`. Concretely the
-gate occupies the same architectural tier as the existing consent filter
-and the egress face-obscure invariant — it operates at the
-**axiom-enforcement layer**, removing whole capability classes from the
-candidate set before the decision-making layer scores anything.
+A **governance-axiom-level fail-closed filter**, sibling to
+`shared/governance/consent.py::contract_check` and
+`agents/studio_compositor/face_obscure_integration.py`. The gate
+occupies the axiom-enforcement layer, removing whole capability classes
+from the candidate set before the decision-making layer scores anything.
 
-The architecture is **three concentric rings** (research §4):
+**Three concentric rings** (research §4):
 
 - **Ring 1 — capability-level filter.** Runs inside
   `AffordancePipeline.select()` adjacent to the consent filter. Reads
@@ -55,1018 +50,557 @@ The architecture is **three concentric rings** (research §4):
   capabilities unconditionally + `medium` capabilities unless the
   active programme has explicitly opted in. Capabilities never enter
   the score competition.
-- **Ring 2 — pre-render classifier.** Runs on LLM-emitted text
-  destined for externally visible surfaces. Produces a `RiskAssessment`;
-  if `score >= 2` the render is withheld and a `content.flagged`
-  impingement is emitted. The pipeline's next tick re-recruits on the
-  signal. The classifier is itself a grounded LLM call — it does not
-  make the next decision, it emits a perceptual signal.
+- **Ring 2 — pre-render classifier.** Runs on LLM-emitted text for
+  externally visible surfaces. Emits `content.flagged` impingement on
+  `score >= 2`; pipeline re-recruits on the signal. The classifier
+  does not decide; it emits a perceptual signal.
 - **Ring 3 — egress audit log.** Append-only JSONL at
-  `~/hapax-state/programmes/egress-audit/<date>/<hour>.jsonl` recording
-  every render decision with sampling rate configurable per
-  surface-kind.
+  `~/hapax-state/programmes/egress-audit/<date>/<hour>.jsonl`.
 
-Programme-layer interaction is restricted to Ring 1 via an explicit
-`monetization_opt_ins: frozenset[str]` field on `Programme` — soft priors
-that expand `medium`-risk candidacy only. `high` is permanently
-excluded; no programme can opt in. Ring 2 classifier ALWAYS runs
-regardless of programme state.
+Programme-layer interaction is restricted to Ring 1 via
+`Programme.monetization_opt_ins: frozenset[str]` — soft priors that
+expand `medium`-risk candidacy only. `high` is permanently excluded.
 
 ### 0.2 What this plan is NOT
 
-**This is NOT a post-hoc deny-list.** There is no code path of the
-shape:
+**This is NOT a post-hoc deny-list.** No code path of the shape
+`if "X" in rendered_text: withhold()`. Such a gate sits at the
+decision-making layer and violates `feedback_no_expert_system_rules`.
+The safety boundary is at the **candidate-filter** layer (Ring 1) —
+capabilities are REMOVED from the recruitment-set before the pipeline
+scores anything, the same structural move consent performs. Ring 2
+does not decide either; it emits an impingement, and the pipeline's
+next tick recruits an alternative capability grounded in the live
+moment. **The gate removes, it does not score away.** That is the
+architectural pattern preserving the no-expert-system-rules axiom
+while providing governance-level fail-closed safety.
 
-```
-if "fuck" in rendered_text and count > threshold:
-    withhold(rendered_text)
-```
+This plan does NOT introduce: runtime regex deny-lists, threshold
+counters on risk words, cadence overrides, timer-based suppression,
+or pre-written "safe alternative" libraries. Recovery is whatever the
+pipeline recruits next tick from the `content.flagged` impingement.
 
-Such a gate sits at the decision-making layer and violates
-`feedback_no_expert_system_rules`. This plan architects the safety
-boundary at the **candidate-filter** layer (Ring 1) — capabilities are
-REMOVED from the recruitment-set before the pipeline scores anything,
-the same structural move consent performs. Ring 2 runs on top of that
-after the LLM has already produced rendered text, and it still does
-not decide: it emits an impingement carrying the risk signal, and the
-pipeline's next tick recruits an alternative capability against that
-impingement in the usual grounded way. The gate **removes**, it does
-not **score away**. That is the architectural pattern that preserves
-the no-expert-system-rules axiom while providing governance-level
-fail-closed safety.
-
-Similarly, this plan does NOT:
-
-- hardcode guideline text into source (guidelines live in a cached
-  prompt fragment refreshed via `WebFetch` every 24 h with stale-fallback
-  behavior — research §5)
-- introduce per-word lists, regex deny-patterns at runtime, or
-  threshold counters ("if 3+ profanities then withhold") anywhere in
-  the scoring or rendering path
-- replace the recruitment pipeline's narrative choice with a
-  pre-written "safe alternative" library — the alternative is
-  whatever the pipeline recruits next tick from the
-  `content.flagged` impingement, grounded in the live moment
-- add cadence overrides, interval gates, or timer-based suppression
-  (the `suppression_until` window on per-capability false-positive
-  recovery is a capability-local base-level decay, not a global
-  timer gate)
-
-This plan also does NOT prescribe the music policy in §7 — that is one
-of two operator-gated open questions (0.4) and is implemented only
-after the operator answers.
+This plan also does NOT prescribe the music policy (§7) — that is an
+operator-gated open question (§0.4) implemented only after the
+operator answers.
 
 ### 0.3 Relationship to parallel work
 
-- **Programme layer (task #164).** Phase 5 and Phase 11 of this plan
-  depend on the `Programme` primitive landing from that epic. Until
-  it lands, Phase 5 ships as a no-op stub with the field declared but
-  unwired; Phase 11 is sequenced after #164 Phase 1 (the
-  `Programme` + `ProgrammeRegistry` primitives).
-- **YouTube content visibility (adjacent design doc).** Phase 7 (music
-  provenance) and Phase 8 (music policy) interact with the
-  YouTube-visibility surface. Neither blocks the other; the
-  interaction is that YouTube reaction content has
-  `music_provenance = "youtube-react"` and its audio-bus handling is
-  subject to Phase 8's operator-gated policy.
-- **Homage completion (parallel cascade epic).** Anti-personification
-  footer (Phase 9 here) composes with the chronicle + captions wards
-  that Phase A3 of the homage-completion plan rewrites. Phase 9 here
-  is sequenced AFTER homage Phase A3 lands on main.
+- **Task #164 (programme layer):** Phases 5 and 11 depend on the
+  `Programme` primitive. Until it lands, Phase 5 ships as no-op stub
+  (field declared, unwired); Phase 11 is sequenced after #164 Phase 1.
+- **YouTube content visibility:** Phase 7 (provenance) and Phase 8
+  (music policy) interact with the YouTube-visibility surface.
+- **HOMAGE completion:** Phase 9 (footer) composes onto chronicle +
+  captions wards that HOMAGE Phase A3 rewrites. Phase 9 is sequenced
+  AFTER HOMAGE A3 lands on main.
 
 ### 0.4 Required operator inputs (blocking)
 
-Two open questions from research §11 are **required-operator-input
-gates** for specific phases in this plan. Neither is resolved here;
-both are flagged explicitly so delta does not attempt to prescribe
-them.
+Two research §11 open questions are **required-operator-input gates**
+for specific phases. Neither is resolved here.
 
-1. **Music policy (research §11 Q1).** Research §7.2 recommends
-   YouTube reaction audio MUTED with transcript overlay as default,
-   retiring the half-speed DMCA-evasion hack (task #66). Operator
-   must confirm or counter-propose before Phase 8 ships. Viability of
-   the muted model vs. the §7.2 alternative 2 (≤30 s fair-use clips
-   with operator-transformative narration) is part of the same
-   decision — operator picks one.
-2. **False-negative tolerance (research §11 Q3).** Operator input
-   sets the target classifier FNR; governs Ring 2 score cutoff and
-   `MAX_OPT_INS`. Phase 3 can ship with a conservative default
-   (score cutoff at 2, `MAX_OPT_INS = 3`) pending operator
-   confirmation.
+1. **Music policy (§11 Q1).** Research §7.2 recommends YouTube
+   reaction audio MUTED with transcript overlay (retiring the
+   half-speed DMCA hack, task #66). Operator must confirm or
+   counter-propose before Phase 8 ships. Viability under mute vs. the
+   §7.2 alternative 2 (≤30 s fair-use clips with operator-
+   transformative narration) is part of the same decision.
+2. **False-negative tolerance (§11 Q3).** Operator input sets the
+   target classifier FNR; governs Ring 2 score cutoff and
+   `MAX_OPT_INS`. Phase 3 ships with conservative defaults pending.
 
-Phases 8 and (optionally) 3's cutoff tuning BLOCK on these. All other
+Phases 8 and (optionally) 3's cutoff tuning BLOCK on these. Other
 phases proceed without operator input.
 
 ---
 
 ## §1. Success definition — what "done" looks like
 
-The acceptance test is a 30-minute live test stream with instrumented
-telemetry, combined with static-analysis gates. The stream runs in
-nominal stance with HOMAGE Phase A+B surface active. Below are the
-pixel-level and instrument-level criteria every phase below must
-ultimately contribute to.
+Acceptance test is a 30-minute live test stream with instrumented
+telemetry plus static-analysis gates. Below are the instrument-level
+criteria every phase must contribute to.
 
-### 1.1 Capability declaration coverage
-
-Every `CapabilityRecord` in `shared/compositional_affordances.py` (and
-every capability JSON under `affordances/`) declares an explicit
-`monetization_risk: Literal["none", "low", "medium", "high"]` value via
-`OperationalProperties.monetization_risk`. Zero capabilities carry the
-field's implicit default — the audit commit (Phase 2) makes every
-declaration explicit. A CI-blocking test asserts 100 % field presence
-across the catalog; a separate test asserts `high`-risk capabilities
-have a non-empty `risk_reason`.
-
-### 1.2 Candidate-set filter behavior
-
-A recruitment dry-run over a representative impingement batch
-(fixtures: `tests/fixtures/recruitment_impingements.json`) shows:
-
-- `monetization_risk == "high"` capabilities are never in the
-  candidate set regardless of programme state
-- `monetization_risk == "medium"` capabilities are in the candidate
-  set ONLY when the active programme's `monetization_opt_ins`
-  contains the capability name
-- `monetization_risk == "none"` or `"low"` capabilities are in the
-  candidate set unconditionally (subject to existing consent +
-  governance filters)
-- The filter runs before the score competition — assertions in
-  `test_affordance_pipeline_monetization_filter` verify candidates
-  are excluded at `_filter_candidates`, not demoted at score time
-
-### 1.3 Ring 2 classifier round-trip
-
-`MonetizationRiskGate.content_classify` against the TabbyAPI
-`local-fast` route (Qwen3.5-9B EXL3) completes in **p50 ≤ 10 ms**,
-**p99 ≤ 50 ms** over a benchmark of 500 rendered-text samples spanning
-the surface-kind taxonomy (TTS, captions, chronicle, activity-header,
-director-commentary). The benchmark script lives in
-`scripts/benchmark_monetization_classifier.py` and emits results to
-`~/hapax-state/benchmarks/monetization-classifier/`.
-
-### 1.4 Fail-closed on classifier unavailable
-
-A chaos test that disables TabbyAPI (simulated via
-`HAPAX_TABBYAPI_DISABLE=1` in a test harness or by `systemctl stop
-tabbyapi.service` in the staging run) demonstrates:
-
-- All LLM-generated external-surface text (TTS, chronicle, captions,
-  director commentary) is withheld
-- Template-only emission proceeds for surfaces that have templates
-  (activity header gloss, signature artefacts)
-- TTS goes silent (Kokoro receives no text)
-- The control law triggers: 3 consecutive classifier failures emit
-  `classifier.degraded` impingement + `ntfy` priority=high; 5
-  consecutive successes restore nominal
-- Mirrors the consent-gate-unavailable path in
-  `shared/governance/consent_gate.py`
-
-### 1.5 Zero high-risk capabilities in a live candidate set
-
-Over a 30-minute post-live test stream instrumented with
-`hapax_monetization_candidates_total{risk="high"}` Prometheus counter,
-the value remains **0** for the full duration. A single non-zero
-observation fails the acceptance gate.
-
-### 1.6 Egress audit JSONL populated
-
-`~/hapax-state/programmes/egress-audit/2026-XX-XX/HH.jsonl` contains
-one entry per rendered external-surface payload across the 30-minute
-window. Sampling: 100 % during the first 48 hours of post-live, 10 %
-steady-state after (configurable via `HAPAX_EGRESS_AUDIT_SAMPLE`).
-Each entry has `timestamp`, `surface_kind`, `capability`,
-`rendered_text` (truncated 512 chars), `classifier_score`, `guideline`,
-`music_provenance`, `youtube_source`, `decision`, `decision_reason`.
-Daily gzip rotation + 90-day retention configured via systemd timer
-`hapax-egress-audit-rotate.timer`.
-
-### 1.7 Half-speed hack removed
-
-`scripts/youtube-player.py` contains no `_playback_rate` function and
-no references to `HAPAX_YOUTUBE_PLAYBACK_RATE`. CI test
-`tests/scripts/test_youtube_player_no_playback_rate.py` asserts both
-(regression pin for task #66 retirement). The retirement is coupled
-to Phase 8 landing — if operator selects alternative 2 (fair-use
-clips), the half-speed hack is replaced by the clip-windowing
-mechanism instead of by the mute path.
-
-### 1.8 Anti-personification egress footer present
-
-Chronicle and captions ward layouts show the muted-grey low-prominence
-footer "Council research instrument — experimental cognitive
-architecture (operator: <name>, research home: <url>)" persistent
-across all stream modes. Footer text passes Ring 0 + Ring 2 once at
-startup and is cached. A layout-snapshot regression test captures the
-footer's presence, grey tone, and low-prominence alpha.
-
-### 1.9 Observability
-
-Prometheus metrics under `hapax_monetization_*` emit to the running
-council Prometheus scrape (already wired for `hapax_homage_*` and
-`hapax_cpal_*`). Grafana dashboard
-`localhost:3001/d/monetization-gate/` shows:
-
-- `hapax_monetization_candidates_total{risk, filtered}` — counter
-  of filter decisions per risk class
-- `hapax_monetization_classifier_seconds` — histogram of Ring 2
-  latency
-- `hapax_monetization_classifier_score_total{surface_kind, score}` —
-  counter of Ring 2 outcomes
-- `hapax_monetization_classifier_degraded` — gauge (0/1)
-- `hapax_monetization_egress_audit_entries_total` — counter of
-  audit log writes
-- `hapax_monetization_whitelist_entries` — gauge (Phase 10)
-
-Dashboard panels show strictly-increasing counters during the test
-stream and a zero-bar on `risk="high"`.
+- **Capability declaration coverage.** Every `CapabilityRecord` in
+  `shared/compositional_affordances.py` and every capability JSON under
+  `affordances/` declares an explicit `monetization_risk` via
+  `OperationalProperties`. CI-blocking test asserts 100% field
+  presence; `high`-risk capabilities have non-empty `risk_reason`.
+- **Candidate-set filter.** Recruitment dry-run over
+  `tests/fixtures/recruitment_impingements.json`: `high` never in
+  candidate set regardless of programme; `medium` only when programme
+  opts in; filter runs before score competition (asserted via
+  capture-side-effect in mocked scorer).
+- **Ring 2 classifier round-trip.** `content_classify` against TabbyAPI
+  `local-fast` (Qwen3.5-9B EXL3): **p50 ≤ 10 ms, p99 ≤ 50 ms** over 500
+  samples. Benchmark at `scripts/benchmark_monetization_classifier.py`,
+  results to `~/hapax-state/benchmarks/monetization-classifier/`.
+- **Fail-closed on classifier unavailable.** Chaos test
+  (`systemctl stop tabbyapi.service`): all LLM-generated external-
+  surface text withheld; templates still emit; TTS silent; 3-failure
+  degrade → `ntfy priority=high`; 5-success restore. Mirrors
+  `consent_gate.py` pattern.
+- **Zero high-risk in live candidate set.**
+  `hapax_monetization_candidates_total{risk="high"}` remains **0** for
+  the full 30-minute window. Single non-zero observation fails
+  acceptance.
+- **Egress audit JSONL populated.** `~/hapax-state/programmes/egress-
+  audit/<date>/<hour>.jsonl` contains one entry per external-surface
+  render: `timestamp`, `surface_kind`, `capability`, `rendered_text`
+  (truncated 512 chars), `classifier_score`, `guideline`,
+  `music_provenance`, `youtube_source`, `decision`, `decision_reason`.
+  Sampling 100% post-live-48h, 10% steady-state. Daily gzip rotation,
+  90-day retention via `hapax-egress-audit-rotate.timer`.
+- **Half-speed hack removed.** `scripts/youtube-player.py` has no
+  `_playback_rate` function and no `HAPAX_YOUTUBE_PLAYBACK_RATE`
+  references. `tests/scripts/test_youtube_player_no_playback_rate.py`
+  regression-pins this (task #66).
+- **Anti-personification footer present.** Chronicle + captions wards
+  show muted-grey low-prominence "Council research instrument —
+  experimental cognitive architecture (operator: <name>, research
+  home: <url>)" footer, validated once at startup and cached.
+- **Observability.** Prometheus metrics `hapax_monetization_*`:
+  `candidates_total{risk, filtered}`, `classifier_seconds` (histogram),
+  `classifier_score_total{surface_kind, score}`,
+  `classifier_degraded` (gauge), `egress_audit_entries_total`,
+  `whitelist_entries` (gauge). Grafana dashboard
+  `localhost:3001/d/monetization-gate/` shows strictly-increasing
+  counters, zero-bar on `risk="high"`.
 
 ---
 
 ## §2. Phase list
 
-Eleven phases. Each phase has: scope (file paths bounded), blocking
+Eleven phases. Each has: scope (file paths bounded), blocking
 dependencies, parallel-safe siblings, success criteria, test strategy,
-LOC range, commit-message template, and (where relevant) operator-gate
-marker.
+LOC range, commit-message template.
 
-All phases commit directly to `hotfix/fallback-layout-assignment`. Do
-NOT switch branches. Do NOT use `isolation: "worktree"` (operator-
-mandated subagent git safety per workspace CLAUDE.md). Each commit is
-self-contained and ends with the standard
-`Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>`
-trailer.
+All commit directly to `hotfix/fallback-layout-assignment`. Do NOT
+switch branches. Do NOT use `isolation: "worktree"`. Each commit ends
+with `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>`.
 
 Size legend: **S** ≤ 200 LOC, **M** 200-500, **L** 500-1500.
 
 ### Phase 1 — `MonetizationRiskGate` primitive + field declaration
 
-**Scope:**
+**Scope:** NEW `shared/governance/monetization_safety.py` (hosts
+`MonetizationRiskGate`, `RiskAssessment` Pydantic frozen, `SurfaceKind`
+enum); EXTEND `shared/affordance.py::OperationalProperties` with
+`monetization_risk: Literal["none", "low", "medium", "high"] = "none"`
+and `risk_reason: str | None = None`; WIRE
+`MonetizationRiskGate.candidate_filter` into
+`AffordancePipeline._filter_candidates` adjacent to the consent filter
+(dispatch confirms exact file at run-time — likely
+`agents/hapax_dmn/pipeline.py`); tests at
+`tests/governance/test_monetization_safety.py` +
+`tests/pipeline/test_affordance_pipeline_monetization_filter.py`.
 
-- `shared/governance/monetization_safety.py` — NEW module hosting
-  `MonetizationRiskGate`, `RiskAssessment` (Pydantic frozen),
-  `SurfaceKind` enum, `MonetizationRisk` Literal type alias
-- `shared/affordance.py` — EXTEND `OperationalProperties` with
-  `monetization_risk: Literal["none", "low", "medium", "high"] = "none"`
-  and `risk_reason: str | None = None`
-- `agents/hapax_dmn/pipeline.py` (or wherever `AffordancePipeline.select`
-  + `_filter_candidates` live — confirm at dispatch time) — WIRE
-  `MonetizationRiskGate.candidate_filter` into `_filter_candidates`
-  adjacent to the existing consent filter
-- Tests: `tests/governance/test_monetization_safety.py` +
-  `tests/pipeline/test_affordance_pipeline_monetization_filter.py`
+**Description.** Ship the primitive and the field. The filter is pure:
+signature `candidate_filter(capabilities, programme) -> list`.
+`high` unconditionally removed; `medium` removed unless
+`programme.monetization_opt_ins` contains the capability; `low`/`none`
+pass through. Copy `consent.py` test fixtures as pattern template.
+No Ring-2 classifier yet.
 
-**Description.** Ship the primitive and the field. The module owns
-the single-source of truth for risk enums and the Ring-1 filter. The
-filter is pure: signature
-`candidate_filter(capabilities: list[Capability], programme: Programme
-| None) -> list[Capability]`. `monetization_risk == "high"` removed
-unconditionally; `"medium"` removed unless programme is not-None AND
-its `monetization_opt_ins` contains the capability name; `"low"` and
-`"none"` pass through. The Ring-1 wire inserts a call in
-`_filter_candidates` next to the consent call. Existing consent test
-fixtures are copied-and-adapted as the pattern template. No
-Ring-2 classifier yet (Phase 3).
+**Blocking dependencies:** None (leaf module).
 
-**Blocking dependencies:** None. Leaf module.
+**Parallel-safe siblings:** None in-plan for Wave 1; Phase 2 is serial
+after Phase 1 merges to main.
 
-**Parallel-safe siblings:** Phase 2 (catalog audit) reads Phase 1's
-field declaration; dispatch Phase 2 only AFTER Phase 1's field is
-merged to main (serial). Phases 4, 5, 6 can land in parallel with
-Phase 1.
-
-**Success criteria:**
-
-- `uv run pytest tests/governance/test_monetization_safety.py -q`
-  passes (≥ 8 tests: field-default, filter-high-always-out,
-  filter-medium-gated-by-opt-in, filter-low-passes, filter-none-passes,
-  programme-None-excludes-medium, programme-with-opt-in-includes-medium,
-  filter-is-pure)
-- `uv run pytest tests/pipeline/test_affordance_pipeline_monetization_filter.py -q`
-  passes (≥ 4 tests: filter-runs-before-score, consent+monetization-
-  compose, high-never-in-candidates, medium-present-when-opted-in)
-- `uv run ruff check shared/governance/monetization_safety.py` clean
-- `uv run pyright shared/governance/monetization_safety.py` clean
-- Importable: `from shared.governance.monetization_safety import
-  MonetizationRiskGate, RiskAssessment` at REPL
-- Existing `consent.py` + `consent_gate.py` tests still pass (no
-  regression on the sibling filter)
-
-**Test strategy.** Pure unit tests for the primitive. Pipeline
-integration test uses a fake `AffordancePipeline.select` harness with
-a fixture capability set spanning all four risk classes. Golden
-assertion: filter is run at the `_filter_candidates` stage, verified
-by inserting a capture-side-effect into a mocked scorer that asserts
-it never sees `risk="high"` capabilities.
+**Success criteria:** ≥ 8 primitive tests (field-default, filter-high-
+always-out, filter-medium-gated-by-opt-in, filter-low-passes,
+filter-none-passes, programme-None-excludes-medium, programme-with-
+opt-in-includes-medium, filter-is-pure); ≥ 4 pipeline-integration
+tests (filter-runs-before-score, consent+monetization-compose,
+high-never-in-candidates, medium-present-when-opted-in); ruff + pyright
+clean; existing `consent.py` tests still pass.
 
 **Estimated LOC:** 250-350 module + 200-300 tests. **Size: M.**
 
-**Commit message template:**
-
-```
-feat(governance): MonetizationRiskGate primitive + OperationalProperties.monetization_risk
-
-Phase 1 of demonetization-safety-plan. Introduces
-shared/governance/monetization_safety.py hosting MonetizationRiskGate
-and RiskAssessment, and extends OperationalProperties with a
-monetization_risk field. Ring-1 candidate filter wired into
-AffordancePipeline._filter_candidates adjacent to the consent filter.
-
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
-```
+**Commit message:** `feat(governance): MonetizationRiskGate primitive +
+OperationalProperties.monetization_risk`
 
 ### Phase 2 — Capability catalog audit + risk classification
 
-**Scope:**
+**Scope:** Annotate every `CapabilityRecord` in
+`shared/compositional_affordances.py` and every capability JSON under
+`affordances/` with explicit `monetization_risk` + `risk_reason`; NEW
+`docs/governance/monetization-risk-classification.md` (rubric +
+per-capability rationale citing research §1.1); NEW
+`tests/governance/test_capability_catalog_complete.py` (CI-blocking
+field-presence assertion).
 
-- `shared/compositional_affordances.py` — one-time survey pass:
-  annotate every `CapabilityRecord` with an explicit
-  `monetization_risk` + `risk_reason` (where non-`none`) in its
-  `operational` field
-- All capability JSONs under `affordances/` — same annotation pass;
-  loader at `shared/affordance_loader.py` confirms field round-trips
-- `docs/governance/monetization-risk-classification.md` — NEW
-  governance doc recording the classification rubric + per-capability
-  rationale, with the research §1.1 category table as its citation
-  base
-- Tests: `tests/governance/test_capability_catalog_complete.py` —
-  CI-blocking assertion that every registered capability carries a
-  non-default (explicit) `monetization_risk` annotation
+**Description.** One-time survey commit. Capabilities classified
+against research §1.1 categories. `high`: unfiltered profanity-
+eligible speech, raw-audio broadcast of non-provenanced music,
+graphic-content emitters (catalog should not have any; this phase
+verifies). `medium`: occasional-profanity narrative registers,
+reaction-content capabilities whose input is third-party, album-art-
+splattribution narrative. Everything else: `none` or `low`.
 
-**Description.** One-time survey commit. Every capability in the
-catalog — currently on the order of 200 — is classified against the
-research §1.1 YouTube advertiser-friendly categories, and the result
-written back as the `monetization_risk` + `risk_reason` pair on its
-declaration. The classification rubric is written first as the
-governance doc, then applied systematically. Categories triggering
-`high`: unfiltered profanity-eligible speech capabilities, raw-audio
-broadcast capabilities for non-provenanced music, anything emitting
-graphic violence / sexual / hate content (the catalog shouldn't have
-any; this phase verifies). Categories triggering `medium`: narrative
-registers that permit occasional-strong-profanity, reaction-content
-capabilities whose input is third-party, album-art-splattribution
-narrative registers. Everything else: `none` or `low`.
+**Blocking dependencies:** Phase 1 (field declaration on main).
 
-**Blocking dependencies:** Phase 1 (field declaration must be merged
-to main before annotation).
+**Parallel-safe siblings:** Phases 4, 5, 6.
 
-**Parallel-safe siblings:** Phases 4, 5, 6 can run alongside.
+**Success criteria:** every registered capability has explicit (non-
+default) `monetization_risk`; `high` capabilities have non-empty
+`risk_reason`; catalog loads cleanly; governance doc published +
+cross-linked from `docs/governance/README.md`; operator-reviewed
+classification before merge.
 
-**Success criteria:**
+**Estimated LOC:** 400-700 (annotations + governance doc). **Size: M.**
 
-- `test_capability_catalog_complete` asserts `monetization_risk` is
-  explicitly set (not implicit default) for every registered
-  capability
-- `test_capability_catalog_high_risk_has_reason` asserts every
-  `high` capability has `risk_reason` non-empty
-- Catalog loads cleanly; no Pydantic validation errors
-- Governance doc published + cross-linked from
-  `docs/governance/README.md`
-
-**Test strategy.** Catalog iteration tests. Governance doc reviewed
-via operator-read; its classification rubric becomes the reference
-document for future capability authors. Author a `CONTRIBUTING`-style
-note in the doc: "new capabilities default `none`, promote to `low` /
-`medium` / `high` per rubric §3".
-
-**Estimated LOC:** 400-700 (mostly annotations + governance doc).
-**Size: M.**
-
-**Commit message template:**
-
-```
-chore(governance): capability catalog — classify monetization_risk per rubric
-
-Phase 2 of demonetization-safety-plan. Every registered capability
-now carries an explicit monetization_risk annotation. Governance doc
-docs/governance/monetization-risk-classification.md records the
-classification rubric and per-capability rationale.
-
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
-```
+**Commit message:** `chore(governance): capability catalog — classify
+monetization_risk per rubric`
 
 ### Phase 3 — Ring 2 pre-render classifier + `content.flagged` impingement
 
-**Scope:**
+**Scope:** ADD `content_classify(rendered_text, surface_kind) ->
+RiskAssessment` to `MonetizationRiskGate`; re-use the `local-fast`
+LiteLLM client from the grounded director (no new VRAM); INSERT
+classifier calls at `agents/cpal/production_stream.py` (TTS),
+`agents/studio_compositor/captions_source.py` (captions),
+`agents/studio_compositor/chronicle_*.py` (chronicle); ADD
+`ContentFlaggedImpingement` + `ContentIncidentImpingement` in
+`shared/impingements.py`; NEW
+`scripts/benchmark_monetization_classifier.py`;
+`tests/governance/test_monetization_classifier.py` +
+`tests/integration/test_content_flagged_impingement_roundtrip.py`.
 
-- `shared/governance/monetization_safety.py` — ADD
-  `content_classify(rendered_text, surface_kind) -> RiskAssessment`
-  method to `MonetizationRiskGate`
-- `agents/hapax_dmn/cognitive/director.py` (or wherever the
-  `local-fast` LiteLLM client lives for the grounded director) —
-  re-use the existing model client; no new VRAM
-- `agents/cpal/production_stream.py` — INSERT classifier call after
-  TTS text generation, before TTS synthesis
-- `agents/studio_compositor/captions_source.py` — INSERT classifier
-  call after LLM-generated caption text is received
-- `agents/studio_compositor/chronicle_*.py` (where chronicle LLM
-  emissions land) — same insertion
-- `shared/impingements.py` (or equivalent) — ADD
-  `ContentFlaggedImpingement` + `ContentIncidentImpingement` types
-- `tests/governance/test_monetization_classifier.py`
-- `tests/integration/test_content_flagged_impingement_roundtrip.py`
-- `scripts/benchmark_monetization_classifier.py` (benchmark harness)
-
-**Description.** Ring 2 lands. The classifier is a structured JSON-only
-sub-prompt against the grounded director's model (`local-fast` →
-TabbyAPI Qwen3.5-9B). Prompt structure per research §5: cached YouTube
-guidelines (24 h WebFetch refresh, stale-fallback), surface kind,
-rendered text, JSON output `{score, guideline, redaction_suggestion}`.
+**Description.** Structured JSON-only sub-prompt against the grounded
+director's model (Qwen3.5-9B EXL3). Prompt per research §5: cached
+YouTube guidelines (24 h WebFetch refresh, stale-fallback), surface
+kind, rendered text, JSON `{score, guideline, redaction_suggestion}`.
 Score semantics: 0 none, 1 low (audit-only), 2 medium (withhold +
 `content.flagged`), 3 high (withhold + `content.incident` +
-`suppression_until = now + 5 ticks` on the capability).
+`suppression_until = now + 5 ticks` on capability).
 
-On `score >= 2`:
+On `score >= 2`: no render, emit impingement carrying
+`{surface_kind, score, guideline, original_capability, redaction_
+suggestion}`; pipeline's next tick recruits alternative. No retry
+logic; recovery is grounded in the usual recruitment loop.
 
-1. Do NOT render (no TTS synth, no caption paint, no chronicle push).
-2. Emit `ContentFlaggedImpingement` (score 2) or
-   `ContentIncidentImpingement` (score 3) to the impingement bus
-   carrying `{surface_kind, score, guideline, original_capability,
-   redaction_suggestion}`.
-3. The pipeline's next tick reads the impingement as perceptual
-   ground and recruits an alternative capability. No retry logic;
-   recovery is grounded in the usual recruitment loop.
+LRU cache `(rendered_text → RiskAssessment, maxsize=1024)`.
 
-LRU cache `(rendered_text → RiskAssessment, maxsize=1024)` on the
-classifier call reduces repeated-text load (chronicle headers,
-attribution lines).
-
-**Operator gate.** Score cutoff (default 2) and MAX_OPT_INS (default
-3) stay at conservative defaults until operator answers §11 Q3
-(false-negative tolerance). Default ships; operator can tighten.
+Operator-gate note: score cutoff (default 2) and `MAX_OPT_INS`
+(default 3) stay conservative pending operator §11 Q3 answer.
 
 **Blocking dependencies:** Phase 1 (primitive). Phase 2 (field
-coverage is audited before Ring 2 starts classifying emissions from
-capabilities that should never emit in the first place).
+coverage audited before classifier runs).
 
-**Parallel-safe siblings:** Phase 4 (fail-closed path) — Phase 3's
-classifier wiring surfaces the failure mode Phase 4 handles. Phases
-5, 6, 7 parallel-safe.
+**Parallel-safe siblings:** Phases 4 (fail-closed), 5, 6, 7.
 
-**Success criteria:**
+**Success criteria:** ≥ 10 classifier tests (score parsing, prompt
+construction, guideline cache, LRU reuse, surface-kind discrimination,
+JSON-error handling); impingement round-trip integration test green
+(mock pipeline consumes + recruits alternative); benchmark records
+p50 ≤ 10 ms, p99 ≤ 50 ms over 500 samples against running TabbyAPI;
+post-deploy test-stream smoke: synthetic flagged utterance observed
+withheld + recovery in `~/hapax-state/daimonion-cpal.jsonl`.
 
-- `test_monetization_classifier` passes (≥ 10 tests: score parsing,
-  prompt construction, guideline cache, LRU reuse, surface-kind
-  discrimination, JSON-error handling)
-- `test_content_flagged_impingement_roundtrip` passes: classifier
-  emits impingement → next-tick pipeline consumes → recruits
-  alternative capability (integration test with mock pipeline)
-- Benchmark `scripts/benchmark_monetization_classifier.py` records
-  p50 ≤ 10 ms, p99 ≤ 50 ms over 500 samples against running TabbyAPI
-- `uv run ruff check`, `uv run pyright` clean on all touched files
-- Post-deploy test-stream smoke: send a deliberately flagged
-  synthetic utterance via test injection, observe withhold +
-  impingement + alternative recruitment in
-  `~/hapax-state/daimonion-cpal.jsonl`
+**Estimated LOC:** 400-600. **Size: M-L.**
 
-**Test strategy.** Unit tests with a mocked LiteLLM client. One
-integration test with a real TabbyAPI call behind a pytest marker
-`@pytest.mark.llm` (excluded from default test run). Benchmark is a
-standalone script, not a pytest.
+**Commit message:** `feat(governance): Ring-2 pre-render classifier +
+content.flagged impingement`
 
-**Estimated LOC:** 400-600 (classifier method + 3 call-sites + 2
-impingement types + benchmark + tests). **Size: M-L.**
+### Phase 4 — Classifier unavailable → fail-closed template-only
 
-**Commit message template:**
+**Scope:** ADD `ClassifierDegradedController` to
+`monetization_safety.py` (mirrors `consent_gate.py`'s 3-fail-degrade,
+5-success-restore); wrap `content_classify` call-sites in Phase 3
+modules with `if gate.classifier_degraded(): withhold`; tests at
+`tests/governance/test_classifier_degraded_controller.py` +
+`tests/chaos/test_fail_closed_on_classifier_unavailable.py`.
 
-```
-feat(governance): Ring-2 pre-render classifier + content.flagged impingement
+**Description.** Control law per research §9 row 3. `degrade` state
+on ≥ 3 consecutive classifier failures (timeout, exception, malformed
+JSON). In `degrade`: all LLM-generated external-surface emissions
+withheld; TTS silent; captions frozen; chronicle holds last frame;
+templates still emit (hand-authored, Ring-0-covered). `ntfy
+priority=high` on entry. 5 consecutive successes restore nominal.
+Pattern matches consent-gate-unavailable exactly.
 
-Phase 3 of demonetization-safety-plan. MonetizationRiskGate.content_classify
-runs on LLM-emitted text for external surfaces (TTS, captions, chronicle).
-Score >= 2 withholds render and emits ContentFlaggedImpingement for
-pipeline next-tick re-recruitment. Uses the grounded director model
-(local-fast -> TabbyAPI); no new VRAM.
+**Blocking dependencies:** Phase 3.
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
-```
+**Parallel-safe siblings:** Phases 5, 6, 7.
 
-### Phase 4 — Classifier unavailable → fail-closed template-only path
-
-**Scope:**
-
-- `shared/governance/monetization_safety.py` — ADD
-  `ClassifierDegradedController` mirroring
-  `shared/governance/consent_gate.py`'s degradation controller
-  (3-failure-degrade, 5-success-restore)
-- `agents/cpal/production_stream.py`,
-  `agents/studio_compositor/captions_source.py`, and chronicle
-  emission path — INSERT `if gate.classifier_degraded(): withhold`
-  wrappers
-- `shared/notify.py` — existing API, no change
-- Tests: `tests/governance/test_classifier_degraded_controller.py` +
-  `tests/chaos/test_fail_closed_on_classifier_unavailable.py`
-
-**Description.** Implement the control law from research §9 row 3.
-The controller tracks a rolling window of classifier call outcomes;
-`degrade` state triggers when ≥ 3 consecutive calls fail (timeout,
-exception, malformed JSON). In `degrade` state, ALL external-surface
-emissions from LLM-generated text are withheld — TTS goes silent,
-captions stop updating, chronicle holds its last frame. Templates
-still emit (activity header gloss, signature artefacts, ward labels
-— all hand-authored and Ring-0-covered). `ntfy priority=high` fires
-on entry to `degrade`. Five consecutive successful calls restore
-nominal. Pattern matches consent-gate-unavailable exactly.
-
-**Blocking dependencies:** Phase 3 (classifier exists to be
-degraded).
-
-**Parallel-safe siblings:** Phase 5, 6, 7.
-
-**Success criteria:**
-
-- `test_classifier_degraded_controller` passes (≥ 6 tests:
-  3-failures-degrade, 5-successes-restore, hysteresis, thread-safe
-  invocation, ntfy-on-degrade, ntfy-on-restore)
-- `test_fail_closed_on_classifier_unavailable` chaos test: stop
-  TabbyAPI via systemd (in CI container this is a mocked client
-  that raises); observe TTS silent, captions stop updating,
-  chronicle holds frame, templates still render, ntfy fired
-- Existing control-law tests on `consent_gate.py` still pass
-
-**Test strategy.** Controller unit tests use a fake clock + fake
-classifier invocation. Chaos test uses a pytest fixture that
-monkeypatches the classifier to raise, then asserts downstream
-behavior (TTS not called, caption text unchanged, chronicle not
-appended).
+**Success criteria:** ≥ 6 controller tests (3-fail-degrade, 5-success-
+restore, hysteresis, thread-safe, ntfy-on-degrade, ntfy-on-restore);
+chaos test (monkeypatched-raising classifier) confirms TTS silent,
+captions frozen, chronicle held, templates rendering, ntfy fired.
 
 **Estimated LOC:** 250-350. **Size: M.**
 
-**Commit message template:**
+**Commit message:** `feat(governance): classifier-degraded fail-closed
+path`
 
-```
-feat(governance): classifier-degraded fail-closed path
+### Phase 5 — Programme `monetization_opt_ins` field + Ring 1 wiring
 
-Phase 4 of demonetization-safety-plan. ClassifierDegradedController
-mirrors consent_gate's degradation pattern (3-fail -> degrade, 5-success
--> restore). In degrade state all external-surface LLM emissions are
-withheld; templates proceed. ntfy priority=high on entry/exit.
+**Scope:** EXTEND `Programme` (from task #164) with
+`monetization_opt_ins: frozenset[str] = frozenset()`; Ring 1 already
+accepts `programme`, wire opt-ins set into its decision; ENFORCE in
+`shared/programmes_validation.py`: Hapax-authored programmes with
+non-empty `monetization_opt_ins` fail validation; operator-authored
+allowed up to `MAX_OPT_INS = 3`; tests at
+`tests/governance/test_programme_monetization_opt_ins.py`.
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
-```
+**Description.** Programme-layer interaction surface per research §6.
+`high` permanently excluded (validation enforces). Operator-authorship
+is the authorship axis: programmes are Hapax-authored per
+`feedback_hapax_authors_programmes`, BUT `monetization_opt_ins` is the
+one exception where operator-authored programmes bypass Hapax-only
+authorship — expansion of candidacy beyond the safe set requires
+operator consent, mirroring consent-gate's bilateral-contract
+requirement. Hard cap `MAX_OPT_INS = 3`. Ring 2 classifier ALWAYS
+runs regardless of opt-in.
 
-### Phase 5 — Programme `monetization_opt_ins` field + Ring 1 programme wiring
+**Stub mode.** Until task #164 Phase 1 lands, Phase 5 ships no-op:
+field declared; Ring 1 always sees `programme=None` and filters all
+medium-risk out. Follow-up commit wires live programme lookup.
 
-**Scope:**
+**Blocking dependencies:** Phase 1 (primitive). Task #164 Phase 1 for
+non-stub.
 
-- `shared/programmes.py` (or wherever the `Programme` primitive lands
-  from task #164 Phase 1) — EXTEND `Programme` with
-  `monetization_opt_ins: frozenset[str] = frozenset()`
-- `shared/governance/monetization_safety.py` — Ring 1 already accepts
-  `programme: Programme | None`; wire the opt-ins set into its
-  decision
-- `shared/programmes_validation.py` — ENFORCE: Hapax-authored
-  programmes with non-empty `monetization_opt_ins` fail validation;
-  operator-authored programmes allowed up to `MAX_OPT_INS = 3`
-- `tests/governance/test_programme_monetization_opt_ins.py`
+**Parallel-safe siblings:** Phases 4, 6, 7.
 
-**Description.** The programme-layer interaction surface per research
-§6. `Programme.monetization_opt_ins` is a `frozenset[str]` naming
-capability names whose `monetization_risk == "medium"` the programme
-accepts. `high` is permanently out (validation enforced). Operator-
-authorship is the authorship axis (per
-`feedback_hapax_authors_programmes`, programmes are Hapax-authored —
-but the `monetization_opt_ins` field is the one exception where
-operator-authored programmes bypass the Hapax-only rule because it
-expands capability candidacy beyond the default safe set, and such
-expansion requires operator consent). Hard cap `MAX_OPT_INS = 3`
-prevents opt-in abuse. Ring 2 classifier ALWAYS runs regardless of
-opt-in — opt-in expands candidacy, does not bypass classification.
-
-**Dependency note.** This phase depends on the `Programme` primitive
-from task #164. Until #164 Phase 1 lands, Phase 5 ships as a
-no-op stub: the field is declared but no programme is ever active, so
-Ring 1 always sees `programme=None` and filters all medium-risk
-capabilities out. When #164 lands, a follow-up commit wires the
-live `programme` lookup.
-
-**Blocking dependencies:** Phase 1 (Ring 1 primitive). Task #164
-Phase 1 (`Programme` primitive) for the non-stub wiring.
-
-**Parallel-safe siblings:** 4, 6, 7.
-
-**Success criteria:**
-
-- `test_programme_monetization_opt_ins` passes (≥ 6 tests:
-  hapax-authored-with-opt-in-fails-validation,
-  operator-authored-with-opt-in-passes, max-opt-ins-3-enforced,
-  high-risk-never-opted-in, ring-1-respects-opt-ins,
-  ring-2-runs-regardless-of-opt-in)
-- `test_affordance_pipeline_monetization_filter` extended to cover
-  the programme-active-with-opt-in path
+**Success criteria:** ≥ 6 tests (hapax-authored-with-opt-in-fails-
+validation, operator-authored-with-opt-in-passes, max-opt-ins-3-
+enforced, high-never-opted-in, ring-1-respects-opt-ins, ring-2-runs-
+regardless-of-opt-in); pipeline filter test extended for
+programme-active-with-opt-in path.
 
 **Estimated LOC:** 150-250. **Size: S.**
 
-**Commit message template:**
-
-```
-feat(governance): Programme.monetization_opt_ins + Ring-1 wiring
-
-Phase 5 of demonetization-safety-plan. Programme gains a frozenset
-of capability names whose medium-risk monetization gate the programme
-expands. Hapax-authored programmes with opt-ins fail validation;
-operator-authored cap MAX_OPT_INS = 3. Ring 2 classifier unaffected.
-
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
-```
+**Commit message:** `feat(governance): Programme.monetization_opt_ins
++ Ring-1 wiring`
 
 ### Phase 6 — Egress audit JSONL + sampling + rotation
 
-**Scope:**
+**Scope:** ADD `EgressAuditWriter` + `egress_log(payload, decision,
+reason)` on `MonetizationRiskGate`; call `egress_log` from Phase 3
+call-sites on both `rendered` and `withheld` branches; ADD
+`HAPAX_EGRESS_AUDIT_SAMPLE_LOW = 0.1`,
+`HAPAX_EGRESS_AUDIT_SAMPLE_HIGH = 1.0`, post-live-48h toggle in
+`config/defaults.py`; NEW `systemd/user/hapax-egress-audit-
+rotate.service` + `.timer` (daily gzip + 90-day prune); tests at
+`tests/governance/test_egress_audit_writer.py` +
+`tests/systemd/test_hapax_egress_audit_rotate_timer.py`.
 
-- `shared/governance/monetization_safety.py` — ADD
-  `EgressAuditWriter` + `egress_log(payload, decision, reason)` method
-  on `MonetizationRiskGate`
-- `agents/cpal/production_stream.py`,
-  `agents/studio_compositor/captions_source.py`, chronicle emission
-  path — call `egress_log` after render decision (both `rendered`
-  and `withheld` branches)
-- `config/defaults.py` — ADD `HAPAX_EGRESS_AUDIT_SAMPLE_LOW = 0.1`,
-  `HAPAX_EGRESS_AUDIT_SAMPLE_HIGH = 1.0`, post-live-48h toggle
-- `systemd/user/hapax-egress-audit-rotate.service` + `.timer` —
-  daily gzip rotation + 90-day prune
-- Tests: `tests/governance/test_egress_audit_writer.py`,
-  `tests/systemd/test_hapax_egress_audit_rotate_timer.py`
+**Description.** Ring 3. JSONL path
+`~/hapax-state/programmes/egress-audit/<YYYY-MM-DD>/<HH>.jsonl`. Per-
+entry schema per §1 success definition. Sampling configurable per
+surface-kind (post-live-48h 100% across all surfaces, then
+high-risk-surface 100%, low-risk 10%). Atomic append via single-
+writer queue + background thread; does not block render path. Daily
+gzip + 90-day retention via timer. Rotation failure ntfys but writer
+continues to log (log-integrity > disk hygiene per research §9 row 5).
 
-**Description.** Ring 3 lands. JSONL path:
-`~/hapax-state/programmes/egress-audit/<YYYY-MM-DD>/<HH>.jsonl`. Per
-entry: `timestamp`, `surface_kind`, `capability`, `rendered_text`
-(truncated 512 chars), `classifier_score`, `guideline`,
-`music_provenance` (nullable), `youtube_source` (nullable),
-`decision` (`rendered` | `withheld`), `decision_reason` (ring that
-triggered). Sampling: configurable per surface-kind; post-live 48 h
-runs at 100 % sampling across all surfaces, then
-high-risk-surface-only stays at 100 % while low-risk drops to 10 %.
-Atomic append via a single-writer `EgressAuditWriter` backed by a
-queue + background thread (avoid blocking the render path). Daily
-gzip rotation + 90-day retention via systemd timer. Rotation failure
-ntfys but the writer continues to log (log-integrity > disk hygiene
-per research §9 row 5).
-
-**Blocking dependencies:** Phase 1 (gate primitive exists). Can
-land parallel to 3, 4, 5 — gate is hollow until Ring 2 emits, but
-the writer itself is ready to receive calls from Phase 3/4 when
-they land.
+**Blocking dependencies:** Phase 1. Can land parallel to 3/4/5 — the
+writer is ready to receive calls when Phases 3/4 wire them.
 
 **Parallel-safe siblings:** Phases 3, 4, 5, 7, 9.
 
-**Success criteria:**
+**Success criteria:** ≥ 8 writer tests (append atomicity, sampling,
+truncation, hour-boundary rotation, thread-safety, queue overflow,
+gzip invocation, 90-day prune); timer test passes
+`systemd-analyze verify`; 30-s test-stream smoke produces ≥ 3 entries;
+4-hour stream keeps egress-audit under 100 MiB.
 
-- `test_egress_audit_writer` passes (≥ 8 tests: append atomicity,
-  sampling correctness, truncation, directory rotation on hour
-  boundary, thread-safety, queue overflow policy, gzip-rotation
-  invocation, 90-day prune)
-- Systemd timer test: `systemctl --user start
-  hapax-egress-audit-rotate.service` succeeds; rotated files appear
-  under `egress-audit/<date>/<hour>.jsonl.gz`
-- Post-deploy smoke: 30 s test stream produces N log entries where
-  N ≥ 3 (at least one TTS + one caption + one chronicle)
-- `du -sh ~/hapax-state/programmes/egress-audit/` stays < 100 MiB
-  after a 4-hour stream
+**Estimated LOC:** 300-450. **Size: M.**
 
-**Test strategy.** Writer unit tests use a tmp-path JSONL dir. Timer
-test invokes the rotation script in dry-run mode against a fixture
-tree.
-
-**Estimated LOC:** 300-450 (writer + systemd unit + tests).
-**Size: M.**
-
-**Commit message template:**
-
-```
-feat(governance): Ring-3 egress audit JSONL + sampling + rotation
-
-Phase 6 of demonetization-safety-plan. EgressAuditWriter appends every
-render decision to ~/hapax-state/programmes/egress-audit/<date>/<hour>.jsonl.
-Sampling 100% post-live-48h, 10% steady-state for low-risk surfaces.
-Daily gzip rotation + 90-day retention via hapax-egress-audit-rotate.timer.
-
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
-```
+**Commit message:** `feat(governance): Ring-3 egress audit JSONL +
+sampling + rotation`
 
 ### Phase 7 — Music provenance tagging
 
-**Scope:**
+**Scope:** NEW `shared/music/provenance.py` (`MusicProvenance` Literal
+type + per-track schema); ADD provenance tag on
+`agents/studio_compositor/album_overlay.py` splattribution (muted-grey
+BitchX register); ENUMERATE license at SoundCloud ingestion (file
+confirmed at dispatch; likely `agents/music/soundcloud_ingest.py`) —
+default `unknown` excluded from queue; ANNOTATE vinyl playlist loader
+`operator-vinyl`; stub Hapax-pool ingestion accepting only `cc-by`,
+`cc-by-sa`, `public-domain`, `licensed-for-broadcast`; wire value
+through Phase 6's `music_provenance` egress-log field; tests at
+`tests/music/test_provenance_loader.py`.
 
-- `shared/music/provenance.py` — NEW module hosting `MusicProvenance`
-  Literal type + per-track metadata schema
-- `agents/studio_compositor/album_overlay.py` — ADD provenance tag
-  rendered in the splattribution (muted-grey BitchX register, bottom
-  line)
-- SoundCloud ingestion path (confirm location at dispatch; likely
-  `agents/music/soundcloud_ingest.py` or similar) — ENUMERATE
-  license at ingestion, default `unknown` excluded from queue
-- Vinyl playlist loader — ANNOTATE every track
-  `provenance="operator-vinyl"`
-- Future Hapax-pool ingestion path — stub accepting only `cc-by`,
-  `cc-by-sa`, `public-domain`, `licensed-for-broadcast`
-- Ring 3 egress log already carries `music_provenance` field
-  (added in Phase 6); wire the value through
-- Tests: `tests/music/test_provenance_loader.py`
+**Description.** Schema-first. Values: `operator-vinyl`,
+`soundcloud-licensed`, `hapax-pool`, `youtube-react`, `unknown`.
+`unknown` fail-closed: audio muted + `music.provenance.unknown`
+impingement for operator review. SoundCloud reads license metadata at
+ingest; tracks without clear license stay `unknown` + excluded.
+Vinyl: trivially `operator-vinyl` (operator owns physical record;
+HIGH DMCA risk on broadcast accepted as policy claim). Hapax-pool:
+stub in this phase (full curation path at task #130). YouTube-react:
+Phase 8 interaction surface.
 
-**Description.** Schema-first. Provenance values:
-`operator-vinyl`, `soundcloud-licensed`, `hapax-pool`,
-`youtube-react`, `unknown`. `unknown` fail-closed: audio muted,
-`music.provenance.unknown` impingement fires for operator review.
-SoundCloud ingestion reads license metadata from the SoundCloud API
-at ingest time; tracks without a clear license stay `unknown` and
-are excluded from the play queue. Vinyl annotations are trivially
-`operator-vinyl` (operator owns the physical record; HIGH DMCA risk
-on broadcast accepted). Hapax-pool ingestion is a stub in this
-phase — the full pool curation path lands separately (task #130).
-YouTube-react provenance is the Phase 8 interaction surface.
+Phase 7 does NOT implement the audio-mute-on-YouTube policy (that is
+Phase 8, operator-gated). It establishes the data shape Phase 8
+consumes.
 
-**Operator gate touch.** This phase does NOT implement the
-audio-mute-on-YouTube policy (that is Phase 8). But it does
-establish the data shape Phase 8 consumes.
-
-**Blocking dependencies:** Phase 6 (egress log schema has
+**Blocking dependencies:** Phase 6 (egress-log schema has
 `music_provenance` slot).
 
-**Parallel-safe siblings:** 3, 4, 5, 6, 9.
+**Parallel-safe siblings:** Phases 3, 4, 5, 6, 9.
 
-**Success criteria:**
-
-- `test_provenance_loader` passes (≥ 6 tests: vinyl-annotation,
-  soundcloud-licensed-parsing, soundcloud-unknown-excluded,
-  hapax-pool-accepts-cc-by, hapax-pool-rejects-proprietary,
-  youtube-react-annotation)
-- Egress audit log entries for any music emission carry the
-  correct `music_provenance` value
-- Album-overlay splattribution visible-read post-deploy shows
-  provenance line in muted-grey
+**Success criteria:** ≥ 6 tests (vinyl-annotation, soundcloud-licensed-
+parsing, soundcloud-unknown-excluded, hapax-pool-accepts-cc-by,
+hapax-pool-rejects-proprietary, youtube-react-annotation); egress log
+entries carry correct `music_provenance`; album-overlay
+splattribution visibly shows provenance line.
 
 **Estimated LOC:** 300-400. **Size: M.**
 
-**Commit message template:**
-
-```
-feat(music): per-track provenance tagging (operator-vinyl | soundcloud-licensed | hapax-pool | youtube-react | unknown)
-
-Phase 7 of demonetization-safety-plan. Every music emission carries
-a MusicProvenance tag. SoundCloud ingestion enumerates license at
-ingest; unknown excluded from queue. Vinyl annotated operator-vinyl.
-Hapax-pool stub accepts only license-cleared families. Egress audit
-log records provenance per entry.
-
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
-```
+**Commit message:** `feat(music): per-track provenance tagging`
 
 ### Phase 8 — OPERATOR-GATED music policy implementation
 
-**OPERATOR GATE.** This phase DOES NOT dispatch until the operator
-answers research §11 Q1 (mute + transcript overlay vs. §7.2
-alternative 2 fair-use clips). The plan documents both paths; the
-operator picks one.
+**OPERATOR GATE.** Does NOT dispatch until operator answers research
+§11 Q1. Both paths below documented; operator picks one.
 
-**Scope (path A — mute + transcript overlay, research recommendation):**
+**Path A (mute + transcript overlay — research recommendation).**
+REMOVE `_playback_rate` function + `HAPAX_YOUTUBE_PLAYBACK_RATE` env
+var from `scripts/youtube-player.py` (task #66 retires here); mute
+audio output via ffmpeg `-af volume=0` or pipeline-level audio-tee
+drop; ADD transcript overlay surface on
+`agents/studio_compositor/youtube_turn_taking.py` (or dedicated
+YouTube-embed-ward renderer) rendering source captions from
+`--write-subs` data in BitchX register; regression pin
+`tests/scripts/test_youtube_player_no_playback_rate.py`.
 
-- `scripts/youtube-player.py` — REMOVE `_playback_rate` function
-  + `HAPAX_YOUTUBE_PLAYBACK_RATE` env var + all calls; the
-  half-speed hack (task #66) dies here. Mute the audio output
-  via ffmpeg `-af volume=0` or pipeline-level audio tee drop
-- `agents/studio_compositor/youtube_turn_taking.py` (or dedicated
-  YouTube-embed-ward renderer) — ADD transcript overlay surface
-  that renders source captions (when available from YouTube's
-  `--write-subs` data) in BitchX register over the video
-- `tests/scripts/test_youtube_player_no_playback_rate.py` —
-  regression pin ensuring `_playback_rate` stays dead
+**Path B (≤30 s fair-use clips — §7.2 alternative 2).** REPLACE
+`_playback_rate` with `_clip_windower` enforcing ≤ 30 s contiguous
+playback + ≥ 60 s operator-transformative narration gap before same-
+source replay; wire windower signal into `agents/cpal/production_
+stream.py` so pipeline tracks same-source cooldown; regression pin
+drops on the `_playback_rate` retirement.
 
-**Scope (path B — ≤ 30 s fair-use clips, if operator prefers):**
+**Description.** Per research §7.2. Operator chooses. Whichever path,
+half-speed rate manipulation is retired. Path A: Content ID is audio-
+only; muted audio cannot match. Path B: higher strike risk, preserves
+audio signal for reaction framing. Both preserve Phase 7 `youtube-
+react` provenance.
 
-- `scripts/youtube-player.py` — REPLACE `_playback_rate` with
-  `_clip_windower`: enforces ≤ 30 s contiguous playback, ≥ 60 s
-  operator-transformative narration gap before same-source replay
-- `agents/cpal/production_stream.py` — wire the windower signal
-  into the recruitment surface so the pipeline is aware of
-  same-source cooldown
-- Regression pin drops
+**Blocking dependencies:** Phase 7 (provenance shape). OPERATOR ANSWER
+on §11 Q1.
 
-**Description.** Per research §7.2. The operator makes the choice.
-Whichever path ships, the half-speed rate manipulation is retired.
-Path A is the research recommendation (Content ID is audio-only; muted
-audio cannot match). Path B carries higher strike risk but keeps the
-audio signal for reaction framing. Both paths preserve the Phase 7
-`youtube-react` provenance tag.
+**Parallel-safe siblings:** Phase 9.
 
-**Blocking dependencies:** Phase 7 (provenance shape). OPERATOR
-ANSWER on research §11 Q1.
+**Success criteria (both paths):** `scripts/youtube-player.py` no
+longer defines `_playback_rate`; `HAPAX_YOUTUBE_PLAYBACK_RATE`
+unreferenced; regression pin green. **Path A additional:** YouTube
+audio muted on test stream; transcript overlay visible when captions
+present; egress log shows `music_provenance: "youtube-react"` +
+`decision: "audio_muted"`. **Path B additional:** playback cuts at 30 s
+contiguous; same-source replay blocked until ≥ 60 s narration gap.
 
-**Parallel-safe siblings:** 9.
+**Estimated LOC:** 150-300. **Size: S-M.**
 
-**Success criteria (both paths):**
-
-- `scripts/youtube-player.py` no longer defines `_playback_rate`
-- `HAPAX_YOUTUBE_PLAYBACK_RATE` env var unreferenced in the
-  codebase
-- Regression pin `test_youtube_player_no_playback_rate` green
-
-**Success criteria (path A only):**
-
-- YouTube audio output muted on the post-deploy test stream
-- Transcript overlay visible in the YouTube embed ward when source
-  captions are present
-- Egress audit log shows `music_provenance: "youtube-react"` +
-  `decision: "audio_muted"` for YouTube plays
-
-**Success criteria (path B only):**
-
-- Playback automatically cuts at 30 s contiguous window
-- Same-source replay blocked until ≥ 60 s narration gap observed
-  via director emissions
-
-**Estimated LOC:** 150-300 (both paths are small). **Size: S-M.**
-
-**Commit message template (path A):**
-
-```
-feat(youtube): mute audio + transcript overlay (task #66 retirement)
-
-Phase 8A of demonetization-safety-plan. Retires _playback_rate half-
-speed DMCA-evasion hack per research §7.2 recommendation. YouTube
-audio muted; transcript overlay renders source captions in the
-YouTube embed ward. Regression pin asserts _playback_rate stays dead.
-
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
-```
-
-**Commit message template (path B):**
-
-```
-feat(youtube): 30s fair-use clip windower (task #66 retirement)
-
-Phase 8B of demonetization-safety-plan. Retires _playback_rate half-
-speed DMCA-evasion hack per research §7.2 alternative 2. Playback
-capped at 30s contiguous; ≥60s operator-transformative narration
-gap required before same-source replay.
-
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
-```
+**Commit message (path A):** `feat(youtube): mute audio + transcript
+overlay (task #66 retirement)` — **Path B:** `feat(youtube): 30s fair-
+use clip windower (task #66 retirement)`.
 
 ### Phase 9 — Anti-personification egress footer
 
-**Scope:**
+**Scope:** ADD persistent footer row at bottom of
+`agents/studio_compositor/chronicle_source.py` layout (muted-grey,
+low-prominence, BitchX: `>>> Council research instrument —
+experimental cognitive architecture (operator: <name>, research
+home: <url>)`); ADD same footer beneath caption strip in
+`agents/studio_compositor/captions_source.py`; footer text through
+Ring 0 + Ring 2 validation once at startup + cached; ADD
+`HAPAX_OPERATOR_NAME`, `HAPAX_RESEARCH_HOME_URL` in `config/
+defaults.py`; tests at `tests/studio_compositor/test_chronicle_
+footer.py` + `test_captions_footer.py`.
 
-- `agents/studio_compositor/chronicle_source.py` — ADD persistent
-  footer row at bottom of chronicle ward, muted-grey low-prominence,
-  BitchX register:
-  `>>> Council research instrument — experimental cognitive architecture (operator: <name>, research home: <url>)`
-- `agents/studio_compositor/captions_source.py` — ADD same footer as
-  a permanent low-prominence line beneath the caption strip
-- Footer text through Ring 0 + Ring 2 validation ONCE at startup, then
-  cached (avoid per-frame classifier overhead on static text)
-- `config/defaults.py` — ADD `HAPAX_OPERATOR_NAME`,
-  `HAPAX_RESEARCH_HOME_URL` config keys
-- Tests: `tests/studio_compositor/test_chronicle_footer.py`,
-  `tests/studio_compositor/test_captions_footer.py`
-
-**Description.** Per research §8. Frames the channel for advertiser
-review without claiming AI sentience. Operator name + research URL
-contextualize the channel as operator-driven research. Footer text is
-cached at startup; its passing Ring 2 validation once suffices
-because it is static.
+**Description.** Per research §8. Frames channel for advertiser
+review without claiming AI sentience. Footer is static; one-time
+validation suffices.
 
 **Blocking dependencies:** HOMAGE Phase A3 (legibility family emissive
-rewrite) must land on main first — the chronicle and captions wards
-get Pango-Px437 rendering from A3, and the footer composes onto that
-rendering path.
+rewrite) on main — footer composes onto Pango-Px437 rendering path.
 
-**Parallel-safe siblings:** 3, 4, 5, 6, 7, 10.
+**Parallel-safe siblings:** Phases 3, 4, 5, 6, 7, 10.
 
-**Success criteria:**
-
-- Chronicle ward layout snapshot shows the footer bottom-row,
-  muted-grey alpha ≤ 0.55
-- Captions ward snapshot shows the footer beneath the caption strip
-- Footer text matches operator config (not hardcoded)
-- Startup log records the one-time Ring 2 validation pass result
+**Success criteria:** chronicle layout snapshot shows footer bottom-row,
+alpha ≤ 0.55; captions snapshot shows footer beneath caption strip;
+text matches operator config (not hardcoded); startup log records
+one-time Ring 2 validation pass.
 
 **Estimated LOC:** 150-220. **Size: S.**
 
-**Commit message template:**
-
-```
-feat(homage): anti-personification "research instrument" egress footer
-
-Phase 9 of demonetization-safety-plan. Persistent muted-grey BitchX-
-register footer on chronicle + captions wards: "Council research
-instrument — experimental cognitive architecture (operator: <name>,
-research home: <url>)". Frames channel for advertiser review per
-research §8. Footer text Ring-0+Ring-2 validated once at startup.
-
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
-```
+**Commit message:** `feat(homage): anti-personification "research
+instrument" egress footer`
 
 ### Phase 10 — Operator review + whitelist CLI
 
-**Scope:**
-
-- `scripts/review-flagged.sh` — NEW CLI wrapper; invokes
-  `uv run python -m agents.monetization_review`
-- `agents/monetization_review/` — NEW module (Tier 3, deterministic,
-  no LLM): reads `~/hapax-state/monetization-flagged/`, presents
-  one flagged payload at a time via `fzf` or `rich`, operator selects
-  `a`ccept (render proceeds on next pattern match),
-  `r`eject (pattern stays flagged), or `w`hitelist (regex or exact
-  pattern added to allow-list)
-- `~/hapax-state/monetization-whitelist.yaml` — operator-curated
-  whitelist file, loaded by `MonetizationRiskGate` on startup +
-  on SIGHUP
-- Tests: `tests/monetization_review/test_review_cli.py`
+**Scope:** NEW `scripts/review-flagged.sh` (wrapper invoking
+`uv run python -m agents.monetization_review`); NEW
+`agents/monetization_review/` (Tier-3 deterministic module — no LLM
+— reads `~/hapax-state/monetization-flagged/` via `fzf` or `rich`,
+operator selects accept / reject / whitelist); NEW
+`~/hapax-state/monetization-whitelist.yaml` loaded by
+`MonetizationRiskGate` on startup + SIGHUP; tests at
+`tests/monetization_review/test_review_cli.py`.
 
 **Description.** False-positive recovery surface. Flagged payloads
-time-window at 7 days in
-`~/hapax-state/monetization-flagged/<date>/<capability>.jsonl`. CLI
-presents operator with context (capability name, surface kind,
-rendered text, classifier rationale) and accepts a decision. Whitelist
-entries are regex by default; research §11 Q6 flags regex-vs-exact
-as an open question — plan ships with both forms supported and
-operator-config default. Whitelist narrows Ring 2 only — never
+time-window 7 days at `~/hapax-state/monetization-flagged/<date>/
+<capability>.jsonl`. CLI presents context (capability, surface,
+rendered text, classifier rationale); accepts a decision. Whitelist
+supports both regex and exact-string forms per research §11 Q6;
+operator-config default. Whitelist narrows Ring 2 only — NEVER
 bypasses Ring 1 high-risk filter.
 
-**Blocking dependencies:** Phase 3 (flagged impingements exist to
-review). Phase 6 (egress log provides audit trail).
+**Blocking dependencies:** Phases 3 + 6.
 
-**Parallel-safe siblings:** 9, 11.
+**Parallel-safe siblings:** Phases 9, 11.
 
-**Success criteria:**
-
-- `scripts/review-flagged.sh` runnable end-to-end
-- Whitelist entries persist across restart (loaded from YAML)
-- SIGHUP reloads whitelist without restart
-- Whitelist NEVER bypasses high-risk filter (test asserts)
+**Success criteria:** CLI runnable end-to-end; whitelist persists
+across restart (YAML); SIGHUP reloads without restart; hard test asserts
+whitelist NEVER bypasses high-risk filter.
 
 **Estimated LOC:** 350-500. **Size: M.**
 
-**Commit message template:**
-
-```
-feat(monetization): operator review + whitelist CLI
-
-Phase 10 of demonetization-safety-plan. scripts/review-flagged.sh
-presents flagged payloads to the operator with accept/reject/whitelist
-decisions. Whitelist lives at ~/hapax-state/monetization-whitelist.yaml,
-loaded on startup + SIGHUP. Narrows Ring 2; never bypasses Ring 1
-high-risk filter.
-
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
-```
+**Commit message:** `feat(monetization): operator review + whitelist
+CLI`
 
 ### Phase 11 — Incident-recovery "quiet-frame" programme
 
-**Scope:**
+**Scope:** NEW `shared/programmes/quiet_frame.py` (vinyl-only music,
+no TTS, no chronicle narrative, ward emphasis on biometric-rest);
+ADD auto-entry hook on `ContentIncidentImpingement` in
+`agents/hapax_dmn/programme_switcher.py` (or programme-transition
+surface from task #164); tests at
+`tests/programmes/test_quiet_frame_transitions.py`.
 
-- `shared/programmes/quiet_frame.py` — NEW programme definition
-  (vinyl-only music, no TTS, no chronicle narrative; only templates
-  + ward emphasis on biometric-rest signals)
-- `agents/hapax_dmn/programme_switcher.py` (or wherever programme
-  transitions live from task #164) — ADD `content.incident` →
-  quiet-frame programme auto-entry for 20 ticks + auto-exit
-- Tests: `tests/programmes/test_quiet_frame_transitions.py`
+**Description.** Per research §9 row 1 + §10 Phase 8. On score-3
+incident, auto-enter `quiet-frame` for 20 ticks: LLM-emitted external-
+surface text disabled; vinyl-only music continues; ward emphasis on
+rest (breathing, stillness); anti-personification footer preserved.
+Auto-exits after 20 ticks to prior programme. Operator can force
+earlier exit via Stream Deck cue. Suppression on same impingement
+source during active quiet-frame window prevents auto-entry loop.
 
-**Description.** Per research §9 row 1 + §10 Phase 8. On
-`ContentIncidentImpingement` (classifier score 3), the programme
-switcher auto-enters `quiet-frame` for 20 ticks. Quiet-frame disables
-all LLM-emitted external-surface text, keeps vinyl-only music,
-preserves ward-emphasis-on-biometric-rest (breathing, stillness),
-keeps the anti-personification footer. Auto-exits after 20 ticks to
-the prior programme. Operator can manually force an earlier exit via
-Stream Deck cue.
+**Blocking dependencies:** Phase 3 (incident impingement type). Task
+#164 Phase 1 (programme primitive).
 
-**Blocking dependencies:** Phase 3 (incident impingement type).
-Task #164 Phase 1 (programme primitive).
+**Parallel-safe siblings:** Phase 10.
 
-**Parallel-safe siblings:** 10.
-
-**Success criteria:**
-
-- `test_quiet_frame_transitions` passes: incident → programme entry
-  observed within ≤ 2 ticks; auto-exit after 20 ticks; operator
-  forced exit works
-- Post-deploy injection test: synthetic score-3 flagged utterance
-  triggers quiet-frame entry; observe TTS silent, vinyl continuing,
-  ward emphasis on rest for 20 ticks
+**Success criteria:** incident → quiet-frame entry within ≤ 2 ticks;
+auto-exit after 20 ticks; operator forced exit works; post-deploy
+injection test: synthetic score-3 utterance triggers entry with TTS
+silent + vinyl continuing + rest-emphasis.
 
 **Estimated LOC:** 200-300. **Size: M.**
 
-**Commit message template:**
-
-```
-feat(programmes): quiet-frame incident-recovery programme
-
-Phase 11 of demonetization-safety-plan. ContentIncidentImpingement
-(classifier score 3) triggers 20-tick auto-entry to quiet-frame:
-vinyl-only music, no LLM-emitted external text, ward emphasis on
-biometric rest. Auto-exits after 20 ticks; operator can force earlier.
-
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
-```
+**Commit message:** `feat(programmes): quiet-frame incident-recovery
+programme`
 
 ---
 
 ## §3. Dependency DAG + critical path
 
-### 3.1 Dependency graph
+### 3.1 Graph
 
 ```
 Phase 1 (primitive + field) ─── BLOCKER
@@ -1076,46 +610,36 @@ Phase 1 (primitive + field) ─── BLOCKER
        │       │
        │       └─> Phase 4 (fail-closed)
        │
-       ├─> Phase 5 (programme opt-ins, needs task #164 P1 for non-stub)
+       ├─> Phase 5 (programme opt-ins; stub until task #164 P1)
        ├─> Phase 6 (egress audit) ─── feeds 7, 10
        │       │
        │       └─> Phase 7 (music provenance)
        │                   │
-       │                   └─> Phase 8 (OPERATOR-GATED music policy)
+       │                   └─> Phase 8 (OPERATOR-GATED)
        │
        └─> Phase 9 (footer) ─── depends on HOMAGE A3 on main
 
-Phase 10 (review CLI) depends on Phase 3 + Phase 6
-Phase 11 (quiet-frame) depends on Phase 3 + task #164 P1
+Phase 10 depends on Phases 3 + 6
+Phase 11 depends on Phase 3 + task #164 P1
 ```
 
 ### 3.2 Critical path
 
-**Phases 1 → 3 → 4** is the minimum-viable safety surface and the
-critical path. Rough LOC:
-
-- Phase 1: 450-650 LOC (~4-6 dispatch-hours)
-- Phase 3: 600-900 LOC (~6-9 hours)
-- Phase 4: 250-350 LOC (~2-3 hours)
-
-Serial critical path: **~12-18 dispatch-hours**. With parallel
-dispatch on Phase 2 + 5 + 6 landing in the same window, the full
-Phases 1-7 + 9 + 10 deploy is **~18-24 dispatch-hours** end-to-end.
-
-Phase 8 blocks on operator answer; cannot be critical-pathed from
-the plan.
-
-Phase 11 blocks on task #164 Phase 1 external to this plan; target
-sequencing is "after task #164 primitive lands on main".
+**Phases 1 → 3 → 4** is the minimum-viable safety surface. Rough
+dispatch-hour estimates: Phase 1 ~4-6h, Phase 3 ~6-9h, Phase 4 ~2-3h.
+Serial critical path: **~12-18 dispatch-hours**. Parallel dispatch on
+2/5/6 in the same window brings Phases 1-7 + 9 + 10 to **~18-24
+end-to-end dispatch-hours**. Phase 8 blocks on operator. Phase 11
+blocks on task #164 Phase 1 (external).
 
 ### 3.3 Blockers summary
 
 - **External:** task #164 (programme primitive) for Phases 5 (non-stub)
-  and 11. HOMAGE A3 (legibility emissive rewrite) on main for Phase 9.
-- **Operator:** §11 Q1 answer gates Phase 8. §11 Q3 answer (optional)
-  gates tuning of Phase 3 cutoffs.
-- **Phase-internal:** Phase 2 serial after Phase 1. Phase 4 serial
-  after Phase 3. Phase 7 serial after Phase 6.
+  and 11. HOMAGE A3 on main for Phase 9.
+- **Operator:** §11 Q1 → Phase 8. §11 Q3 (optional) → Phase 3 cutoff
+  tuning.
+- **Phase-internal:** 2 serial after 1. 4 serial after 3. 7 serial
+  after 6.
 
 ---
 
@@ -1123,148 +647,111 @@ sequencing is "after task #164 primitive lands on main".
 
 | # | Phase | Highest-consequence failure mode | Mitigation |
 |---|---|---|---|
-| 1 | Primitive + field | Field added but `_filter_candidates` wiring subtly wrong (e.g., runs after scoring) | Pipeline integration test `test_filter_runs_before_score` asserts via capture-side-effect into mocked scorer |
-| 2 | Catalog audit | Miscategorised capability (high-risk declared as low) | Governance doc rubric is the reference; a second operator-review pass recommended before merging the catalog commit |
-| 3 | Ring 2 classifier | Classifier latency blows p99 > 50 ms under real load | Benchmark script pre-merge + LRU cache + operating-envelope control law in Phase 4 |
-| 4 | Fail-closed | Controller fires on transient errors (single timeout), TTS goes silent unnecessarily | 3-failure hysteresis, 5-success restore, matches proven consent-gate pattern |
-| 5 | Programme opt-ins | Hapax-authored programme sneaks in opt-ins via validation bypass | Validation is Pydantic `model_validator`; tests enforce both paths |
-| 6 | Egress audit | Log fills disk, rotation race condition drops entries | Daily gzip rotation + 90-day prune; rotation failure ntfys but writer continues to log (research §9 row 5) |
-| 7 | Music provenance | SoundCloud metadata missing license field → everything lands `unknown` → queue empty | Ingestion error path surfaces `music.provenance.unknown` impingement for operator review per track |
-| 8 | Music policy (gated) | Wrong path chosen; strike risk remains | Operator picks the path — plan does not prescribe |
-| 9 | Footer | HOMAGE A3 reverts; footer floats orphan above JetBrains Mono text | Phase 9 depends explicitly on A3 being on main; dispatch gate checks |
-| 10 | Whitelist | Regex pattern too broad, re-opens risk surface | Whitelist narrows Ring 2 only; high-risk Ring 1 filter never bypassed; hard-coded in `test_whitelist_never_bypasses_ring_1` |
-| 11 | Quiet-frame | Auto-entry loop (incident during quiet-frame → re-entry) | Suppression on the `content.incident` impingement source during active quiet-frame window; tested |
+| 1 | Primitive + field | Field added but wiring subtly wrong (runs after scoring) | `test_filter_runs_before_score` capture-side-effect in mocked scorer |
+| 2 | Catalog audit | Miscategorised capability (high declared as low) | Governance doc rubric; operator-review pass before merge |
+| 3 | Ring 2 classifier | p99 blows > 50 ms under real load | Pre-merge benchmark + LRU cache + Phase 4 control law |
+| 4 | Fail-closed | Transient error fires degrade, TTS silent unnecessarily | 3-failure hysteresis, 5-success restore (proven consent-gate pattern) |
+| 5 | Programme opt-ins | Hapax-authored programme sneaks opt-ins via validation bypass | Pydantic `model_validator`; tests enforce both paths |
+| 6 | Egress audit | Log fills disk; rotation race drops entries | Daily gzip + 90-day prune; rotation failure ntfys, writer continues |
+| 7 | Music provenance | SoundCloud metadata missing license → queue empty | Error-path `music.provenance.unknown` impingement per track |
+| 8 | Music policy | Wrong path chosen; strike risk remains | Operator picks — plan does not prescribe |
+| 9 | Footer | HOMAGE A3 reverts; footer floats orphan | Dispatch gate checks A3 on main |
+| 10 | Whitelist | Regex too broad, re-opens risk surface | Whitelist narrows Ring 2 only; Ring 1 unbypassed; `test_whitelist_never_bypasses_ring_1` |
+| 11 | Quiet-frame | Auto-entry loop (incident during quiet-frame) | Suppression on impingement source during active window; tested |
 
 ---
 
 ## §5. Branch / PR strategy
 
-**One branch.** All phases commit to `hotfix/fallback-layout-assignment`.
-No new branches. No branch switching. Subagent git-safety directive
-(verbatim): "You are working in the cascade worktree. Branch is
-`hotfix/fallback-layout-assignment`. Commit directly to this branch.
-Do NOT create branches. Do NOT run `git checkout` or `git switch`. Do
-NOT switch branches under any circumstances." This appears in every
-dispatch prompt.
+**One branch.** All phases commit to `hotfix/fallback-layout-
+assignment`. No new branches. No branch switching. Subagent git-
+safety directive (verbatim in every dispatch): *"You are working in the
+cascade worktree. Branch is `hotfix/fallback-layout-assignment`. Commit
+directly to this branch. Do NOT create branches. Do NOT run `git
+checkout` or `git switch`. Do NOT switch branches under any
+circumstances."*
 
-**Per-phase PR.** The gate touches many files (capability catalog
-annotations alone span dozens) and involves governance-axiom-level
-policy decisions. Per-phase PRs are cleaner than one mega-PR for
-three reasons:
-
-1. **Review surface.** A 200-LOC governance primitive PR reviews
-   faster than a 2 000-LOC mixed-concern PR. Each phase's
-   commit-message template (above) frames the review.
-2. **Partial landing.** If Phase 3 (Ring 2) benchmarks poorly, it
-   can hold in PR while Phases 4, 5, 6, 7 continue — they depend
-   only on Phase 1's primitive, which landed in its own PR.
-3. **Operator gates.** Phase 8 blocks on operator answer. It cannot
-   sit mid-PR alongside Phase 7 content; separating PRs keeps each
-   at a ready-to-merge state.
+**Per-phase PR.** The gate touches many files (catalog annotations
+alone span dozens) and involves axiom-level policy decisions. Per-
+phase PRs beat one mega-PR because: (a) review surface — a 200-LOC
+primitive reviews faster than a 2000-LOC mixed PR; (b) partial
+landing — if Phase 3 benchmarks poorly, it can hold while Phases 4/5/6/7
+continue on Phase 1's merged primitive; (c) operator gates — Phase 8's
+operator-block cannot sit mid-PR next to Phase 7.
 
 **Merge order per critical path:** 1 → 2 → 3 → 4 → (6 → 7 → 8) || 5
-|| 9 || 10 || 11. Parallel-merge-capable: 2, 5, 6 after 1; 4 after 3;
-7 after 6; 9 after HOMAGE A3; 10 after 3+6; 11 after 3 + task #164.
+|| 9 || 10 || 11.
 
-**Squash-merge.** Each PR squash-merges to keep `main` history linear
-with one commit per phase, matching the HOMAGE plan convention.
-
-**CI.** All PRs pass `uv run pytest tests/ -q`, `uv run ruff check .`,
-`uv run ruff format --check .`, `uv run pyright`. Phase 3 gate:
-benchmark script results posted as PR comment with p50/p99 table.
-Phase 6 gate: systemd timer passes `systemd-analyze verify`.
+**Squash-merge** to keep main history linear with one commit per
+phase (HOMAGE convention). **CI:** `uv run pytest tests/ -q`,
+`uv run ruff check .`, `uv run ruff format --check .`,
+`uv run pyright`. Phase 3 gate: benchmark results posted as PR
+comment with p50/p99 table. Phase 6 gate: `systemd-analyze verify`
+on the timer unit.
 
 ---
 
 ## §6. Acceptance checklist
 
-Work is NOT done until every item below is ticked. This runs after the
-final phase merges; it is the go-no-go for declaring the §165
-directive closed.
+Work is NOT done until every item below is ticked. Go-no-go for
+declaring §165 directive closed.
 
 ### 6.1 Static analysis
 
-- [ ] `uv run pytest tests/ -q` passes (full suite, not just
-  governance/)
+- [ ] `uv run pytest tests/ -q` passes (full suite)
 - [ ] `uv run ruff check .` clean
 - [ ] `uv run ruff format --check .` clean
 - [ ] `uv run pyright` clean
-- [ ] `scripts/lint_personification.py` extended per research §4.4
-  (Ring 0); CI-blocking on hand-authored surfaces
-- [ ] `test_capability_catalog_complete` passes (every capability
-  has explicit `monetization_risk`)
-- [ ] `test_youtube_player_no_playback_rate` passes (task #66
-  retirement pin)
+- [ ] `scripts/lint_personification.py` extended (Ring 0 per research §4.4); CI-blocking
+- [ ] `test_capability_catalog_complete` passes
+- [ ] `test_youtube_player_no_playback_rate` passes (task #66 pin)
 
-### 6.2 Live stream observation (30-minute test stream)
+### 6.2 Live stream (30-minute test stream)
 
-- [ ] `hapax_monetization_candidates_total{risk="high"}` remains
-  0 for the full 30-minute window
-- [ ] `hapax_monetization_classifier_seconds` p50 ≤ 10 ms, p99 ≤
-  50 ms
-- [ ] `hapax_monetization_classifier_degraded == 0` for the full
-  window
-- [ ] Egress audit JSONL populated for every external-surface
-  emission in the window
-- [ ] At least one synthetic-injected score-≥2 payload is
-  withheld + recovery observed on next tick (Phase 3 end-to-end
-  validation)
-- [ ] Anti-personification footer visibly present on chronicle +
-  captions wards
-- [ ] YouTube embed ward shows muted audio + transcript overlay
-  (path A) OR ≤ 30 s clip windower (path B), per operator choice
+- [ ] `hapax_monetization_candidates_total{risk="high"}` = 0 for full window
+- [ ] `hapax_monetization_classifier_seconds` p50 ≤ 10 ms, p99 ≤ 50 ms
+- [ ] `hapax_monetization_classifier_degraded == 0` throughout
+- [ ] Egress audit JSONL populated for every external-surface emission
+- [ ] ≥ 1 synthetic score-≥2 payload withheld + recovery observed next-tick
+- [ ] Anti-personification footer visible on chronicle + captions
+- [ ] YouTube embed ward: path A (muted + transcript) or path B (≤30 s clip windower)
 - [ ] Album overlay splattribution shows provenance tag
-  (`operator-vinyl` on vinyl, etc.)
 
 ### 6.3 Chaos + recovery
 
-- [ ] `systemctl --user stop tabbyapi.service` → classifier
-  degrades within 3 failed attempts; TTS silent; templates still
-  emit; `ntfy priority=high` fires
-- [ ] `systemctl --user start tabbyapi.service` → 5 successful
-  classifier calls → nominal restored; TTS resumes
-- [ ] Whitelist SIGHUP reload works without restart
-- [ ] Whitelist entry cannot bypass high-risk filter (regression
-  test green)
+- [ ] `systemctl --user stop tabbyapi.service` → classifier degrades within 3 attempts; TTS silent; templates emit; `ntfy priority=high` fires
+- [ ] `systemctl --user start tabbyapi.service` → 5 successes restore nominal; TTS resumes
+- [ ] Whitelist SIGHUP reload without restart
+- [ ] Whitelist cannot bypass high-risk filter (regression green)
 
 ### 6.4 Governance
 
-- [ ] `docs/governance/monetization-risk-classification.md`
-  published, cross-linked from `docs/governance/README.md`
-- [ ] Operator-reviewed capability catalog classification
-- [ ] Operator answer on §11 Q1 (music policy) recorded + Phase 8
-  merged
-- [ ] Operator answer on §11 Q3 (FNR tolerance) recorded + cutoff
-  tuned (optional)
+- [ ] `docs/governance/monetization-risk-classification.md` published + cross-linked
+- [ ] Operator-reviewed catalog classification
+- [ ] Operator §11 Q1 answer recorded + Phase 8 merged
+- [ ] Operator §11 Q3 answer recorded + cutoff tuned (optional)
 
 ### 6.5 Observability
 
-- [ ] Grafana dashboard `monetization-gate` shows strictly-
-  increasing counters during the test stream
+- [ ] Grafana dashboard `monetization-gate` shows strictly-increasing counters
 - [ ] Zero-bar on `risk="high"` candidate counter
-- [ ] 90-day retention timer `hapax-egress-audit-rotate.timer`
-  active + tested
+- [ ] `hapax-egress-audit-rotate.timer` active + tested (90-day retention)
 
 ---
 
 ## §7. Notes for execution subagents
 
-### 7.1 Dispatch order
+### 7.1 Dispatch order (delta)
 
-Delta dispatches in this order, honoring the DAG:
-
-1. **Wave 1 (serial on Phase 1):** Phase 1 alone. Merge to main.
-2. **Wave 2 (parallel after Phase 1 on main):** Phase 2, 5 (stub
-   form), 6 in parallel.
-3. **Wave 3 (serial on Phase 3):** Phase 3 after Phase 2 merges.
-4. **Wave 4 (parallel after Phase 3 on main):** Phase 4, 7, 9
-   (Phase 9 gates on HOMAGE A3 being on main). 10 after 3+6 merge.
-5. **Wave 5 (blocked on operator + external):** Phase 8 on operator
-   answer; Phase 11 on task #164 Phase 1.
+1. **Wave 1 (serial):** Phase 1. Merge to main.
+2. **Wave 2 (parallel after Phase 1 merges):** Phases 2, 5 (stub), 6.
+3. **Wave 3 (serial after Phase 2 merges):** Phase 3.
+4. **Wave 4 (parallel after Phase 3 merges):** Phases 4, 7. Phase 9
+   after HOMAGE A3 on main. Phase 10 after 3 + 6 merge.
+5. **Wave 5 (blocked):** Phase 8 on operator §11 Q1. Phase 11 on
+   task #164 Phase 1.
 
 ### 7.2 Per-dispatch prompt skeleton
-
-Each dispatch to an execution subagent includes verbatim:
 
 ```
 You are working in the cascade worktree
@@ -1274,94 +761,72 @@ Do NOT create branches. Do NOT run `git checkout` or `git switch`.
 Do NOT switch branches under any circumstances.
 
 Implement Phase <N> of docs/superpowers/plans/2026-04-20-demonetization-safety-plan.md
-exactly as specified. Do not introduce any expert-system-style rules:
-the gate REMOVES capabilities at the candidate-filter layer; it does
-NOT score away or threshold-gate at the decision layer. If tempted to
-add a regex match, a threshold counter, or a timer gate anywhere in
-the scoring or rendering path, stop and re-read §0.2 of the plan.
+exactly as specified. Do NOT introduce expert-system rules: the gate
+REMOVES capabilities at the candidate-filter layer; it does NOT score
+away or threshold-gate at the decision layer. If tempted to add a
+regex match, a threshold counter, or a timer gate anywhere in the
+scoring or rendering path, stop and re-read §0.2.
 
 Commit message: follow the phase's commit-message template verbatim.
 ```
 
 ### 7.3 Common failure mode to reject
 
-If a dispatch returns a diff containing any of:
+Reject any dispatch diff containing:
 
 - `if <token/phrase> in rendered_text`
 - `if count > N` on risk words
 - hardcoded regex deny-list
 - `if ticks % N == 0` gating on risk
-- `HAPAX_*_INTERVAL_S` env var on risk-related cadence
+- `HAPAX_*_INTERVAL_S` env var on risk cadence
 
-— reject the diff. These are decision-layer patterns and violate the
-no-expert-system-rules axiom. The correct architectural move is
-always: (a) declare `monetization_risk` on the capability (Ring 1),
-or (b) emit an impingement and let the pipeline re-recruit
-(Ring 2).
+These are decision-layer patterns and violate no-expert-system-rules.
+Correct move is always: (a) declare `monetization_risk` on the
+capability (Ring 1), or (b) emit an impingement and let the pipeline
+re-recruit (Ring 2).
 
 ### 7.4 Test-data fixtures
 
-Phase 3 benchmark requires a 500-sample rendered-text corpus. Source
-fixtures are:
+Phase 3 benchmark requires 500-sample rendered-text corpus:
 
 - Recent chronicle emissions from
-  `~/hapax-state/daimonion-cpal.jsonl` (tail last 72 hours)
+  `~/hapax-state/daimonion-cpal.jsonl` (tail 72 h)
 - Recent TTS text from `~/hapax-state/tts-queue.jsonl`
-- Synthetic injections spanning all five §1.1 categories (borderline
-  profanity, violence reference, controversial issue discussion,
-  graphic detail attempt, slur attempt)
+- Synthetic injections spanning all §1.1 categories (borderline
+  profanity, violence reference, controversial-issue discussion,
+  graphic-detail attempt, slur attempt)
 
-Collect the corpus as `tests/fixtures/classifier_corpus_500.json`,
-checked in under test fixtures. Corpus generation script:
+Store as `tests/fixtures/classifier_corpus_500.json`. Generator:
 `scripts/build_classifier_corpus.py`.
 
 ### 7.5 Operator-gate signaling
 
-When a phase blocks on operator answer, delta updates the relay
-status to include a `monetization-plan-blocked-on-operator` field
-naming the specific question. Operator visibility surface:
-`hapax-council` orientation panel domain = "research",
-sprint-measure surfaced via vault frontmatter on
+Phases blocked on operator answer: delta updates relay status with
+`monetization-plan-blocked-on-operator` field naming the question.
+Operator visibility via `hapax-council` orientation panel (research
+domain); sprint-measure via vault frontmatter on
 `20-projects/hapax-research/2026-04-20-demonetization-gate.md`.
 
 ### 7.6 Rebase discipline
 
-Every phase dispatch begins with:
-
-```
-cd /home/hapax/projects/hapax-council--cascade-2026-04-18
-git fetch origin
-git rebase origin/hotfix/fallback-layout-assignment  # or main after merge
-```
-
-and ends with:
-
-```
-git rebase origin/hotfix/fallback-layout-assignment
-git push origin hotfix/fallback-layout-assignment
-```
-
-if the feature branch is still live, or `origin/main` after merge.
-Concurrent planning subagents may have pushed; rebase-before-push is
-mandatory.
+Every dispatch begins with `git fetch origin && git rebase
+origin/hotfix/fallback-layout-assignment` (or `main` after merge) and
+ends with `git rebase origin/hotfix/fallback-layout-assignment && git
+push origin hotfix/fallback-layout-assignment` (if branch live, else
+`origin/main`). Concurrent planning subagents may have pushed;
+rebase-before-push mandatory.
 
 ### 7.7 Research condition
 
-HOMAGE opens research condition `cond-phase-a-homage-active-001`.
-Demonetization-gate opens its own research condition when Phase 1
-merges: `cond-monetization-gate-active-001`. Director-intent records
-after Phase 3 carry it; the Bayesian validation pipeline can slice
-pre/post-gate. Phase 1 dispatch includes the condition open call as
-its final sub-step.
+Phase 1 dispatch includes opening
+`cond-monetization-gate-active-001` as its final sub-step. Director-
+intent records after Phase 3 carry it; Bayesian validation slices
+pre/post-gate.
 
 ### 7.8 Post-live window
 
-Per task #165 scoping, this plan is "post-live iteration." HOMAGE
-goes live first. The Ring 1 filter (Phase 1) ships immediately after
-HOMAGE merges — it is cheap and the governance exposure of running
-post-live without Ring 1 is material. Phases 3-11 land over the
-subsequent 48-72 hours. The 30-minute acceptance test stream is run
-after all non-gated phases land (everything except 8 if operator has
-not yet answered).
-
----
+Per task #165, this is post-live iteration. HOMAGE goes live first.
+Phase 1 ships immediately after HOMAGE merges — Ring 1 is cheap and
+post-live exposure without it is material. Phases 3-11 land over the
+subsequent 48-72 hours. The 30-minute acceptance test runs after all
+non-gated phases land.
