@@ -361,90 +361,96 @@ recursive Programme objects).
 
 ---
 
-## §4. How programmes get planned — three authorship paths
+## §4. How programmes get planned — Hapax-authored (only path)
 
-### 4.1 Hapax-authored (generative)
+**Authorship is Hapax-generated, end-to-end. No operator authorship at
+any level — no outlines, no templates, no skeletons, no cue sheets.**
+The operator's original directive ("hapax needs to program content in
+coherent batches") is unambiguous: Hapax does the programming. See
+memory `feedback_hapax_authors_programmes.md` for the load-bearing
+correction that retired the earlier hybrid/operator-curated proposals.
 
-At show-start and each programme boundary, Hapax's director LLM
-emits a programme plan — 2-5 programmes with role, planned
-duration, content directives, constraint envelope. Input: perceptual
-field + operator profile + vault goals + working mode. Output: list
-of `Programme` JSON, validated, persisted at
-`~/hapax-state/programmes/<show_id>/plan.json`.
+### 4.1 Hapax-generated programme plans
 
-*Tradeoffs.* Lowest operator overhead (start stream and walk away).
-Plan quality bound by LLM grounding; mis-reads produce structurally
-wrong shows, recoverable only via abort predicates (reactive). The
-LLM scope creeps — per-tick director and per-show planner share a
-model endpoint, coupling planning latency to tick latency. Plan
-adherence non-trivial (no operator forcing function — Hapax can
-re-plan at runtime).
+At show-start and each programme boundary, Hapax's director LLM emits
+a programme plan — 2-5 programmes with role, planned duration, content
+directives, constraint envelope. Inputs:
 
-*Fits.* Vinyl-only ambient sessions; overnight runs; experiments
-where programme structure is the variable under study.
+- Perceptual field (operator presence, stance, biometrics, recent
+  utterance, camera/IR signals)
+- Operator profile (recent activity, fatigue, working mode)
+- Vault state as **read-source** (goals with `type: goal`, sprint
+  measures, daily note, active project frontmatter) — programme
+  generation reads these; the operator does NOT pre-author anything
+  at the programme scale
+- Research condition history (what programme shapes produced what
+  outcomes on prior streams — Thompson-sampling posteriors over
+  programme-role × condition)
+- Available content state (vinyl platter current track, SoundCloud
+  queue depth, whiteboard content classification, YouTube reaction
+  queue)
 
-### 4.2 Operator-curated (explicit)
+Output: list of `Programme` JSON, validated, persisted at
+`~/hapax-state/programmes/<show_id>/plan.json`. The plan is
+regenerated (not just appended) at programme boundaries so Hapax can
+re-plan forward in response to the live context.
 
-Operator authors programme notes under `~/Documents/Personal/
-20-projects/hapax-research/programmes/` — templates per role
-(`tpl-listening.md`, ...) plus per-show outlines
-(`2026-04-19-go-live.md` enumerating the night's sequence). Frontmatter
-`type: programme`, parseable by a sync agent modeled on
-`agents/sprint_tracker.py`. Ingested into
-`~/hapax-state/programmes/<show_id>/plan.json` at show-start.
+*Grounding anchor.* Per `project_programmes_enable_grounding` and
+`feedback_grounding_exhaustive`, the programme plan is itself a
+recruitment output — the planner LLM recruits programme-shape
+capabilities (role, duration, constraint envelope) from an affordance
+catalog. Programme authorship is grounded recruitment at the show
+scale, not a pre-written script. The plan can be wrong; it re-plans.
 
-*Tradeoffs.* Highest plan fidelity (intent captured directly, not
-inferred; specific tracks/tasks/objectives as explicit references).
-Highest operator overhead per show. Excellent observability (vault
-notes are diff-able, Obsidian-synced, retroactively reviewable;
-outcomes can write back as a Result appendix). Operator-as-curator
-is a known-good role pattern (matches the existing goal-note
-workflow + orientation panel + obsidian-hapax sync).
+### 4.2 Operator live influence — at runtime only
 
-*Fits.* Marquee streams; LRR research collection where programme
-structure is part of the scientific design; DJ-style performance
-runs where the plan IS the artistic statement.
+The operator's influence on programme flow happens through runtime
+impingements, never through pre-stream authorship:
 
-### 4.3 Hybrid (plan-then-improvise)
+- **Side-chat** — operator writes to the sidechat file; emits as
+  high-salience impingement; director can recruit "cut to a new
+  programme" capability in response
+- **Stream Deck cues** — per task #140, operator buttons emit
+  impingement-level cues the pipeline recruits against
+- **Voice** — STT → impingement → pipeline recruitment
+- **Presence shifts** — operator leaves the room, fatigue increases,
+  etc., produce perceptual impingements the planner re-reads on the
+  next boundary check
 
-Operator writes a skeletal vault note (e.g. "2 h: opening-listening
-~15 min → studio-work-block ~40 min → chat-interlude ~20 min →
-wind-down ~25 min"). Hapax fills in programme-level detail — specific
-track shortlist, specific operator task, specific homage package,
-constraint envelope — from the skeleton + perception + profile, and
-runs sub-programme/tactical moves inside as today.
+Operator-triggered programme transitions (e.g. "switch to
+wind-down now") are valid runtime commands, emitted as impingements,
+executed at the next programme boundary. They are NOT programme
+authorship — they are programme-level cues the pipeline acts on.
 
-*Tradeoffs.* Operator sets show shape; Hapax fills detail. Captures
-directive intent at the right scale (which sections in which order)
-without enumeration. LLM grounding bounded by operator-given role
-(narrower than 4.1). Two artifacts to reconcile (vault read-only
-during show, JSON is running state; outcomes write back post-show).
+### 4.3 Vault integration — read-only
 
-*Fits.* The operator's regular working pattern. Most streams. The
-LRR research instrument.
+The vault at `~/Documents/Personal/` is a perception source, not a
+write target. Programme generation reads:
 
-### 4.4 Recommendation (contingent)
+- Goal notes (`type: goal`) — what the operator has flagged as
+  long-horizon work
+- Sprint measures — research sprint context
+- Daily notes — recent narrative context + today's operator state
+- Person notes — relationship context for any non-operator-identified
+  content
+- Project frontmatter — active project shape
 
-**Hybrid (4.3) is recommended as the default** because the
-operator's existing workflow already runs this way at the
-sub-programme scale (operator declares working mode and the working
-goal in the vault; Hapax fills in the per-tick detail). Extending
-upward by one level matches the existing rhythm and keeps the
-operator in the loop on the load-bearing decision (which sections,
-in which order) without demanding the operator enumerate every
-detail.
+These feed the programme LLM's context. The operator writes vault
+notes as part of personal executive-function work; Hapax reads them
+as perception. There is **no** `~/Documents/Personal/20-projects/
+hapax-research/programmes/` folder, no `type: programme` frontmatter,
+no template ingestion. That path, proposed in the earlier drafts, is
+retired.
 
-The recommendation is contingent on which authorship path the
-operator's own preference favours. If the operator enjoys the act of
-writing the plan — and the existing vault workflow suggests yes —
-hybrid is correct. If the operator wants push-play-and-walk-away
-streams (overnight ambient, vinyl-only sessions), 4.1 is correct
-*for those streams specifically*; the design supports a per-show
-choice of authorship path. If the operator wants every programme
-spec'd to the field (DJ-set marquee streams, scientific A/B
-research collection runs), 4.2 is correct *for those streams
-specifically*. The system should default to hybrid and allow per-
-show override.
+### 4.4 Failure mode + recovery
+
+When the programme plan is structurally wrong (e.g. Hapax authored a
+listening programme while the operator is actively speaking to
+collaborators), the abort predicate at §6 fires and the planner
+re-plans forward. There is no operator forcing function at the
+authorship layer — abort + re-plan is the only correction path.
+Post-show, the planner's Thompson posteriors update against observed
+outcomes so the next run's prior is better-informed.
 
 ---
 
