@@ -245,11 +245,39 @@ def dispatch_preset_bias(capability_name: str, ttl_s: float) -> bool:
     return True
 
 
-def dispatch_overlay_emphasis(capability_name: str, ttl_s: float) -> bool:
+# overlay.* target slug → ward_id. Mirrors the informal convention the
+# overlay catalog uses: "album" is the album_overlay ward, "captions" the
+# captions source, "activity-header" the activity_header panel, etc. The
+# slug "all-chrome" intentionally maps to None so a broad dim request
+# still lands in the overlay-alpha-overrides file without firing a ward-
+# properties write on an illegitimate key. Phase B2 mapping.
+_OVERLAY_TARGET_TO_WARD_ID: dict[str, str] = {
+    "album": "album_overlay",
+    "captions": "captions",
+    "chat-legend": "chat_keyword_legend",
+    "activity-header": "activity_header",
+    "grounding-ticker": "grounding_provenance_ticker",
+}
+
+
+def dispatch_overlay_emphasis(
+    capability_name: str,
+    ttl_s: float,
+    salience: float | None = None,
+) -> bool:
     """overlay.{foreground,dim}.<source> → overlay-alpha-overrides.json.
 
     Foreground → alpha 1.0 for ttl_s seconds. Dim → alpha 0.3 for ttl_s.
     The compositor's layout mutator merges these with the baseline alphas.
+
+    Phase B2 (homage-completion-plan §2): for ``foreground`` actions
+    whose target slug maps to a known ward_id (see
+    ``_OVERLAY_TARGET_TO_WARD_ID``), also write the B1 aggressive
+    ward-properties envelope (glow_radius_px=14, border_pulse_hz=2.0,
+    scale_bump_pct=0.06, alpha=1.0, domain-accent border) so the
+    compositor's ward-property consumers visibly react. The
+    alpha-overrides file write is preserved for backward compatibility
+    with the legacy layout-mutator path.
     """
     parts = capability_name.split(".", 2)
     if len(parts) < 3 or parts[0] != "overlay":
@@ -275,6 +303,26 @@ def dispatch_overlay_emphasis(capability_name: str, ttl_s: float) -> bool:
         _OVERLAY_ALPHA_OVERRIDES,
         {"overrides": overrides, "updated_at": time.time()},
     )
+    # Phase B2: if this is a foreground emphasis on a known ward target,
+    # additionally write the aggressive ward-properties envelope. Kept
+    # off the "dim" path because the whole point of dim is to recede,
+    # not emphasize.
+    if action == "foreground":
+        ward_id = _OVERLAY_TARGET_TO_WARD_ID.get(target)
+        if ward_id is not None:
+            effective_ttl = ttl_s
+            if salience is not None:
+                clamped = max(0.0, min(1.5, float(salience)))
+                effective_ttl = max(1.5, clamped * _STRUCTURAL_EMPHASIS_TTL_SCALE_S)
+            _write_ward_property(
+                ward_id,
+                effective_ttl,
+                alpha=_STRUCTURAL_EMPHASIS_PROPS["alpha"],
+                glow_radius_px=_STRUCTURAL_EMPHASIS_PROPS["glow_radius_px"],
+                scale_bump_pct=_STRUCTURAL_EMPHASIS_PROPS["scale_bump_pct"],
+                border_pulse_hz=_STRUCTURAL_EMPHASIS_PROPS["border_pulse_hz"],
+                border_color_rgba=domain_accent_rgba(ward_id),
+            )
     _mark_recruitment("overlay.emphasis")
     return True
 
@@ -319,11 +367,40 @@ def dispatch_attention_winner(capability_name: str) -> bool:
 
 
 _WARD_HIGHLIGHT_MODIFIERS: dict[str, dict[str, float]] = {
-    "pulse": {"border_pulse_hz": 2.0, "scale_bump_pct": 0.05},
-    "glow": {"glow_radius_px": 12.0},
-    "flash": {"alpha": 1.0, "scale_bump_pct": 0.15},
+    # Phase B2 (homage-completion-plan §2 / reckoning §3.4): the
+    # "aggressive" modifiers (pulse, glow, flash, foreground) now share
+    # the B1 "in-your-face" envelope (glow_radius_px=14, border_pulse_hz=
+    # 2.0, scale_bump_pct=0.06, alpha=1.0) so a recruited
+    # ward.highlight.<id>.<modifier> capability lands the same visible
+    # impact as a narrative-director structural_intent emphasis. The
+    # "dim" / "default" modifiers remain distinct because they express
+    # the *opposite* intent (subordinate, reset) and the operator has
+    # explicitly wanted them to stay mild.
+    "pulse": {
+        "alpha": 1.0,
+        "glow_radius_px": 14.0,
+        "border_pulse_hz": 2.0,
+        "scale_bump_pct": 0.06,
+    },
+    "glow": {
+        "alpha": 1.0,
+        "glow_radius_px": 14.0,
+        "border_pulse_hz": 2.0,
+        "scale_bump_pct": 0.06,
+    },
+    "flash": {
+        "alpha": 1.0,
+        "glow_radius_px": 14.0,
+        "border_pulse_hz": 2.0,
+        "scale_bump_pct": 0.15,
+    },
+    "foreground": {
+        "alpha": 1.0,
+        "glow_radius_px": 14.0,
+        "border_pulse_hz": 2.0,
+        "scale_bump_pct": 0.06,
+    },
     "dim": {"alpha": 0.35},
-    "foreground": {"alpha": 1.0, "glow_radius_px": 6.0},
     "default": {},
 }
 
@@ -405,6 +482,7 @@ def dispatch_ward_size(capability_name: str, ttl_s: float) -> bool:
         return False
     _write_ward_property(ward_id, ttl_s, scale=scale)
     _mark_recruitment("ward.size")
+    _emit_homage_emphasis("ward.size", ward_id)
     return True
 
 
@@ -437,6 +515,7 @@ def dispatch_ward_position(capability_name: str, ttl_s: float) -> bool:
         drift_amplitude_px=float(spec.get("drift_amplitude_px", 0.0)),
     )
     _mark_recruitment("ward.position")
+    _emit_homage_emphasis("ward.position", ward_id)
     return True
 
 
@@ -461,15 +540,29 @@ def dispatch_ward_staging(capability_name: str, ttl_s: float) -> bool:
         update["z_order_override"] = spec["z_order_override"]
     _write_ward_property(ward_id, ttl_s, **update)
     _mark_recruitment("ward.staging")
+    _emit_homage_emphasis("ward.staging", ward_id)
     return True
 
 
-def dispatch_ward_highlight(capability_name: str, ttl_s: float) -> bool:
+def dispatch_ward_highlight(
+    capability_name: str,
+    ttl_s: float,
+    salience: float | None = None,
+) -> bool:
     """``ward.highlight.<ward_id>.<modifier>`` → ward-properties.json (alpha/glow/pulse).
 
     Modifier vocabulary: ``pulse``, ``glow``, ``flash``, ``dim``,
     ``foreground``, ``default``. Unknown modifiers return False without
     writing.
+
+    Phase B2 (homage-completion-plan §2): the "aggressive" modifiers
+    (pulse / glow / flash / foreground) now additionally carry the
+    domain-accent ``border_color_rgba`` and a salience-scaled TTL so a
+    recruited ``ward.highlight.<id>.<modifier>`` impingement reads with
+    the same visible impact as a narrative-director structural_intent
+    emphasis. ``salience`` defaults to None (callers that don't pass it
+    get the raw ``ttl_s``); when provided it clamps to [0, 1.5] and
+    drives ``ttl_s = max(1.5, salience * 5.0)``.
     """
     parsed = _ward_dispatch_common(capability_name, "ward.highlight")
     if parsed is None:
@@ -479,8 +572,23 @@ def dispatch_ward_highlight(capability_name: str, ttl_s: float) -> bool:
     if spec is None:
         log.warning("ward.highlight unknown modifier %s in %s", modifier, capability_name)
         return False
-    _write_ward_property(ward_id, ttl_s, **{k: float(v) for k, v in spec.items()})
+    # Phase B2: aggressive modifiers get the domain accent border + the
+    # salience-scaled TTL; dim/default stay on their prior (milder)
+    # semantics so an LLM that dispatches a "dim" doesn't have its intent
+    # inverted into a "pulse".
+    aggressive = modifier in ("pulse", "glow", "flash", "foreground")
+    props: dict[str, float | tuple[float, float, float, float]] = {
+        k: float(v) for k, v in spec.items()
+    }
+    effective_ttl = ttl_s
+    if aggressive:
+        props["border_color_rgba"] = domain_accent_rgba(ward_id)
+        if salience is not None:
+            clamped = max(0.0, min(1.5, float(salience)))
+            effective_ttl = max(1.5, clamped * _STRUCTURAL_EMPHASIS_TTL_SCALE_S)
+    _write_ward_property(ward_id, effective_ttl, **props)
     _mark_recruitment("ward.highlight")
+    _emit_homage_emphasis("ward.highlight", ward_id)
     return True
 
 
@@ -508,6 +616,7 @@ def dispatch_ward_appearance(capability_name: str, ttl_s: float) -> bool:
         return False
     _write_ward_property(ward_id, ttl_s, color_override_rgba=palette[modifier])
     _mark_recruitment("ward.appearance")
+    _emit_homage_emphasis("ward.appearance", ward_id)
     return True
 
 
@@ -527,6 +636,7 @@ def dispatch_ward_cadence(capability_name: str, ttl_s: float) -> bool:
         return False
     _write_ward_property(ward_id, ttl_s, rate_hz_override=_WARD_CADENCE_MODIFIERS[modifier])
     _mark_recruitment("ward.cadence")
+    _emit_homage_emphasis("ward.cadence", ward_id)
     return True
 
 
@@ -872,7 +982,11 @@ def dispatch(
     if name.startswith("fx.family."):
         return "preset.bias" if dispatch_preset_bias(name, record.ttl_s) else "unknown"
     if name.startswith("overlay."):
-        return "overlay.emphasis" if dispatch_overlay_emphasis(name, record.ttl_s) else "unknown"
+        return (
+            "overlay.emphasis"
+            if dispatch_overlay_emphasis(name, record.ttl_s, salience=record.score)
+            else "unknown"
+        )
     if name.startswith("youtube."):
         return "youtube.direction" if dispatch_youtube_direction(name, record.ttl_s) else "unknown"
     if name.startswith("attention.winner."):
@@ -886,7 +1000,11 @@ def dispatch(
     if name.startswith("ward.staging."):
         return "ward.staging" if dispatch_ward_staging(name, record.ttl_s) else "unknown"
     if name.startswith("ward.highlight."):
-        return "ward.highlight" if dispatch_ward_highlight(name, record.ttl_s) else "unknown"
+        return (
+            "ward.highlight"
+            if dispatch_ward_highlight(name, record.ttl_s, salience=record.score)
+            else "unknown"
+        )
     if name.startswith("ward.appearance."):
         return "ward.appearance" if dispatch_ward_appearance(name, record.ttl_s) else "unknown"
     if name.startswith("ward.cadence."):
@@ -1104,6 +1222,29 @@ _VALID_WARD_IDS: frozenset[str] = frozenset(
 _HOMAGE_PENDING: Path = Path("/dev/shm/hapax-compositor/homage-pending-transitions.json")
 
 
+def _emit_homage_emphasis(intent_family: str, ward_id: str) -> None:
+    """Best-effort bump of ``hapax_homage_emphasis_applied_total``.
+
+    Phase C1 (homage-completion-plan §2): every ward-properties write
+    driven by an intent_family increments this counter so the §7.3
+    verification protocol has direct proof that the narrative director
+    is actually writing to the ward-properties surface. Import and
+    emit failures are swallowed — the metric is diagnostic and must
+    not break the dispatcher hot path.
+    """
+    try:
+        from shared.director_observability import emit_homage_emphasis_applied
+
+        emit_homage_emphasis_applied(ward=ward_id, intent_family=intent_family)
+    except Exception:
+        log.debug(
+            "emit_homage_emphasis_applied failed for %s / %s",
+            ward_id,
+            intent_family,
+            exc_info=True,
+        )
+
+
 def _apply_emphasis(ward_id: str, salience: float = 1.0) -> None:
     """Bump a ward's highlight envelope for the structural-intent window.
 
@@ -1152,6 +1293,12 @@ def _apply_emphasis(ward_id: str, salience: float = 1.0) -> None:
     merged = WardProperties(**{**current.__dict__, **props})
     set_ward_properties(ward_id, merged, ttl_s)
     _mark_recruitment("structural.emphasis", extra={"ward_id": ward_id, "ttl_s": ttl_s})
+    # Phase C1 (homage-completion-plan §2): count every structural
+    # emphasis write so ``rate(hapax_homage_emphasis_applied_total[5m])``
+    # reflects the narrative director's actual write-rate to the
+    # ward-properties surface (the §7.3 verification protocol's
+    # aliveness check).
+    _emit_homage_emphasis("structural.emphasis", ward_id)
 
 
 def _apply_placement(ward_id: str, hint: str) -> None:

@@ -83,9 +83,13 @@ class TestWardHighlight:
         assert wp.resolve_ward_properties("captions").alpha == pytest.approx(0.35)
 
     def test_glow_sets_glow_radius(self):
+        # Phase B2: the aggressive modifiers (glow/pulse/flash/foreground)
+        # now share the B1 in-your-face envelope (glow=14, pulse=2,
+        # bump=0.06, alpha=1.0). Updated from the prior 12.0 value per
+        # homage-completion-plan §2.
         assert cc.dispatch_ward_highlight("ward.highlight.album.glow", 10.0)
         wp.clear_ward_properties_cache()
-        assert wp.resolve_ward_properties("album").glow_radius_px == 12.0
+        assert wp.resolve_ward_properties("album").glow_radius_px == 14.0
 
 
 class TestWardAppearance:
@@ -199,6 +203,7 @@ class TestAuditRegression:
         cc.dispatch_ward_highlight("ward.highlight.album.glow", 30.0)
         wp.clear_ward_properties_cache()
         props = wp.resolve_ward_properties("album")
-        # Both fields should be present
+        # Both fields should be present. Phase B2 bumped the aggressive
+        # glow envelope to 14.0.
         assert props.scale == pytest.approx(1.10)
-        assert props.glow_radius_px == 12.0
+        assert props.glow_radius_px == 14.0
