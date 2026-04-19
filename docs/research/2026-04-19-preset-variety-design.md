@@ -63,35 +63,19 @@ narratives invoke `audio-reactive`, `glitch-dense`, `warm-minimal`, or
 
 ### Slot-level activation (12h `activate_plan` count)
 
-20,510 `activate_plan` calls across 12h. Aggregating by **node type** (the
-slot-level shader that fires, not the preset that composed it):
+20,510 `activate_plan` calls across 12h, **27 unique node types**.
+Heavily front-loaded: `colorgrade` (2,321), `bloom` (2,170), `vignette`
+(1,670), `noise_overlay` (1,518), `content_layer` (1,274),
+`chromatic_aberration` (1,214), `scanlines` (1,055), `postprocess` (969),
+`passthrough` (934). Top 9 are universal post-process nodes plus
+`vhs`/`kaleidoscope`/`tunnel` (the high-frequency "signature look").
 
-| Node | Count | Node | Count | Node | Count |
-|---|---:|---|---:|---|---:|
-| colorgrade | 2,321 | bloom | 2,170 | vignette | 1,670 |
-| noise_overlay | 1,518 | content_layer | 1,274 | chromatic_aberration | 1,214 |
-| scanlines | 1,055 | postprocess | 969 | passthrough | 934 |
-| tunnel | 609 | kaleidoscope | 608 | vhs | 603 |
-| trail | 461 | mirror | 459 | fisheye | 457 |
-| thermal | 306 | slitscan | 155 | threshold | 153 |
-| invert | 153 | posterize | 152 | dither | 152 |
-| rutt_etra | 151 | pixsort | 151 | stutter | 149 |
-| glitch_block | 149 | ascii | 149 | halftone | 49 |
-
-**27 unique node types fire.** Total 20,510 activations of a 12h window means
-~28 plan-applies/min — most of which are slot re-binding (the SlotPipeline
-re-issues `activate_plan` on every plan delta, not per-tick), so this is not
-the per-second tick-rate of the compositor.
-
-The shape that matters: the top 3 nodes (`colorgrade`, `bloom`, `vignette`) are
-**ubiquitous** post-process nodes that every preset invokes. The top 9 are all
-either post-process universals or `vhs` / `kaleidoscope` / `tunnel` —
-high-frequency aesthetic choices that the operator probably reads as the
-"signature look." The bottom of the table — `pixsort`, `glitch_block`,
-`stutter`, `halftone`, `ascii` — are exactly the high-entropy / high-personality
-nodes whose absence is what reads as "same-y."
-
-`halftone` fired **49 times in 12h** versus `colorgrade`'s 2,321. A 47:1 ratio.
+The bottom of the distribution is the personality nodes operator reads as
+"same-y" by their absence: `slitscan` (155), `threshold` (153), `invert`
+(153), `posterize` (152), `dither` (152), `rutt_etra` (151), `pixsort` (151),
+`stutter` (149), `glitch_block` (149), `ascii` (149), **`halftone` (49)**.
+A 47:1 ratio between `colorgrade` and `halftone`. The personality slots fire
+1–4% of the post-process slots' rate.
 
 ### Adjacent state signals
 
@@ -419,40 +403,30 @@ tilts the field.
 
 ## §6. Integration With Tonight's Retirements + Un-Shipped Work
 
-### F1 (camera-hero variety-gate retirement)
-F1's gate operated on `cam.hero.*`, not `fx.family.*`. Retirement does not
-affect preset variety directly. However: F1's gate was hiding the fact that
-camera-hero recruitment was producing the same winners 14 % of the time.
-That failure-mode shape — recruitment producing same winners — is identical
-to what §1 documents for preset.bias. If F1's recruitment failure was ever
-"papered over" by the operator perceiving variety only because of the gate,
-the operator's pre-F1 perception of camera variety may have been artificially
-inflated. Post-F1, raw recruitment quality is now visible — and §4 / §5's
-moves are needed to make that raw recruitment actually generate variety.
+**F1 (camera-hero variety-gate retirement)** — operated on `cam.hero.*`, not
+`fx.family.*`. Does not affect preset variety directly. However: F1's gate
+was hiding camera-hero recruitment producing same winners 14% of the time —
+identical failure-mode shape to §1's preset.bias monoculture. Pre-F1
+operator perception of camera variety may have been artificially inflated;
+post-F1, raw recruitment quality is visible, and §4 / §5 moves are needed
+on the preset side as well.
 
-### F2 (deterministic micromove retirement)
-F2 was a fallback path that emitted hardcoded micromove tuples. Its retirement
-exposes more of the live recruitment surface to the audience. Same caveat as
-F1 — without §4 / §5, the raw surface is monotonous.
+**F2 (deterministic micromove retirement)** — exposes raw recruitment
+surface; same caveat as F1.
 
-### A6 (`random_mode` neutral-ambient hardcoded fallback) — un-retired
-This is the hardcoded fallback that fires when no `preset.bias` family is
-recruited within 20 s. Per §3, A6 is a sibling expert-system rule that should
-also retire. **Sequence: ship §5.1–§5.4 first, then retire A6.** Without
-recency scoring + Thompson decay + perceptual-distance impingement, retiring
-A6 will widen the unguided-pick surface but not improve recruitment quality
-— and the loss of the family-coherent fallback may make the variety problem
-*worse* in the interim. Ship the architectural fix, validate on telemetry,
-then remove the gate.
+**A6 (`random_mode` neutral-ambient fallback) — un-retired** — sibling
+expert-system rule per §3 reference. **Sequence: ship §5.1–§5.4 first, then
+retire A6.** Without recency scoring + Thompson decay first, retiring A6
+will make variety *worse* in the interim. Ship architectural fix, validate
+on telemetry, then remove gate.
 
-### A7 (twitch director hardcoded `pressure-discharge` rule) — un-retired
-Similar: A7 emits a `preset.bias.pressure-discharge` impingement when
-`active_signals >= 6`. This is an expert-system rule. Replace with a real
-perceptual signal that can drive `preset.bias` impingements.
+**A7 (twitch director `pressure-discharge` rule) — un-retired** — emits a
+hardcoded `preset.bias.pressure-discharge` when `active_signals >= 6`. Replace
+with a real perceptual signal.
 
-### B6 (HARDM emphasis → FX-chain neon bias) — un-shipped
-B6 is the first wired ward → FX-bias coupling. **Generalise the pattern:**
-every prominent ward should bias a *different* preset family. Sketch:
+**B6 (HARDM emphasis → FX-chain neon bias) — un-shipped** — first wired ward
+→ FX-bias coupling. **Generalise the pattern:** every prominent ward should
+bias a *different* preset family.
 
 | Ward class | Family bias | Programme hint |
 |---|---|---|
@@ -509,50 +483,41 @@ content-programming layer landing first).
 1. **What does "same-y" mean specifically?** Same palette, same motion
    register, same density, same node composition? §5.1's recency-distance
    is a generic embedding-distance term; if the operator is responding to
-   a specific axis (e.g., "every preset feels low-saturation"), the
-   embedding distance may not capture that — and we would need a
-   palette-distance term in addition.
+   a specific axis (e.g., low-saturation), a palette-distance term may be
+   needed in addition.
 
 2. **Chain-level vs within-preset:** is the chain transition (§5.5) the
-   loudest miss, or is the within-preset visual variety the loudest miss?
-   Phase 6 vs Phase 4 sequencing depends on this.
+   loudest miss, or within-preset visual variety? Phase 6 vs Phase 4
+   sequencing depends on this.
 
-3. **Per-programme palette characterizations:** the §5.6 sketches above
+3. **Per-programme palette characterizations:** the §5.6 sketches
    (vinyl-listening = calm/warm; beat-making = audio-reactive/glitch-dense)
-   are first guesses. Operator's mental model of which presets fit which
-   programmes is the authority. Need a 30-min pairing session to set the
-   palette_bias maps once the programme layer ships.
+   are first guesses. Need a brief pairing session once the programme layer
+   ships.
 
-4. **Thompson decay aggressiveness:** §5.2 proposes `gamma_unused=0.999`
-   per tick. Is exploration recovery on the order of hours acceptable, or
-   should it be minutes? Aggressive decay (`0.95`) makes the system feel
-   more "restless"; gentle decay (`0.999`) keeps continuity but risks
-   long-form monocultures persisting.
+4. **Thompson decay aggressiveness:** is exploration recovery over hours
+   (`gamma_unused=0.999`) acceptable, or should it be minutes (`0.99`)?
+   Aggressive decay makes the system feel "restless"; gentle keeps
+   continuity but risks long-form monocultures.
 
-5. **Novelty-impingement recruitment veto:** when
-   `content.too-similar-recently` fires, does the operator want to be able
-   to override (e.g., "I'm in a deliberate listening register, ignore
-   novelty bonuses for the next 30 min")? If yes, an
-   `affordance_inhibition` for `novelty.shift` would be needed —
-   operator-controlled, not director-controlled.
+5. **Novelty-impingement veto:** when `content.too-similar-recently` fires,
+   should the operator be able to suppress it for a deliberate-listening
+   register (would need an operator-controlled `affordance_inhibition`)?
 
 6. **F1/F2 retirement perceptual baseline:** did the "same-y" complaint
-   appear before or after the F1/F2 retirements went live? If post-F1/F2,
-   some perceived variety may have been the camera/micromove rotation
-   masking the underlying preset monoculture, and the proposed scoring
-   moves restore variety to the *correct* layer.
+   appear before or after F1/F2 went live? If post-F1/F2, some perceived
+   variety may have been camera/micromove rotation masking preset
+   monoculture.
 
-7. **HARDM B6 unshipped expectation:** the operator may have expected B6 to
-   already be addressing this. Confirming whether B6 alone (HARDM → neon
-   bias) is enough variety, or whether the wider §6 pattern is required,
-   would tighten Phase 7's scope.
+7. **HARDM B6 unshipped expectation:** is B6 alone enough, or is the wider
+   §6 pattern required?
 
-8. **Director narrative monotony — separate fix?** The §1 finding that
-   the director's narrative itself is locked on `'calm-textural'` for
-   hours suggests a director-loop bug independent of the affordance
-   pipeline. Worth a separate research thread — possibly the director's
-   prompt itself is templating in the recently-recruited family name in a
-   way that creates a self-reinforcing loop.
+8. **Director narrative monotony — separate fix?** The §1 finding that the
+   director's narrative is itself locked on `'calm-textural'` for hours
+   suggests a director-loop bug independent of the affordance pipeline.
+   Worth a separate research thread — possibly the director's prompt is
+   templating in the recently-recruited family name and creating a
+   self-reinforcing loop.
 
 ---
 

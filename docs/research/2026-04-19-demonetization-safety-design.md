@@ -242,37 +242,21 @@ pipeline does. This is the architectural distinction from a deny-list.
 
 ### 4.3 Ring 3 — egress audit (sample-rate JSONL)
 
-Append-only JSONL at `~/hapax-state/monetization-audit/egress-{date}.jsonl`,
-one entry per render at low-tier surfaces and 100% per render at high-tier
-surfaces. Schema:
+Append-only JSONL at `~/hapax-state/monetization-audit/egress-{date}.jsonl`
+(low-tier 10% sample, high-tier 100%). Per-entry: `timestamp`,
+`surface_kind`, `capability`, `rendered_text` (truncated 512 chars),
+`classifier_score`, `guideline`, `music_provenance`, `youtube_source`,
+`decision`, `decision_reason`. Daily gzip rotation; 90-day retention.
+Audit log is the corpus for classifier prompt tuning and FP/FN pattern
+identification.
 
-```
-{
-  "timestamp": "2026-04-19T14:32:01Z",
-  "surface_kind": "tts" | "captions" | "chronicle" | "activity_header" | ...,
-  "capability": "say.spontaneous-narration" | ...,
-  "rendered_text": "...",         // truncated to 512 chars
-  "classifier_score": 0..3,
-  "guideline": "inappropriate_language" | null,
-  "music_provenance": "operator-vinyl" | "soundcloud" | "hapax-pool" | null,
-  "youtube_source": {url, title, channel, runtime_s} | null,
-  "decision": "rendered" | "withheld",
-  "decision_reason": "..."
-}
-```
+### 4.4 Ring 0 — build-time linter (extend existing)
 
-For human-reviewable post-hoc audit and classifier improvement. The audit
-log is the corpus for tuning the classifier prompt and identifying
-false-positive / false-negative patterns. Daily rotation; 90-day retention.
-
-### 4.4 Ring 0 — build-time linter (existing pattern, extend)
-
-Already implemented for the personification axiom
-(`scripts/lint_personification.py`). Extend the same shape to scan the
-hand-authored content surfaces — capability descriptions, ward labels,
-signature artefact catalog entries, MOTD/quit-quip blocks — for terms
-matching the deny-list categories from §1.1. Failures block merge.
-Catalog edits are rare; this is the cheap layer.
+Extend `scripts/lint_personification.py`'s pattern to scan hand-authored
+content surfaces — capability descriptions, ward labels, signature
+artefact catalog entries, MOTD/quit-quip blocks — for terms matching the
+§1.1 categories. CI-blocking. Catalog edits are rare; this is the cheap
+layer.
 
 ### 4.5 Architectural sketch (Pydantic-shape, not real code)
 
@@ -395,108 +379,81 @@ bilateral-contract requirement on consent.
 
 ## 7. Music + vinyl — the DMCA corner
 
-The vinyl-on-stream path and the YouTube half-speed playback hack
-(`scripts/youtube-player.py:_playback_rate` defaulting to 0.5x) are the
-current state. The half-speed hack is not a defense per the §1.2 research
-findings: Content ID's tolerance for pitch/tempo deltas is roughly ±5%,
-not ±50%, and the 2026 enforcement state explicitly enumerates pitch-shift
-and speed-change as evasion attempts that constitute a Terms of Service
-violation. The current behavior carries both DMCA-strike risk and a
-ToS-violation overlay.
+The half-speed playback hack (`youtube-player.py:_playback_rate=0.5`,
+task #66) is not a defense per §1.2 — Content ID's pitch/tempo tolerance
+is ~±5%, not ±50%, and 2026 enforcement explicitly enumerates altered-
+content evasion as a Terms-of-Service violation. Current behavior carries
+both strike risk and ToS overlay.
 
 ### 7.1 Music provenance tagging
 
-Add a `music_provenance` tag at the splattribution layer (`scripts/youtube-player.py`
-already writes attribution files; extend the schema). Values:
+Extend the splattribution schema with `music_provenance`. Values:
 
-- `operator-vinyl` — operator owns the physical record. Fair-use-adjacent
-  for playback in the studio; DMCA risk on broadcast is HIGH but the
-  operator's ownership is the policy claim.
-- `soundcloud-licensed` — operator's SoundCloud account; per-track license
-  read from SoundCloud metadata. Some are CC-BY, some are all-rights-
-  reserved. The provenance tag carries the per-track license string.
-- `hapax-pool` — Hapax-curated license-cleared pool (future, task #130).
-  License statuses pre-cleared at pool ingestion; only `cc-by`, `cc-by-sa`,
-  `public-domain`, and `licensed-for-broadcast` tracks are eligible.
-- `youtube-react` — third-party YouTube content, see §7.3.
-- `unknown` — fail-closed: if provenance cannot be determined at playback
-  time, the audio path is muted (silent video) and a
-  `music.provenance.unknown` impingement fires for operator review.
+- `operator-vinyl` — operator owns the physical record. HIGH DMCA risk on
+  broadcast accepted; operator ownership is the policy claim.
+- `soundcloud-licensed` — operator's account; tag carries per-track
+  license string from SoundCloud metadata.
+- `hapax-pool` — Hapax-curated license-cleared pool (task #130);
+  ingestion accepts only `cc-by`, `cc-by-sa`, `public-domain`,
+  `licensed-for-broadcast`.
+- `youtube-react` — third-party (see §7.2).
+- `unknown` — fail-closed: audio path muted, `music.provenance.unknown`
+  impingement fires for operator review.
 
-Egress audit (Ring 3) records the provenance tag for every track that
-plays. This is the audit trail.
+Egress audit (Ring 3) records the tag for every track. This is the audit
+trail.
 
-### 7.2 YouTube reaction content — recommend mute + transcript overlay
+### 7.2 YouTube reaction content — mute + transcript overlay
 
-The half-speed hack should be retired. Three alternatives, in order of
-preference:
+Three alternatives, in preference order:
 
-1. **Mute YouTube audio entirely; render transcript overlay.** Use yt-dlp
-   to fetch caption tracks (when available); render captions in the
-   dedicated YouTube embed ward (per the 2026-04-19 visibility design). The
-   operator's voice carries the audio of the moment; the visual + caption
-   carries the source content. This is the cleanest defense — Content ID is
-   audio-fingerprint-driven; muted audio cannot match.
-2. **Short-clip framing.** Limit each YouTube source's playback to ≤ 30s
-   contiguous and require ≥ 60s of operator-narrated transformation between
-   replays of the same source. Fair-use adjacent; not a guaranteed defense.
-   Defer until alternative 1 is shipped.
-3. **Source-swap to Creative Commons / licensed equivalents.** Long-term
-   path for the Hapax-curated pool (task #130). Not applicable to the
-   reaction-mode use case where the source IS the subject.
+1. **Mute YouTube audio; render transcript overlay.** Operator voice
+   carries the audio of the moment; the visual + caption carries the
+   source content. Cleanest defense — Content ID is audio-fingerprint;
+   muted audio cannot match. **Recommended.**
+2. **Short-clip framing.** ≤30s contiguous + ≥60s operator-transformative
+   narration between same-source replays. Fair-use-adjacent; not
+   guaranteed. Defer.
+3. **Source-swap to Creative Commons.** Long-term path for the Hapax pool;
+   not applicable to react use cases where the source IS the subject.
 
-**Recommendation:** ship alternative 1 as the default. Make
-`HAPAX_YOUTUBE_PLAYBACK_RATE` removable (no rate manipulation; play at
-1.0x). Mute the audio output of the youtube-player ffmpeg pipeline; route
-the YouTube audio nowhere. Render transcript overlay in the dedicated
-YouTube embed ward when captions are available.
+Ship alternative 1 as default. Remove `HAPAX_YOUTUBE_PLAYBACK_RATE`. Mute
+the youtube-player audio output; render transcript overlay in the
+dedicated YouTube embed ward when captions are available.
 
 ### 7.3 SoundCloud — per-track license enumeration
 
-Operator's linked SoundCloud account contains tracks under varying
-licenses. The integration (task #131) must enumerate licenses at
-ingestion time and tag accordingly. Tracks without a clear license tag
-default to `unknown` and are excluded from the play queue. This is a
-data-quality requirement on the SoundCloud integration; the monetization
-gate consumes the tag, it does not derive it.
+The SoundCloud integration (task #131) enumerates licenses at ingestion
+time. Tracks without a clear license default to `unknown` and are
+excluded from the play queue. This is a data-quality requirement on the
+integration; the monetization gate consumes the tag, it does not derive
+it.
 
 ---
 
 ## 8. Personified-AI + advertiser perception
 
-The 2025-2026 YouTube enforcement wave on AI-generated content is the
-adjacent risk. Hapax avoids the disclosure requirement (no synthetic voices
-of real people, no deepfake content of real events) and avoids the
-inauthentic-content axis (the operator is physically present; the canvas
-shows real cameras, real music production). But advertiser perception is
-its own axis — an advertiser scanning the channel may make a
-decisional call about "AI-driven channel" that does not require a policy
-violation to manifest.
+Hapax avoids the YouTube AI disclosure requirement (no synthetic real-people
+content) and the inauthentic-content axis (operator physically on cameras,
+real music production). The residual risk is advertiser perception — a
+reviewer scanning the channel may decide "AI-driven channel" without any
+policy violation manifesting.
 
-### 8.1 Egress-level "research instrument" footer
-
-Proposal: add a non-removable footer to the chronicle and captions wards:
+**Egress footer.** Add a non-removable footer to chronicle and captions
+wards:
 
 > Council research instrument — experimental cognitive architecture
 > (operator: <name>, research home: <url>)
 
-Renders in BitchX-grammar muted-grey, low-prominence, persistent across
-all stream modes. Frames the channel for advertiser review without
-claiming AI sentience (which would tangle with the anti-personification
-axiom). The operator's name + research URL contextualizes the channel as
-operator-driven research, not autonomous AI content.
+BitchX-grammar muted-grey, low-prominence, persistent across all stream
+modes. Frames the channel for advertiser review without claiming AI
+sentience (which would tangle with the anti-personification axiom). The
+operator name + research URL contextualizes the channel as operator-driven
+research. Footer text passes Ring 0 + Ring 2 once at startup, cached.
 
-### 8.2 Limits
-
-- Will not address the underlying inauthenticity-policy enforcement. If
-  Hapax content reads to a reviewer as "channel of an AI making decisions
-  by itself", the footer is a small mitigation. The structural mitigations
-  are the operator's physical presence + the operator's curated music +
-  the explicit research framing throughout the stream copy (channel
-  description, video titles, thumbnails).
-- The footer text itself must pass Ring 0 lint + Ring 2 classifier as an
-  invariant. Rendered every frame, so the cost is dominated by once-per-
-  startup classification + cache hit thereafter.
+**Limits.** This is a small mitigation. Structural mitigations are the
+operator's physical presence + curated music + explicit research framing
+in channel description, video titles, thumbnails.
 
 ---
 
