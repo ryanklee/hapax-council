@@ -603,6 +603,7 @@ async def sidechat_consumer_loop(daemon: VoiceDaemon) -> None:
     # Task #144: import the shared-link writer lazily so
     # run_loops_aux stays importable in test environments that don't
     # have the compositor package on the path.
+    from agents.studio_compositor.text_repo_commands import apply_sidechat_command
     from agents.studio_compositor.yt_shared_links import (
         append_shared_link,
         parse_link_command,
@@ -636,6 +637,16 @@ async def sidechat_consumer_loop(daemon: VoiceDaemon) -> None:
                         )
                     except (ValueError, OSError):
                         log.debug("Sidechat link capture failed (non-fatal)", exc_info=True)
+
+                # Task #126: `add-text <body>` / `rotate-text` commands
+                # dispatch into the Hapax-managed Pango text repo. Still
+                # flows through the affordance pipeline so the operator
+                # retains the same observability as any other sidechat
+                # utterance — the repo write is additive.
+                try:
+                    apply_sidechat_command(msg.text)
+                except Exception:
+                    log.debug("Sidechat text-repo command failed (non-fatal)", exc_info=True)
 
                 imp = Impingement(
                     timestamp=msg.ts,
