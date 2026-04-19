@@ -600,6 +600,13 @@ async def sidechat_consumer_loop(daemon: VoiceDaemon) -> None:
     enqueued message, not at end-of-batch, so a crash mid-batch
     re-processes only the unhandled tail.
     """
+    # Task #144: import the shared-link writer lazily so
+    # run_loops_aux stays importable in test environments that don't
+    # have the compositor package on the path.
+    from agents.studio_compositor.yt_shared_links import (
+        append_shared_link,
+        parse_link_command,
+    )
     from shared.impingement import Impingement, ImpingementType
     from shared.operator_sidechat import SIDECHAT_PATH, tail_sidechat
 
@@ -614,6 +621,22 @@ async def sidechat_consumer_loop(daemon: VoiceDaemon) -> None:
         try:
             new_msgs = list(tail_sidechat(since_ts=cursor_ts))
             for msg in new_msgs:
+                # Task #144: recognize `link <url>` and stage the URL
+                # for the YouTube description syncer. The message still
+                # flows through the affordance pipeline so the operator
+                # sees the same recruitment/observability as any other
+                # sidechat utterance — the link capture is additive.
+                link_url = parse_link_command(msg.text)
+                if link_url is not None:
+                    try:
+                        append_shared_link(link_url, source="sidechat", ts=msg.ts)
+                        log.info(
+                            "Sidechat link captured for YouTube description: %s",
+                            link_url[:120],
+                        )
+                    except (ValueError, OSError):
+                        log.debug("Sidechat link capture failed (non-fatal)", exc_info=True)
+
                 imp = Impingement(
                     timestamp=msg.ts,
                     source="operator.sidechat",

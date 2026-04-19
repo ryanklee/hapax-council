@@ -32,6 +32,16 @@ from agents.studio_compositor.youtube_description import (
     assemble_description,
     update_video_description,
 )
+from agents.studio_compositor.yt_shared_links import (
+    load_cursor as _load_links_cursor,
+)
+from agents.studio_compositor.yt_shared_links import (
+    queue_link_for_next_broadcast,
+    tail_shared_links,
+)
+from agents.studio_compositor.yt_shared_links import (
+    save_cursor as _save_links_cursor,
+)
 
 log = logging.getLogger("youtube_description_syncer")
 
@@ -196,6 +206,175 @@ def sync_once(
     return bool(sent)
 
 
+# --- Task #144: operator-shared link consumer ---------------------------
+#
+# Tails ``/dev/shm/hapax-compositor/yt-shared-links.jsonl`` (cursor at
+# ``~/.cache/hapax/yt-links-cursor.txt``), appends each URL to the live
+# broadcast description via the existing quota-gated updater, and queues
+# any links that can't be sent (no video_id, quota exhausted, updater
+# returned False) to ``~/hapax-state/yt-queue.jsonl`` for the next
+# broadcast. Intentionally separate from ``sync_once`` above because the
+# two cursors have different semantics — the research-state syncer is
+# hash-of-state driven, while the shared-links consumer is line-driven.
+#
+# Rate-limit strategy: YouTube's description-update path costs 50 quota
+# units per call (``videos.update`` with part=snippet). The existing
+# ``config/youtube-quota.yaml`` caps daily spend + per-stream updates;
+# we read+debit via the same ``check_and_debit`` path as every other
+# call site, so no separate rate-limit bookkeeping lives here.
+
+
+# Prefix that marks the operator-shared links block in the description.
+# Anything after this marker until the next ``---`` or EOF is the
+# auto-managed URL list; the block is rebuilt on every append so stale
+# URLs from prior broadcasts don't accumulate within a single broadcast.
+_SHARED_LINKS_MARKER: str = "--- Links ---"
+
+
+def _append_links_to_description(
+    existing: str | None, urls: list[str], *, max_chars: int = 4800
+) -> str:
+    """Build the new description with the shared-links block appended.
+
+    Idempotent — re-invocation with the same inputs yields the same
+    string. Any existing ``--- Links ---`` block in ``existing`` is
+    preserved (its contents merged with ``urls``, de-duplicated while
+    preserving first-seen order).
+
+    The YouTube description limit is 5000 chars; we stay safely under.
+    Oldest URLs are dropped from the head of the block if the total
+    would overflow ``max_chars``.
+    """
+    existing = existing or ""
+    marker = _SHARED_LINKS_MARKER
+    head = existing
+    old_links: list[str] = []
+    if marker in existing:
+        head, _, tail = existing.partition(marker)
+        head = head.rstrip("\n")
+        for line in tail.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped == marker:
+                continue
+            # Stop at the next separator block (another "---" section).
+            if stripped.startswith("---") and stripped != marker:
+                break
+            old_links.append(stripped)
+
+    seen: set[str] = set()
+    merged: list[str] = []
+    for url in old_links + list(urls):
+        if url in seen:
+            continue
+        seen.add(url)
+        merged.append(url)
+
+    def _compose(link_list: list[str]) -> str:
+        parts = [head] if head else []
+        parts.append(marker)
+        parts.extend(link_list)
+        return "\n".join(parts).strip() + "\n"
+
+    composed = _compose(merged)
+    # Trim oldest if we blow past the char budget.
+    while len(composed) > max_chars and merged:
+        merged.pop(0)
+        composed = _compose(merged)
+    return composed
+
+
+def sync_shared_links_once(
+    video_id: str | None = None,
+    *,
+    dry_run: bool = False,
+    links_reader=None,
+    updater=None,
+    description_reader=None,
+    cursor_loader=None,
+    cursor_saver=None,
+    queue_writer=None,
+) -> int:
+    """Consume one batch of operator-shared links.
+
+    Reads the shared-links JSONL since the last-saved cursor, and either
+    (a) appends the URLs to the live broadcast description via the
+    existing quota-gated updater, or (b) queues them for the next
+    broadcast when no ``video_id`` is known or the updater reports
+    quota exhaustion.
+
+    Returns the count of newly-seen URLs processed (sent or queued).
+
+    All collaborators are overridable for tests:
+      ``links_reader(since_ts)``     → iterable of records
+      ``updater(video_id, desc, dry_run=...)`` → True on success
+      ``description_reader(video_id)`` → current description string
+      ``cursor_loader()`` / ``cursor_saver(ts)`` → cursor persistence
+      ``queue_writer(record)`` → fallback queue write
+    """
+    links_reader = links_reader or tail_shared_links
+    cursor_loader = cursor_loader or _load_links_cursor
+    cursor_saver = cursor_saver or _save_links_cursor
+    queue_writer = queue_writer or queue_link_for_next_broadcast
+    updater = updater or update_video_description
+    video_id = video_id or os.environ.get("HAPAX_YOUTUBE_VIDEO_ID", "").strip()
+
+    cursor_ts = cursor_loader()
+    records = [r for r in links_reader(since_ts=cursor_ts) if isinstance(r, dict) and r.get("url")]
+    if not records:
+        return 0
+
+    processed = 0
+    if not video_id:
+        # No live broadcast target — queue every record.
+        for rec in records:
+            queue_writer(rec)
+            cursor_ts = max(cursor_ts, float(rec.get("ts", 0.0)))
+            processed += 1
+        cursor_saver(cursor_ts)
+        log.info(
+            "yt-shared-links: no video_id; queued %d link(s) for next broadcast",
+            processed,
+        )
+        return processed
+
+    urls = [str(r["url"]) for r in records]
+    # Read the current description so we don't clobber it on update. The
+    # default reader goes through the YouTube API; tests override.
+    existing_description = ""
+    if description_reader is not None:
+        try:
+            existing_description = description_reader(video_id) or ""
+        except Exception:
+            log.debug("description_reader failed; treating as empty", exc_info=True)
+
+    new_description = _append_links_to_description(existing_description, urls)
+
+    sent = updater(video_id, new_description, dry_run=dry_run)
+    if sent:
+        for rec in records:
+            cursor_ts = max(cursor_ts, float(rec.get("ts", 0.0)))
+            processed += 1
+        cursor_saver(cursor_ts)
+        log.info(
+            "yt-shared-links: appended %d URL(s) to broadcast %s",
+            processed,
+            video_id,
+        )
+        return processed
+
+    # Updater refused (quota / no-such-video) — queue every record.
+    for rec in records:
+        queue_writer(rec)
+        cursor_ts = max(cursor_ts, float(rec.get("ts", 0.0)))
+        processed += 1
+    cursor_saver(cursor_ts)
+    log.info(
+        "yt-shared-links: updater declined; queued %d link(s) for next broadcast",
+        processed,
+    )
+    return processed
+
+
 def main() -> int:
     """CLI entry point for systemd user timer.
 
@@ -219,10 +398,17 @@ def main() -> int:
     )
     try:
         sync_once()
-        return 0
     except Exception:
         log.exception("sync_once failed")
+        # Continue to the shared-links path even if the state sync failed —
+        # the two are independent concerns.
+
+    try:
+        sync_shared_links_once()
+    except Exception:
+        log.exception("sync_shared_links_once failed")
         return 1
+    return 0
 
 
 if __name__ == "__main__":

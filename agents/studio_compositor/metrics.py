@@ -119,6 +119,11 @@ COMP_TTS_CLIENT_TIMEOUT_TOTAL: Any = None
 CAM_FRAME_FLOW_STALE_TOTAL: Any = None
 COMP_VOICE_ACTIVE: Any = None
 COMP_MUSIC_DUCKED: Any = None
+# CVS #145 — bidirectional 24c audio-ducking state machine. One-hot
+# gauge (one label per state, 1 for the current state and 0 for the
+# others) so Grafana can plot dwell time in each state and alert on
+# anomalous residency (e.g. stuck in BOTH_ACTIVE).
+HAPAX_AUDIO_DUCKING_STATE: Any = None
 HAPAX_IMAGINATION_SHADER_ROLLBACK_TOTAL: Any = None
 COMP_GLFEEDBACK_RECOMPILE_TOTAL: Any = None
 COMP_GLFEEDBACK_ACCUM_CLEAR_TOTAL: Any = None
@@ -151,6 +156,8 @@ COMP_NONDESTRUCTIVE_CLAMPS_TOTAL: Any = None
 # is follow-mode actually making" and verify the creative-bias scoring
 # isn't getting stuck on one camera.
 HAPAX_FOLLOW_MODE_CUTS_TOTAL: Any = None
+# Task #122 — director degraded hold counter, see ``_init_metrics`` below.
+DIRECTOR_DEGRADED_HOLDS_TOTAL: Any = None
 # Last value the mirror published, so we can detect rollback events
 # (the gauge → counter delta must be non-negative since the underlying
 # Rust counter is monotonic across imagination process lifetime).
@@ -301,6 +308,18 @@ def _init_metrics() -> None:
         "1 when SlotAudioControl is in any non-idle envelope state (ducking/ducked/restoring), 0 when idle",
         registry=REGISTRY,
     )
+
+    # CVS #145 — 24c bidirectional ducker state machine. Pre-register
+    # every label value below so Grafana scrapes always see the full set.
+    global HAPAX_AUDIO_DUCKING_STATE
+    HAPAX_AUDIO_DUCKING_STATE = Gauge(
+        "hapax_audio_ducking_state",
+        "Current AudioDuckingController state (1 for the active label, 0 for others)",
+        ["state"],
+        registry=REGISTRY,
+    )
+    for _st in ("normal", "voice_active", "yt_active", "both_active"):
+        HAPAX_AUDIO_DUCKING_STATE.labels(state=_st).set(1 if _st == "normal" else 0)
 
     # LRR Phase 0 item 4 / FINDING-Q step 4: shader rollback counter.
     # Mirrors the Rust `DynamicPipeline::shader_rollback_total()` over
@@ -607,6 +626,21 @@ def _init_metrics() -> None:
         registry=REGISTRY,
     )
 
+    # Task #122 — director-specific degraded hold counter. Increments
+    # each time ``DirectorLoop._emit_degraded_silence_hold`` fires (i.e.
+    # the LLM tick was skipped because DEGRADED mode was active). The
+    # generic ``hapax_degraded_holds_total{surface="director"}`` label
+    # covers the same ground, but keeping a dedicated counter lets the
+    # Grafana live-change dashboard point at one clean line without
+    # filtering by label.
+    global DIRECTOR_DEGRADED_HOLDS_TOTAL
+    DIRECTOR_DEGRADED_HOLDS_TOTAL = Counter(
+        "hapax_director_degraded_holds_total",
+        "Director ticks where DEGRADED mode caused the LLM call to be "
+        "skipped in favor of a silence-hold fallback intent.",
+        registry=REGISTRY,
+    )
+
 
 _init_metrics()
 
@@ -814,6 +848,19 @@ def set_music_ducked(ducked: bool) -> None:
     if COMP_MUSIC_DUCKED is None:
         return
     COMP_MUSIC_DUCKED.set(1 if ducked else 0)
+
+
+def set_audio_ducking_state(state: str) -> None:
+    """Publish the AudioDuckingController state (CVS #145).
+
+    One-hot: the matching label is set to 1 and all other known labels
+    to 0. Unknown labels are accepted silently so callers can't crash
+    the poll path if a new state is added.
+    """
+    if HAPAX_AUDIO_DUCKING_STATE is None:
+        return
+    for st in ("normal", "voice_active", "yt_active", "both_active"):
+        HAPAX_AUDIO_DUCKING_STATE.labels(state=st).set(1 if st == state else 0)
 
 
 def on_pipeline_restart(pipeline_name: str) -> None:
