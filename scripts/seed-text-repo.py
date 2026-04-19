@@ -41,7 +41,7 @@ log = logging.getLogger("seed-text-repo")
 
 def _seed_id_for(path: Path) -> str:
     """Deterministic id derived from the absolute path of the seed file."""
-    digest = hashlib.sha1(str(path.resolve()).encode("utf-8")).hexdigest()
+    digest = hashlib.sha1(str(path.resolve()).encode("utf-8"), usedforsecurity=False).hexdigest()
     return f"seed-{digest[:8]}"
 
 
