@@ -1503,7 +1503,9 @@ class TestPolicyExperiential:
         state_with_consent = replace(w._last_state, consent_phase="pending_consent")
         policy = get_policy(env=state_with_consent)
         assert "Dignity floor only" in policy
-        assert "Socrates" not in policy  # no operator personality in unconsented mode
+        assert (
+            "executive-function prosthetic" not in policy
+        )  # no operator style in unconsented mode
 
     def test_consented_guest_moderate_formality(self):
         """Consented guest — moderate formality, operator style softened."""

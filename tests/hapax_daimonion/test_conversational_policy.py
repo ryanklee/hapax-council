@@ -231,10 +231,10 @@ class TestPolicyFormat:
 
 
 class TestChildPolicy:
-    def test_child_mode_activates_child_style(self):
+    def test_child_mode_activates_child_policy(self):
         """Child mode produces child-specific interaction guidance."""
         policy = get_policy(guest_mode=True, child_mode=True)
-        assert "sovereign principals" in policy.lower()
+        assert "Child principal active" in policy
         assert "intelligent humans" in policy.lower()
 
     def test_child_mode_respects_intelligence(self):
@@ -244,9 +244,9 @@ class TestChildPolicy:
         assert "Respect their intelligence" in policy
 
     def test_child_mode_allows_productive_confusion(self):
-        """Confusion is a pedagogical tool, not a failure state."""
+        """Productive confusion is allowed."""
         policy = get_policy(guest_mode=True, child_mode=True)
-        assert "confuse them purposefully" in policy.lower()
+        assert "Productive confusion" in policy
 
     def test_child_mode_no_personal_data(self):
         """Children should not see personal data or system internals."""
@@ -261,7 +261,7 @@ class TestChildPolicy:
     def test_child_mode_no_operator_style(self):
         """Child mode should not include operator-specific style."""
         policy = get_policy(guest_mode=True, child_mode=True)
-        assert "Socrates" not in policy
+        assert "executive-function prosthetic" not in policy
 
     def test_non_child_guest_mode_unchanged(self):
         """Regular guest mode (not child) still works as before."""

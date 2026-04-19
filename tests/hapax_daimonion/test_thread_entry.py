@@ -215,12 +215,12 @@ class TestExperimentPolicy:
 
         policy = get_policy(experiment_mode=True)
         assert "truthful" in policy  # dignity floor
-        assert "Dry wit" in policy  # minimal style
-        assert "Socrates" not in policy  # full style stripped
+        assert "Never interrupt pauses" in policy  # minimal style marker
+        assert "executive-function prosthetic" not in policy  # full style stripped
         assert "phone" not in policy.lower()  # env modulation stripped
 
     def test_normal_policy_has_full_style(self):
         from agents.hapax_daimonion.conversational_policy import get_policy
 
         policy = get_policy(experiment_mode=False)
-        assert "Socrates" in policy
+        assert "executive-function prosthetic" in policy

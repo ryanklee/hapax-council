@@ -15,10 +15,11 @@ Use cases (14 rows):
 
 Components (8 columns):
   A: dignity_floor     — Grice maxims always present
-  B: operator_style    — interview-derived personality (Socrates × Hodgman × Carroll)
+  B: operator_style    — architectural-state operator style (executive-function
+                         prosthetic, pacing, interruption rules)
   C: activity_mod      — activity-mode-specific modulation
   D: guest_policy      — consent-phase-dependent guest handling
-  E: child_style       — child interaction guidelines
+  E: child_policy      — child interaction guidelines
   F: env_block         — "Environment:" section with modulation rules
   G: data_protection   — personal data / system internals blocked
   H: format            — starts with header, sections joined correctly
@@ -63,16 +64,15 @@ def _has_dignity_floor(policy: str) -> None:
 
 
 def _has_operator_style(policy: str) -> None:
-    """B: interview-derived operator personality."""
-    assert "Socrates" in policy, "Missing Socrates archetype"
-    assert "Hodgman" in policy, "Missing Hodgman archetype"
+    """B: architectural-state operator style (post-#155 Stage 2)."""
+    assert "executive-function prosthetic" in policy, "Missing operator-style frame"
     assert "dysfluencies" in policy, "Missing ADHD accommodation"
     assert "open loops" in policy, "Missing proactivity directive"
 
 
 def _lacks_operator_style(policy: str) -> None:
-    """B (inverse): operator personality must NOT be present."""
-    assert "Socrates" not in policy, "Operator style leaked"
+    """B (inverse): operator style must NOT be present."""
+    assert "executive-function prosthetic" not in policy, "Operator style leaked"
     assert "dysfluencies" not in policy, "ADHD details leaked to non-operator"
 
 
@@ -90,19 +90,19 @@ def _has_guest_policy(policy: str, phase: str) -> None:
     elif phase == "pending_consent":
         assert "Dignity floor only" in policy
     elif phase == "guest_mode":
-        assert "Guest mode" in policy or "sovereign principals" in policy.lower()
+        assert "Guest mode" in policy or "Child principal active" in policy
 
 
 def _has_child_style(policy: str) -> None:
     """E: child interaction guidelines."""
-    assert "sovereign principals" in policy.lower()
+    assert "Child principal active" in policy
     assert "Never talk down" in policy
-    assert "confuse them purposefully" in policy.lower()
+    assert "Productive confusion" in policy
 
 
 def _lacks_child_style(policy: str) -> None:
-    """E (inverse): child style must NOT be present."""
-    assert "sovereign principals" not in policy.lower()
+    """E (inverse): child policy must NOT be present."""
+    assert "Child principal active" not in policy
 
 
 def _has_env_block(policy: str) -> None:
