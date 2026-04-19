@@ -46,6 +46,48 @@ _STIMMUNG_PATH = Path("/dev/shm/hapax-stimmung/state.json")
 _TPN_PATH = Path("/dev/shm/hapax-dmn/tpn_active")
 
 
+_TICK_DURATION_MS = None
+_TICKS_TOTAL = None
+_TICKS_BY_TYPE = None
+_COLD_START_EVENTS = None
+
+try:
+    from prometheus_client import Counter, Histogram
+
+    # Queue #225: exposed via hapax-daimonion's /metrics server (started in
+    # agents/hapax_daimonion/__main__.py). A Counter with a `type` label is
+    # used instead of the queue-spec-suggested Gauge: a Gauge over three
+    # mutually exclusive categorical states would force 0/1 flips every tick
+    # and drop cumulative history. ValueError catches duplicate-registration
+    # on test re-imports and leaves the sentinels as None.
+    try:
+        _TICK_DURATION_MS = Histogram(
+            "hapax_cpal_tick_duration_ms",
+            "Wallclock duration of a CPAL cognitive tick, in milliseconds",
+            buckets=(10, 25, 50, 100, 150, 300, 500, 1000, 2500),
+        )
+        _TICKS_TOTAL = Counter(
+            "hapax_cpal_ticks_total",
+            "Total CPAL cognitive ticks",
+        )
+        _TICKS_BY_TYPE = Counter(
+            "hapax_cpal_ticks_by_type_total",
+            "CPAL ticks by activity classification",
+            labelnames=("type",),
+        )
+        _COLD_START_EVENTS = Counter(
+            "hapax_cpal_cold_start_events_total",
+            "CpalRunner.run() entries — target stays at 1 for a healthy daemon",
+        )
+    except ValueError:
+        log.debug(
+            "CPAL metrics already registered (test re-import); tick "
+            "instrumentation will be a no-op in this interpreter."
+        )
+except ImportError:
+    pass
+
+
 class CpalRunner:
     """Async run loop for CPAL-based conversation.
 
@@ -122,6 +164,9 @@ class CpalRunner:
         self._last_stimmung_check = 0.0
         self._queued_utterance: bytes | None = None
         self._last_speech_end: float = 0.0  # monotonic timestamp of last system speech end
+        # Queue #225: flipped to True by process_impingement(); reset each tick.
+        # Drives the "impingement" label on hapax_cpal_ticks_by_type_total.
+        self._impingement_since_last_tick: bool = False
 
     @property
     def is_running(self) -> bool:
@@ -168,6 +213,8 @@ class CpalRunner:
         self._running = True
         self._last_tick_at = time.monotonic()
         log.info("CPAL runner started (tick=%.0fms)", TICK_INTERVAL_S * 1000)
+        if _COLD_START_EVENTS is not None:
+            _COLD_START_EVENTS.inc()
 
         try:
             while self._running:
@@ -178,14 +225,24 @@ class CpalRunner:
                 await self._tick(dt)
                 self._tick_count += 1
 
+                tick_duration_s = time.monotonic() - tick_start
+                if _TICK_DURATION_MS is not None:
+                    _TICK_DURATION_MS.observe(tick_duration_s * 1000.0)
+                if _TICKS_TOTAL is not None:
+                    _TICKS_TOTAL.inc()
+                if _TICKS_BY_TYPE is not None:
+                    _TICKS_BY_TYPE.labels(type=self._classify_tick()).inc()
+                self._impingement_since_last_tick = False
+
                 # Publish state every 10 ticks (~1.5s)
                 if self._tick_count % 10 == 0:
                     self._publish_state()
                     self._check_stimmung()
 
-                # Sleep for remainder of tick interval
-                elapsed = time.monotonic() - tick_start
-                sleep_time = max(0, TICK_INTERVAL_S - elapsed)
+                # Sleep for remainder of tick interval. tick_duration_s already
+                # covers the time from tick_start through the end-of-tick
+                # instrumentation, so reuse it as the elapsed time here.
+                sleep_time = max(0, TICK_INTERVAL_S - tick_duration_s)
                 if sleep_time > 0:
                     await asyncio.sleep(sleep_time)
 
@@ -196,6 +253,22 @@ class CpalRunner:
         finally:
             self._running = False
             log.info("CPAL runner stopped after %d ticks", self._tick_count)
+
+    def _classify_tick(self) -> str:
+        """Queue #225 label value for hapax_cpal_ticks_by_type_total.
+
+        Priority: impingement > utterance > producing > idle. An impingement
+        arriving mid-tick dominates classification because it's the most
+        information-dense signal the loop handles; utterance processing and
+        speech production are already-scheduled work.
+        """
+        if self._impingement_since_last_tick:
+            return "impingement"
+        if self._processing_utterance:
+            return "utterance"
+        if self._production.is_producing:
+            return "producing"
+        return "idle"
 
     def stop(self) -> None:
         """Signal the runner to stop."""
@@ -556,6 +629,7 @@ class CpalRunner:
         modulate gain and, if they should surface, trigger T3 via
         the pipeline's spontaneous speech path.
         """
+        self._impingement_since_last_tick = True
         effect = self._impingement_adapter.adapt(impingement)
 
         if effect.gain_update is not None:

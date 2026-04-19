@@ -108,6 +108,18 @@ def main() -> None:
     uvloop.install()
     gc.set_threshold(50_000, 30, 10)
 
+    # Queue #225: Prometheus /metrics server on :9483 for CPAL loop telemetry.
+    # Port choice: compositor owns 9482; daimonion gets 9483. Fails closed so
+    # a port conflict or missing prometheus_client doesn't block the daemon.
+    try:
+        from prometheus_client import start_http_server
+
+        metrics_port = int(os.environ.get("HAPAX_DAIMONION_METRICS_PORT", "9483"))
+        start_http_server(metrics_port)
+        log.info("Prometheus /metrics server listening on :%d", metrics_port)
+    except (ImportError, OSError) as exc:
+        log.warning("Prometheus /metrics server not started: %s", exc)
+
     daemon = VoiceDaemon(cfg=cfg)
     loop = asyncio.new_event_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):
