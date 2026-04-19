@@ -279,6 +279,36 @@ class TestOpenSlugValidation:
         assert cli._read_current() == "cond-phase-a-prime-hermes-001"
 
 
+class TestOpenWithParent:
+    """Phase C2 addition: ``--parent`` links a new condition to an
+    existing one. The parent condition_id is written to
+    ``parent_condition_id`` in the new condition YAML; Bayesian analysis
+    slices pre/post-treatment strata by traversing the parent chain."""
+
+    def test_open_with_valid_parent_sets_parent_condition_id(self, isolated_registry):
+        cli = isolated_registry
+        cli.cmd_init(_args())
+        # init creates cond-phase-a-baseline-qwen-001; use as parent.
+        result = cli.cmd_open(_args(slug="phase-a-child", parent="cond-phase-a-baseline-qwen-001"))
+        assert result == 0
+        child = cli._read_condition("cond-phase-a-child-001")
+        assert child is not None
+        assert child["parent_condition_id"] == "cond-phase-a-baseline-qwen-001"
+
+    def test_open_rejects_nonexistent_parent(self, isolated_registry):
+        cli = isolated_registry
+        cli.cmd_init(_args())
+        result = cli.cmd_open(_args(slug="phase-a-orphan", parent="cond-does-not-exist-001"))
+        assert result == 1
+
+    def test_open_without_parent_keeps_parent_condition_id_null(self, isolated_registry):
+        cli = isolated_registry
+        cli.cmd_init(_args())
+        cli.cmd_open(_args(slug="phase-a-no-parent", parent=None))
+        condition = cli._read_condition("cond-phase-a-no-parent-001")
+        assert condition["parent_condition_id"] is None
+
+
 class TestShowSubcommand:
     def test_show_prints_yaml(self, isolated_registry, capsys):
         cli = isolated_registry
