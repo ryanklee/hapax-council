@@ -116,22 +116,32 @@ class TestFailureModes:
 
 
 class TestRenderCalls:
-    def test_visible_state_triggers_draw(self, tmp_path: Path) -> None:
+    def test_visible_state_triggers_draw(self, tmp_path: Path, monkeypatch) -> None:
         marker = tmp_path / "research-marker.json"
         now = datetime(2026, 4, 14, 12, 0, 0, tzinfo=UTC)
         _write_marker(marker, condition_id="cond-phase-a-baseline-qwen-001", written_at=now)
 
         overlay = ResearchMarkerOverlay(marker_path=marker, now_fn=lambda: now)
         cr = MagicMock()
-        # cairo text_extents returns a 6-tuple (x_bearing, y_bearing, width, height, x_advance, y_advance).
         cr.text_extents.return_value = (0.0, 0.0, 420.0, 24.0, 430.0, 0.0)
-        overlay.render(cr, canvas_w=1920, canvas_h=1080, t=0.0, state=overlay.state())
-        # At least one fill call for the banner background
+
+        # HOMAGE Phase A4 routes text through Pango. Pango's C-level code
+        # type-checks the cairo.Context and rejects a MagicMock, so stub out
+        # text_render.render_text for this unit test. The render method does
+        # a local `from ... import render_text`, so we patch the submodule
+        # directly before any render call.
+        import agents.studio_compositor.text_render as text_render_module
+
+        def _fake_render_text(*args, **kwargs):
+            return (0.0, 0.0, 100.0, 16.0)
+
+        monkeypatch.setattr(text_render_module, "render_text", _fake_render_text)
+
+        state = overlay.state()
+        overlay.render(cr, canvas_w=1920, canvas_h=1080, t=0.0, state=state)
+        assert state["visible"] is True
+        assert state["condition_id"] == "cond-phase-a-baseline-qwen-001"
         assert cr.fill.call_count >= 1
-        # Text shown
-        cr.show_text.assert_called_once()
-        args, _ = cr.show_text.call_args
-        assert "cond-phase-a-baseline-qwen-001" in args[0]
 
     def test_invisible_state_only_clears(self, tmp_path: Path) -> None:
         overlay = ResearchMarkerOverlay(marker_path=tmp_path / "nope.json")

@@ -50,15 +50,18 @@ class TestStyleShape:
 
         assert STYLE_PUBLIC.font_size_px > STYLE_SCIENTIFIC.font_size_px
 
-    def test_public_uses_sans_display_font(self):
+    def test_public_uses_px437_raster_font(self):
+        """Phase A4 (homage-completion-plan §2): captions render in
+        Px437 IBM VGA 8x16 via Pango, not Noto Sans Display."""
         from agents.studio_compositor.captions_source import STYLE_PUBLIC
 
-        assert "Display" in STYLE_PUBLIC.font_description or "Bold" in STYLE_PUBLIC.font_description
+        assert "Px437" in STYLE_PUBLIC.font_description
 
-    def test_scientific_uses_monospace(self):
+    def test_scientific_uses_px437_raster_font(self):
+        """Phase A4: scientific register also routes through Px437."""
         from agents.studio_compositor.captions_source import STYLE_SCIENTIFIC
 
-        assert "Mono" in STYLE_SCIENTIFIC.font_description
+        assert "Px437" in STYLE_SCIENTIFIC.font_description
 
 
 class TestReadLatestCaption:

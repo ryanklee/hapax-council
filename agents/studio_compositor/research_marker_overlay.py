@@ -126,35 +126,90 @@ class ResearchMarkerOverlay(HomageTransitionalSource):
     def _draw_banner(
         self, cr: cairo.Context, canvas_w: int, canvas_h: int, condition_id: str
     ) -> None:
-        """Render a high-contrast banner at the top of the canvas."""
+        """Render the research-marker banner emissively.
+
+        Phase A4: Gruvbox ground + point-of-light glyphs over a
+        ``>>> [RESEARCH MARKER] <HH:MM:SS>`` Px437 line via Pango. The
+        condition id renders as an emissive glyph row above the main
+        line so the marker reads as both timestamp and id.
+        """
+        from agents.studio_compositor.homage.emissive_base import (
+            GRUVBOX_BG0,
+            paint_emissive_bg,
+            paint_emissive_point,
+        )
+        from agents.studio_compositor.homage.rendering import (
+            active_package,
+            select_bitchx_font_pango,
+        )
+        from agents.studio_compositor.text_render import TextStyle, render_text
+
         banner_h = 64
         banner_w = canvas_w
         padding = 16
 
-        # Semi-opaque dark background (Gruvbox hard dark bg0)
-        cr.save()
-        cr.set_source_rgba(0.10, 0.10, 0.10, 0.85)
-        cr.rectangle(0, 0, banner_w, banner_h)
-        cr.fill()
+        # Ground — Gruvbox bg0 via the shared emissive helper so the
+        # ward reads as part of the HOMAGE surface.
+        paint_emissive_bg(cr, banner_w, banner_h, ground_rgba=GRUVBOX_BG0)
 
-        # High-contrast accent bar along the bottom of the banner
-        cr.set_source_rgba(0.98, 0.74, 0.18, 1.0)  # Gruvbox yellow
-        cr.rectangle(0, banner_h - 4, banner_w, 4)
-        cr.fill()
+        try:
+            pkg = active_package()
+            accent_rgba = pkg.resolve_colour("accent_yellow")
+            content_rgba = pkg.resolve_colour(pkg.grammar.content_colour_role)
+            muted_rgba = pkg.resolve_colour(pkg.grammar.punctuation_colour_role)
+            font_desc = select_bitchx_font_pango(cr, 20, bold=True)
+        except Exception:
+            accent_rgba = (0.98, 0.74, 0.18, 1.0)
+            content_rgba = (0.98, 0.92, 0.78, 1.0)
+            muted_rgba = (0.55, 0.55, 0.55, 1.0)
+            font_desc = "Px437 IBM VGA 8x16 20"
 
-        # Text
-        cr.set_source_rgba(0.98, 0.92, 0.78, 1.0)  # Gruvbox fg1
-        cr.select_font_face(
-            "JetBrainsMono Nerd Font",
-            cairo.FONT_SLANT_NORMAL,
-            cairo.FONT_WEIGHT_BOLD,
+        # Condition-id glyph row — emissive points with per-char phase so
+        # the id reads as a row of lanterns. Positioned above the main
+        # text line. Phase is driven by the overlay's injected ``now_fn``
+        # so the test harness can pin determinism.
+        now_wall = self._now_fn()
+        try:
+            t_phase = float(now_wall.timestamp())
+        except Exception:
+            t_phase = 0.0
+        glyph_y = int(banner_h * 0.28)
+        glyph_spacing = 12
+        for i, _ch in enumerate(condition_id[:40]):
+            cx = padding + i * glyph_spacing
+            paint_emissive_point(
+                cr,
+                cx,
+                glyph_y,
+                accent_rgba,
+                t=t_phase,
+                phase=i * 0.21,
+                baseline_alpha=0.85,
+                centre_radius_px=2.0,
+                halo_radius_px=4.5,
+                outer_glow_radius_px=6.5,
+            )
+
+        # Main Px437 line — ``>>> [RESEARCH MARKER] <HH:MM:SS>``. The
+        # marker chevron stays in the muted role so the identity colour
+        # belongs to the timestamp.
+        now = self._now_fn()
+        timestamp = now.strftime("%H:%M:%S") if hasattr(now, "strftime") else ""
+        body_text = f">>> [RESEARCH MARKER] {timestamp}  [{condition_id}]"
+        body_style = TextStyle(
+            text=body_text,
+            font_description=font_desc,
+            color_rgba=content_rgba,
         )
-        cr.set_font_size(28)
-        text = f"RESEARCH CONDITION: {condition_id}"
-        _, _, text_w, text_h, _, _ = cr.text_extents(text)
-        cr.move_to(padding, banner_h / 2 + text_h / 2 - 2)
-        cr.show_text(text)
+        render_text(cr, body_style, x=padding, y=int(banner_h * 0.50))
 
+        # Muted 1-px baseline stroke at the foot of the banner, echoing
+        # the accent-bar role from the prior design.
+        mr, mg, mb, _ = muted_rgba
+        cr.save()
+        cr.set_source_rgba(mr, mg, mb, 0.55)
+        cr.rectangle(0, banner_h - 2, banner_w, 1)
+        cr.fill()
         cr.restore()
 
 

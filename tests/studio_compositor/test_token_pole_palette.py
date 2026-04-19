@@ -111,7 +111,13 @@ class TestPaletteSwap:
     palette routing is live.
     """
 
-    def test_glyph_centre_uses_bright_role(self) -> None:
+    def test_glyph_centre_uses_accent_yellow_role(self) -> None:
+        """Phase A4 §1.2: centre dot is ``accent_yellow`` (stub: pure yellow).
+
+        The HOMAGE emissive rewrite moved the centre to accent_yellow so
+        the token reads as a point of light (yellow core + magenta halo)
+        rather than a flat bright-identity target.
+        """
         surface = _render_surface(lambda: _distinctive_stub())
         # The glyph centre sits at the spiral sample for pole_position=0.6.
         cx = _SURFACE_SIZE * tp.SPIRAL_CENTER_X
@@ -120,11 +126,12 @@ class TestPaletteSwap:
         spiral = tp._build_spiral(cx, cy, max_r, tp.NUM_POINTS)
         idx = int(0.6 * (tp.NUM_POINTS - 1))
         gx, gy = spiral[idx]
-        # Sample the glyph centre. Stub ``bright`` = pure white.
+        # Sample the glyph centre. Stub ``accent_yellow`` = pure yellow.
         b, g, r, _ = _sample(surface, int(gx), int(gy))
-        assert r >= 200, f"centre R {r} - bright role not applied"
-        assert g >= 200, f"centre G {g} - bright role not applied"
-        assert b >= 200, f"centre B {b} - bright role not applied"
+        assert r >= 200, f"centre R {r} - accent_yellow not applied"
+        assert g >= 200, f"centre G {g} - accent_yellow not applied"
+        # Yellow → blue channel near zero.
+        assert b <= 80, f"centre B {b} - expected near-zero blue for yellow"
 
     def test_background_uses_package_background(self) -> None:
         """The flat card uses ``palette.background``. Stubbed to dark

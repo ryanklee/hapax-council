@@ -65,7 +65,7 @@ class TestStartLayoutOnly:
             "reverie",
             "activity_header",
             "stance_indicator",
-            "chat_keyword_legend",
+            "chat_ambient",
             "grounding_provenance_ticker",
             "captions",
             "impingement_cascade",
@@ -74,6 +74,7 @@ class TestStartLayoutOnly:
             "pressure_gauge",
             "activity_variety_log",
             "whos_here",
+            "hardm_dot_matrix",
         }
         assert {s.id for s in layout.sources} == expected_ids
         assert set(compositor.source_registry.ids()) == expected_ids
@@ -94,7 +95,7 @@ class TestStartLayoutOnly:
             "reverie",
             "activity_header",
             "stance_indicator",
-            "chat_keyword_legend",
+            "chat_ambient",
             "grounding_provenance_ticker",
             "captions",
             "impingement_cascade",
@@ -103,6 +104,7 @@ class TestStartLayoutOnly:
             "pressure_gauge",
             "activity_variety_log",
             "whos_here",
+            "hardm_dot_matrix",
         }
 
     def test_broken_json_resolves_to_fallback(self, tmp_path: Path) -> None:

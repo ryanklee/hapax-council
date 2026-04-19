@@ -40,7 +40,7 @@ def test_default_json_exists_and_is_valid_layout() -> None:
         # (PR #1017/§3.5 + follow-ups #1018).
         "activity_header",
         "stance_indicator",
-        "chat_keyword_legend",
+        "chat_ambient",
         "grounding_provenance_ticker",
         # Epic 2 Phase C (2026-04-17) — hothouse pressure surfaces.
         "impingement_cascade",
@@ -95,7 +95,7 @@ def test_default_json_exists_and_is_valid_layout() -> None:
         # Volitional-director Phase 4 legibility assignments.
         ("activity_header", "activity-header-top"),
         ("stance_indicator", "stance-indicator-tr"),
-        ("chat_keyword_legend", "chat-legend-right"),
+        ("chat_ambient", "chat-legend-right"),
         ("grounding_provenance_ticker", "grounding-ticker-bl"),
         # Epic 2 Phase C hothouse assignments.
         ("impingement_cascade", "impingement-cascade-midright"),
@@ -126,7 +126,7 @@ def test_default_json_source_backends_match_registry_dispatch() -> None:
         # Volitional-director Phase 4 legibility sources.
         "activity_header": "cairo",
         "stance_indicator": "cairo",
-        "chat_keyword_legend": "cairo",
+        "chat_ambient": "cairo",
         "grounding_provenance_ticker": "cairo",
         # Epic 2 Phase C hothouse sources.
         "impingement_cascade": "cairo",
@@ -210,6 +210,35 @@ def test_default_json_stream_overlay_source_is_registered() -> None:
     assert cls.__name__ == "StreamOverlayCairoSource"
 
 
+def test_default_json_chat_ambient_binds_to_chat_ambient_ward() -> None:
+    """HOMAGE Phase B5 regression pin: chat_ambient binds to ChatAmbientWard.
+
+    Per docs/superpowers/plans/2026-04-19-homage-completion-plan.md §B5
+    and the HOMAGE reckoning §7.2 step 1, the chat_ambient slot must
+    render through the new aggregate-only ChatAmbientWard, NOT the
+    legacy ChatKeywordLegendCairoSource keyword legend. Pinning the
+    binding prevents a silent regression to the legacy class.
+    """
+    from agents.studio_compositor.cairo_sources import get_cairo_source_class
+
+    raw = json.loads(DEFAULT_JSON.read_text())
+    layout = Layout.model_validate(raw)
+
+    chat_ambient = next(
+        (s for s in layout.sources if s.id == "chat_ambient"),
+        None,
+    )
+    assert chat_ambient is not None, "chat_ambient source missing from default.json"
+    assert chat_ambient.backend == "cairo"
+    class_name = chat_ambient.params.get("class_name")
+    assert class_name == "ChatAmbientWard", (
+        f"chat_ambient must bind to ChatAmbientWard (HOMAGE B5); got {class_name!r}"
+    )
+    cls = get_cairo_source_class(class_name)
+    assert cls is not None
+    assert cls.__name__ == "ChatAmbientWard"
+
+
 # ---------------------------------------------------------------------------
 # Phase D task 13 — load_layout_or_fallback
 # ---------------------------------------------------------------------------
@@ -237,7 +266,7 @@ def test_load_layout_or_fallback_reads_valid_file(tmp_path: Path) -> None:
         # Volitional-director Phase 4 legibility additions.
         "activity_header",
         "stance_indicator",
-        "chat_keyword_legend",
+        "chat_ambient",
         "grounding_provenance_ticker",
         # Epic 2 Phase C hothouse additions.
         "impingement_cascade",

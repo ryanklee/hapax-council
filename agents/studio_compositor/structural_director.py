@@ -107,11 +107,13 @@ class StructuralIntent(BaseModel):
     condition_id: str = "none"
 
 
+_RESEARCH_MARKER_PATH = Path("/dev/shm/hapax-compositor/research-marker.json")
+
+
 def _read_condition_id() -> str:
     try:
-        marker = Path("/dev/shm/hapax-compositor/research-marker.json")
-        if marker.exists():
-            data = json.loads(marker.read_text(encoding="utf-8"))
+        if _RESEARCH_MARKER_PATH.exists():
+            data = json.loads(_RESEARCH_MARKER_PATH.read_text(encoding="utf-8"))
             return data.get("condition_id") or "none"
     except Exception:
         pass

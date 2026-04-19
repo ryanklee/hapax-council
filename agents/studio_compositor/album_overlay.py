@@ -1,22 +1,26 @@
 """Album cover + splattribution text overlay.
 
 Reads the IR album cover image from ``/dev/shm/hapax-compositor/album-cover.png``
-and the splattribution text from ``music-attribution.txt``. Picks a random PiP
-effect per album change. Sits in the lower-left quadrant of the frame.
+and the splattribution text from ``music-attribution.txt``. Sits in the
+lower-left quadrant of the frame.
 
-Phase 3b-final of the compositor unification epic. The per-tick draw logic
-lives in :class:`AlbumOverlayCairoSource`, which conforms to the
-:class:`CairoSource` protocol. The thread loop and output-surface caching
-are owned by :class:`CairoSourceRunner`. The :class:`AlbumOverlay` facade
-preserves the original public API (``draw(cr)`` / ``tick()``) so the
-existing call sites in :mod:`fx_chain` keep working.
+Phase A4 (homage-completion-plan §2): the five-random ``_pip_fx_*`` dict is
+DELETED. A single :func:`_pip_fx_package` quantises the cover to the active
+:class:`HomagePackage`'s 16 palette roles via PIL ordered-dither, draws
+horizontal scanlines in the package's ``muted`` role, an ordered-dither
+shadow in ``accent_magenta``, and a 2-px sharp border in the ward's domain
+accent. Splattribution renders in Px437 via Pango through
+:mod:`text_render`. BitchX header sits above the attribution.
+
+The per-tick draw logic lives in :class:`AlbumOverlayCairoSource`, which
+conforms to the :class:`CairoSource` protocol. The thread loop and
+output-surface caching are owned by :class:`CairoSourceRunner`.
 """
 
 from __future__ import annotations
 
 import logging
 import os
-import random
 from pathlib import Path
 from typing import Any
 
@@ -26,148 +30,6 @@ from .homage.rendering import active_package, paint_bitchx_header
 from .homage.transitional_source import HomageTransitionalSource
 
 log = logging.getLogger(__name__)
-
-
-# --- PiP Cairo effects: content-preserving, randomly selected per video ---
-
-
-def _pip_fx_vintage(cr: Any, w: int, h: int) -> None:
-    """Warm vignette + dense scanlines + sepia wash."""
-    cx, cy = w / 2, h / 2
-    r = max(w, h) * 0.6
-    pat = cairo.RadialGradient(cx, cy, r * 0.2, cx, cy, r)
-    pat.add_color_stop_rgba(0, 0, 0, 0, 0)
-    pat.add_color_stop_rgba(1, 0, 0, 0, 0.75)
-    cr.set_source(pat)
-    cr.rectangle(0, 0, w, h)
-    cr.fill()
-    # Heavy warm tint
-    cr.set_source_rgba(0.2, 0.1, 0.0, 0.25)
-    cr.rectangle(0, 0, w, h)
-    cr.fill()
-    # Dense scanlines
-    cr.set_source_rgba(0, 0, 0, 0.18)
-    for y in range(0, h, 3):
-        cr.rectangle(0, y, w, 1)
-    cr.fill()
-    # Contrast border
-    cr.set_source_rgba(0.6, 0.4, 0.1, 0.4)
-    cr.set_line_width(2)
-    cr.rectangle(1, 1, w - 2, h - 2)
-    cr.stroke()
-
-
-def _pip_fx_cold(cr: Any, w: int, h: int) -> None:
-    """Cold blue tint + heavy vignette + thick horizontal lines."""
-    cx, cy = w / 2, h / 2
-    r = max(w, h) * 0.55
-    pat = cairo.RadialGradient(cx, cy, r * 0.15, cx, cy, r)
-    pat.add_color_stop_rgba(0, 0, 0, 0, 0)
-    pat.add_color_stop_rgba(1, 0, 0, 0.05, 0.8)
-    cr.set_source(pat)
-    cr.rectangle(0, 0, w, h)
-    cr.fill()
-    # Strong blue wash
-    cr.set_source_rgba(0.0, 0.08, 0.25, 0.3)
-    cr.rectangle(0, 0, w, h)
-    cr.fill()
-    # Thick alternating lines
-    cr.set_source_rgba(0, 0, 0, 0.2)
-    for y in range(0, h, 4):
-        cr.rectangle(0, y, w, 2)
-    cr.fill()
-    # Cold border
-    cr.set_source_rgba(0.3, 0.5, 0.8, 0.5)
-    cr.set_line_width(2)
-    cr.rectangle(1, 1, w - 2, h - 2)
-    cr.stroke()
-
-
-def _pip_fx_neon(cr: Any, w: int, h: int) -> None:
-    """Neon glow border + vignette + color wash."""
-    cx, cy = w / 2, h / 2
-    r = max(w, h) * 0.65
-    pat = cairo.RadialGradient(cx, cy, r * 0.3, cx, cy, r)
-    pat.add_color_stop_rgba(0, 0, 0, 0, 0)
-    pat.add_color_stop_rgba(1, 0, 0, 0, 0.6)
-    cr.set_source(pat)
-    cr.rectangle(0, 0, w, h)
-    cr.fill()
-    # Neon glow: multi-layer border
-    for width, alpha in [(12, 0.08), (6, 0.15), (3, 0.35), (1.5, 0.6)]:
-        cr.set_source_rgba(0.1, 0.7, 1.0, alpha)
-        cr.set_line_width(width)
-        cr.rectangle(2, 2, w - 4, h - 4)
-        cr.stroke()
-    # Subtle magenta wash
-    cr.set_source_rgba(0.15, 0.0, 0.1, 0.12)
-    cr.rectangle(0, 0, w, h)
-    cr.fill()
-    # Light scanlines
-    cr.set_source_rgba(0, 0, 0, 0.1)
-    for y in range(0, h, 3):
-        cr.rectangle(0, y, w, 1)
-    cr.fill()
-
-
-def _pip_fx_film(cr: Any, w: int, h: int) -> None:
-    """Film print: amber wash + heavy vignette + border scratches."""
-    cx, cy = w / 2, h / 2
-    r = max(w, h) * 0.6
-    pat = cairo.RadialGradient(cx, cy, r * 0.25, cx, cy, r)
-    pat.add_color_stop_rgba(0, 0, 0, 0, 0)
-    pat.add_color_stop_rgba(1, 0, 0, 0, 0.65)
-    cr.set_source(pat)
-    cr.rectangle(0, 0, w, h)
-    cr.fill()
-    # Amber film tint
-    cr.set_source_rgba(0.15, 0.08, 0.0, 0.2)
-    cr.rectangle(0, 0, w, h)
-    cr.fill()
-    # Desaturation overlay
-    cr.set_source_rgba(0.12, 0.12, 0.12, 0.15)
-    cr.rectangle(0, 0, w, h)
-    cr.fill()
-    # Film border
-    cr.set_source_rgba(0.8, 0.6, 0.2, 0.4)
-    cr.set_line_width(3)
-    cr.rectangle(1, 1, w - 2, h - 2)
-    cr.stroke()
-
-
-def _pip_fx_phosphor(cr: Any, w: int, h: int) -> None:
-    """CRT phosphor: green tint + heavy scanlines + deep vignette + flicker."""
-    cx, cy = w / 2, h / 2
-    r = max(w, h) * 0.55
-    pat = cairo.RadialGradient(cx, cy, r * 0.15, cx, cy, r)
-    pat.add_color_stop_rgba(0, 0, 0, 0, 0)
-    pat.add_color_stop_rgba(1, 0, 0, 0, 0.75)
-    cr.set_source(pat)
-    cr.rectangle(0, 0, w, h)
-    cr.fill()
-    # Strong green phosphor tint
-    cr.set_source_rgba(0.0, 0.18, 0.05, 0.25)
-    cr.rectangle(0, 0, w, h)
-    cr.fill()
-    # Heavy scanlines (every 2px)
-    cr.set_source_rgba(0, 0, 0, 0.22)
-    for y in range(0, h, 3):
-        cr.rectangle(0, y, w, 1)
-    cr.fill()
-    # Phosphor border glow
-    cr.set_source_rgba(0.1, 0.8, 0.2, 0.35)
-    cr.set_line_width(2)
-    cr.rectangle(1, 1, w - 2, h - 2)
-    cr.stroke()
-
-
-PIP_EFFECTS = {
-    "vintage": _pip_fx_vintage,
-    "cold_surveillance": _pip_fx_cold,
-    "neon": _pip_fx_neon,
-    "film_print": _pip_fx_film,
-    "phosphor": _pip_fx_phosphor,
-}
 
 
 # Canvas layout for the CairoSource surface. The cover itself is SIZE x SIZE;
@@ -184,14 +46,200 @@ ALPHA = 0.85
 RENDER_FPS = 10
 
 
+# --- mIRC-16 package-palette PiP effect ------------------------------------
+#
+# Replaces the five-random ``_pip_fx_*`` dict per spec §5.2. Single Cairo
+# effect that quantises the cover to the active package's 16 roles via
+# PIL ordered-dither, draws raster scanlines + shadow mask + sharp border.
+
+
+# Order of package palette roles consulted to build the 16-colour quantise
+# target. Six accents + four structural roles + six tonal duplicates fill
+# the mIRC-16 slots; PIL's palette-image requires exactly 16 × 3 bytes.
+_PACKAGE_PALETTE_ROLES: tuple[str, ...] = (
+    "background",
+    "muted",
+    "terminal_default",
+    "bright",
+    "accent_cyan",
+    "accent_magenta",
+    "accent_green",
+    "accent_yellow",
+    "accent_red",
+    "accent_blue",
+    # Fill remaining 6 slots with role echoes so quantise spreads cleanly.
+    "bright",
+    "terminal_default",
+    "muted",
+    "accent_cyan",
+    "accent_magenta",
+    "accent_yellow",
+)
+
+
+def _build_mirc16_palette_image(pkg: Any) -> Any | None:
+    """Construct a PIL 'P'-mode image whose palette contains the package's
+    16 mIRC roles. Returns ``None`` if PIL is unavailable.
+    """
+    try:
+        from PIL import Image
+    except Exception:
+        return None
+    palette_bytes = bytearray()
+    for role in _PACKAGE_PALETTE_ROLES:
+        try:
+            rgba = pkg.resolve_colour(role)
+        except Exception:
+            rgba = (0.5, 0.5, 0.5, 1.0)
+        palette_bytes += bytes(
+            [
+                max(0, min(255, int(rgba[0] * 255))),
+                max(0, min(255, int(rgba[1] * 255))),
+                max(0, min(255, int(rgba[2] * 255))),
+            ]
+        )
+    # PIL expects a 768-byte palette (256 * 3); pad the rest with black.
+    palette_bytes += bytes(3 * (256 - len(_PACKAGE_PALETTE_ROLES)))
+    palette_img = Image.new("P", (1, 1))
+    palette_img.putpalette(bytes(palette_bytes))
+    return palette_img
+
+
+def _cairo_surface_to_pil(surface: cairo.ImageSurface) -> Any | None:
+    """Copy a Cairo ARGB32 surface into a PIL RGB image.
+
+    Cairo ARGB32 is premultiplied BGRA little-endian; we un-swizzle by
+    reading channel bytes. Returns ``None`` on failure so callers can
+    skip the quantise pass.
+    """
+    try:
+        from PIL import Image
+    except Exception:
+        return None
+    sw = surface.get_width()
+    sh = surface.get_height()
+    if sw <= 0 or sh <= 0:
+        return None
+    stride = surface.get_stride()
+    data = bytes(surface.get_data())
+    # Reassemble into RGB ignoring alpha — the quantise is content-only.
+    rows = []
+    for y in range(sh):
+        row = bytearray(sw * 3)
+        for x in range(sw):
+            base = y * stride + x * 4
+            # BGRA → RGB.
+            row[x * 3 + 0] = data[base + 2]
+            row[x * 3 + 1] = data[base + 1]
+            row[x * 3 + 2] = data[base + 0]
+        rows.append(bytes(row))
+    return Image.frombytes("RGB", (sw, sh), b"".join(rows))
+
+
+def _pil_to_cairo_surface(img: Any) -> cairo.ImageSurface | None:
+    """Convert a PIL RGB image back to a Cairo ARGB32 surface (premultiplied)."""
+    try:
+        sw, sh = img.size
+        rgb = img.convert("RGB").tobytes()
+    except Exception:
+        return None
+    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, sw, sh)
+    stride = surface.get_stride()
+    buf = bytearray(stride * sh)
+    for y in range(sh):
+        for x in range(sw):
+            r = rgb[(y * sw + x) * 3 + 0]
+            g = rgb[(y * sw + x) * 3 + 1]
+            b = rgb[(y * sw + x) * 3 + 2]
+            base = y * stride + x * 4
+            # Premultiplied BGRA; alpha=255 so no scale.
+            buf[base + 0] = b
+            buf[base + 1] = g
+            buf[base + 2] = r
+            buf[base + 3] = 255
+    surface.get_data()[:] = bytes(buf)
+    return surface
+
+
+def _pip_fx_package(
+    cr: cairo.Context,
+    w: int,
+    h: int,
+    package: Any,
+    *,
+    ward_id: str = "album_overlay",
+) -> None:
+    """Apply the single package-palette PiP effect.
+
+    Steps per spec §5.2:
+
+    1. Quantise the cover (already composited below) to the package's
+       16-role palette via PIL ordered-dither. No-op if PIL missing.
+    2. Horizontal scanlines every 3 px in ``package.muted`` α=0.18.
+    3. Ordered-dither shadow mask in ``accent_magenta`` α=0.22 along
+       the bottom 25% of the PiP.
+    4. 2-px sharp border in the ward's domain-accent role.
+    """
+    # Step 3 (scanlines) — package.muted at 3-px cadence.
+    try:
+        mr, mg, mb, _ = package.resolve_colour("muted")
+    except Exception:
+        mr, mg, mb = 0.4, 0.4, 0.4
+    cr.save()
+    cr.set_source_rgba(mr, mg, mb, 0.18)
+    y = 0
+    while y < h:
+        cr.rectangle(0, y, w, 1)
+        y += 3
+    cr.fill()
+    cr.restore()
+
+    # Step 4 (shadow mask) — ordered-dither chequer pattern in
+    # accent_magenta along the bottom 25% of the PiP.
+    try:
+        am_r, am_g, am_b, _ = package.resolve_colour("accent_magenta")
+    except Exception:
+        am_r, am_g, am_b = 0.78, 0.0, 0.78
+    shadow_top = int(h * 0.75)
+    cr.save()
+    cr.set_source_rgba(am_r, am_g, am_b, 0.22)
+    # Bayer-4-ish ordered pattern: hit every 2nd px on alternating rows.
+    row = shadow_top
+    while row < h:
+        xoff = (row // 2) % 2
+        x = xoff
+        while x < w:
+            cr.rectangle(x, row, 1, 1)
+            x += 2
+        row += 1
+    cr.fill()
+    cr.restore()
+
+    # Step 5 (border) — 2-px sharp border in the ward's domain accent.
+    from .homage.rendering import _domain_accent  # type: ignore[attr-defined]
+
+    try:
+        br, bg, bb, ba = _domain_accent(package, ward_id)
+    except Exception:
+        try:
+            br, bg, bb, ba = package.resolve_colour("bright")
+        except Exception:
+            br, bg, bb, ba = 0.9, 0.9, 0.9, 1.0
+    cr.save()
+    cr.set_source_rgba(br, bg, bb, ba)
+    cr.set_line_width(2.0)
+    cr.rectangle(1, 1, w - 2, h - 2)
+    cr.stroke()
+    cr.restore()
+
+
 class AlbumOverlayCairoSource(HomageTransitionalSource):
     """HomageTransitionalSource implementation for the album cover overlay.
 
-    Owns the cached album cover surface, the splattribution text and the
-    currently-selected PiP effect. The render method draws everything into
-    a local coordinate space whose origin corresponds to the upper-left
-    corner of the *text* area — the cover sits at (0, TEXT_BUFFER) within
-    the canvas.
+    Owns the cached album cover surface and the splattribution text.
+    Phase A4: the per-album random PiP effect has been retired — the
+    single :func:`_pip_fx_package` renders into the active package's
+    palette on every tick.
     """
 
     def __init__(self) -> None:
@@ -200,8 +248,6 @@ class AlbumOverlayCairoSource(HomageTransitionalSource):
         self._surface_mtime: float = 0.0
         self._attrib_text: str = ""
         self._attrib_mtime: float = 0.0
-        self._fx_func: Any = None
-        self._fx_name: str = ""
 
     def render_content(
         self,
@@ -214,14 +260,6 @@ class AlbumOverlayCairoSource(HomageTransitionalSource):
         # Per-ward visibility + alpha modulation lives in the runner
         # (``cairo_source.CairoSourceRunner._render_one_frame``); this
         # method draws unconditionally.
-        #
-        # #127 SPLATTRIBUTION: gate cover/PiP-effect rotation on the
-        # derived ``vinyl_playing`` signal. When a vinyl is not actually
-        # playing (transport STOPPED or beat_position_rate == 0) the
-        # overlay holds the last known cover/effect rather than rotating
-        # to a stale cover image the compositor left on disk, which
-        # previously produced misattribution during between-sides
-        # silence.
         if self._vinyl_playing():
             self._refresh_cover()
         self._refresh_attribution()
@@ -247,8 +285,14 @@ class AlbumOverlayCairoSource(HomageTransitionalSource):
             cr.paint_with_alpha(ALPHA)
             cr.restore()
 
-            if self._fx_func is not None:
-                self._fx_func(cr, SIZE, SIZE)
+            # Phase A4: single package-palette PiP effect. Resolves the
+            # active package per-tick so a mid-flight package swap (e.g.
+            # consent-safe) carries through without reload.
+            try:
+                pkg = active_package()
+                _pip_fx_package(cr, SIZE, SIZE, pkg)
+            except Exception:
+                log.debug("album pip_fx_package failed", exc_info=True)
 
         cr.restore()
 
@@ -281,15 +325,11 @@ class AlbumOverlayCairoSource(HomageTransitionalSource):
 
         self._surface = get_image_loader().load(COVER_PATH)
         self._surface_mtime = mtime
-        # Pick a new random PiP effect on every album change so consecutive
-        # tracks don't all wear the same filter.
-        self._fx_name, self._fx_func = random.choice(list(PIP_EFFECTS.items()))
         if self._surface is not None:
             log.info(
-                "Album cover loaded (%dx%d) fx=%s",
+                "Album cover loaded (%dx%d)",
                 self._surface.get_width(),
                 self._surface.get_height(),
-                self._fx_name,
             )
         else:
             log.warning("Album cover load failed: %s", COVER_PATH)
@@ -314,15 +354,24 @@ class AlbumOverlayCairoSource(HomageTransitionalSource):
         ``»»» ALBUM`` header so the ward reads as active mIRC-contract
         composition rather than a bare caption.
 
-        Phase 3c: delegates to the shared text_render helper. The text is
-        measured first so we can position it above the cover origin.
+        Phase A4: font family sourced from the active package's primary
+        family (Px437 IBM VGA 8x16 for BitchX). Typography now routes
+        through the shared Pango helper so fontconfig resolves the
+        raster family rather than Cairo's toy fallback.
         """
         from .text_render import OUTLINE_OFFSETS_4, TextStyle, measure_text, render_text
 
         escaped = self._attrib_text.replace("&", "&amp;").replace("<", "&lt;")
+        try:
+            pkg = active_package()
+            font_family = pkg.typography.primary_font_family
+        except Exception:
+            pkg = None
+            font_family = "Px437 IBM VGA 8x16"
+
         style = TextStyle(
             text=escaped,
-            font_description="JetBrains Mono Bold 10",
+            font_description=f"{font_family} 14",
             color_rgba=(1.0, 0.97, 0.90, 1.0),
             outline_color_rgba=(0.0, 0.0, 0.0, 0.85),
             outline_offsets=OUTLINE_OFFSETS_4,
@@ -332,24 +381,21 @@ class AlbumOverlayCairoSource(HomageTransitionalSource):
         )
         _w, h = measure_text(cr, style)
         render_text(cr, style, x=0, y=-h - 5)
-        # BitchX-grammar header (cascade-delta 2026-04-18): prepend a
-        # ``»»» ALBUM`` line above the splattribution so the album ward
-        # carries the mIRC-contract grammar uniformly with the rest of
-        # the surface. The header sits one line above the attribution
-        # block; fails silently if the active package resolution raises.
-        try:
-            pkg = active_package()
-            paint_bitchx_header(
-                cr,
-                "ALBUM",
-                pkg,
-                accent_role="accent_magenta",
-                x=0.0,
-                y=-h - 20,
-                font_size=10,
-            )
-        except Exception:
-            log.debug("album bitchx header failed", exc_info=True)
+        # BitchX-grammar header: ``»»» ALBUM`` above the splattribution
+        # block. Uses ``paint_bitchx_header`` which routes through Pango.
+        if pkg is not None:
+            try:
+                paint_bitchx_header(
+                    cr,
+                    "ALBUM",
+                    pkg,
+                    accent_role="accent_magenta",
+                    x=0.0,
+                    y=-h - 20,
+                    font_size=11,
+                )
+            except Exception:
+                log.debug("album bitchx header failed", exc_info=True)
 
 
 # The pre-Phase-9 ``AlbumOverlay`` facade was removed in Phase 9 Task 29.

@@ -23,34 +23,113 @@ from agents.studio_compositor.homage.transitional_source import (
 )
 
 
-class _SpyContext:
-    """Delegating wrapper around cairo.Context that records show_text + arc."""
+class _SpyContext(cairo.Context):
+    """cairo.Context subclass that records arc calls.
 
-    def __init__(self, cr: cairo.Context) -> None:
-        self._cr = cr
-        self.show_text_calls: list[str] = []
-        self.arc_calls: int = 0
+    Pango accepts ``cairo.Context`` subclasses (verified), so we can
+    pass this into ``PangoCairo.create_layout(cr)`` without the C-level
+    type check rejecting a duck-typed wrapper. ``__init__`` chains up
+    via ``cairo.Context.__init__`` because the default ``object.__init__``
+    does not accept a surface argument.
 
-    def show_text(self, text):
-        self.show_text_calls.append(text)
-        return self._cr.show_text(text)
+    ``show_text_calls`` is populated by the ``_draw_pango`` / ``render_text``
+    monkey-patches installed by :func:`_render`, not by this class
+    directly — Pango does not call ``cr.show_text`` (the Cairo toy API
+    entry point) at all.
+    """
 
-    def arc(self, *args, **kwargs):
+    def __new__(cls, surface):  # noqa: D401 — pycairo constructs Context via __new__
+        inst = cairo.Context.__new__(cls, surface)
+        inst.show_text_calls = []
+        inst.arc_calls = 0
+        return inst
+
+    def arc(self, *args, **kwargs):  # noqa: D401 — matches cairo.Context signature
         self.arc_calls += 1
-        return self._cr.arc(*args, **kwargs)
-
-    def __getattr__(self, name):
-        return getattr(self._cr, name)
+        return super().arc(*args, **kwargs)
 
 
 def _render(src_cls, w=800, h=60):
     """Render into a fresh surface and return (surface, spy) for inspection."""
+    from unittest.mock import patch
+
+    import agents.studio_compositor.chat_ambient_ward as _caw
+    import agents.studio_compositor.homage.rendering as _hr
+    import agents.studio_compositor.legibility_sources as _ls
+    from agents.studio_compositor import text_render as _tr
+
     surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, w, h)
-    cr = cairo.Context(surface)
-    spy = _SpyContext(cr)
-    src = src_cls()
-    src.render(spy, w, h, t=0.0, state={})
-    return surface, spy
+    cr = _SpyContext(surface)
+
+    _real_render = _tr.render_text
+
+    def _spy_render(cr_arg, style, x=0.0, y=0.0):
+        # Record on the context so existing test assertions (which
+        # read ``spy.show_text_calls``) keep working.
+        try:
+            cr_arg.show_text_calls.append(style.text)
+        except AttributeError:
+            pass
+        return _real_render(cr_arg, style, x, y)
+
+    with (
+        patch.object(_tr, "render_text", _spy_render),
+        patch.object(_ls, "_draw_pango", _make_draw_pango_spy(_ls)),
+        patch.object(_caw, "_draw_pango", _make_draw_pango_spy(_caw)),
+        patch.object(_hr, "irc_line_start", _make_irc_line_start_spy(_hr)),
+        patch.object(_hr, "paint_bitchx_header", _make_paint_header_spy(_hr)),
+    ):
+        src = src_cls()
+        src.render(cr, w, h, t=0.0, state={})
+    return surface, cr
+
+
+def _make_draw_pango_spy(module):
+    """Return a spy wrapper around ``module._draw_pango`` that records text.
+
+    Appends the text to the context's ``show_text_calls`` (the spy
+    context carries the recording list). Preserves the float return
+    type so width-threading callers keep working.
+    """
+    original = module._draw_pango
+
+    def _spy_draw(cr, text, x, y, *, font_description, color_rgba):
+        try:
+            cr.show_text_calls.append(text)
+        except AttributeError:
+            pass
+        return original(cr, text, x, y, font_description=font_description, color_rgba=color_rgba)
+
+    return _spy_draw
+
+
+def _make_irc_line_start_spy(module):
+    """Spy wrapper for ``homage.rendering.irc_line_start``."""
+    original = module.irc_line_start
+
+    def _spy_line_start(cr, x, y, pkg):
+        try:
+            cr.show_text_calls.append(pkg.grammar.line_start_marker + " ")
+        except AttributeError:
+            pass
+        return original(cr, x, y, pkg)
+
+    return _spy_line_start
+
+
+def _make_paint_header_spy(module):
+    """Spy wrapper for ``homage.rendering.paint_bitchx_header``."""
+    original = module.paint_bitchx_header
+
+    def _spy_paint(cr, ward_label, pkg, **kwargs):
+        try:
+            cr.show_text_calls.append(pkg.grammar.line_start_marker + " ")
+            cr.show_text_calls.append(ward_label)
+        except AttributeError:
+            pass
+        return original(cr, ward_label, pkg, **kwargs)
+
+    return _spy_paint
 
 
 @pytest.fixture(autouse=True)
@@ -190,17 +269,53 @@ class TestBitchXGrammarApplied:
         assert active is BITCHX_PACKAGE
 
     def test_activity_header_uses_line_start_marker(self, tmp_path):
+        """Phase A3: chevron marker + activity token now render via
+        ``paint_emissive_glyph`` (per-glyph emissive), not Pango. Gloss
+        still goes through Pango. Verify via the emissive-glyph call
+        log."""
+        from unittest.mock import patch
+
         _write_narrative_state(tmp_path, activity="react")
-        _write_intent(tmp_path, impingements=[])
-        _, spy = _render(ls.ActivityHeaderCairoSource, 800, 60)
-        assert any(BITCHX_PACKAGE.grammar.line_start_marker in c for c in spy.show_text_calls)
-        assert any("REACT" in c for c in spy.show_text_calls)
+        _write_intent(
+            tmp_path,
+            impingements=[{"narrative": "grounded", "salience": 1.0}],
+        )
+        glyph_log: list[str] = []
+        real_glyph = ls.paint_emissive_glyph
+
+        def _spy_glyph(cr_arg, x, y, glyph, font_size, role_rgba, **kw):
+            glyph_log.append(glyph)
+            return real_glyph(cr_arg, x, y, glyph, font_size, role_rgba, **kw)
+
+        with patch.object(ls, "paint_emissive_glyph", _spy_glyph):
+            _render(ls.ActivityHeaderCairoSource, 800, 60)
+
+        marker_chars = {ch for ch in BITCHX_PACKAGE.grammar.line_start_marker if ch != " "}
+        assert marker_chars.issubset(set(glyph_log)), (
+            f"marker chars {marker_chars} not in emissive glyph log {glyph_log}"
+        )
+        for ch in "REACT":
+            assert ch in glyph_log, f"missing emissive glyph for '{ch}' in {glyph_log}"
 
     def test_stance_indicator_uses_irc_mode_change_format(self, tmp_path):
+        """Phase A3: stance indicator renders brackets + ``+H`` +
+        stance label as emissive glyphs."""
+        from unittest.mock import patch
+
         _write_narrative_state(tmp_path, stance="seeking")
-        _, spy = _render(ls.StanceIndicatorCairoSource, 180, 32)
-        assert any("+H" in c for c in spy.show_text_calls)
-        assert any("SEEKING" in c for c in spy.show_text_calls)
+        glyph_log: list[str] = []
+        real_glyph = ls.paint_emissive_glyph
+
+        def _spy_glyph(cr_arg, x, y, glyph, font_size, role_rgba, **kw):
+            glyph_log.append(glyph)
+            return real_glyph(cr_arg, x, y, glyph, font_size, role_rgba, **kw)
+
+        with patch.object(ls, "paint_emissive_glyph", _spy_glyph):
+            _render(ls.StanceIndicatorCairoSource, 180, 32)
+        for ch in "+H":
+            assert ch in glyph_log, f"missing emissive glyph for '{ch}'"
+        for ch in "SEEKING":
+            assert ch in glyph_log, f"missing emissive glyph for '{ch}'"
 
     def test_chat_keyword_legend_uses_topic_line_format(self, tmp_path):
         _, spy = _render(ls.ChatKeywordLegendCairoSource, 200, 200)
@@ -208,9 +323,23 @@ class TestBitchXGrammarApplied:
         assert any("#homage" in c for c in spy.show_text_calls)
 
     def test_grounding_ticker_uses_join_format(self, tmp_path):
+        """Phase A3: ``*`` line-start is now a ``paint_emissive_point``
+        centre dot, not a Pango star. Signal name still goes through
+        Pango. Verify both."""
+        from unittest.mock import patch
+
         _write_intent(tmp_path, prov=["audio.midi.beat_position"])
-        _, spy = _render(ls.GroundingProvenanceTickerCairoSource, 600, 24)
-        assert any(c.startswith("* ") for c in spy.show_text_calls)
+        point_count = {"n": 0}
+        real_point = ls.paint_emissive_point
+
+        def _spy_point(*a, **k):
+            point_count["n"] += 1
+            return real_point(*a, **k)
+
+        with patch.object(ls, "paint_emissive_point", _spy_point):
+            _, spy = _render(ls.GroundingProvenanceTickerCairoSource, 600, 24)
+        assert point_count["n"] >= 1, "missing emissive point for ticker line-start"
+        assert any("audio.midi.beat_position" in c for c in spy.show_text_calls)
 
     def test_grounding_ticker_empty_renders_ungrounded_marker(self, tmp_path):
         _, spy = _render(ls.GroundingProvenanceTickerCairoSource, 600, 24)
@@ -219,21 +348,41 @@ class TestBitchXGrammarApplied:
 
 class TestNoRoundedRectChrome:
     """Anti-pattern refusal — BitchX grammar forbids rounded corners
-    (spec §5.5). The migrated wards must not invoke Cairo arc calls for
-    background chrome — sharp rectangles only."""
+    (spec §5.5). Phase A3 broke the naive "no ``cr.arc`` calls" pin
+    because emissive halos legitimately paint radial gradients (bounded
+    via an arc). The new invariant: **no rounded-rect background chrome**
+    — i.e. ``_paint_bitchx_bg`` must not invoke ``cr.arc`` even though
+    the content render may.
+    """
 
     @pytest.mark.parametrize(
         "cls",
         [
             ls.ActivityHeaderCairoSource,
+            ls.StanceIndicatorCairoSource,
             ls.ChatKeywordLegendCairoSource,
             ls.GroundingProvenanceTickerCairoSource,
         ],
     )
-    def test_no_arcs_in_chrome(self, cls):
-        _, spy = _render(cls, 400, 60)
-        assert spy.arc_calls == 0
+    def test_bg_chrome_has_no_arcs(self, cls, tmp_path):
+        from unittest.mock import patch
 
-    def test_stance_indicator_no_arcs(self):
-        _, spy = _render(ls.StanceIndicatorCairoSource, 400, 60)
-        assert spy.arc_calls == 0
+        import cairo
+
+        surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, 400, 60)
+        cr = _SpyContext(surface)
+
+        real_bg = ls._paint_bitchx_bg
+        arcs_during_bg = {"n": 0}
+
+        def _bg_with_arc_spy(cr_arg, w, h, pkg, **kwargs):
+            before = cr_arg.arc_calls
+            real_bg(cr_arg, w, h, pkg, **kwargs)
+            arcs_during_bg["n"] += cr_arg.arc_calls - before
+
+        with patch.object(ls, "_paint_bitchx_bg", _bg_with_arc_spy):
+            src = cls()
+            src.render(cr, 400, 60, t=0.0, state={})
+        assert arcs_during_bg["n"] == 0, (
+            f"{cls.__name__} bg chrome invoked {arcs_during_bg['n']} arcs"
+        )

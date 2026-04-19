@@ -328,9 +328,16 @@ def cmd_open(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 1
+    parent_id = getattr(args, "parent", None)
     lock = _registry_lock()
     previous_current = _read_current()
     try:
+        if parent_id and not _condition_file(parent_id).exists():
+            print(
+                f"research-registry: parent condition {parent_id!r} not found in registry",
+                file=sys.stderr,
+            )
+            return 1
         n = _next_sequential(slug)
         condition_id = f"cond-{slug}-{n:03d}"
         if _condition_file(condition_id).exists():
@@ -340,6 +347,8 @@ def cmd_open(args: argparse.Namespace) -> int:
             )
             return 1
         skeleton = _new_condition_skeleton(condition_id, slug)
+        if parent_id:
+            skeleton["parent_condition_id"] = parent_id
         _write_condition(condition_id, skeleton)
         _set_current(condition_id)
     finally:
@@ -609,6 +618,12 @@ def main() -> int:
     sub.add_parser("list", help="list all conditions")
     open_parser = sub.add_parser("open", help="open a new condition")
     open_parser.add_argument("slug", help="short name for the condition (alphanumeric + hyphens)")
+    open_parser.add_argument(
+        "--parent",
+        dest="parent",
+        default=None,
+        help="parent condition_id (existing condition this one inherits from)",
+    )
     close_parser = sub.add_parser("close", help="close a condition")
     close_parser.add_argument("condition_id", help="condition_id to close")
     show_parser = sub.add_parser("show", help="show a condition's full YAML")

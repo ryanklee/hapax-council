@@ -245,11 +245,13 @@ async def stream_sidechat(
 
         class _Handler(FileSystemEventHandler):
             def on_modified(self, event) -> None:  # type: ignore[no-untyped-def]
-                if getattr(event, "src_path", None) and str(target) in event.src_path:
+                src_path = getattr(event, "src_path", None)
+                if isinstance(src_path, str) and str(target) in src_path:
                     loop.call_soon_threadsafe(wake.set)
 
             def on_created(self, event) -> None:  # type: ignore[no-untyped-def]
-                if getattr(event, "src_path", None) and str(target) in event.src_path:
+                src_path = getattr(event, "src_path", None)
+                if isinstance(src_path, str) and str(target) in src_path:
                     loop.call_soon_threadsafe(wake.set)
 
         observer = Observer()

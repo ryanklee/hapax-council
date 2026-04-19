@@ -1,5 +1,16 @@
 """VinylPlatterCairoSource — HOMAGE-styled ward for the spinning platter.
 
+Phase A4 (homage-completion-plan §2) classification: this module is a
+Cairo source (inherits :class:`HomageTransitionalSource`) and already
+routes every text path through Pango via
+:mod:`agents.studio_compositor.text_render` — no ``cr.show_text``, no
+``cr.select_font_face``. Typography sources the package's
+``primary_font_family`` (Px437 IBM VGA 8x16 for BitchX). No rewrite
+needed; the ward is already substantially emissive-compliant. Future
+pointillism passes (per-glyph halos on the ``NOW SPINNING`` header,
+rpm-readout emissive stroke) can land as follow-ons without breaking
+the ward's current contract.
+
 Task #159. Operator directive: when a record is playing, a camera capture
 of the turntable platter should appear as a ward surface — not the album
 art panel (``AlbumOverlayCairoSource``) but the platter itself, tinted

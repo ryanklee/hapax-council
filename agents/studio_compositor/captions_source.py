@@ -50,20 +50,47 @@ class CaptionStyle:
 
 
 # LRR Phase 9 §3.6 — per-stream-mode styles. Operator can tune in place.
+#
+# Phase A4 (homage-completion-plan §2): typography swapped to Px437 IBM
+# VGA 8x16 so captions render in the BitchX CP437 raster grammar via
+# Pango + fontconfig. Sizes bumped (public 32 → 36, scientific 18 → 22)
+# to compensate for the bitmap-esque raster cell vs. the previous
+# anti-aliased proportional display face.
 STYLE_PUBLIC: CaptionStyle = CaptionStyle(
-    font_description="Noto Sans Display Bold 32",
+    font_description="Px437 IBM VGA 8x16 36",
     color_rgba=(1.0, 0.97, 0.88, 1.0),
-    font_size_px=32,
+    font_size_px=36,
     max_width_px=1600,
     y_offset_px=140,
 )
 STYLE_SCIENTIFIC: CaptionStyle = CaptionStyle(
-    font_description="JetBrains Mono 18",
+    font_description="Px437 IBM VGA 8x16 22",
     color_rgba=(0.80, 0.88, 0.95, 0.95),
-    font_size_px=18,
+    font_size_px=22,
     max_width_px=1400,
     y_offset_px=80,
 )
+
+
+# Phase A4 (homage-completion-plan §2): loud WARN at module import time
+# if Px437 doesn't resolve via Pango — operator learns at boot rather
+# than noticing a wrong-looking livestream.
+def _check_px437_availability() -> None:
+    try:
+        from .text_render import has_font
+
+        if not has_font("Px437 IBM VGA 8x16"):
+            log.warning(
+                "captions-font-probe: 'Px437 IBM VGA 8x16' NOT FOUND via Pango/"
+                "fontconfig — captions will fall back to DejaVu Sans Mono. "
+                "Install the TTF (e.g. /usr/share/fonts/TTF/Px437_IBM_VGA_8x16.ttf) "
+                "and restart the compositor."
+            )
+    except Exception:
+        log.debug("captions Px437 probe skipped (text_render import failed)", exc_info=True)
+
+
+_check_px437_availability()
 
 
 def style_for_stream_mode(mode: str | None) -> CaptionStyle:
