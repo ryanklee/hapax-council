@@ -1,0 +1,70 @@
+# Stream Deck control surface manifest (task #140, Phase 1).
+#
+# 15 keys for a StreamDeck Mini (3×5). Each slot maps a physical key to a
+# command-registry dispatch forwarded to the Tauri WebSocket relay at
+# `ws://127.0.0.1:8052/ws/commands`. Phase 2 will wire the real `streamdeck`
+# python library; this manifest is the source of truth either way.
+#
+# `slot` is 0-indexed, left-to-right then top-to-bottom. `icon` is advisory
+# for Phase 2 (key image rendering) and currently unused. `label` is
+# operator-facing and appears in logs for each press.
+version: 1
+device: mini   # 3x5 = 15 keys
+keys:
+  - slot: 0
+    label: "HERO/OP"
+    icon: "brio-operator.png"
+    command: "studio.hero.set"
+    args: {camera_role: "brio-operator"}
+  - slot: 1
+    label: "HERO/DESK"
+    icon: "c920-desk.png"
+    command: "studio.hero.set"
+    args: {camera_role: "c920-desk"}
+  - slot: 2
+    label: "HERO/ROOM"
+    command: "studio.hero.set"
+    args: {camera_role: "c920-room"}
+  - slot: 3
+    label: "HERO/CLEAR"
+    command: "studio.hero.clear"
+  - slot: 4
+    label: "VINYL 45"
+    command: "audio.vinyl.rate_preset"
+    args: {preset: "45-on-33"}
+  - slot: 5
+    label: "VINYL 33"
+    command: "audio.vinyl.rate_preset"
+    args: {preset: "33"}
+  - slot: 6
+    label: "FX/CLEAN"
+    command: "fx.chain.set"
+    args: {chain: "clean"}
+  - slot: 7
+    label: "FX/GHOST"
+    command: "fx.chain.set"
+    args: {chain: "ghost"}
+  - slot: 8
+    label: "FX/DATAMOSH"
+    command: "fx.chain.set"
+    args: {chain: "datamosh"}
+  - slot: 9
+    label: "MODE/RND"
+    command: "mode.set"
+    args: {mode: "rnd"}
+  - slot: 10
+    label: "MODE/RSCH"
+    command: "mode.set"
+    args: {mode: "research"}
+  - slot: 11
+    label: "NEXT WARD"
+    command: "homage.ward.next"
+  - slot: 12
+    label: "PAUSE"
+    command: "homage.rotation.pause"
+  - slot: 13
+    label: "RESUME"
+    command: "homage.rotation.resume"
+  - slot: 14
+    label: "SAFE MODE"
+    command: "degraded.activate"
