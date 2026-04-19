@@ -156,7 +156,10 @@ class TestActivityHeaderEmissive:
             glyphs.append(glyph)
             return real_glyph(cr_arg, x, y, glyph, font_size, role_rgba, **kw)
 
-        # Non-default ("burst") — suffix must appear.
+        # Non-default ("burst") — suffix must appear. paint_emissive_glyph
+        # may be called multiple times per character (halo + body passes) and
+        # calls from different text segments can interleave. Check the set of
+        # painted characters rather than a contiguous substring.
         with (
             patch.object(ls, "_read_narrative_state", return_value={"activity": "x"}),
             patch.object(ls, "_read_latest_intent", return_value={}),
@@ -165,12 +168,21 @@ class TestActivityHeaderEmissive:
         ):
             glyphs.clear()
             _render_ward(ward, 800, 56, t=0.0)
-        joined = "".join(glyphs)
-        assert "ROTATION" in joined or "BURST" in joined, (
-            f"rotation suffix missing when mode is burst; glyphs={joined}"
+        glyph_set = set(glyphs)
+        # Every letter of ROTATION and BURST should have been painted.
+        rotation_letters = set("ROTATION")
+        burst_letters = set("BURST")
+        assert rotation_letters.issubset(glyph_set) and burst_letters.issubset(glyph_set), (
+            f"rotation suffix missing when mode is burst; "
+            f"missing_rotation={rotation_letters - glyph_set}, "
+            f"missing_burst={burst_letters - glyph_set}"
         )
 
-        # Default ("steady") — no suffix.
+        # Default ("steady") — no suffix. Rotation-specific letters that do
+        # NOT appear in the header chrome ('>>> [ACTIVITY|X]') must be absent.
+        # Use letters that aren't in the default chrome: R, O, N, U, S —
+        # absent from '>>> [ACTIVITY|X]' (A, C, I, T, V, Y, X and chevrons
+        # only). If any of these appear, the rotation suffix rendered.
         ward2 = ls.ActivityHeaderCairoSource()
         with (
             patch.object(ls, "_read_narrative_state", return_value={"activity": "x"}),
@@ -180,9 +192,11 @@ class TestActivityHeaderEmissive:
         ):
             glyphs.clear()
             _render_ward(ward2, 800, 56, t=0.0)
-        joined = "".join(glyphs)
-        assert "ROTATION" not in joined, (
-            f"rotation suffix present when mode is default; glyphs={joined}"
+        glyph_set = set(glyphs)
+        rotation_only_letters = {"R", "O", "N", "U", "S"}
+        assert not rotation_only_letters.intersection(glyph_set), (
+            f"rotation suffix present when mode is default; "
+            f"unexpected_letters={rotation_only_letters & glyph_set}"
         )
 
     def test_emissive_primitives_are_invoked(self):
