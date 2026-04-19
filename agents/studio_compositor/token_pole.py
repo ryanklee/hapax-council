@@ -1,9 +1,14 @@
 """token_pole.py — Golden Spiral token tracker over Vitruvian Man.
 
-Da Vinci's Vitruvian Man (1490, public domain) as background.
-A golden spiral overlaid on the figure — the token follows the spiral
-path from outside in. Cute, colorful token contrasts the somber
-Renaissance geometry.
+Da Vinci's Vitruvian Man (1490, public domain) as background. A golden
+spiral overlaid on the figure — the token follows the spiral path from
+outside in. Geometry is preserved pixel-for-pixel (spiral center,
+navel anchor, 3 turns, 250 points) from the pre-HOMAGE revision; what
+changed in #125 is purely aesthetic: the candy-rainbow palette is
+replaced with the active :class:`HomagePackage`'s BitchX grammar —
+Gruvbox/mIRC-grey skeleton + bright-identity accents. The rounded-
+corner sepia card becomes a flat dark-terminal rectangle per HOMAGE
+spec §5.5 (``rounded-corners`` is a refused anti-pattern).
 
 Upper-left quadrant of the frame.
 
@@ -24,10 +29,13 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from .homage import get_active_package
 from .homage.transitional_source import HomageTransitionalSource
 
 if TYPE_CHECKING:
     import cairo  # noqa: F401
+
+    from shared.homage_package import HomagePackage
 
 log = logging.getLogger(__name__)
 
@@ -44,8 +52,10 @@ VITRUVIAN_PATH = Path(__file__).parent.parent.parent / "assets" / "vitruvian_man
 # render loop to walk LayoutState.
 NATURAL_SIZE = 300
 
-# Spiral is centered on the figure's navel (golden ratio center of the human body)
-# Relative to the overlay image (0-1 normalized)
+# Geometry invariants. These MUST stay constant per spec §Preservation
+# Invariants — the navel anchor, the 3-turn spiral, the exponential
+# decay coefficient and the starting-angle offset in ``_build_spiral``
+# are load-bearing for the artefact's identity.
 SPIRAL_CENTER_X = 0.50
 SPIRAL_CENTER_Y = 0.52  # navel is slightly below center
 SPIRAL_MAX_R = 0.45  # relative to overlay size
@@ -53,31 +63,33 @@ SPIRAL_MAX_R = 0.45  # relative to overlay size
 NUM_POINTS = 250
 PHI = (1 + math.sqrt(5)) / 2
 
-# Colors — candy-bright against Renaissance sepia
-COLOR_SPIRAL_LINE = (0.6, 0.45, 0.7, 0.2)
-COLOR_TRAIL = [
-    (1.0, 0.4, 0.6),  # hot pink
-    (1.0, 0.6, 0.2),  # tangerine
-    (1.0, 0.9, 0.3),  # sunshine
-    (0.4, 1.0, 0.6),  # mint
-    (0.3, 0.8, 1.0),  # sky blue
-    (0.7, 0.4, 1.0),  # violet
-    (1.0, 0.5, 0.8),  # bubblegum
-]
-COLOR_GLYPH_OUTER = (1.0, 0.45, 0.7)
-COLOR_GLYPH = (1.0, 0.9, 0.4)
-COLOR_GLYPH_INNER = (1.0, 1.0, 0.85)
-COLOR_GLYPH_CHEEK = (1.0, 0.55, 0.55, 0.5)
-COLOR_EXPLOSION = [
-    (1.0, 0.4, 0.6),
-    (1.0, 0.9, 0.3),
-    (0.4, 1.0, 0.6),
-    (0.3, 0.8, 1.0),
-    (1.0, 0.6, 0.2),
-    (0.7, 0.4, 1.0),
-    (1.0, 0.5, 0.8),
-    (0.5, 1.0, 0.9),
-]
+# --- Palette role names (HOMAGE spec §4.4) ---------------------------------
+# The token-pole resolves all colour state through the active
+# ``HomagePackage.palette`` at draw time; no hardcoded hex. The six
+# roles below are the ones used by the trail gradient and the particle
+# explosion. Ordered so the trail walks muted→bright via accent hops —
+# a Gruvbox-monochrome skeleton with bright identity accents punching
+# through, mirroring BitchX's grey-punctuation / bright-identity rule.
+_TRAIL_ROLES: tuple[str, ...] = (
+    "muted",
+    "terminal_default",
+    "accent_cyan",
+    "accent_yellow",
+    "accent_magenta",
+    "bright",
+)
+
+# The explosion palette re-uses the accent roles plus ``bright``. All
+# references are symbolic — a palette swap (e.g. consent-safe variant)
+# recolours particles in flight without needing to re-emit them.
+_EXPLOSION_ROLES: tuple[str, ...] = (
+    "accent_cyan",
+    "accent_magenta",
+    "accent_yellow",
+    "accent_green",
+    "accent_red",
+    "bright",
+)
 
 
 def _build_spiral(cx: float, cy: float, max_r: float, n: int) -> list[tuple[float, float]]:
@@ -95,8 +107,27 @@ def _build_spiral(cx: float, cy: float, max_r: float, n: int) -> list[tuple[floa
     return points
 
 
+def _resolve_package() -> HomagePackage:
+    """Return the active HomagePackage, or the BitchX fallback.
+
+    The runtime returns ``None`` under the consent-safe layout
+    (HOMAGE disabled per axiom ``it-irreversible-broadcast``). The
+    token-pole still has to paint *something*, so we fall through to
+    the baseline BitchX package — its greyscale grammar is already
+    consent-safe by construction (no operator-identity accent that
+    could leak into the broadcast; the consent-safe variant collapses
+    all accents to the same grey).
+    """
+    pkg = get_active_package()
+    if pkg is not None:
+        return pkg
+    from .homage.bitchx import BITCHX_PACKAGE
+
+    return BITCHX_PACKAGE
+
+
 class Particle:
-    __slots__ = ("x", "y", "vx", "vy", "color", "alpha", "size", "born")
+    __slots__ = ("x", "y", "vx", "vy", "role_index", "alpha", "size", "born")
 
     def __init__(self, x: float, y: float) -> None:
         angle = random.uniform(0, 2 * math.pi)
@@ -105,7 +136,9 @@ class Particle:
         self.y = y
         self.vx = math.cos(angle) * speed
         self.vy = math.sin(angle) * speed - random.uniform(1, 4)
-        self.color = random.choice(COLOR_EXPLOSION)
+        # Palette-role index; resolved at draw time so a mid-flight
+        # package swap recolours particles in place.
+        self.role_index = random.randrange(len(_EXPLOSION_ROLES))
         self.alpha = 1.0
         self.size = random.uniform(3, 10)
         self.born = time.monotonic()
@@ -234,16 +267,17 @@ class TokenPoleCairoSource(HomageTransitionalSource):
     def _draw_scene(self, cr: Any) -> None:
         self._load_bg(cr)
 
-        # --- Dark backing card (natural-size, origin at 0, 0) ---
-        cr.set_source_rgba(0.05, 0.04, 0.08, 0.88)
-        # Rounded rectangle
-        _r = 12
-        cr.new_sub_path()
-        cr.arc(NATURAL_SIZE - _r, _r, _r, -math.pi / 2, 0)
-        cr.arc(NATURAL_SIZE - _r, NATURAL_SIZE - _r, _r, 0, math.pi / 2)
-        cr.arc(_r, NATURAL_SIZE - _r, _r, math.pi / 2, math.pi)
-        cr.arc(_r, _r, _r, math.pi, 3 * math.pi / 2)
-        cr.close_path()
+        pkg = _resolve_package()
+        palette = pkg.palette
+
+        # --- Flat dark terminal card --------------------------------------
+        # Spec §5.5 refuses ``rounded-corners``; replace the prior sepia
+        # rounded rect with a flat rectangle in the package's
+        # ``background`` role. Near-black, α≈0.9 so the shader surface
+        # still breathes through.
+        bg_r, bg_g, bg_b, bg_a = palette.background
+        cr.set_source_rgba(bg_r, bg_g, bg_b, bg_a)
+        cr.rectangle(0, 0, NATURAL_SIZE, NATURAL_SIZE)
         cr.fill()
 
         # --- Vitruvian Man (transparent PNG, full alpha — ink lines pop) ---
@@ -257,8 +291,9 @@ class TokenPoleCairoSource(HomageTransitionalSource):
             cr.paint_with_alpha(1.0)
             cr.restore()
 
-        # --- Spiral guide line ---
-        cr.set_source_rgba(*COLOR_SPIRAL_LINE)
+        # --- Spiral guide line (muted grey skeleton) ----------------------
+        muted_r, muted_g, muted_b, _ = palette.muted
+        cr.set_source_rgba(muted_r, muted_g, muted_b, 0.30)
         cr.set_line_width(1.0)
         for i, (x, y) in enumerate(self._spiral):
             if i == 0:
@@ -267,16 +302,17 @@ class TokenPoleCairoSource(HomageTransitionalSource):
                 cr.line_to(x, y)
         cr.stroke()
 
-        # --- Rainbow trail ---
+        # --- Trail — muted→bright gradient via accent hops ----------------
         idx = int(self._position * (NUM_POINTS - 1))
         if idx > 1:
             cr.set_line_width(3.5)
-            num_c = len(COLOR_TRAIL)
+            trail_rgba = tuple(pkg.resolve_colour(role) for role in _TRAIL_ROLES)  # type: ignore[arg-type]
+            num_c = len(trail_rgba)
             for i in range(1, idx):
                 progress = i / idx
                 ci = progress * (num_c - 1)
-                c0 = COLOR_TRAIL[int(ci) % num_c]
-                c1 = COLOR_TRAIL[(int(ci) + 1) % num_c]
+                c0 = trail_rgba[int(ci) % num_c]
+                c1 = trail_rgba[(int(ci) + 1) % num_c]
                 f = ci - int(ci)
                 r = c0[0] + (c1[0] - c0[0]) * f
                 g = c0[1] + (c1[1] - c0[1]) * f
@@ -289,7 +325,7 @@ class TokenPoleCairoSource(HomageTransitionalSource):
                 cr.line_to(x, y)
                 cr.stroke()
 
-        # --- Token glyph ---
+        # --- Token glyph (bright identity ring, terminal body) ------------
         if idx < len(self._spiral):
             gx, gy = self._spiral[idx]
         else:
@@ -300,57 +336,61 @@ class TokenPoleCairoSource(HomageTransitionalSource):
         bounce_y = math.sin(self._pulse * 1.7) * 1.5
         glyph_r = 11 + pulse_r
 
-        # Sparkle trail
+        ring_r, ring_g, ring_b, _ = palette.accent_magenta
+        body_r, body_g, body_b, _ = palette.accent_yellow
+        inner_r, inner_g, inner_b, _ = palette.bright
+        cheek_r, cheek_g, cheek_b, _ = palette.accent_red
+
+        # Sparkle trail — bright identity, thinning
         for i in range(1, 4):
             trail_idx = max(0, idx - i * 5)
             if trail_idx < len(self._spiral):
                 tx, ty = self._spiral[trail_idx]
                 sr = (4 - i) * 1.5
-                cr.set_source_rgba(1.0, 1.0, 0.8, 0.6 - i * 0.15)
+                cr.set_source_rgba(inner_r, inner_g, inner_b, 0.6 - i * 0.15)
                 cr.arc(tx, ty, sr, 0, 2 * math.pi)
                 cr.fill()
 
-        # Pink outer glow
-        cr.set_source_rgba(*COLOR_GLYPH_OUTER, 0.25)
+        # Outer glow (accent_magenta, low alpha)
+        cr.set_source_rgba(ring_r, ring_g, ring_b, 0.25)
         cr.arc(gx, gy + bounce_y, glyph_r + 8, 0, 2 * math.pi)
         cr.fill()
 
-        # Pink ring
-        cr.set_source_rgba(*COLOR_GLYPH_OUTER, 0.7)
+        # Identity ring
+        cr.set_source_rgba(ring_r, ring_g, ring_b, 0.70)
         cr.set_line_width(2.5)
         cr.arc(gx, gy + bounce_y, glyph_r + 2, 0, 2 * math.pi)
         cr.stroke()
 
-        # Yellow body
-        cr.set_source_rgba(*COLOR_GLYPH, 0.95)
+        # Body — accent_yellow (mIRC 8 highlight)
+        cr.set_source_rgba(body_r, body_g, body_b, 0.95)
         cr.arc(gx, gy + bounce_y, glyph_r, 0, 2 * math.pi)
         cr.fill()
 
-        # Cream center
-        cr.set_source_rgba(*COLOR_GLYPH_INNER, 0.85)
+        # Center — bright identity
+        cr.set_source_rgba(inner_r, inner_g, inner_b, 0.85)
         cr.arc(gx, gy + bounce_y, glyph_r * 0.55, 0, 2 * math.pi)
         cr.fill()
 
-        # Rosy cheeks
-        cr.set_source_rgba(*COLOR_GLYPH_CHEEK)
+        # Cheeks — accent_red, half-alpha
+        cr.set_source_rgba(cheek_r, cheek_g, cheek_b, 0.50)
         cr.arc(gx - 5, gy + bounce_y + 2, 3, 0, 2 * math.pi)
         cr.fill()
         cr.arc(gx + 5, gy + bounce_y + 2, 3, 0, 2 * math.pi)
         cr.fill()
 
-        # Eyes
-        cr.set_source_rgba(0.15, 0.1, 0.0, 1.0)
+        # Eyes + smile — muted (terminal-monochrome face on a bright ring)
+        cr.set_source_rgba(muted_r, muted_g, muted_b, 1.0)
         cr.arc(gx - 3.5, gy + bounce_y - 2, 1.5, 0, 2 * math.pi)
         cr.fill()
         cr.arc(gx + 3.5, gy + bounce_y - 2, 1.5, 0, 2 * math.pi)
         cr.fill()
 
-        # Smile
         cr.set_line_width(1.2)
         cr.arc(gx, gy + bounce_y + 1, 3.5, 0.2, math.pi - 0.2)
         cr.stroke()
 
-        # --- Particles ---
+        # --- Particles ----------------------------------------------------
         # Phase 2 of the source-registry completion epic dropped the old
         # Goal / Explosion-count / Token-count labels because they used
         # to live in the canvas margin just outside the overlay card,
@@ -359,8 +399,13 @@ class TokenPoleCairoSource(HomageTransitionalSource):
         # tracked in ``_threshold`` / ``_explosions`` / ``_total_tokens``
         # so a future inside-the-card label layout can render them
         # without re-plumbing state.
+        #
+        # Particle colour is resolved per-frame via the active palette;
+        # a mid-flight package swap recolours particles already in flight.
         for p in self._particles:
-            cr.set_source_rgba(*p.color, p.alpha)
+            role = _EXPLOSION_ROLES[p.role_index]
+            pr, pg, pb, _ = pkg.resolve_colour(role)  # type: ignore[arg-type]
+            cr.set_source_rgba(pr, pg, pb, p.alpha)
             cr.arc(p.x, p.y, p.size, 0, 2 * math.pi)
             cr.fill()
 
