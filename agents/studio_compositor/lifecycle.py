@@ -340,10 +340,10 @@ def start_compositor(compositor: Any) -> None:
     # instantiate + schedule reconcile() on a 1Hz GLib timeout, pass the
     # source registry so substrate declarations are honoured.
     try:
-        from .homage.choreographer import HomageChoreographer
+        from .homage.choreographer import Choreographer
         from .homage.rendering import active_package
 
-        compositor._homage_choreographer = HomageChoreographer(
+        compositor._homage_choreographer = Choreographer(
             source_registry=getattr(compositor, "source_registry", None),
         )
 
@@ -361,9 +361,9 @@ def start_compositor(compositor: Any) -> None:
         # invariants other wards depend on (pending-transitions drain,
         # substrate broadcast, voice-register rotation, artefact cycle).
         GLib.timeout_add(1000, _choreographer_tick)
-        log.info("HomageChoreographer instantiated, reconcile scheduled at 1Hz")
+        log.info("Choreographer instantiated, reconcile scheduled at 1Hz")
     except Exception:
-        log.exception("HomageChoreographer wiring failed — FINDING-B unresolved")
+        log.exception("Choreographer wiring failed — FINDING-B unresolved")
 
     def _shutdown(signum: int, frame: Any) -> None:
         log.info("Signal %d received, shutting down", signum)
