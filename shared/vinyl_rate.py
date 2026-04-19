@@ -33,6 +33,7 @@ from pathlib import Path
 _SNAPSHOT_DIR = Path("/dev/shm/hapax-compositor")
 _RATE_FILE = _SNAPSHOT_DIR / "vinyl-playback-rate.txt"
 _LEGACY_BOOL_FILE = _SNAPSHOT_DIR / "vinyl-mode.txt"
+_BPM_FILE = _SNAPSHOT_DIR / "current-bpm.txt"
 
 # The 45-RPM-on-33⅓ preset that the pre-existing boolean flag meant.
 # Operator-confirmable; a configured override will land in a follow-up.
@@ -112,8 +113,33 @@ def compensate_bpm(observed_bpm: float, rate: float | None = None) -> float:
     return observed_bpm / rate
 
 
+def normalized_bpm_signal() -> float | None:
+    """Return the vinyl-rate-compensated BPM signal.
+
+    Reads the raw BPM from ``/dev/shm/hapax-compositor/current-bpm.txt``
+    (written by the beat tracker or audio_capture publisher) and pipes
+    it through :func:`compensate_bpm` with the current vinyl playback
+    rate. Returns ``None`` if the BPM file is missing, unreadable, or
+    contains a non-positive value — tempo-reactive consumers should
+    fall through to a default cadence in that case instead of halting.
+    """
+    try:
+        if not _BPM_FILE.exists():
+            return None
+        raw = _BPM_FILE.read_text().strip()
+        if not raw:
+            return None
+        observed = float(raw)
+    except (OSError, ValueError):
+        return None
+    if observed <= 0:
+        return None
+    return compensate_bpm(observed, read_vinyl_playback_rate())
+
+
 __all__ = [
     "compensate_bpm",
+    "normalized_bpm_signal",
     "rate_to_restore_factor",
     "read_vinyl_playback_rate",
 ]
