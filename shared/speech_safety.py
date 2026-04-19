@@ -124,6 +124,13 @@ _ALLOWLIST_SUFFIXES: tuple[str, ...] = (
     "nigerian",
     "nigeria",
     "nigerians",
+    # Archaic "nigh" family (= near): added 2026-04-20 after the regex
+    # was widened to catch h-terminal slur variants. These share letter
+    # prefixes but are unrelated etymology.
+    "nigh",
+    "nighed",
+    "nigher",
+    "nighs",
 )
 
 # Leet-speak normalisation. Applied before the detector runs so
@@ -146,11 +153,16 @@ _LEET_MAP: dict[str, str] = {
 #   * ``n`` (any case)
 #   * optional digit/punctuation filler (handled by leet map)
 #   * one or more ``g`` / ``q`` (q is a near-visual homoglyph)
-#   * optional ``a`` / ``e`` / ``u`` / ``o`` vowel
-#   * optional trailing ``r`` (for the original hard-R variant)
-#   * optional trailing ``s`` (plural)
-# Word boundaries on both sides to avoid intra-word FPs.
-_SLUR_RE = re.compile(r"\bn[i][gq]+[aeuo]+r?s?\b", re.IGNORECASE)
+#   * one or more vowels (``a`` / ``e`` / ``i`` / ``u`` / ``o``) optionally
+#     interspersed with ``h`` (``niggah`` / ``nigguh`` variants) — the
+#     ``[aeuohi]+`` class covers all known phonetic spellings
+#   * optional trailing ``r`` (hard-R variant) or ``z`` / ``x`` / ``s``
+#     (plural / slang plural)
+# Word boundaries on both sides to avoid intra-word FPs. Live-stream
+# 2026-04-20 leak: Hapax narrated about a rap track, gate caught one
+# ``nigga`` token but another variant (likely ``niggah`` / ``niggaz``)
+# slipped. Widened to match ALL plural endings + ``h``-terminal forms.
+_SLUR_RE = re.compile(r"\bn[i][gq]+[aeuohi]+[rzsx]?\b", re.IGNORECASE)
 
 # Asterisk-fill detector. Matches obfuscated forms like ``n*gga``,
 # ``ni**a``, ``n**ga``. We collapse asterisks to letters then re-check.

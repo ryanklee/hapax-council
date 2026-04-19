@@ -104,6 +104,37 @@ def test_asterisk_obfuscation_is_redacted():
     assert result.was_modified is True
 
 
+def test_variant_niggah_is_redacted():
+    # Programmatic construction: "niggah" — h-terminal phonetic spelling
+    variant = bytes([0x6E, 0x69, 0x67, 0x67, 0x61, 0x68]).decode("ascii")
+    result = speech_safety.censor(f"the track says {variant}")
+    assert result.was_modified is True
+    assert variant not in result.text
+
+
+def test_variant_niggaz_is_redacted():
+    # "niggaz" — z plural
+    variant = bytes([0x6E, 0x69, 0x67, 0x67, 0x61, 0x7A]).decode("ascii")
+    result = speech_safety.censor(f"rap lyric: {variant}")
+    assert result.was_modified is True
+    assert variant not in result.text
+
+
+def test_variant_nigguh_is_redacted():
+    # "nigguh" — common phonetic spelling
+    variant = bytes([0x6E, 0x69, 0x67, 0x67, 0x75, 0x68]).decode("ascii")
+    result = speech_safety.censor(f"hey {variant}")
+    assert result.was_modified is True
+    assert variant not in result.text
+
+
+def test_variant_niggaz_plural_is_redacted():
+    # "niggahs" (h+s) + "nigguhs"
+    for word in ("niggahs", "nigguhs"):
+        result = speech_safety.censor(f"said {word}")
+        assert result.was_modified is True, f"{word} not caught"
+
+
 def test_allowlist_niagara_passes():
     # "Niagara Falls" must not be redacted.
     result = speech_safety.censor("we visited Niagara Falls last summer")
