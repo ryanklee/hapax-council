@@ -39,10 +39,13 @@ consent gate flips the layout.
 
 from __future__ import annotations
 
+import json
 import logging
 import math
+import time
 from typing import TYPE_CHECKING, Any, Final
 
+from agents.studio_compositor.chat_signals import DEFAULT_CHAT_SIGNALS_PATH
 from agents.studio_compositor.homage import get_active_package
 from agents.studio_compositor.homage.transitional_source import HomageTransitionalSource
 from shared.homage_package import HomagePackage
@@ -188,6 +191,7 @@ class ChatAmbientWard(HomageTransitionalSource):
         self._counters: dict[str, float] = {}
         if initial_counters is not None:
             self._counters = self._coerce_counters(initial_counters)
+        self._last_state_cache: dict[str, float] = {}
 
     # ── Type guard ──────────────────────────────────────────────────────
 
@@ -230,6 +234,44 @@ class ChatAmbientWard(HomageTransitionalSource):
     def counters(self) -> dict[str, float]:
         """Return a snapshot of the current counter state (read-only copy)."""
         return dict(self._counters)
+
+    # ── State hook (FINDING-V Phase 1) ──────────────────────────────────
+
+    def state(self) -> dict[str, Any]:
+        """Return live ChatSignals counters from the SHM aggregator.
+
+        Reads ``shared/hapax-chat-signals.json`` (the canonical sink
+        ``ChatSignalsAggregator.write_shm`` publishes to). The ward
+        filters to ``_COUNTER_KEYS`` upstream of ``_coerce_counters`` so
+        any ChatSignals fields the aggregator gains in future are
+        ignored here until the ward explicitly adopts them.
+
+        Freshness policy: if the file mtime is older than 120 s, drop
+        to empty — the ward renders the idle/zero-rate state rather
+        than stale counters. A sub-second read failure returns the
+        last-good cache so a partial tmp+rename race does not flash
+        the ward to idle.
+        """
+        try:
+            mtime = DEFAULT_CHAT_SIGNALS_PATH.stat().st_mtime
+        except OSError:
+            return dict(self._last_state_cache)
+
+        if time.time() - mtime > 120.0:
+            self._last_state_cache = {}
+            return {}
+
+        try:
+            payload = json.loads(DEFAULT_CHAT_SIGNALS_PATH.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return dict(self._last_state_cache)
+
+        if not isinstance(payload, dict):
+            return dict(self._last_state_cache)
+
+        filtered = {k: payload[k] for k in _COUNTER_KEYS if k in payload}
+        self._last_state_cache = filtered
+        return dict(filtered)
 
     # ── Render ──────────────────────────────────────────────────────────
 
