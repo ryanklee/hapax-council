@@ -21,7 +21,6 @@ import io
 import json
 import logging
 import os
-import random
 import subprocess
 import tempfile
 import threading
@@ -757,33 +756,41 @@ def main() -> None:
         # Use the full IR frame — camera is positioned close, album dominates
         cropped = frame_data
 
-        # Check if image changed
+        # Check if image changed — but refresh the PNG on EVERY poll so the
+        # on-disk crop is always fresh. Only the expensive LLM identify call
+        # is gated by the hash-distance threshold.
         h = image_hash(cropped)
         dist = hamming_distance(h, _last_hash) if _last_hash else 999
 
-        if dist < 8:
-            continue
-
-        log.info("Album zone changed (distance=%d), identifying...", dist)
-        _last_hash = h
-
-        # Save cropped cover as PNG with random cheesy color tint (IR is monochrome)
+        # Save cropped cover as PNG every poll. Colorization is deterministic
+        # per IR-frame hash so the same album keeps the same tint across
+        # re-saves (previously `random.choice(tints)` swapped colors on every
+        # tick and read to the operator as "crop coords changing"). Geometry
+        # is also deterministic: fixed 15% center-crop margin, 90° rotate,
+        # 512×512 resize — so the same scene ALWAYS produces the same PNG.
         try:
             from PIL import Image, ImageOps
 
+            if not isinstance(cropped, (bytes, bytearray)):
+                log.warning(
+                    "cropped is %s, not bytes — skipping PNG save",
+                    type(cropped).__name__,
+                )
+                raise TypeError("cropped must be bytes-like")
+
             img = Image.open(io.BytesIO(cropped)).convert("L")
             # Crop to center square with 15% zoom (cut desk edges)
-            w, h = img.size
-            size = min(w, h)
+            w, ih = img.size
+            size = min(w, ih)
             margin = int(size * 0.15)
             left = (w - size) // 2 + margin
-            top = (h - size) // 2 + margin
+            top = (ih - size) // 2 + margin
             img = img.crop((left, top, left + size - 2 * margin, top + size - 2 * margin))
             # Rotate 90° CW (album is sideways in the IR camera frame)
             img = img.rotate(-90, expand=True)
             # Downscale for overlay (no need for 1080p on a 300px bouncing tile)
             img = img.resize((512, 512), Image.LANCZOS)
-            # Random cheesy duotone colorization
+            # Duotone colorization — deterministic per hash (stable tint per album)
             tints = [
                 ((20, 0, 40), (255, 100, 50)),  # purple → orange
                 ((0, 20, 40), (50, 255, 200)),  # dark teal → mint
@@ -794,12 +801,36 @@ def main() -> None:
                 ((20, 0, 20), (255, 150, 255)),  # plum → lavender
                 ((10, 20, 0), (255, 255, 100)),  # olive → yellow
             ]
-            dark, light = random.choice(tints)
+            # _last_hash (or h on first iteration) is a hex STRING — parse the
+            # first byte worth (2 hex chars) as int for deterministic tint
+            # selection. Previously used int.from_bytes on a str which is
+            # the "cannot convert 'str' object to bytes" crash that was
+            # burning ~5 TypeErrors/minute in journald.
+            hash_hex = h if _last_hash == "" else _last_hash
+            tint_idx = int(hash_hex[:2], 16) % len(tints)
+            dark, light = tints[tint_idx]
             colored = ImageOps.colorize(img, dark, light)
             colored.save(str(ALBUM_COVER_FILE), format="PNG")
-            log.info("Album cover saved with color tint (%dx%d)", colored.size[0], colored.size[1])
+            log.info(
+                "Album cover saved (%dx%d) tint=%d (deterministic per hash)",
+                colored.size[0],
+                colored.size[1],
+                tint_idx,
+            )
         except Exception:
             log.exception("Album cover save failed")
+
+        # Gate the EXPENSIVE Gemini+ACRCloud identification behind the
+        # hash-distance threshold. 32 requires a real scene change
+        # (different album placed on deck, operator hand in frame) before
+        # re-querying the vision/audio identifiers; prevents LLM-call
+        # flooding on IR sensor noise + spinning-record shimmer. The PNG
+        # crop above is refreshed every poll regardless.
+        if dist < 32:
+            continue
+
+        log.info("Album zone changed (distance=%d), identifying...", dist)
+        _last_hash = h
 
         # Combined vision + audio identification
         album, track = identify_album_and_track(cropped)
