@@ -421,6 +421,68 @@ class VocalChainCapability:
         self.deactivate()
         _apply_tier_fn(tier, vocal_chain=self, midi_output=self._midi, impingement=impingement)
 
+    def emit_voice_tier_impingement(
+        self,
+        tier: Any,
+        *,
+        programme_band: tuple[int, int] | None = None,
+        excursion: bool = False,
+        clamped_from: Any | None = None,
+        strength: float = 1.0,
+    ) -> Any:
+        """Produce a ``VoiceTierImpingement``-wrapped ``Impingement`` for the director loop.
+
+        Phase 3b cross-zone glue (alpha handoff §7.1). Returns an
+        ``Impingement`` whose ``content`` is the typed payload so
+        ``agents/studio_compositor/director_loop.py`` consumes via
+        ``VoiceTierImpingement.try_from(imp)`` without needing a
+        direct import of this module.
+
+        Args:
+            tier: ``VoiceTier`` the director picked for this tick.
+            programme_band: Optional ``(low, high)`` structural band;
+                defaults to the tier as its own band when the director
+                has no active Programme override.
+            excursion: True when this tier is a §4.2 excursion pick
+                (outside the structural band). Signals the consumer
+                that the transition should not be treated as the new
+                steady state.
+            clamped_from: Optional original tier requested by the
+                director before IntelligibilityBudget clamped it down;
+                None when no clamp fired.
+            strength: Impingement activation strength (0..1).
+        """
+        from agents.hapax_daimonion.voice_path import (
+            VoicePath as _LiveVoicePath,
+        )
+        from agents.hapax_daimonion.voice_path import (
+            select_voice_path,
+        )
+        from shared.typed_impingements import VoiceTierImpingement
+        from shared.voice_tier import (
+            TIER_MONETIZATION_RISK,
+        )
+        from shared.voice_tier import (
+            VoiceTier as _VoiceTier,
+        )
+
+        tier_enum = tier if isinstance(tier, _VoiceTier) else _VoiceTier(int(tier))
+        band = programme_band if programme_band is not None else (int(tier_enum), int(tier_enum))
+        # Map the tier's route choice; fall back to DRY on lookup failure.
+        try:
+            path_enum = select_voice_path(tier_enum)
+        except Exception:
+            path_enum = _LiveVoicePath.DRY
+        payload = VoiceTierImpingement(
+            tier=tier_enum,
+            programme_band=band,
+            voice_path=path_enum.value,
+            monetization_risk=TIER_MONETIZATION_RISK[tier_enum],
+            excursion=excursion,
+            clamped_from=clamped_from if clamped_from is None else _VoiceTier(int(clamped_from)),
+        )
+        return payload.to_impingement(strength=strength)
+
     def _maybe_switch_route(self, tier: Any, path_override: Any | None) -> None:
         """Resolve the tier's VoicePath and switch PipeWire routing if it changed.
 

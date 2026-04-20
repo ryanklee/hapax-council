@@ -38,12 +38,85 @@ import json
 import logging
 import os
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import Final, Literal
+from typing import Any, Final, Literal
 
 log = logging.getLogger(__name__)
+
+
+class EngineContention(RuntimeError):
+    """Raised by ``engine_session`` when a consumer fails to acquire the engine.
+
+    Carries the arbitration ``reason`` ("blocked_by_operator",
+    "debounce_0.5s", etc.) so callers can log the specific contention
+    class. Director loops typically catch + drop the tick; operator
+    CLI raises to the user.
+    """
+
+    def __init__(self, reason: str, current_writer: str) -> None:
+        super().__init__(f"engine acquire blocked: {reason} (held by writer={current_writer})")
+        self.reason = reason
+        self.current_writer = current_writer
+
+
+class _EngineMetrics:
+    """Lazy Prometheus counters for engine acquire/contention observability.
+
+    Pattern mirrors ``_VocalChainMetrics`` in vocal_chain.py — tolerate
+    the absence of prometheus_client so tests + headless smoke runs
+    don't fail. Metrics are named per research §7 of
+    2026-04-20-mode-d-voice-tier-mutex.md.
+    """
+
+    def __init__(self) -> None:
+        self._acquires: Any = None
+        self._contention: Any = None
+        try:
+            from prometheus_client import REGISTRY, Counter
+        except ImportError:
+            return
+        for name, doc, labels, attr in (
+            (
+                "hapax_evil_pet_engine_acquires_total",
+                "Successful engine acquires by consumer + target mode",
+                ["consumer", "target_mode"],
+                "_acquires",
+            ),
+            (
+                "hapax_evil_pet_engine_contention_total",
+                "Rejected engine acquires by consumer + reason",
+                ["consumer", "reason"],
+                "_contention",
+            ),
+        ):
+            try:
+                setattr(self, attr, Counter(name, doc, labels))
+            except ValueError:
+                # Counter already registered (import re-runs across tests).
+                setattr(self, attr, REGISTRY._names_to_collectors.get(name))  # noqa: SLF001
+
+    def inc_acquire(self, consumer: str, target_mode: str) -> None:
+        if self._acquires is None:
+            return
+        try:
+            self._acquires.labels(consumer=consumer, target_mode=target_mode).inc()
+        except Exception:
+            log.debug("engine acquires counter inc failed", exc_info=True)
+
+    def inc_contention(self, consumer: str, reason: str) -> None:
+        if self._contention is None:
+            return
+        try:
+            self._contention.labels(consumer=consumer, reason=reason).inc()
+        except Exception:
+            log.debug("engine contention counter inc failed", exc_info=True)
+
+
+_metrics = _EngineMetrics()
 
 # The operator-tmpfs compositor flag dir. All writes land here.
 _STATE_DIR: Final[Path] = Path("/dev/shm/hapax-compositor")
@@ -303,6 +376,108 @@ def _serializable(state: EvilPetState) -> dict[str, object]:
     # asdict keeps EvilPetMode as a StrEnum member; JSON wants its .value.
     d["mode"] = state.mode.value
     return d
+
+
+def release_engine(
+    consumer: str,
+    *,
+    path: Path = DEFAULT_STATE_PATH,
+    legacy_flag: Path = LEGACY_MODE_D_FLAG,
+    now: float | None = None,
+) -> bool:
+    """Release engine ownership — skip arbitrate debounce for same-writer release.
+
+    A consumer that holds the engine MUST be able to release it
+    without waiting for the 0.5 s debounce window. This bypasses
+    ``arbitrate()`` entirely: if the live state's writer matches
+    ``consumer`` (or the state is stale), write a bypass state with
+    ``consumer`` as the new writer. If a higher-priority writer has
+    preempted in the meantime, the release is a no-op — the new
+    owner will release on its own schedule.
+
+    Returns True on successful release, False when another writer
+    owns the engine.
+    """
+    ts = now if now is not None else time.time()
+    current = read_state(path=path, now=ts)
+    if (
+        not current.is_stale(ts)
+        and current.writer != consumer
+        and _WRITER_PRIORITY.get(current.writer, 0) > _WRITER_PRIORITY.get(consumer, 0)
+    ):
+        log.info(
+            "release_engine no-op: %s held by higher-priority %s",
+            consumer,
+            current.writer,
+        )
+        return False
+    bypass = EvilPetState(
+        mode=EvilPetMode.BYPASS,
+        active_since=ts,
+        writer=consumer,
+        heartbeat=ts,
+        tier=None,
+        programme_opt_in=False,
+    )
+    write_state(bypass, path=path, legacy_flag=legacy_flag)
+    return True
+
+
+@contextmanager
+def engine_session(
+    target_mode: EvilPetMode,
+    consumer: str,
+    *,
+    programme_opt_in: bool = False,
+    path: Path = DEFAULT_STATE_PATH,
+    legacy_flag: Path = LEGACY_MODE_D_FLAG,
+    now: float | None = None,
+    release_on_exit: bool = True,
+) -> Iterator[ArbitrationResult]:
+    """Context-managed engine ownership — raise on contention, release on exit.
+
+    Equivalent to ``acquire_engine`` + ``try/finally`` in idiomatic form.
+    The director_loop Phase 3 consumer uses:
+
+        with engine_session(EvilPetMode.VOICE_TIER_5, "director"):
+            vocal_chain.apply_tier(VoiceTier.GRANULAR_WASH)
+
+    and the mutex guarantees:
+    - No CC emission on contention — ``EngineContention`` raised before
+      the ``with`` body runs.
+    - Release on exit — even on exception, a ``bypass`` write lands so
+      the engine is freed. Operator retains override priority; a
+      ``release_on_exit=False`` disables this for nested sessions that
+      want the outer context to manage release.
+
+    Prometheus: ``hapax_evil_pet_engine_acquires_total{consumer,
+    target_mode}`` increments on accept;
+    ``hapax_evil_pet_engine_contention_total{consumer, reason}``
+    increments on reject.
+    """
+    result = acquire_engine(
+        target_mode=target_mode,
+        writer=consumer,
+        programme_opt_in=programme_opt_in,
+        path=path,
+        legacy_flag=legacy_flag,
+        now=now,
+    )
+    if not result.accepted:
+        _metrics.inc_contention(consumer=consumer, reason=result.reason)
+        raise EngineContention(
+            reason=result.reason,
+            current_writer=result.state.writer,
+        )
+    _metrics.inc_acquire(consumer=consumer, target_mode=target_mode.value)
+    try:
+        yield result
+    finally:
+        if release_on_exit:
+            try:
+                release_engine(consumer, path=path, legacy_flag=legacy_flag)
+            except Exception:
+                log.warning("engine_session release failed", exc_info=True)
 
 
 def acquire_engine(
