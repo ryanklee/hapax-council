@@ -50,6 +50,30 @@ Smoketest gate (operator-walked 5-row acceptance) is the close.
 | `c17b487ce` | YT bundle Phase 2 — chat URL extractor wire (#144) |
 | `6b81b2296` | Orphan-ward Phase 4 — youtube-viewer-count producer + systemd unit |
 
+### Evilpet-s4-routing — Phases 1-4 shipped (2nd post-compaction run)
+
+| Commit | Phase |
+|---|---|
+| `9917381b8` | 1 — S-4 USB loopback descriptor + conf |
+| `da105f2ce` | 2 — 4 routing-aware presets (sampler-wet/bed-music/drone-loop/s4-companion) |
+| `8c56a9ea8` | 3 — gain discipline regression pins + Task 2.6 recall coverage |
+| `4a3658f2c` | 4 — preset-recall observability counters |
+
+Phases 5-6 are operator/hardware-gated: sampler wet/dry capture
+(Task 5.2), S-4 MIDI coupling (5.3), face-obscure-with-Evil-Pet
+regression (5.4), Ring 2 WARD legibility validation (6.1).
+
+### Unified-audio Phase 5 closeout (2nd post-compaction run)
+
+| Commit | What |
+|---|---|
+| `1762a9b07` | pin-check CLI subcommand + --auto-fix recovery |
+
+Detector module shipped in `8963d676e`; CLI integration closes the
+plan §Phase 5 "auto-fix subcommand" item. Designed for systemd-
+timer composition (silence_started_at persists across ticks via
+/run/user/1000/hapax-pin-glitch-state.json).
+
 ## Operator standing directives (still in force)
 
 - **Bias toward action.** Pick the obvious next item. "Always pick up
