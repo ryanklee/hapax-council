@@ -166,3 +166,21 @@ Q3. Should Kokoro TTS output also feed the echo-cancel reference signal? Relevan
 - **Follow-on #133** (Rode Wireless Pro): layers onto extended source list; this spec's §3.3 is the handoff point.
 - **Voice pipeline:** `agents/hapax_daimonion/cpal/runner.py`
 - **VAD:** `agents/hapax_daimonion/vad.py`
+
+---
+
+## Shipped in
+
+Phase 1 deliverables (runbook + topology-check) shipped via the
+2026-04-18 cascade epic:
+
+- `57a41a243` — feat: cascade phase 3 (HOMAGE Phase 6 + 11c + #129 Stage 2 + #155 Stage 2 + **#134 AEC** + trio-delivery plan)
+- `f7969bea2` — docs(governance): #156 role derivation methodology + #122 DEGRADED-STREAM mode
+- `9248984e5` — cascade: #133 Rode Wireless + #143 IR cadence control (#1092)
+
+Live artifacts:
+- `docs/runbooks/audio-topology.md` (272 lines, 2026-04-18)
+- `scripts/audio-topology-check.sh` (exit 0 = healthy)
+
+Phases 2–4 (echo-cancel module, voice-embedding gate, regression
+smoke) tracked in `docs/superpowers/plans/2026-04-20-audio-pathways-audit-plan.md`.
