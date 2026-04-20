@@ -376,6 +376,57 @@ class AffordancePipeline:
                 self._consent_loaded_at = now
         return bool(self._consent_has_active)
 
+    def _apply_programme_bias(
+        self, candidates: list[SelectionCandidate], programme: Any
+    ) -> list[SelectionCandidate]:
+        """Phase 4 of programme-layer plan (D-28).
+
+        Multiplies each candidate's composed score by the active
+        Programme's per-capability bias multiplier. NEVER shrinks the
+        candidate set — set-size preservation is a hard architectural
+        invariant per ``project_programmes_enable_grounding``. The
+        validator on ``capability_bias_negative`` rejects zero
+        multipliers, so a strongly-biased-negative capability can
+        still recruit if its base similarity + impingement pressure
+        overcome the bias.
+
+        No-op when ``programme is None`` (steady state — no active
+        programme, nothing to bias).
+
+        Increments ``hapax_programme_candidate_set_reduction_total`` if
+        the input + output lists differ in length — this is a bug
+        sentinel and must always remain at 0 in production.
+        """
+        if programme is None:
+            return candidates
+        before_len = len(candidates)
+        for c in candidates:
+            try:
+                multiplier = float(programme.bias_multiplier(c.capability_name))
+            except Exception:
+                # Programme without bias_multiplier method (test stub) or
+                # raised — treat as 1.0 (no bias). Cannot break recruitment
+                # on a programme-method gap.
+                multiplier = 1.0
+            c.combined = max(0.0, c.combined * multiplier)
+        # Sentinel: helper MUST preserve list length. Any reduction is a
+        # bug; emit a counter so a future regression surfaces immediately.
+        if len(candidates) != before_len:
+            try:
+                from shared.governance.demonet_metrics import METRICS as _M
+
+                programme_id = getattr(programme, "programme_id", "unknown")
+                _M.inc_programme_candidate_set_reduction(programme_id)
+            except Exception:
+                log.warning(
+                    "programme bias INVARIANT VIOLATION: candidate set "
+                    "shrunk from %d to %d under programme %r",
+                    before_len,
+                    len(candidates),
+                    getattr(programme, "programme_id", "?"),
+                )
+        return candidates
+
     def _active_programme_cached(self) -> Any:
         """Return the currently-active Programme (D-26 / plan Phase 5).
 
@@ -483,9 +534,8 @@ class AffordancePipeline:
         from shared.governance.monetization_safety import GATE as _MONET_GATE
 
         quiet_frame_subscriber.install()
-        candidates = _MONET_GATE.candidate_filter(
-            candidates, programme=self._active_programme_cached()
-        )
+        active_programme = self._active_programme_cached()
+        candidates = _MONET_GATE.candidate_filter(candidates, programme=active_programme)
         if not candidates:
             return []
         now = time.time()
@@ -504,6 +554,14 @@ class AffordancePipeline:
                 + W_CONTEXT * c.context_boost
                 + W_THOMPSON * c.thompson_score
             ) * c.cost_weight
+        # Phase 4 of programme-layer plan (D-28): apply programme bias as
+        # SOFT PRIOR multiplier on the composed score. Per
+        # `project_programmes_enable_grounding` memory + spec §5.1: the
+        # programme NEVER shrinks the candidate set; bias is a multiplier
+        # only. Set-size preservation is a hard architectural invariant
+        # (validator on capability_bias_negative rejects 0.0; the helper
+        # below preserves len() exactly).
+        candidates = self._apply_programme_bias(candidates, active_programme)
         priority = [c for c in candidates if c.payload.get("priority_floor")]
         normal = [c for c in candidates if not c.payload.get("priority_floor")]
         if priority:

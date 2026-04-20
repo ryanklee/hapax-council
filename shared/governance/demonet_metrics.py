@@ -44,6 +44,7 @@ class _DemonetMetrics:
         self._classifier_calls: Any = None
         self._classifier_health: Any = None
         self._music_mutes: Any = None
+        self._programme_set_reductions: Any = None
         try:
             from prometheus_client import REGISTRY, Counter
         except ImportError:
@@ -72,6 +73,18 @@ class _DemonetMetrics:
                 "MusicPolicy mute decisions by path and reason class",
                 ["path", "reason_class"],
                 "_music_mutes",
+            ),
+            (
+                "hapax_programme_candidate_set_reduction_total",
+                (
+                    "Programme bias INVARIANT VIOLATION counter — "
+                    "MUST stay at 0. Increments only when "
+                    "_apply_programme_bias drops a candidate (Phase 4 of "
+                    "programme-layer plan; soft prior must NEVER shrink "
+                    "the candidate set per project_programmes_enable_grounding)"
+                ),
+                ["programme_id"],
+                "_programme_set_reductions",
             ),
         ):
             try:
@@ -120,6 +133,21 @@ class _DemonetMetrics:
             self._music_mutes.labels(path=path, reason_class=reason_class).inc()
         except Exception:
             log.debug("music_mutes counter inc failed", exc_info=True)
+
+    def inc_programme_candidate_set_reduction(self, programme_id: str) -> None:
+        """Phase 4 invariant violation sentinel — must always stay at 0.
+
+        Programme bias is a soft-prior multiplier; it must NEVER
+        reduce the candidate set per `project_programmes_enable_grounding`.
+        Any nonzero rate on this counter is a bug in
+        ``_apply_programme_bias`` (D-28 Phase 4).
+        """
+        if self._programme_set_reductions is None:
+            return
+        try:
+            self._programme_set_reductions.labels(programme_id=programme_id).inc()
+        except Exception:
+            log.debug("programme_set_reductions counter inc failed", exc_info=True)
 
 
 # Module-level singleton — production services share this.
