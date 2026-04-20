@@ -106,6 +106,18 @@ class StructuralIntent(BaseModel):
     emitted_at: float = Field(default_factory=time.time)
     condition_id: str = "none"
 
+    # Programme-layer Phase 5: stamp the active programme on every emitted
+    # intent so Phase 9 observability can group structural moves by the
+    # programme they served. None when no programme is active.
+    programme_id: str | None = Field(
+        default=None,
+        description=(
+            "ID of the active Programme at emission time; None when no "
+            "programme is active. Stamped by StructuralDirector.tick_once "
+            "(Phase 5 of the programme-layer plan)."
+        ),
+    )
+
 
 _RESEARCH_MARKER_PATH = Path("/dev/shm/hapax-compositor/research-marker.json")
 
@@ -183,13 +195,23 @@ class StructuralDirector:
         cadence_s: float = DEFAULT_CADENCE_S,
         sleep_fn=time.sleep,
         llm_fn=None,
+        programme_provider=None,
     ):
         """llm_fn: callable(prompt: str) -> str. Defaults to the same
         LiteLLM route used by the narrative director. Tests inject a
-        deterministic stub."""
+        deterministic stub.
+
+        programme_provider: callable() -> Programme | None. When provided,
+        the director consults the active programme on every tick to
+        enrich the prompt with the programme's role + beat + soft priors,
+        stamp ``programme_id`` on emitted intents, and honour the
+        programme's ``structural_cadence_prior_s`` override between
+        ticks. ``None`` short-circuits to legacy behaviour.
+        """
         self._cadence_s = cadence_s
         self._sleep = sleep_fn
         self._llm_fn = llm_fn or _default_llm_fn
+        self._programme_provider = programme_provider
         self._running = False
         self._thread: threading.Thread | None = None
 
@@ -211,10 +233,34 @@ class StructuralDirector:
                 self.tick_once()
             except Exception:  # pragma: no cover
                 log.warning("structural tick crashed", exc_info=True)
-            self._sleep(self._cadence_s)
+            self._sleep(self._next_cadence_s())
+
+    def _active_programme(self):
+        """Resolve the active Programme (or None). Robust to provider failure."""
+        if self._programme_provider is None:
+            return None
+        try:
+            return self._programme_provider()
+        except Exception:
+            log.debug("structural: programme lookup failed", exc_info=True)
+            return None
+
+    def _next_cadence_s(self) -> float:
+        """Return the cadence to use for the upcoming sleep.
+
+        A programme's ``structural_cadence_prior_s`` overrides the
+        director's default for the next sleep when set. The validator
+        in ``ProgrammeConstraintEnvelope`` already enforces ``> 0``.
+        """
+        prog = self._active_programme()
+        if prog is None:
+            return self._cadence_s
+        prior = prog.constraints.structural_cadence_prior_s
+        return float(prior) if prior else self._cadence_s
 
     def tick_once(self) -> StructuralIntent | None:
-        prompt = self._build_prompt()
+        programme = self._active_programme()
+        prompt = self._build_prompt(programme=programme)
         try:
             raw = self._llm_fn(prompt)
         except Exception:
@@ -228,17 +274,26 @@ class StructuralDirector:
             update={
                 "emitted_at": time.time(),
                 "condition_id": _read_condition_id(),
+                "programme_id": programme.programme_id if programme is not None else None,
             }
         )
         _publish(intent)
         return intent
 
-    def _build_prompt(self) -> str:
+    def _build_prompt(self, programme=None) -> str:
         """Minimal structural prompt. No images, no per-tick compositional demand.
 
         Reads the same PerceptualField the narrative director sees plus a
         short objectives summary. Shorter than narrative to keep the 150s
         cadence latency-cheap.
+
+        When a programme is active its role + narrative beat + soft priors
+        are appended as a "Programme context" section so the LLM knows
+        which long-horizon direction it's serving. The priors are framed
+        as PREFERENCES (soft bias), never as REQUIREMENTS (hard gate) —
+        the regression pin
+        ``test_structural_director_programme.py::TestSoftPriorFraming``
+        enforces this wording at module-test time.
         """
         parts: list[str] = []
         parts.append("<structural_context>")
@@ -251,6 +306,9 @@ class StructuralDirector:
         except Exception:
             log.debug("structural: perceptual_field read failed", exc_info=True)
         parts.append("")
+        if programme is not None:
+            parts.extend(_render_programme_context(programme))
+            parts.append("")
         parts.append("## Your Role")
         parts.append(
             "You are Hapax's slow (2-3 min) structural director. Your job "
@@ -286,6 +344,39 @@ class StructuralDirector:
         )
         parts.append("</structural_context>")
         return "\n".join(parts)
+
+
+def _render_programme_context(programme) -> list[str]:
+    """Render the active Programme as a soft-prior context block.
+
+    Phase 5 of the programme-layer plan. Soft priors only — every prior
+    is framed as a preference the LLM may override when impingement
+    pressure justifies it. The grounding-expansion regression pin
+    inspects this section's wording (must NOT contain 'must' / 'required'
+    / 'only' / 'never' / 'forbidden'; MUST frame priors with 'prefers' /
+    'soft prior' / 'bias toward' so the LLM knows it has slack).
+    """
+    role = programme.role.value if hasattr(programme.role, "value") else str(programme.role)
+    lines: list[str] = ["## Programme context"]
+    lines.append(
+        f"An active programme of role `{role}` is in flight. "
+        "Treat the items below as SOFT PRIORS — preferences that bias "
+        "your choices, not gates that constrain them. When impingement "
+        "pressure or the perceptual field calls for a different move, "
+        "emit it; the programme's purpose is to expand grounding "
+        "opportunities, not to replace grounding."
+    )
+    beat = (programme.content.narrative_beat or "").strip()
+    if beat:
+        lines.append(f"- programme direction: {beat}")
+    constraints = programme.constraints
+    if constraints.preset_family_priors:
+        priors = ", ".join(constraints.preset_family_priors)
+        lines.append(f"- prefers preset families: {priors} (soft prior)")
+    if constraints.homage_rotation_modes:
+        modes = ", ".join(constraints.homage_rotation_modes)
+        lines.append(f"- bias toward homage rotation modes: {modes} (soft prior)")
+    return lines
 
 
 def _default_llm_fn(prompt: str) -> str:
