@@ -36,6 +36,14 @@ W_THOMPSON = 0.20
 # in run_loops_aux), so we cache for 60s instead of reading every call.
 _CONSENT_CACHE_TTL_S = 60.0
 
+# D-26 (Phase 5): active-programme refresh window. Tighter than the consent
+# cache because Programme transitions (e.g. quiet_frame activation) need to
+# take effect on the gate within ~1s — slower would let medium-risk content
+# leak through during a governance hold. Reading the JSONL store on every
+# call is too expensive on the recruitment hot path; 1s is the right
+# trade-off for human-action-cadence Programme changes.
+_PROGRAMME_CACHE_TTL_S = 1.0
+
 
 def _apply_exploration_noise(
     candidates: list[SelectionCandidate],
@@ -157,6 +165,13 @@ class AffordancePipeline:
         # forces an immediate load.
         self._consent_has_active: bool | None = None
         self._consent_loaded_at: float = 0.0
+        # D-26: active-programme cache for the monetization gate. Loaded on
+        # first gate-passing select() call and refreshed every
+        # _PROGRAMME_CACHE_TTL_S seconds. Read failures (no store, malformed
+        # JSONL) yield None — the gate then sees no opt-ins, which is
+        # fail-CLOSED for medium-risk capabilities (correct safety posture).
+        self._active_programme: Any = None
+        self._programme_loaded_at: float = 0.0
 
     def _ensure_collection(self, client: object, vector_size: int) -> None:
         """Create the affordances collection if it doesn't exist."""
@@ -361,6 +376,36 @@ class AffordancePipeline:
                 self._consent_loaded_at = now
         return bool(self._consent_has_active)
 
+    def _active_programme_cached(self) -> Any:
+        """Return the currently-active Programme (D-26 / plan Phase 5).
+
+        Reads ``shared.programme_store.default_store().active_programme()``
+        with a TTL cache (``_PROGRAMME_CACHE_TTL_S``) so the recruitment
+        hot path doesn't open the JSONL store on every gate call. Returns
+        ``None`` if the store is empty, unreadable, or no Programme has
+        status=ACTIVE — the gate then sees no opt-ins, fail-CLOSED for
+        medium-risk capabilities (correct safety posture).
+
+        Read failures (FileNotFoundError, JSON parse errors) are logged
+        once per refresh cycle but never propagated — programme lookup
+        cannot break the recruitment pipeline.
+        """
+        now = time.time()
+        # Refresh on time-only condition; None is a LEGITIMATE cached value
+        # (means "no active Programme") so cannot serve as a not-loaded
+        # sentinel. _programme_loaded_at=0.0 (init default) forces the first
+        # call to load.
+        if now - self._programme_loaded_at > _PROGRAMME_CACHE_TTL_S:
+            try:
+                from shared.programme_store import default_store
+
+                self._active_programme = default_store().active_programme()
+            except Exception:  # noqa: BLE001 — programme lookup must never break recruitment
+                log.warning("active_programme lookup failed; falling back to None", exc_info=True)
+                self._active_programme = None
+            self._programme_loaded_at = now
+        return self._active_programme
+
     def register_interrupt(self, token: str, capability_name: str, daemon: str) -> None:
         self._interrupt_handlers.setdefault(token, []).append(
             InterruptHandler(capability_name=capability_name, daemon=daemon)
@@ -426,12 +471,14 @@ class AffordancePipeline:
         if not candidates:
             return []
         # Monetization-risk gate (task #165, plan Phase 1). High-risk always
-        # blocked; medium-risk requires a programme opt-in (wired in plan
-        # Phase 5). Low/none pass unchanged. Programme context plumbs through
-        # the pipeline in plan Phase 5; Phase 1 passes None.
+        # blocked; medium-risk requires a programme opt-in. D-26 (plan
+        # Phase 5) wires the active-programme lookup so opt-ins set on the
+        # current Programme actually reach the gate. Low/none pass unchanged.
         from shared.governance.monetization_safety import GATE as _MONET_GATE
 
-        candidates = _MONET_GATE.candidate_filter(candidates, programme=None)
+        candidates = _MONET_GATE.candidate_filter(
+            candidates, programme=self._active_programme_cached()
+        )
         if not candidates:
             return []
         now = time.time()
