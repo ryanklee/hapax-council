@@ -1,0 +1,205 @@
+#!/usr/bin/env -S uv run python
+"""hapax-audio-topology — CLI for the declarative PipeWire topology.
+
+Phase 3 of docs/superpowers/plans/2026-04-20-unified-audio-architecture-
+plan.md. Wraps shared.audio_topology + audio_topology_generator with
+subcommands operators (and CI) run against ``config/audio-topology.yaml``.
+
+Subcommands shipped in this phase:
+
+- ``describe <yaml>``  — parse the descriptor and print a node/edge
+  summary (operator-readable, not machine-readable).
+- ``generate <yaml> [--output-dir <dir>]``  — write generated confs
+  to ``<dir>/pipewire/<node.id>.conf``. Without ``--output-dir``,
+  prints the dict to stdout so it can be piped through ``diff`` or
+  similar.
+- ``diff <yaml_a> <yaml_b>`` — structural diff between two
+  descriptors; shows node additions/removals/changes + edge changes.
+
+Subcommands deferred to Phase 4+ (require pw-dump live-graph
+inspection):
+
+- ``verify``  — assert live graph matches descriptor
+- ``switch``  — atomically apply descriptor changes to live graph
+- ``audit``   — full drift report
+- ``watchdog`` — Ryzen codec pin-glitch auto-recovery
+
+Exit codes:
+
+- 0  — success
+- 1  — parse error / validation error / file-not-found
+- 2  — descriptors differ (``diff`` subcommand only; mirrors
+       ``diff(1)`` convention)
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+
+from shared.audio_topology import (
+    Node,
+    TopologyDescriptor,
+)
+from shared.audio_topology_generator import generate_confs
+
+
+def _load(path: str) -> TopologyDescriptor:
+    try:
+        return TopologyDescriptor.from_yaml(Path(path))
+    except FileNotFoundError:
+        print(f"error: descriptor file not found: {path}", file=sys.stderr)
+        sys.exit(1)
+    except Exception as exc:  # pydantic ValidationError + YAML errors
+        print(f"error: failed to load {path}: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+
+def _format_node(n: Node) -> str:
+    parts = [f"{n.id} [{n.kind.value}]"]
+    parts.append(f"name={n.pipewire_name}")
+    if n.hw:
+        parts.append(f"hw={n.hw}")
+    if n.target_object:
+        parts.append(f"target={n.target_object}")
+    if n.channels.count != 2 or n.channels.positions not in (["FL", "FR"], []):
+        parts.append(f"channels={n.channels.count}")
+    return "  " + "  ".join(parts)
+
+
+def cmd_describe(args: argparse.Namespace) -> int:
+    d = _load(args.descriptor)
+    print(f"# {d.description or 'topology descriptor'}")
+    print(f"schema_version: {d.schema_version}")
+    print(f"nodes ({len(d.nodes)}):")
+    for n in d.nodes:
+        print(_format_node(n))
+    print(f"edges ({len(d.edges)}):")
+    for e in d.edges:
+        src = f"{e.source}:{e.source_port}" if e.source_port else e.source
+        tgt = f"{e.target}:{e.target_port}" if e.target_port else e.target
+        gain = f" (+{e.makeup_gain_db:+.1f} dB)" if e.makeup_gain_db else ""
+        print(f"  {src} → {tgt}{gain}")
+    return 0
+
+
+def cmd_generate(args: argparse.Namespace) -> int:
+    d = _load(args.descriptor)
+    out = generate_confs(d)
+    if args.output_dir is None:
+        for filename, content in out.items():
+            print(f"\n### {filename} ###")
+            print(content)
+        return 0
+
+    outdir = Path(args.output_dir)
+    outdir.mkdir(parents=True, exist_ok=True)
+    written = 0
+    for filename, content in out.items():
+        dest = outdir / filename
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(content)
+        written += 1
+    print(f"wrote {written} conf(s) under {outdir}/")
+    return 0
+
+
+def cmd_diff(args: argparse.Namespace) -> int:
+    a = _load(args.left)
+    b = _load(args.right)
+
+    a_ids = {n.id: n for n in a.nodes}
+    b_ids = {n.id: n for n in b.nodes}
+
+    added = b_ids.keys() - a_ids.keys()
+    removed = a_ids.keys() - b_ids.keys()
+    shared = a_ids.keys() & b_ids.keys()
+    changed = [i for i in shared if a_ids[i] != b_ids[i]]
+
+    drift = False
+    if added:
+        drift = True
+        print("+ added nodes:")
+        for node_id in sorted(added):
+            print(f"  + {_format_node(b_ids[node_id]).strip()}")
+    if removed:
+        drift = True
+        print("- removed nodes:")
+        for node_id in sorted(removed):
+            print(f"  - {_format_node(a_ids[node_id]).strip()}")
+    if changed:
+        drift = True
+        print("~ changed nodes:")
+        for node_id in sorted(changed):
+            print(f"  ~ {node_id}")
+            print(f"      was: {_format_node(a_ids[node_id]).strip()}")
+            print(f"      now: {_format_node(b_ids[node_id]).strip()}")
+
+    a_edges = {(e.source, e.source_port, e.target, e.target_port): e for e in a.edges}
+    b_edges = {(e.source, e.source_port, e.target, e.target_port): e for e in b.edges}
+    a_keys = set(a_edges)
+    b_keys = set(b_edges)
+    added_edges = b_keys - a_keys
+    removed_edges = a_keys - b_keys
+    changed_edges = [k for k in a_keys & b_keys if a_edges[k] != b_edges[k]]
+
+    if added_edges:
+        drift = True
+        print("+ added edges:")
+        for k in sorted(added_edges):
+            e = b_edges[k]
+            print(f"  + {e.source} → {e.target} (+{e.makeup_gain_db:+.1f} dB)")
+    if removed_edges:
+        drift = True
+        print("- removed edges:")
+        for k in sorted(removed_edges):
+            e = a_edges[k]
+            print(f"  - {e.source} → {e.target}")
+    if changed_edges:
+        drift = True
+        print("~ changed edges (gain shift):")
+        for k in sorted(changed_edges):
+            print(
+                f"  ~ {k[0]} → {k[2]}: "
+                f"{a_edges[k].makeup_gain_db:+.1f} dB → "
+                f"{b_edges[k].makeup_gain_db:+.1f} dB"
+            )
+
+    if not drift:
+        print("descriptors match (no drift)")
+        return 0
+    return 2
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        prog="hapax-audio-topology",
+        description="Manage the declarative PipeWire audio topology descriptor.",
+    )
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    p_describe = sub.add_parser("describe", help="Summarise a descriptor.")
+    p_describe.add_argument("descriptor")
+    p_describe.set_defaults(func=cmd_describe)
+
+    p_generate = sub.add_parser("generate", help="Generate PipeWire conf fragments.")
+    p_generate.add_argument("descriptor")
+    p_generate.add_argument(
+        "--output-dir",
+        help="Directory to write pipewire/<node>.conf files. "
+        "If omitted, fragments print to stdout.",
+    )
+    p_generate.set_defaults(func=cmd_generate)
+
+    p_diff = sub.add_parser("diff", help="Structural diff between two descriptors.")
+    p_diff.add_argument("left")
+    p_diff.add_argument("right")
+    p_diff.set_defaults(func=cmd_diff)
+
+    args = parser.parse_args()
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
