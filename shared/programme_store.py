@@ -61,6 +61,24 @@ class ProgrammePlanStore:
 
     def __init__(self, path: Path | None = None) -> None:
         self.path = path if path is not None else DEFAULT_STORE_PATH
+        self._cleanup_tmp()
+
+    def _cleanup_tmp(self) -> None:
+        """Remove any ``*.tmp`` sibling left behind by a prior crash.
+
+        ``_rewrite`` writes to ``self.path + ".tmp"`` and atomically
+        renames to ``self.path``. If the process crashes between the
+        write and the rename, the tmp file persists — harmless for
+        correctness (the old canonical file is still intact), but
+        operators notice strays over time. Clean up at construction
+        so a daimonion restart is also a self-healing sweep.
+        """
+        tmp = self.path.with_suffix(self.path.suffix + ".tmp")
+        try:
+            if tmp.exists():
+                tmp.unlink()
+        except OSError:
+            log.debug("programme_store: failed to clean %s", tmp, exc_info=True)
 
     # --- Reads ------------------------------------------------------
 
@@ -115,12 +133,19 @@ class ProgrammePlanStore:
     # --- Writes -----------------------------------------------------
 
     def add(self, programme: Programme) -> None:
-        """Append a Programme to the store as a new JSONL line.
+        """Add or replace a Programme by programme_id.
+
+        Dedupes on ``programme_id`` collision — re-adding an existing
+        record REPLACES the previous row rather than appending a
+        duplicate. This keeps the file compact across the quiet-frame
+        reactivation loop (and any other "refresh an existing
+        programme" pattern).
 
         Caller sets the status; ``add`` does NOT transition PENDING →
         ACTIVE implicitly. Use ``activate`` for that.
         """
-        self._rewrite([*self.all(), programme])
+        existing = [p for p in self.all() if p.programme_id != programme.programme_id]
+        self._rewrite([*existing, programme])
 
     def activate(self, programme_id: str, now: float | None = None) -> Programme:
         """Transition ``programme_id`` to ACTIVE + deactivate any prior active.

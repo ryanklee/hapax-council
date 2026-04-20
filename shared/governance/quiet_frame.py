@@ -122,19 +122,15 @@ def activate_quiet_frame(
     """
     st = store if store is not None else default_store()
     ts = now if now is not None else time.time()
-    existing = st.get(QUIET_FRAME_PROGRAMME_ID)
     programme = build_quiet_frame_programme(
         duration_s=duration_s,
         status=ProgrammeStatus.PENDING,
         reason=reason,
     )
-    if existing is None:
-        st.add(programme)
-    else:
-        # Replace the stored record with the freshly-built one (new
-        # duration + reason). The store dedupes by programme_id, so
-        # re-adding equals overwrite.
-        st.add(programme)
+    # ProgrammePlanStore.add() now dedupes on programme_id collision
+    # (D-20 fix), so this is a single call regardless of whether a
+    # prior quiet-frame record exists.
+    st.add(programme)
     return st.activate(QUIET_FRAME_PROGRAMME_ID, now=ts)
 
 

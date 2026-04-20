@@ -167,6 +167,14 @@ class MonetizationEgressAudit:
         stem = self.path.stem  # "demonet-egress-audit"
         suffix = self.path.suffix  # ".jsonl"
         pruned: list[Path] = []
+        # Log boundaries so a crash mid-loop is visible in the journal.
+        # Without this, an incomplete prune manifests only as inconsistent
+        # archive state next cycle — hard to attribute.
+        log.info(
+            "prune_old_archives: start (retention=%d days, dir=%s)",
+            retention_days,
+            self.path.parent,
+        )
         for candidate in self.path.parent.iterdir():
             if candidate == self.path:
                 continue  # never prune live file
@@ -186,6 +194,7 @@ class MonetizationEgressAudit:
             if archive_ts < cutoff:
                 candidate.unlink()
                 pruned.append(candidate)
+        log.info("prune_old_archives: end (pruned=%d)", len(pruned))
         return pruned
 
 
