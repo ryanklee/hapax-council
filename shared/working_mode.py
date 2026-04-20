@@ -19,6 +19,11 @@ from pathlib import Path
 class WorkingMode(StrEnum):
     RESEARCH = "research"
     RND = "rnd"
+    # Council-specific third mode: studio livestream gating.
+    # Officium intentionally omits this. Workspace CLAUDE.md §working-mode
+    # documents the council-only scope. Existing equality checks
+    # (RESEARCH / RND) silently route FORTRESS to the else-branch.
+    FORTRESS = "fortress"
 
 
 WORKING_MODE_FILE = Path.home() / ".cache" / "hapax" / "working-mode"
@@ -41,6 +46,15 @@ def set_working_mode(mode: WorkingMode) -> None:
 def is_research() -> bool:
     """True when in research mode (experiment-safe degradation active)."""
     return get_working_mode() == WorkingMode.RESEARCH
+
+
+def is_fortress() -> bool:
+    """True when in fortress mode (livestream gating active).
+
+    Council-specific. Operator flips into fortress when going live so
+    consent gates and content filters tighten — NOT a default mode.
+    """
+    return get_working_mode() == WorkingMode.FORTRESS
 
 
 def is_rnd() -> bool:
