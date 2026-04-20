@@ -9,15 +9,20 @@ import pytest
 from shared.voice_tier import (
     _ROLE_TIER_DEFAULTS,
     TIER_CATALOG,
+    TIER_MONETIZATION_RISK,
     TIER_NAMES,
+    TIER_RISK_REASONS,
+    IntelligibilityBudget,
     RoleTierBand,
     TierProfile,
     VoiceTier,
+    all_tier_capability_records,
     apply_tier,
     profile_for,
     resolve_tier,
     role_tier_band,
     stance_tier_delta,
+    tier_capability_record,
     tier_from_name,
 )
 
@@ -386,6 +391,170 @@ class TestProgrammeVoiceTierBandPrior:
 
         env = ProgrammeConstraintEnvelope()
         assert env.voice_tier_band_prior is None
+
+
+class TestTierMonetizationRisk:
+    """Phase 4: per-tier monetization classification."""
+
+    def test_covers_all_tiers(self) -> None:
+        assert set(TIER_MONETIZATION_RISK.keys()) == set(VoiceTier)
+        assert set(TIER_RISK_REASONS.keys()) == set(VoiceTier)
+
+    def test_risk_levels_monotonic_non_decreasing(self) -> None:
+        """Moving up the tier ladder never lowers monetization risk."""
+        rank = {"none": 0, "low": 1, "medium": 2, "high": 3}
+        tiers_ordered = sorted(VoiceTier)
+        ranks = [rank[TIER_MONETIZATION_RISK[t]] for t in tiers_ordered]
+        assert ranks == sorted(ranks)
+
+    def test_t6_is_high_risk(self) -> None:
+        assert TIER_MONETIZATION_RISK[VoiceTier.OBLITERATED] == "high"
+
+    def test_t5_is_medium(self) -> None:
+        """Granular wash needs Programme opt-in at the gate."""
+        assert TIER_MONETIZATION_RISK[VoiceTier.GRANULAR_WASH] == "medium"
+
+    def test_clear_tiers_have_no_risk_reason(self) -> None:
+        for tier in (
+            VoiceTier.UNADORNED,
+            VoiceTier.RADIO,
+            VoiceTier.BROADCAST_GHOST,
+            VoiceTier.MEMORY,
+        ):
+            assert TIER_RISK_REASONS[tier] == ""
+
+
+class TestTierCapabilityRecord:
+    """Phase 4: CapabilityRecord adapter for pipeline registration."""
+
+    def test_all_seven_records_returned(self) -> None:
+        records = all_tier_capability_records()
+        assert len(records) == 7
+        names = {r.name for r in records}
+        assert names == {f"voice.tier.{TIER_NAMES[t].replace('-', '_')}" for t in VoiceTier}
+
+    def test_record_names_use_underscore_form(self) -> None:
+        """Dashed canonical names become underscores for pipeline keys."""
+        record = tier_capability_record(VoiceTier.BROADCAST_GHOST)
+        assert record.name == "voice.tier.broadcast_ghost"
+        record = tier_capability_record(VoiceTier.GRANULAR_WASH)
+        assert record.name == "voice.tier.granular_wash"
+
+    def test_operational_medium_is_auditory(self) -> None:
+        for tier in VoiceTier:
+            record = tier_capability_record(tier)
+            assert record.operational.medium == "auditory"
+
+    def test_operational_consent_not_required(self) -> None:
+        """Voice tier gates emission modality, not consent-scoped capture."""
+        for tier in VoiceTier:
+            assert tier_capability_record(tier).operational.consent_required is False
+
+    def test_monetization_risk_flows_through(self) -> None:
+        for tier in VoiceTier:
+            record = tier_capability_record(tier)
+            assert record.operational.monetization_risk == TIER_MONETIZATION_RISK[tier]
+
+    def test_risk_reason_present_for_risky_tiers(self) -> None:
+        assert tier_capability_record(VoiceTier.UNADORNED).operational.risk_reason is None
+        assert tier_capability_record(VoiceTier.OBLITERATED).operational.risk_reason is not None
+
+    def test_daemon_is_daimonion(self) -> None:
+        for tier in VoiceTier:
+            assert tier_capability_record(tier).daemon == "hapax-daimonion"
+
+    def test_gate_assessment_matches_risk(self) -> None:
+        """Spot-check that MonetizationRiskGate blocks T6 and gates T5."""
+        from shared.governance.monetization_safety import GATE, RiskAssessment
+
+        class _Candidate:
+            def __init__(self, name: str, risk: str, reason: str | None) -> None:
+                self.capability_name = name
+                self.payload = {"monetization_risk": risk}
+                if reason is not None:
+                    self.payload["risk_reason"] = reason
+
+        # T6 — high → blocked.
+        rec = tier_capability_record(VoiceTier.OBLITERATED)
+        cand = _Candidate(rec.name, rec.operational.monetization_risk, rec.operational.risk_reason)
+        assessment: RiskAssessment = GATE.assess(cand)
+        assert assessment.allowed is False
+        assert assessment.risk == "high"
+
+        # T5 — medium with no programme → blocked (needs opt-in).
+        rec = tier_capability_record(VoiceTier.GRANULAR_WASH)
+        cand = _Candidate(rec.name, rec.operational.monetization_risk, rec.operational.risk_reason)
+        assert GATE.assess(cand).allowed is False
+
+        # T0 — none → allowed.
+        rec = tier_capability_record(VoiceTier.UNADORNED)
+        cand = _Candidate(rec.name, rec.operational.monetization_risk, rec.operational.risk_reason)
+        assert GATE.assess(cand).allowed is True
+
+
+class TestIntelligibilityBudget:
+    """Phase 4: rolling-window unintelligibility cap."""
+
+    def test_empty_budget_is_full(self) -> None:
+        b = IntelligibilityBudget(budget_units=3.0)
+        assert b.remaining(now=100.0) == 3.0
+        assert b.consumed(now=100.0) == 0.0
+
+    def test_recording_unadorned_consumes_zero(self) -> None:
+        b = IntelligibilityBudget()
+        b.record(0.0, 60.0, VoiceTier.UNADORNED)
+        assert b.consumed(now=60.0) == 0.0
+
+    def test_recording_obliterated_full_rate(self) -> None:
+        """T6 floor=0.0 so loss=1.0/min; 60 s = 1 unit-min consumed."""
+        b = IntelligibilityBudget()
+        b.record(0.0, 60.0, VoiceTier.OBLITERATED)
+        assert b.consumed(now=60.0) == pytest.approx(1.0)
+
+    def test_recording_underwater_partial_rate(self) -> None:
+        """T4 floor=0.40 so loss=0.60/min; 60 s = 0.6 unit-min consumed."""
+        b = IntelligibilityBudget()
+        b.record(0.0, 60.0, VoiceTier.UNDERWATER)
+        assert b.consumed(now=60.0) == pytest.approx(0.6)
+
+    def test_rolling_window_excludes_old_spans(self) -> None:
+        """Spans older than window_s don't count toward consumed."""
+        b = IntelligibilityBudget(window_s=600.0)
+        b.record(0.0, 60.0, VoiceTier.OBLITERATED)
+        # 1 hour later, the span is outside the 10-min window.
+        assert b.consumed(now=3600.0) == 0.0
+
+    def test_pick_allowed_true_when_budget_remains(self) -> None:
+        b = IntelligibilityBudget(budget_units=3.0, lookahead_s=15.0)
+        assert b.pick_allowed(VoiceTier.GRANULAR_WASH, now=100.0) is True
+
+    def test_pick_allowed_false_when_exhausted(self) -> None:
+        b = IntelligibilityBudget(budget_units=0.5, lookahead_s=15.0)
+        b.record(0.0, 120.0, VoiceTier.OBLITERATED)  # consumes 2.0 unit-min
+        assert b.pick_allowed(VoiceTier.OBLITERATED, now=120.0) is False
+
+    def test_clamp_tier_downshifts_when_budget_tight(self) -> None:
+        """When budget can't fit T6 lookahead, clamp_tier drops down."""
+        b = IntelligibilityBudget(budget_units=0.2, lookahead_s=15.0)
+        b.record(0.0, 60.0, VoiceTier.OBLITERATED)  # consumes 1.0
+        # Budget is now 0.0; clamp must drop all the way to UNADORNED.
+        clamped = b.clamp_tier(VoiceTier.OBLITERATED, now=60.0)
+        assert clamped == VoiceTier.UNADORNED
+
+    def test_clamp_tier_noop_when_budget_ample(self) -> None:
+        b = IntelligibilityBudget(budget_units=10.0)
+        assert b.clamp_tier(VoiceTier.MEMORY, now=100.0) == VoiceTier.MEMORY
+
+    def test_unadorned_always_allowed(self) -> None:
+        """Even empty budget permits UNADORNED — there's no loss to spend."""
+        b = IntelligibilityBudget(budget_units=0.0)
+        assert b.pick_allowed(VoiceTier.UNADORNED, now=100.0) is True
+        assert b.clamp_tier(VoiceTier.OBLITERATED, now=100.0) == VoiceTier.UNADORNED
+
+    def test_record_rejects_inverted_span(self) -> None:
+        b = IntelligibilityBudget()
+        with pytest.raises(ValueError, match="end_ts"):
+            b.record(100.0, 50.0, VoiceTier.MEMORY)
 
 
 class TestTierFromName:

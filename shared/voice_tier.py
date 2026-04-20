@@ -45,6 +45,8 @@ from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import TYPE_CHECKING, Any
 
+from shared.affordance import CapabilityRecord, MonetizationRisk, OperationalProperties
+
 if TYPE_CHECKING:
     from shared.programme import ProgrammeRole
     from shared.stimmung import Stance
@@ -469,6 +471,169 @@ def resolve_tier(
     picked = int(baseline) + stance_tier_delta(stance)
     picked = max(int(band_low), min(int(band_high), picked))
     return VoiceTier(picked)
+
+
+# -----------------------------------------------------------------
+# Phase 4 — monetization classification + capability registration +
+# intelligibility budget.
+#
+# Why per-tier risk: the MonetizationRiskGate reads ``monetization_risk``
+# off the candidate payload (shared/governance/monetization_safety.py
+# L117). For voice output, the tier — not the Kokoro engine itself —
+# determines whether the render is Content-ID-safe and viewer-tolerable.
+# UNADORNED narration is zero risk; OBLITERATED pure granular-wash is
+# both a Content-ID false-positive magnet (tape-loop-like textures) and a
+# listener-abandonment risk when sustained, so it ships as "high" and
+# needs explicit excursion + duration cap to render at all.
+# -----------------------------------------------------------------
+
+TIER_MONETIZATION_RISK: dict[VoiceTier, MonetizationRisk] = {
+    VoiceTier.UNADORNED: "none",
+    VoiceTier.RADIO: "none",
+    VoiceTier.BROADCAST_GHOST: "none",
+    VoiceTier.MEMORY: "none",
+    VoiceTier.UNDERWATER: "low",
+    VoiceTier.GRANULAR_WASH: "medium",
+    VoiceTier.OBLITERATED: "high",
+}
+
+TIER_RISK_REASONS: dict[VoiceTier, str] = {
+    VoiceTier.UNADORNED: "",
+    VoiceTier.RADIO: "",
+    VoiceTier.BROADCAST_GHOST: "",
+    VoiceTier.MEMORY: "",
+    VoiceTier.UNDERWATER: ("heavily processed but audible; minor viewer-parse cost"),
+    VoiceTier.GRANULAR_WASH: (
+        "Evil Pet granular engine + 0.85 diffusion produces tape-loop-like "
+        "texture that can ping Content-ID false-positives; needs Programme "
+        "opt-in"
+    ),
+    VoiceTier.OBLITERATED: (
+        "pure granular dissolution at 0.0 intelligibility floor; unbounded "
+        "listener-abandonment + Content-ID risk — gated behind explicit "
+        "excursion + 15 s duration cap"
+    ),
+}
+
+
+def tier_capability_record(tier: VoiceTier) -> CapabilityRecord:
+    """Build a ``CapabilityRecord`` for a tier so the affordance pipeline
+    can score tier selection as a recruitable capability.
+
+    Phase 4 does NOT auto-register these — the daimonion bootstrap
+    registers them explicitly (deferred to the wiring step). This helper
+    exists so that registration + ad-hoc gate checks use the same shape.
+
+    The returned record ships:
+    - ``name = 'voice.tier.<canonical>'`` keyed off ``TIER_NAMES``
+    - ``description`` = Gibson-verb shape, 20-30 words, describing the
+      vocal affordance rather than the engine
+    - ``operational.medium = 'auditory'`` (destination-modality routing)
+    - ``operational.monetization_risk`` from ``TIER_MONETIZATION_RISK``
+    - ``operational.risk_reason`` from ``TIER_RISK_REASONS`` (empty for
+      zero-risk tiers)
+    - ``operational.consent_required = False`` (voice tier is the
+      operator's own output; consent contracts gate capture/persistence,
+      not emission)
+
+    Callers that register these records MUST dedup by ``name`` — the
+    affordance registry rejects duplicate names.
+    """
+    profile = profile_for(tier)
+    canonical = TIER_NAMES[tier].replace("-", "_")
+    description = (
+        f"Render speech in the {TIER_NAMES[tier]} register — "
+        f"{profile.description} Intelligibility floor {profile.intelligibility_floor:.2f}."
+    )
+    reason = TIER_RISK_REASONS.get(tier) or None
+    return CapabilityRecord(
+        name=f"voice.tier.{canonical}",
+        description=description,
+        daemon="hapax-daimonion",
+        operational=OperationalProperties(
+            latency_class="fast",
+            medium="auditory",
+            consent_required=False,
+            monetization_risk=TIER_MONETIZATION_RISK[tier],
+            risk_reason=reason,
+        ),
+    )
+
+
+def all_tier_capability_records() -> list[CapabilityRecord]:
+    """Return the full 7-tier CapabilityRecord set in ordinal order."""
+    return [tier_capability_record(t) for t in VoiceTier]
+
+
+# -----------------------------------------------------------------
+# Intelligibility budget — rolling-window cap on cumulative
+# unintelligibility. Prevents the narrative director from chaining high-
+# tier picks into a sustained stretch where the operator's speech is
+# unintelligible for minutes at a time. Units are "unit-minutes of
+# intelligibility loss" — a tier-4 stretch (floor 0.40) active for 60 s
+# consumes (1 - 0.40) × (60/60) = 0.6 unit-minutes.
+# -----------------------------------------------------------------
+
+
+@dataclass
+class IntelligibilityBudget:
+    """Stateful tracker for cumulative unintelligibility over a window.
+
+    Attributes:
+        window_s: Size of the rolling window (default 600 s = 10 min).
+        budget_units: Hard cap on cumulative unintelligibility inside the
+            window, in unit-minutes. Default 3.0 — permits ~7.5 min at
+            TIER_UNDERWATER (floor 0.40, loss 0.60/min) or ~5 min at
+            TIER_GRANULAR_WASH (floor 0.15, loss 0.85/min).
+        lookahead_s: How far ahead ``pick_allowed`` projects a tier's
+            cost when deciding admissibility. Default 15 s.
+    """
+
+    window_s: float = 600.0
+    budget_units: float = 3.0
+    lookahead_s: float = 15.0
+    _spans: list[tuple[float, float, VoiceTier]] = field(default_factory=list)
+
+    def consumed(self, now: float) -> float:
+        """Unit-minutes of unintelligibility inside ``(now - window, now]``."""
+        cutoff = now - self.window_s
+        total_unit_seconds = 0.0
+        for start, end, tier in self._spans:
+            overlap_start = max(start, cutoff)
+            overlap_end = min(end, now)
+            if overlap_end <= overlap_start:
+                continue
+            duration = overlap_end - overlap_start
+            loss = 1.0 - profile_for(tier).intelligibility_floor
+            total_unit_seconds += duration * loss
+        return total_unit_seconds / 60.0
+
+    def remaining(self, now: float) -> float:
+        """Budget units not yet consumed; clamped at 0."""
+        return max(0.0, self.budget_units - self.consumed(now))
+
+    def record(self, start_ts: float, end_ts: float, tier: VoiceTier) -> None:
+        """Record a span during which ``tier`` was active."""
+        if end_ts < start_ts:
+            raise ValueError(
+                f"end_ts ({end_ts}) must be ≥ start_ts ({start_ts}) — IntelligibilityBudget.record"
+            )
+        self._spans.append((start_ts, end_ts, tier))
+        cutoff = start_ts - self.window_s
+        self._spans = [s for s in self._spans if s[1] > cutoff]
+
+    def pick_allowed(self, tier: VoiceTier, now: float) -> bool:
+        """Check whether ``tier`` fits ``lookahead_s`` ahead in current budget."""
+        loss_per_min = 1.0 - profile_for(tier).intelligibility_floor
+        projected_cost = loss_per_min * (self.lookahead_s / 60.0)
+        return self.remaining(now) >= projected_cost
+
+    def clamp_tier(self, tier: VoiceTier, now: float) -> VoiceTier:
+        """Downshift ``tier`` until it fits remaining budget. Never below UNADORNED."""
+        current = tier
+        while current != VoiceTier.UNADORNED and not self.pick_allowed(current, now):
+            current = VoiceTier(int(current) - 1)
+        return current
 
 
 def tier_from_name(name: str) -> VoiceTier:
