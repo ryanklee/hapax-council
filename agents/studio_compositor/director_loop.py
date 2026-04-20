@@ -329,19 +329,30 @@ def _maybe_rotate_jsonl(path: Path) -> None:
 # (6× 30s PERCEPTION_INTERVAL) — a single-tick LLM timeout doesn't
 # trigger; only sustained silence does. Closes the same coverage gap
 # as the v4l2sink stall watchdog (alpha e2175469a).
-_last_real_intent_monotonic: float = 0.0
-_last_any_intent_monotonic: float = 0.0
+#
+# IMPORTANT: initialised to time.monotonic() at module import so the
+# first-intent grace window starts from compositor startup, NOT from
+# epoch-zero. The first parsed-LLM intent typically takes 30-90s to
+# emit (cold cache + long director prompt + Command-R 32B prefill);
+# without this seed, director_intent_age() returns inf for the first
+# minute and the watchdog crash-loops the compositor before the
+# director can produce its first intent. The seed gives the loop the
+# full 180s gate to emit its first intent.
+_last_real_intent_monotonic: float = time.monotonic()
+_last_any_intent_monotonic: float = time.monotonic()
 
 
 def director_intent_age() -> float:
-    """Seconds since last parsed-LLM intent emission. inf if never emitted.
+    """Seconds since last parsed-LLM intent emission, or since module import.
 
     Read by lifecycle._watchdog_tick to gate systemd WATCHDOG=1 ping.
     Excludes micromove fallbacks — fallbacks mask LLM hangs, so the
     watchdog must see real LLM output to consider the loop alive.
+
+    Module-import seed (see top-of-module comment) ensures the first
+    180s post-startup are treated as "alive" so the cold-start LLM
+    prefill window doesn't trip the watchdog into a crash loop.
     """
-    if _last_real_intent_monotonic == 0.0:
-        return float("inf")
     return time.monotonic() - _last_real_intent_monotonic
 
 
