@@ -53,6 +53,15 @@ log = logging.getLogger(__name__)
 # directory bind captures all operator-facing state.
 DEGRADED_MODE_PATH: Path = Path("/dev/shm/hapax-compositor/degraded-mode.json")
 
+# Bridge flag for the HARDM publisher (scripts/hardm-publish-signals.py
+# reads this path's existence as the ``degraded_stream`` signal). The
+# publisher hardcodes the path and uses presence semantics, so we touch
+# it on activate / remove on deactivate alongside the canonical
+# ``degraded-mode.json``. Without this bridge, ``degraded.activate``
+# UDS commands had no observable effect on HARDM rendering — the
+# coverage gap that broke gate-3 verification 2026-04-20.
+DEGRADED_FLAG_PATH: Path = Path("/dev/shm/hapax-compositor/degraded.flag")
+
 # Default TTL for a degraded activation. A typical Python service
 # restart under ``rebuild-service.sh`` completes in 5-15 s; 60 s leaves
 # comfortable headroom for slow imports, Qdrant reconnects, and ExllamaV2
@@ -207,12 +216,23 @@ class DegradedModeController:
             os.replace(tmp_path, self._path)
         except OSError:
             log.warning("degraded-mode publish failed", exc_info=True)
+        # Bridge to HARDM publisher's flag-presence consumer. See
+        # DEGRADED_FLAG_PATH module-level docstring.
+        try:
+            DEGRADED_FLAG_PATH.touch()
+        except OSError:
+            log.debug("degraded.flag touch failed", exc_info=True)
 
     def _unpublish(self) -> None:
         try:
             self._path.unlink(missing_ok=True)
         except OSError:
             log.debug("degraded-mode unpublish failed", exc_info=True)
+        # Mirror unpublish to HARDM publisher's flag.
+        try:
+            DEGRADED_FLAG_PATH.unlink(missing_ok=True)
+        except OSError:
+            log.debug("degraded.flag unlink failed", exc_info=True)
 
     def _init_metrics(self) -> None:
         try:
