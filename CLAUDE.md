@@ -169,6 +169,31 @@ Live `jq 'keys | length' /dev/shm/hapax-imagination/uniforms.json` should be ≥
 
 Hapax TTS output (Kokoro 82M CPU) can be routed through a user-configurable PipeWire `filter-chain` before hitting the Studio 24c analog output. Presets at `config/pipewire/voice-fx-*.conf`; install into `~/.config/pipewire/pipewire.conf.d/`, restart pipewire, export `HAPAX_TTS_TARGET=hapax-voice-fx-capture` before starting `hapax-daimonion.service`. Unset falls through to default wireplumber routing. All presets share the same sink name so swapping does not require restarting daimonion. Details: `config/pipewire/README.md`.
 
+## CC Task Tracking (Obsidian SSOT — D-30)
+
+**Canonical work-state surface:** `~/Documents/Personal/20-projects/hapax-cc-tasks/` in the operator's Obsidian vault. One markdown note per task with `type: cc-task` frontmatter (status, assigned_to, priority, wsjf, etc.). Operator-facing dashboards under `_dashboard/` use Dataview queries (Tasks + Dataview plugins, both already deployed).
+
+**Per-session interaction:**
+- `cc-claim <task_id>` (in `scripts/cc-claim`, symlink to `~/.local/bin/`) — atomic claim: rewrites frontmatter (status: claimed; assigned_to: $CLAUDE_ROLE) + writes the per-role claim file at `~/.cache/hapax/cc-active-task-{role}`.
+- First file mutation triggers PreToolUse hook `hooks/scripts/cc-task-gate.sh` which auto-transitions claimed → in_progress and rejects if status doesn't match the role's claim.
+- `cc-close <task_id> [--pr N]` — closes the task: status → done (or withdrawn/superseded), moves note to `closed/`, clears claim file.
+- SessionStart preamble (`hooks/scripts/session-context.sh` D-30 Phase 4) shows currently-claimed task + top 5 offered tasks by WSJF.
+
+**Native `TaskCreate` is deprecated for cross-session workstream items** — use the vault SSOT instead. Native TaskTool remains permitted for single-session ephemeral todos that don't need operator visibility.
+
+**Bridges:**
+- Native CC TaskTool → vault: one-shot migration `scripts/migrate_native_tasks_to_vault.py` (already applied 2026-04-20: 221 native tasks → 39 active + 182 closed).
+- Relay yaml `active_queue_items[]` → vault: 5-min systemd timer `hapax-relay-to-cc-tasks.timer` mirrors operator-author queue items into vault notes (idempotent, preserves operator hand-edits).
+
+**Hook bypass for incident response:** `HAPAX_CC_TASK_GATE_OFF=1`. Hook is OFF BY DEFAULT until D-30 Phase 7 validation completes (currently in progress).
+
+References:
+- Spec: `docs/superpowers/specs/2026-04-20-cc-task-obsidian-ssot-design.md`
+- Plan: `docs/superpowers/plans/2026-04-20-cc-task-obsidian-ssot-plan.md`
+- Origin: `docs/research/2026-04-20-total-workstream-gap-audit.md` §6 P0
+- Tracking: WSJF doc D-30
+- Vault README: `~/Documents/Personal/20-projects/hapax-cc-tasks/_dashboard/cc-readme.md`
+
 ## Council-Specific Conventions
 
 - Hypothesis for property-based algebraic proofs.
