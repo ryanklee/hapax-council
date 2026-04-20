@@ -183,3 +183,139 @@ class TestStateHash:
         s1 = {"condition_id": "x", "objectives": []}
         s2 = {"condition_id": "y", "objectives": []}
         assert _state_hash(s1) != _state_hash(s2)
+
+
+# ── YT bundle B2 — attribution backflow into syncer ──────────────────
+
+
+class TestAttributionBackflow:
+    """sync_once now enumerates AttributionSource entries and threads
+    them through assemble_description so chat URLs surface in the live
+    broadcast description."""
+
+    def _make_entries(self):
+        from datetime import UTC, datetime
+
+        from shared.attribution import AttributionEntry
+
+        return [
+            AttributionEntry(
+                kind="github",
+                url="https://github.com/example/repo",
+                title="example",
+                source="chat:abc123",
+                emitted_at=datetime.fromtimestamp(100, tz=UTC),
+            ),
+            AttributionEntry(
+                kind="youtube",
+                url="https://youtu.be/xyz",
+                source="chat:def456",
+                emitted_at=datetime.fromtimestamp(200, tz=UTC),
+            ),
+        ]
+
+    def test_snapshot_state_includes_attributions(self):
+        from agents.studio_compositor.youtube_description_syncer import _snapshot_state
+
+        entries = self._make_entries()
+        state = _snapshot_state(
+            marker_reader=lambda: {"condition_id": "cond-A"},
+            objectives_reader=lambda: [],
+            attribution_reader=lambda: entries,
+        )
+        assert state["attributions"] == entries
+
+    def test_snapshot_attribution_reader_failure_returns_empty(self, monkeypatch):
+        """A bad attribution reader must NOT break the snapshot — the
+        syncer's job is to publish state, not be derailed by a vault
+        outage."""
+        import sys
+
+        from agents.studio_compositor.youtube_description_syncer import (
+            _read_attribution_entries,
+        )
+
+        # Force the AttributionFileWriter import to fail.
+        monkeypatch.setitem(sys.modules, "shared.attribution", None)
+        result = _read_attribution_entries()
+        assert result == []
+
+    def test_sync_passes_attributions_to_assemble(self, monkeypatch, tmp_path):
+        from agents.studio_compositor import youtube_description_syncer as sync
+
+        monkeypatch.setattr(sync, "LAST_STATE_FILE", tmp_path / "last.json")
+        captured = {}
+
+        def _updater(video_id, description, *, dry_run=False):
+            captured["description"] = description
+            return True
+
+        entries = self._make_entries()
+        sync.sync_once(
+            video_id="vid-attribution",
+            marker_reader=lambda: {"condition_id": "cond-A"},
+            objectives_reader=lambda: [],
+            attribution_reader=lambda: entries,
+            updater=_updater,
+        )
+        assert "https://github.com/example/repo" in captured["description"]
+        assert "https://youtu.be/xyz" in captured["description"]
+        assert "Sources:" in captured["description"]
+
+    def test_state_hash_stable_across_repeat_reads(self):
+        """Same on-disk attribution entries → same hash → no churn-update."""
+        from agents.studio_compositor.youtube_description_syncer import (
+            _snapshot_state,
+            _state_hash,
+        )
+
+        entries = self._make_entries()
+        s1 = _snapshot_state(
+            marker_reader=lambda: {"condition_id": "x"},
+            objectives_reader=lambda: [],
+            attribution_reader=lambda: entries,
+        )
+        s2 = _snapshot_state(
+            marker_reader=lambda: {"condition_id": "x"},
+            objectives_reader=lambda: [],
+            attribution_reader=lambda: entries,
+        )
+        assert _state_hash(s1) == _state_hash(s2)
+
+    def test_state_hash_changes_when_new_url_added(self):
+        """A newly-extracted URL must trigger a description update."""
+        from datetime import UTC, datetime
+
+        from agents.studio_compositor.youtube_description_syncer import (
+            _snapshot_state,
+            _state_hash,
+        )
+        from shared.attribution import AttributionEntry
+
+        before = [
+            AttributionEntry(
+                kind="github",
+                url="https://github.com/x/y",
+                source="t",
+                emitted_at=datetime.fromtimestamp(100, tz=UTC),
+            )
+        ]
+        after = before + [
+            AttributionEntry(
+                kind="youtube",
+                url="https://youtu.be/new",
+                source="t",
+                emitted_at=datetime.fromtimestamp(200, tz=UTC),
+            )
+        ]
+        s1 = _snapshot_state(
+            marker_reader=lambda: {"condition_id": "x"},
+            objectives_reader=lambda: [],
+            attribution_reader=lambda: before,
+        )
+        s2 = _snapshot_state(
+            marker_reader=lambda: {"condition_id": "x"},
+            objectives_reader=lambda: [],
+            attribution_reader=lambda: after,
+        )
+        assert _state_hash(s1) != _state_hash(s2)

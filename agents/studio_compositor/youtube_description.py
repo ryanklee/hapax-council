@@ -101,8 +101,20 @@ def assemble_description(
     substrate_model: str,
     reaction_count: int | None = None,
     extra: str | None = None,
+    attributions: list[Any] | None = None,
+    attribution_max: int = 50,
+    attribution_max_chars: int = 5000,
 ) -> str:
-    """Assemble a description snippet from current research state."""
+    """Assemble a description snippet from current research state.
+
+    YT bundle B2 wire-in: when ``attributions`` carries
+    AttributionEntry objects (URLs accumulated by the chat URL
+    pipeline + other AttributionSource producers), they're rendered
+    in a "Sources / Attribution" section grouped by kind. Hard caps:
+    ``attribution_max`` entries (newest first) and a total character
+    budget of ``attribution_max_chars`` for the section so a runaway
+    URL flood can never blow YouTube's 5000-char description ceiling.
+    """
     lines = [f"Condition: {condition_id}"]
     if claim_id:
         lines.append(f"Claim: {claim_id}")
@@ -113,7 +125,67 @@ def assemble_description(
         lines.append(f"Reactions observed: {reaction_count}")
     if extra:
         lines.extend(["", extra])
+    if attributions:
+        attrib_block = _render_attribution_block(
+            attributions, max_entries=attribution_max, max_chars=attribution_max_chars
+        )
+        if attrib_block:
+            lines.extend(["", attrib_block])
     return "\n".join(lines)
+
+
+def _render_attribution_block(
+    entries: list[Any],
+    *,
+    max_entries: int,
+    max_chars: int,
+) -> str:
+    """Render attribution entries as a grouped-by-kind section.
+
+    Newest-first ordering; per-kind grouping; cap on entry count and
+    total character budget so a chat URL flood never blows the
+    description ceiling. Each entry renders as ``- {title or url}: {url}``
+    when ``title`` is set, ``- {url}`` otherwise. De-duplicated by
+    ``(kind, url)`` so multi-producer overlaps surface once.
+    """
+    if not entries:
+        return ""
+    # De-dup by (kind, url) — newest entry wins.
+    seen: dict[tuple[str, str], Any] = {}
+    for entry in sorted(entries, key=lambda e: getattr(e, "emitted_at", 0), reverse=True):
+        key = (getattr(entry, "kind", ""), getattr(entry, "url", ""))
+        if not key[1]:
+            continue
+        if key not in seen:
+            seen[key] = entry
+        if len(seen) >= max_entries:
+            break
+    if not seen:
+        return ""
+    by_kind: dict[str, list[Any]] = {}
+    for entry in seen.values():
+        by_kind.setdefault(entry.kind, []).append(entry)
+    lines = ["Sources:"]
+    for kind in sorted(by_kind.keys()):
+        lines.append(f"  [{kind}]")
+        for e in by_kind[kind]:
+            label = e.title.strip() if getattr(e, "title", None) else None
+            line = f"    - {label}: {e.url}" if label else f"    - {e.url}"
+            lines.append(line)
+    block = "\n".join(lines)
+    if len(block) > max_chars:
+        # Truncate at a line boundary just below the budget to keep
+        # the section parseable rather than ending mid-URL.
+        truncated_lines: list[str] = []
+        running = 0
+        for line in lines:
+            if running + len(line) + 1 > max_chars - 50:  # 50-char overflow notice budget
+                truncated_lines.append(f"  [...{len(lines) - len(truncated_lines)} more truncated]")
+                break
+            truncated_lines.append(line)
+            running += len(line) + 1  # +1 for the join newline
+        block = "\n".join(truncated_lines)
+    return block
 
 
 def update_video_description(

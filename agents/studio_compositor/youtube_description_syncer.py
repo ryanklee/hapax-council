@@ -118,15 +118,58 @@ def _active_objectives_summary() -> list[dict[str, Any]]:
     ]
 
 
-def _snapshot_state(marker_reader=None, objectives_reader=None) -> dict[str, Any]:
-    """Build a snapshot of the research state relevant to the YouTube desc."""
+def _read_attribution_entries() -> list[Any]:
+    """Read every kind from the AttributionFileWriter into one list.
+
+    YT bundle B2: chat URL extractor (c17b487ce) accumulates entries
+    into ``<vault-attribution-root>/<kind>.jsonl`` but
+    ``youtube_description_syncer`` was never reading them. This bridges
+    the producer-consumer gap so URLs operators paste in chat actually
+    surface in the live broadcast description.
+
+    Returns the union across every AttributionKind. Tolerant: missing
+    files yield empty lists; malformed lines are skipped (already
+    handled inside ``AttributionFileWriter.read_all``). Failures import
+    or read return an empty list so a vault outage never breaks the
+    sync loop.
+    """
+    try:
+        from shared.attribution import AttributionFileWriter, AttributionKind
+
+        writer = AttributionFileWriter()
+        out: list[Any] = []
+        for kind in AttributionKind.__args__:  # type: ignore[attr-defined]
+            try:
+                out.extend(writer.read_all(kind))
+            except Exception:
+                log.debug("attribution read failed for kind=%s", kind, exc_info=True)
+        return out
+    except Exception:
+        log.debug("attribution writer unavailable; skipping", exc_info=True)
+        return []
+
+
+def _snapshot_state(
+    marker_reader=None,
+    objectives_reader=None,
+    attribution_reader=None,
+) -> dict[str, Any]:
+    """Build a snapshot of the research state relevant to the YouTube desc.
+
+    YT bundle B2: now also enumerates attribution entries (chat URLs +
+    other AttributionSource producers) so they reach
+    ``assemble_description``. Reader is injected for tests so the
+    snapshot stays deterministic.
+    """
     marker_reader = marker_reader or _read_research_marker
     objectives_reader = objectives_reader or _active_objectives_summary
+    attribution_reader = attribution_reader or _read_attribution_entries
     marker = marker_reader()
     return {
         "condition_id": marker.get("condition_id") or "",
         "claim_id": marker.get("claim_id"),
         "objectives": objectives_reader(),
+        "attributions": attribution_reader(),
     }
 
 
@@ -162,6 +205,7 @@ def sync_once(
     dry_run: bool = False,
     marker_reader=None,
     objectives_reader=None,
+    attribution_reader=None,
     updater=None,
 ) -> bool:
     """One sync cycle. Returns True if a description update was sent.
@@ -184,7 +228,7 @@ def sync_once(
         log.debug("no video_id; skipping sync (set HAPAX_YOUTUBE_VIDEO_ID)")
         return False
 
-    state = _snapshot_state(marker_reader, objectives_reader)
+    state = _snapshot_state(marker_reader, objectives_reader, attribution_reader)
     new_hash = _state_hash(state)
     if new_hash == _load_last_hash():
         log.debug("state unchanged; skipping sync")
@@ -196,6 +240,7 @@ def sync_once(
         claim_id=state.get("claim_id"),
         objective_title=top_objective["title"] if top_objective else None,
         substrate_model=substrate_model,
+        attributions=state.get("attributions") or None,
     )
 
     updater = updater or update_video_description

@@ -117,3 +117,139 @@ class TestUpdateSilent:
         # Quota debited even though no API call
         state = json.loads(qf.read_text())
         assert state["units_spent"] == 50
+
+
+# ── YT bundle B2 — attribution backflow into description ──────────────
+
+
+class TestAttributionRendering:
+    """assemble_description renders attribution entries as a Sources
+    section grouped by kind, deduplicated by (kind, url), newest-first,
+    capped on entry count + character budget."""
+
+    def _entry(self, kind: str, url: str, title: str | None = None, ts: int = 1):
+        from datetime import UTC, datetime
+
+        from shared.attribution import AttributionEntry
+
+        return AttributionEntry(
+            kind=kind,  # type: ignore[arg-type]
+            url=url,
+            title=title,
+            source="test",
+            emitted_at=datetime.fromtimestamp(ts, tz=UTC),
+        )
+
+    def test_no_attributions_no_sources_section(self):
+        desc = assemble_description(
+            condition_id="cond-1",
+            claim_id=None,
+            objective_title=None,
+            substrate_model="x",
+        )
+        assert "Sources:" not in desc
+
+    def test_single_attribution_renders(self):
+        entries = [self._entry("youtube", "https://youtu.be/abc")]
+        desc = assemble_description(
+            condition_id="cond-1",
+            claim_id=None,
+            objective_title=None,
+            substrate_model="x",
+            attributions=entries,
+        )
+        assert "Sources:" in desc
+        assert "[youtube]" in desc
+        assert "https://youtu.be/abc" in desc
+
+    def test_grouped_by_kind(self):
+        entries = [
+            self._entry("youtube", "https://youtu.be/aaa"),
+            self._entry("github", "https://github.com/x/y"),
+            self._entry("youtube", "https://youtu.be/bbb"),
+        ]
+        desc = assemble_description(
+            condition_id="cond-1",
+            claim_id=None,
+            objective_title=None,
+            substrate_model="x",
+            attributions=entries,
+        )
+        assert desc.index("[github]") < desc.index("[youtube]"), "kinds must be sorted"
+        # Both youtube entries land under the [youtube] heading.
+        yt_section = desc.split("[youtube]", 1)[1]
+        assert "https://youtu.be/aaa" in yt_section
+        assert "https://youtu.be/bbb" in yt_section
+
+    def test_dedup_by_kind_and_url(self):
+        entries = [
+            self._entry("youtube", "https://youtu.be/aaa", title="first", ts=1),
+            self._entry("youtube", "https://youtu.be/aaa", title="duplicate", ts=2),
+        ]
+        desc = assemble_description(
+            condition_id="cond-1",
+            claim_id=None,
+            objective_title=None,
+            substrate_model="x",
+            attributions=entries,
+        )
+        # URL appears exactly once.
+        assert desc.count("https://youtu.be/aaa") == 1
+
+    def test_title_renders_when_present(self):
+        entries = [self._entry("github", "https://github.com/x/y", title="cool repo")]
+        desc = assemble_description(
+            condition_id="cond-1",
+            claim_id=None,
+            objective_title=None,
+            substrate_model="x",
+            attributions=entries,
+        )
+        assert "cool repo: https://github.com/x/y" in desc
+
+    def test_max_entries_caps_count(self):
+        entries = [self._entry("youtube", f"https://youtu.be/{i}", ts=i) for i in range(20)]
+        desc = assemble_description(
+            condition_id="cond-1",
+            claim_id=None,
+            objective_title=None,
+            substrate_model="x",
+            attributions=entries,
+            attribution_max=5,
+        )
+        # Only 5 URLs make it in.
+        url_count = sum(1 for line in desc.splitlines() if "https://youtu.be/" in line)
+        assert url_count == 5
+
+    def test_max_chars_truncates_with_notice(self):
+        entries = [
+            self._entry("github", f"https://github.com/long-org/very-long-repo-name-{i}", ts=i)
+            for i in range(50)
+        ]
+        desc = assemble_description(
+            condition_id="cond-1",
+            claim_id=None,
+            objective_title=None,
+            substrate_model="x",
+            attributions=entries,
+            attribution_max=50,
+            attribution_max_chars=300,
+        )
+        assert "more truncated" in desc
+
+    def test_other_description_fields_not_clobbered(self):
+        entries = [self._entry("github", "https://github.com/x/y")]
+        desc = assemble_description(
+            condition_id="cond-1",
+            claim_id="claim-A",
+            objective_title="ship the thing",
+            substrate_model="qwen3",
+            attributions=entries,
+        )
+        # Pre-existing fields all still present.
+        assert "Condition: cond-1" in desc
+        assert "Claim: claim-A" in desc
+        assert "Current objective: ship the thing" in desc
+        assert "Substrate: qwen3" in desc
+        # Attribution section appears AFTER the rest.
+        assert desc.index("Sources:") > desc.index("Substrate:")
