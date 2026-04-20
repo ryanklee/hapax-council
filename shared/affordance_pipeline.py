@@ -400,6 +400,7 @@ class AffordancePipeline:
         if programme is None:
             return candidates
         before_len = len(candidates)
+        programme_id = getattr(programme, "programme_id", "unknown")
         for c in candidates:
             try:
                 multiplier = float(programme.bias_multiplier(c.capability_name))
@@ -409,6 +410,20 @@ class AffordancePipeline:
                 # on a programme-method gap.
                 multiplier = 1.0
             c.combined = max(0.0, c.combined * multiplier)
+            # Phase 9 invariant: soft-prior-not-hardening detector. If a
+            # candidate received negative bias (multiplier < 1) and the
+            # post-bias combined still survives the recruitment threshold,
+            # the candidate will (likely) be recruited DESPITE programme
+            # bias — that's the soft-prior-overridden event. Fire the
+            # counter so a stream where the counter stays at zero per
+            # programme can be flagged as a hard-gate regression.
+            if multiplier < 1.0 and c.combined > THRESHOLD:
+                try:
+                    from shared.programme_observability import emit_soft_prior_override
+
+                    emit_soft_prior_override(programme_id, reason="negative_bias_overcome")
+                except Exception:
+                    log.debug("emit_soft_prior_override failed", exc_info=True)
         # Sentinel: helper MUST preserve list length. Any reduction is a
         # bug; emit a counter so a future regression surfaces immediately.
         if len(candidates) != before_len:

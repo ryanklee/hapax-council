@@ -253,6 +253,39 @@ class TestRealProgrammeIntegration:
         result = pipeline._apply_programme_bias(cands, prog)
         assert result[0].combined == pytest.approx(0.6)  # 0.4 * 1.5
 
+    def test_negative_bias_overcome_fires_soft_prior_counter(self, pipeline, monkeypatch) -> None:
+        """Phase 9 invariant: soft-prior-overridden counter must fire when
+        a candidate received negative bias yet still survives the
+        recruitment threshold. Validates the soft-prior-not-hardening
+        detector wires through `_apply_programme_bias`.
+        """
+        from shared import programme_observability as obs
+
+        captured: list[tuple[str, str]] = []
+
+        def fake_emit(pid: str, reason: str = "high_pressure") -> None:
+            captured.append((pid, reason))
+
+        monkeypatch.setattr(obs, "emit_soft_prior_override", fake_emit)
+        # 0.95 * 0.5 = 0.475 — well above THRESHOLD (0.05) so override fires
+        cands = [_candidate("biased_cap", 0.95)]
+        prog = _FakeProgramme(programme_id="prog-test", biases={"biased_cap": 0.5})
+        pipeline._apply_programme_bias(cands, prog)
+        assert ("prog-test", "negative_bias_overcome") in captured
+
+    def test_positive_bias_does_not_fire_override_counter(self, pipeline, monkeypatch) -> None:
+        """Positive bias is not an override event — counter must stay quiet."""
+        from shared import programme_observability as obs
+
+        captured: list[tuple[str, str]] = []
+        monkeypatch.setattr(
+            obs, "emit_soft_prior_override", lambda pid, reason="x": captured.append((pid, reason))
+        )
+        cands = [_candidate("amplified", 0.5)]
+        prog = _FakeProgramme(biases={"amplified": 1.5})
+        pipeline._apply_programme_bias(cands, prog)
+        assert captured == []
+
     def test_real_programme_set_size_invariant_under_bias(self, pipeline) -> None:
         """Pin the architectural axiom against the real Programme model."""
         from shared.programme import (
