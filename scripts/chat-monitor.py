@@ -202,6 +202,22 @@ class ChatMonitor:
             self._contribution_ledger = None
             log.debug("ChatContributionLedger unavailable", exc_info=True)
 
+        # YT bundle Phase 2 (#144): URL extraction → AttributionFileWriter.
+        # Every URL chat surfaces backflows into the YouTube livestream
+        # description as a citation per
+        # docs/superpowers/specs/2026-04-18-youtube-broadcast-bundle-design.md
+        # §2.3-2.6. Author IDs are hashed at the boundary; no raw author
+        # identifier reaches the attribution file (privacy invariant
+        # asserted by tests/shared/test_chat_url_pipeline.py).
+        try:
+            from shared.chat_url_pipeline import ChatUrlPipeline
+
+            self._url_pipeline = ChatUrlPipeline()
+            log.info("ChatUrlPipeline enabled — chat URLs flow into attribution backbone")
+        except Exception:
+            self._url_pipeline = None
+            log.debug("ChatUrlPipeline unavailable", exc_info=True)
+
         # FINDING-V Phase 2 (plan §2): fold ChatSignalsAggregator into
         # chat-monitor so the ChatAmbientWard finally gets live data.
         # The aggregator maintains the rolling 60 s T4 window + the
@@ -397,6 +413,17 @@ class ChatMonitor:
                 self._preset_reactor.process_message(text)
             except Exception:
                 log.debug("PresetReactor failed on message", exc_info=True)
+
+        # YT bundle Phase 2 (#144): extract URLs from this message and
+        # backflow them into the per-kind attribution JSONLs the
+        # description syncer reads. Author ID hashing happens INSIDE
+        # the pipeline so this call site never sees the raw value
+        # leaving the chat-monitor process.
+        if self._url_pipeline is not None and text:
+            try:
+                self._url_pipeline.process_message(text, author_id=author_id)
+            except Exception:
+                log.debug("ChatUrlPipeline failed on message", exc_info=True)
 
         # FINDING-V Phase 2: feed the ChatSignalsAggregator so the
         # ChatAmbientWard gets live counters. The aggregator hashes
