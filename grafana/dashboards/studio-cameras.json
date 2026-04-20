@@ -417,6 +417,117 @@
       ],
       "title": "RTMP connected",
       "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 42 },
+      "id": 13,
+      "panels": [],
+      "title": "Audio hardware interactions",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Evil Pet preset recalls per minute, broken down by preset name. Sourced from shared.evil_pet_presets._preset_recalls_total (incremented in recall_preset()). Operator uses this to verify the preset rotation is staying varied — a single preset dominating means the catalog or the recruitment loop is biased.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisLabel": "recalls / min",
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "lineWidth": 1,
+            "stacking": { "mode": "normal" }
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 43 },
+      "id": 14,
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "showLegend": true },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum by (preset_name) (rate(hapax_evilpet_preset_recalls_total[1m])) * 60",
+          "legendFormat": "{{preset_name}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Evil Pet preset recalls per minute",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "MIDI CC throughput emitted by recall_preset(), broken down by preset name. Counts only CCs the device acknowledged (transmit failures don't increment). Sourced from shared.evil_pet_presets._preset_recall_ccs_total. Use the per-recall ratio (CCs ÷ recalls) as a regression signal — sustained drops mean Evil Pet rejected mid-burst.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisLabel": "CCs / min",
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 43 },
+      "id": 15,
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "showLegend": true },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum by (preset_name) (rate(hapax_evilpet_preset_recall_ccs_total[1m])) * 60",
+          "legendFormat": "{{preset_name}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Evil Pet CC throughput per minute",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Cumulative recall count per preset over the dashboard window. Use this to spot family monoculture: a single preset claiming the lion's share is the same anti-pattern preset-variety Phase 2 catalog work was meant to prevent. Reset on Hapax restart.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 50 },
+              { "color": "red", "value": 200 }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 51 },
+      "id": 16,
+      "options": {
+        "displayMode": "lcd",
+        "minVizHeight": 14,
+        "minVizWidth": 0,
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "showUnfilled": false,
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum by (preset_name) (hapax_evilpet_preset_recalls_total)",
+          "legendFormat": "{{preset_name}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Total recalls per preset (since restart)",
+      "type": "bargauge"
     }
   ],
   "refresh": "5s",
