@@ -141,3 +141,116 @@ class DuckController:
                     log.warning("vad_ducking: duck/restore failed: %s", exc)
                 self._last_state = new
             time.sleep(self._poll_interval)
+
+
+# ── Audio normalization PR-3 — TTS-driven broadcast ducker ────────────
+
+
+def _read_tts_state() -> bool | None:
+    """Read tts_active from voice-state.json, or None if unreadable."""
+    if not VOICE_STATE_FILE.exists():
+        return None
+    try:
+        data = json.loads(VOICE_STATE_FILE.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    val = data.get("tts_active")
+    return bool(val) if isinstance(val, bool) else None
+
+
+def _voice_state_age_s() -> float | None:
+    """Seconds since voice-state.json was last modified, or None if missing."""
+    if not VOICE_STATE_FILE.exists():
+        return None
+    try:
+        return time.time() - VOICE_STATE_FILE.stat().st_mtime
+    except OSError:
+        return None
+
+
+# Stale threshold for fail-open: if voice-state.json hasn't been touched
+# in this long, force gain to 1.0 (broadcast continues at full level
+# rather than going silent on a wedged publisher).
+DEFAULT_STALE_THRESHOLD_S = 2.0
+
+
+class FilterChainGain(Protocol):
+    """Capability the TtsDuckController calls. Decouples controller
+    from how the gain reaches PipeWire (control-interface socket /
+    pactl / mock). ``set_gain(value)`` writes the new gain; the
+    underlying transport handles atomicity + ordering.
+    """
+
+    def set_gain(self, gain: float) -> None: ...
+
+
+class TtsDuckController:
+    """Polls voice-state.json + drives a filter-chain gain on
+    ``tts_active`` transitions. Audio normalization PR-3.
+
+    Default behaviour: emit ``duck_gain`` (0.316 ≈ -10 dB) on
+    transition to tts_active=true; emit ``default_gain`` (1.0) on
+    transition to tts_active=false. Transition-only emission so the
+    underlying gain ramp doesn't re-trigger on every poll.
+
+    Fail-open posture: missing / corrupt / stale (> ``stale_threshold_s``)
+    voice-state.json forces gain to default. Broadcast must keep
+    playing at full level rather than going silent on a wedged
+    publisher.
+    """
+
+    def __init__(
+        self,
+        gain_control: FilterChainGain,
+        *,
+        poll_interval_s: float = 0.03,
+        default_gain: float = 1.0,
+        duck_gain: float = 0.316,
+        stale_threshold_s: float = DEFAULT_STALE_THRESHOLD_S,
+    ):
+        self._gain = gain_control
+        self._poll_interval = poll_interval_s
+        self._default_gain = default_gain
+        self._duck_gain = duck_gain
+        self._stale_threshold_s = stale_threshold_s
+        self._stop_event = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._last_state: bool | None = None
+
+    def start(self) -> None:
+        if self._thread is not None and self._thread.is_alive():
+            return
+        self._stop_event.clear()
+        self._thread = threading.Thread(target=self._run, name="TtsDuckController", daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop_event.set()
+        if self._thread is not None:
+            self._thread.join(timeout=1.0)
+
+    def tick_once(self) -> None:
+        """One iteration of the poll loop — testable in isolation."""
+        new = _read_tts_state()
+        age = _voice_state_age_s()
+        if new is None or (age is not None and age > self._stale_threshold_s):
+            if self._last_state is not False:
+                self._safe_set_gain(self._default_gain)
+                self._last_state = False
+            return
+        if new == self._last_state:
+            return
+        target = self._duck_gain if new else self._default_gain
+        self._safe_set_gain(target)
+        self._last_state = new
+
+    def _safe_set_gain(self, gain: float) -> None:
+        try:
+            self._gain.set_gain(gain)
+        except Exception as exc:
+            log.warning("tts_ducking: set_gain(%.3f) failed: %s", gain, exc)
+
+    def _run(self) -> None:
+        while not self._stop_event.is_set():
+            self.tick_once()
+            time.sleep(self._poll_interval)
