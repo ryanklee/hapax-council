@@ -16,7 +16,9 @@ Scope:
 - ``EvilPetPreset`` dataclass — name, description, CC map
   (cc_number → value) in 0..127.
 - ``PRESETS`` module-level registry with one preset per VoiceTier +
-  Mode D + bypass — 9 entries total.
+  Mode D + bypass + 4 routing-aware presets (Phase 2 extension:
+  hapax-sampler-wet, hapax-bed-music, hapax-drone-loop,
+  hapax-s4-companion) — 13 entries total.
 - ``recall_preset(preset_name, midi_output, channel)`` helper —
   emits the CC burst synchronously; tolerates MIDI-down.
 - Each preset builds on the shared base-scene CCs from the
@@ -121,6 +123,54 @@ _MODE_D_CCS: Final[dict[int, int]] = {
 }
 
 
+# Routing-aware presets (evilpet-s4-routing Phase 2 extension).
+# CC values from spec §7. All build on BASE_SCENE so the engine state
+# is reset to a known voice-safe slate before the preset's overrides
+# layer in. Each preset is named for the content-class it serves;
+# operator selects via the existing recall_preset() pathway.
+
+_SAMPLER_WET_CCS: Final[dict[int, int]] = {
+    **BASE_SCENE,
+    11: 100,  # Grains volume → 78% (granular engaged, denser than voice T5)
+    40: 120,  # Mix → 94% wet (defeat dry sampler bleed)
+    91: 60,  # Reverb amount → 47% (longer tail for sampler sustain)
+    93: 70,  # Reverb tail → extended (~2.5–3.0 s; won't smear drums)
+    39: 50,  # Saturator → 40% (adds harmonic complexity to granular)
+    94: 40,  # Shimmer → 31% (iridescent cloud, optional; tune per taste)
+}
+
+_BED_MUSIC_CCS: Final[dict[int, int]] = {
+    **BASE_SCENE,
+    11: 30,  # Grains volume → 23% (light granular color, not primary)
+    40: 85,  # Mix → 67% wet (balanced dry/wet for musical legibility)
+    91: 45,  # Reverb amount → 35% (ambient wash, not obstructive)
+    93: 50,  # Reverb tail → 50% (~1.5 s, non-intrusive)
+    39: 25,  # Saturator → 20% (preserve dynamic range of music)
+    70: 80,  # Filter freq → slightly bright (emphasize high-frequency details)
+}
+
+_DRONE_LOOP_CCS: Final[dict[int, int]] = {
+    **BASE_SCENE,
+    11: 110,  # Grains volume → 86% (granular primary)
+    40: 127,  # Mix → 100% wet (pure texture)
+    91: 80,  # Reverb amount → 63% (long ambience)
+    93: 90,  # Reverb tail → 70% (~3.5 s, intentional sustain)
+    39: 15,  # Saturator → 12% (clean granular texture)
+    94: 50,  # Shimmer → 39% (iridescent atmosphere)
+    70: 70,  # Filter freq → mild darkening (reduce ear fatigue)
+}
+
+_S4_COMPANION_CCS: Final[dict[int, int]] = {
+    **BASE_SCENE,
+    11: 70,  # Grains volume → 55% (secondary granular, not primary)
+    40: 100,  # Mix → 78% wet (complement S-4, not compete)
+    91: 50,  # Reverb amount → 39% (ambient support, no wash-out)
+    93: 60,  # Reverb tail → moderate (~2.0 s, rhythmic coherence with S-4)
+    39: 35,  # Saturator → 27% (smooth granular texture)
+    94: 30,  # Shimmer → 24% (subtle iridescence, S-4 is primary)
+}
+
+
 PRESETS: Final[dict[str, EvilPetPreset]] = {
     preset.name: preset
     for preset in (
@@ -134,6 +184,39 @@ PRESETS: Final[dict[str, EvilPetPreset]] = {
             name="hapax-bypass",
             description="Voice-safe bypass — base scene, grains off, voice-friendly reverb",
             ccs=BASE_SCENE,
+        ),
+        EvilPetPreset(
+            name="hapax-sampler-wet",
+            description=(
+                "Sampler-optimized granular wash — higher grain density + sustained "
+                "reverb tail for polyrhythmic textures."
+            ),
+            ccs=_SAMPLER_WET_CCS,
+        ),
+        EvilPetPreset(
+            name="hapax-bed-music",
+            description=(
+                "Low-impact music processing — subtle texture without vocals. "
+                "Minimal granular, emphasises filter + reverb."
+            ),
+            ccs=_BED_MUSIC_CCS,
+        ),
+        EvilPetPreset(
+            name="hapax-drone-loop",
+            description=(
+                "Sustained granular drone — full wet, long reverb tail, minimal "
+                "saturation. Use for ambient interludes."
+            ),
+            ccs=_DRONE_LOOP_CCS,
+        ),
+        EvilPetPreset(
+            name="hapax-s4-companion",
+            description=(
+                "S-4 companion preset — light Evil Pet coloration when S-4 Mosaic "
+                "granular is primary. Permits dual-granular textures (Evil Pet + "
+                "S-4) without harshness."
+            ),
+            ccs=_S4_COMPANION_CCS,
         ),
     )
 }

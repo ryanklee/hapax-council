@@ -29,9 +29,9 @@ class TestPresetCoverage:
     def test_has_bypass(self) -> None:
         assert "hapax-bypass" in list_presets()
 
-    def test_nine_presets_total(self) -> None:
-        # 7 tiers + Mode D + bypass = 9.
-        assert len(PRESETS) == 9
+    def test_thirteen_presets_total(self) -> None:
+        # 7 tiers + Mode D + bypass + 4 routing-aware (Phase 2) = 13.
+        assert len(PRESETS) == 13
 
 
 class TestPresetShape:
@@ -166,3 +166,79 @@ class TestPresetObjectShape:
         preset = EvilPetPreset(name="test", description="t", ccs={11: 0})
         with pytest.raises(Exception):
             preset.name = "other"  # type: ignore[misc]
+
+
+# ── evilpet-s4-routing Phase 2: 4 routing-aware presets ──────────────
+
+
+class TestRoutingAwarePresets:
+    """Spec §7: hapax-sampler-wet, -bed-music, -drone-loop, -s4-companion."""
+
+    NEW_PRESETS = (
+        "hapax-sampler-wet",
+        "hapax-bed-music",
+        "hapax-drone-loop",
+        "hapax-s4-companion",
+    )
+
+    def test_all_four_registered(self) -> None:
+        names = set(list_presets())
+        for name in self.NEW_PRESETS:
+            assert name in names, f"missing routing-aware preset: {name}"
+
+    def test_each_has_substantive_ccs(self) -> None:
+        """Each new preset must carry a substantive CC map (at least
+        the BASE_SCENE 16 entries plus its own overrides)."""
+        for name in self.NEW_PRESETS:
+            preset = get_preset(name)
+            assert len(preset.ccs) >= 16, (
+                f"{name} has only {len(preset.ccs)} CCs; expected ≥16 (BASE_SCENE + overrides)"
+            )
+
+    def test_each_has_descriptive_doc(self) -> None:
+        for name in self.NEW_PRESETS:
+            preset = get_preset(name)
+            assert len(preset.description) > 30, (
+                f"{name} description is too short ({len(preset.description)} chars)"
+            )
+
+    def test_sampler_wet_ccs(self) -> None:
+        """hapax-sampler-wet: dense grains + sustained reverb tail."""
+        preset = get_preset("hapax-sampler-wet")
+        assert preset.ccs[11] == 100  # Grains volume
+        assert preset.ccs[40] == 120  # Mix
+        assert preset.ccs[91] == 60  # Reverb amount
+        assert preset.ccs[93] == 70  # Reverb tail
+
+    def test_bed_music_ccs(self) -> None:
+        """hapax-bed-music: light grains, bright filter, balanced mix."""
+        preset = get_preset("hapax-bed-music")
+        assert preset.ccs[11] == 30
+        assert preset.ccs[40] == 85
+        assert preset.ccs[70] == 80  # Filter freq slightly bright
+
+    def test_drone_loop_ccs(self) -> None:
+        """hapax-drone-loop: full-wet, long tail, primary granular."""
+        preset = get_preset("hapax-drone-loop")
+        assert preset.ccs[11] == 110
+        assert preset.ccs[40] == 127  # 100% wet
+        assert preset.ccs[93] == 90
+
+    def test_s4_companion_ccs(self) -> None:
+        """hapax-s4-companion: secondary granular — must NOT dominate S-4."""
+        preset = get_preset("hapax-s4-companion")
+        assert preset.ccs[11] == 70
+        assert preset.ccs[40] == 100
+        # Spec §7 governance: must stay below sampler-wet (100) so the
+        # S-4's Mosaic engine remains the primary granular voice.
+        assert preset.ccs[11] < get_preset("hapax-sampler-wet").ccs[11], (
+            "s4-companion grains volume must stay below sampler-wet to preserve S-4 primacy"
+        )
+
+    def test_all_new_presets_in_midi_range(self) -> None:
+        """Belt-and-braces: every CC in every new preset must be 0..127."""
+        for name in self.NEW_PRESETS:
+            preset = get_preset(name)
+            for cc, value in preset.ccs.items():
+                assert 0 <= cc <= 127, f"{name}: CC {cc} out of range"
+                assert 0 <= value <= 127, f"{name}: CC {cc} value {value} out of range"
