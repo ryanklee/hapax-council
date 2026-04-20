@@ -1,0 +1,322 @@
+"""Voice transformation tier spectrum — 7-tier ladder from clear to obliterated.
+
+Implements Phase 1 of docs/research/2026-04-20-voice-transformation-tier-
+spectrum.md: the type primitives + per-tier catalog. Tiers are vector
+writers — each tier maps to a 9-dim vocal_chain vector + an optional CC
+override set. ``apply_tier()`` sets the vocal chain's dimension levels
+and optionally emits extra CCs that the 9-dim surface doesn't cover.
+
+Operator-facing vocabulary:
+
+- **T0 UNADORNED** — Kokoro raw, Evil Pet bypass-equivalent. Narration
+  register. Intelligibility floor: 1.0.
+- **T1 RADIO** — bandpass + mild compression. Broadcast-booth character.
+  Intelligibility floor: 0.95.
+- **T2 BROADCAST-GHOST** — adds reverb tail + light saturation.
+  Ghostly-present voice; legible but haunted. Floor: 0.85.
+- **T3 MEMORY** — heavier reverb + pitch jitter. Voice legible with
+  effort; feels remembered rather than spoken. Floor: 0.65.
+- **T4 UNDERWATER** — low-pass + detune. Voice present but heavily
+  processed, not quite intelligible at first pass. Floor: 0.40.
+- **T5 GRANULAR-WASH** — position spray + short grains via Evil Pet
+  granular engine. Voice becomes texture; words dissolve. Floor: 0.15.
+  MUTEX with vinyl Mode D (shared engine).
+- **T6 OBLITERATED** — full granular engagement, max scatter. Voice
+  indistinguishable from abstract sound. Floor: 0.0. Duration-capped
+  at 15 s per research §4.
+
+Integration points (Phase 2+, not this module):
+
+- VocalChainCapability gains a ``granular_engagement`` dim for T5/T6
+- director_loop picks tier per-tick given stance × Programme role
+- Mode D mutex + single-owner lease for granular engine (per
+  docs/research/2026-04-20-mode-d-voice-tier-mutex.md)
+- CapabilityRecord registration with monetization_risk tags for T5/T6
+
+References:
+    - docs/research/2026-04-20-voice-transformation-tier-spectrum.md §2
+    - docs/research/2026-04-20-evil-pet-cc-exhaustive-map.md §2 (CCs)
+    - docs/research/2026-04-20-audio-normalization-ducking-strategy.md
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from enum import IntEnum
+from typing import Any
+
+
+class VoiceTier(IntEnum):
+    """7-tier ordering from clear-and-distinct (0) to obliterated (6).
+
+    IntEnum so tiers compare ordinally — band ranges in the director
+    router (e.g. ``T1 <= tier <= T3``) and distance calculations
+    (``abs(t_from - t_to)``) both work naturally.
+    """
+
+    UNADORNED = 0
+    RADIO = 1
+    BROADCAST_GHOST = 2
+    MEMORY = 3
+    UNDERWATER = 4
+    GRANULAR_WASH = 5
+    OBLITERATED = 6
+
+
+# Human-readable names for logs, CLI, operator UI.
+TIER_NAMES: dict[VoiceTier, str] = {
+    VoiceTier.UNADORNED: "unadorned",
+    VoiceTier.RADIO: "radio",
+    VoiceTier.BROADCAST_GHOST: "broadcast-ghost",
+    VoiceTier.MEMORY: "memory",
+    VoiceTier.UNDERWATER: "underwater",
+    VoiceTier.GRANULAR_WASH: "granular-wash",
+    VoiceTier.OBLITERATED: "obliterated",
+}
+
+
+@dataclass(frozen=True)
+class TierProfile:
+    """Static definition of one tier.
+
+    Attributes:
+        tier: The VoiceTier this profile realises.
+        description: Operator-facing one-line description.
+        intelligibility_floor: 0.0-1.0 lower bound on word recognition
+            under this tier. T0 = 1.0, T6 = 0.0. Used by the budget
+            system (§5 of the tier spectrum research doc) to cap
+            cumulative unintelligibility over rolling windows.
+        dimension_vector: target level for each of the 9 vocal_chain
+            semantic dims. Keys are bare dim names (without the
+            ``vocal_chain.`` prefix).
+        cc_overrides: Extra CC writes the 9-dim surface doesn't cover.
+            List of (device, channel, cc, value, note) tuples. Empty
+            list means "no extra CCs, the 9-dim vector is sufficient".
+        mutex_groups: Named mutex groups this tier participates in.
+            T5 and T6 both claim the ``evil_pet_granular_engine`` group,
+            which makes them mutex with vinyl Mode D.
+        max_duration_s: Optional hard cap on how long this tier may be
+            active continuously. T6 is capped at 15s per research §4.
+            None = no cap.
+    """
+
+    tier: VoiceTier
+    description: str
+    intelligibility_floor: float
+    dimension_vector: dict[str, float]
+    cc_overrides: list[tuple[str, int, int, int, str]] = field(default_factory=list)
+    mutex_groups: frozenset[str] = field(default_factory=frozenset)
+    max_duration_s: float | None = None
+
+
+# Catalog — one TierProfile per tier. Operator tunes the vectors + CC
+# overrides in practice; these are the starting points from the research
+# doc §2 matrix.
+#
+# The dimension_vector values are calibrated so each tier produces a
+# distinct audible character when vocal_chain.activate_dimension() is
+# called with them. T0 is "all zeros" — chain transparent. Later tiers
+# progressively push dims that drive intelligibility loss (diffusion,
+# temporal_distortion) and character shift (tension, spectral_color).
+TIER_CATALOG: dict[VoiceTier, TierProfile] = {
+    VoiceTier.UNADORNED: TierProfile(
+        tier=VoiceTier.UNADORNED,
+        description="Kokoro raw, Evil Pet transparent. Clear narration register.",
+        intelligibility_floor=1.0,
+        dimension_vector={
+            "intensity": 0.0,
+            "tension": 0.0,
+            "diffusion": 0.0,
+            "degradation": 0.0,
+            "depth": 0.0,
+            "pitch_displacement": 0.0,
+            "temporal_distortion": 0.0,
+            "spectral_color": 0.0,
+            "coherence": 0.0,
+        },
+    ),
+    VoiceTier.RADIO: TierProfile(
+        tier=VoiceTier.RADIO,
+        description="Bandpass + compression. Broadcast-booth intimacy.",
+        intelligibility_floor=0.95,
+        dimension_vector={
+            "intensity": 0.35,
+            "tension": 0.30,
+            "diffusion": 0.0,
+            "degradation": 0.0,
+            "depth": 0.10,
+            "pitch_displacement": 0.0,
+            "temporal_distortion": 0.0,
+            "spectral_color": 0.35,
+            "coherence": 0.0,
+        },
+    ),
+    VoiceTier.BROADCAST_GHOST: TierProfile(
+        tier=VoiceTier.BROADCAST_GHOST,
+        description="Room reverb + light saturation. Ghostly-present voice.",
+        intelligibility_floor=0.85,
+        dimension_vector={
+            "intensity": 0.40,
+            "tension": 0.30,
+            "diffusion": 0.25,
+            "degradation": 0.15,
+            "depth": 0.35,
+            "pitch_displacement": 0.0,
+            "temporal_distortion": 0.10,
+            "spectral_color": 0.30,
+            "coherence": 0.10,
+        },
+    ),
+    VoiceTier.MEMORY: TierProfile(
+        tier=VoiceTier.MEMORY,
+        description="Heavy reverb + pitch jitter. Voice legible with effort, remembered not spoken.",
+        intelligibility_floor=0.65,
+        dimension_vector={
+            "intensity": 0.35,
+            "tension": 0.25,
+            "diffusion": 0.55,
+            "degradation": 0.20,
+            "depth": 0.65,
+            "pitch_displacement": 0.30,
+            "temporal_distortion": 0.25,
+            "spectral_color": 0.35,
+            "coherence": 0.25,
+        },
+    ),
+    VoiceTier.UNDERWATER: TierProfile(
+        tier=VoiceTier.UNDERWATER,
+        description="Low-pass + detune. Voice present but heavily processed.",
+        intelligibility_floor=0.40,
+        dimension_vector={
+            "intensity": 0.40,
+            "tension": 0.50,
+            "diffusion": 0.65,
+            "degradation": 0.40,
+            "depth": 0.75,
+            "pitch_displacement": 0.55,
+            "temporal_distortion": 0.40,
+            "spectral_color": 0.60,
+            "coherence": 0.50,
+        },
+    ),
+    VoiceTier.GRANULAR_WASH: TierProfile(
+        tier=VoiceTier.GRANULAR_WASH,
+        description="Short grains + position spray. Voice becomes texture; words dissolve.",
+        intelligibility_floor=0.15,
+        dimension_vector={
+            "intensity": 0.50,
+            "tension": 0.45,
+            "diffusion": 0.85,
+            "degradation": 0.55,
+            "depth": 0.80,
+            "pitch_displacement": 0.70,
+            "temporal_distortion": 0.75,
+            "spectral_color": 0.55,
+            "coherence": 0.75,
+        },
+        cc_overrides=[
+            # Engage Evil Pet granular engine — T5/T6 are the only tiers
+            # that do. MUTEX with vinyl Mode D (both want CC 11 hot).
+            ("evil_pet", 0, 11, 90, "grains volume → 70% (engine active)"),
+            ("evil_pet", 0, 40, 110, "mix → 86% wet (defeat-range)"),
+        ],
+        mutex_groups=frozenset({"evil_pet_granular_engine"}),
+    ),
+    VoiceTier.OBLITERATED: TierProfile(
+        tier=VoiceTier.OBLITERATED,
+        description="Full granular engagement. Voice indistinguishable from abstract sound.",
+        intelligibility_floor=0.0,
+        dimension_vector={
+            "intensity": 0.60,
+            "tension": 0.50,
+            "diffusion": 1.0,
+            "degradation": 0.75,
+            "depth": 0.85,
+            "pitch_displacement": 0.85,
+            "temporal_distortion": 0.95,
+            "spectral_color": 0.60,
+            "coherence": 1.0,
+        },
+        cc_overrides=[
+            ("evil_pet", 0, 11, 120, "grains volume → 94% (max engagement)"),
+            ("evil_pet", 0, 40, 127, "mix → 100% wet"),
+            ("evil_pet", 0, 94, 60, "shimmer → 47% (iridescent cloud)"),
+        ],
+        mutex_groups=frozenset({"evil_pet_granular_engine"}),
+        max_duration_s=15.0,
+    ),
+}
+
+
+def profile_for(tier: VoiceTier) -> TierProfile:
+    """Look up the TierProfile for ``tier``. Raises KeyError on unknown."""
+    return TIER_CATALOG[tier]
+
+
+def apply_tier(
+    tier: VoiceTier,
+    vocal_chain: Any,
+    midi_output: Any | None = None,
+    impingement: Any | None = None,
+) -> None:
+    """Apply ``tier`` to ``vocal_chain`` — set the 9-dim vector + emit CC overrides.
+
+    Args:
+        tier: Which tier to apply.
+        vocal_chain: A VocalChainCapability instance. Must expose
+            ``activate_dimension(name, impingement, level)`` with the
+            existing semantics (see ``agents/hapax_daimonion/
+            vocal_chain.py``).
+        midi_output: Optional MidiOutput for CC overrides. If None and
+            the tier declares overrides, they are silently skipped
+            (callers can check ``profile.cc_overrides`` to decide).
+        impingement: Optional Impingement attribution for the dim
+            activations. If None, callers SHOULD construct a synthetic
+            one with ``source="voice_tier"`` so telemetry attributes
+            the change correctly.
+
+    Purely-additive: does not reset dims the tier omits. Callers are
+    responsible for ``vocal_chain.deactivate()`` before tier transitions
+    if a full reset is desired.
+    """
+    profile = profile_for(tier)
+    for dim_name, level in profile.dimension_vector.items():
+        full_name = dim_name if dim_name.startswith("vocal_chain.") else f"vocal_chain.{dim_name}"
+        vocal_chain.activate_dimension(full_name, impingement, level)
+    if midi_output is not None:
+        for _device, channel, cc, value, _note in profile.cc_overrides:
+            try:
+                midi_output.send_cc(channel=channel, cc=cc, value=value)
+            except Exception:  # pragma: no cover — tolerate MIDI-down case
+                pass
+
+
+def tier_from_name(name: str) -> VoiceTier:
+    """Parse a human-readable tier name into a VoiceTier. Case-insensitive.
+
+    Accepts the canonical names from ``TIER_NAMES`` plus common aliases
+    ("clear" for UNADORNED, "obliterated"/"max"/"full" for OBLITERATED).
+    Raises ValueError on unknown names.
+    """
+    key = name.strip().lower().replace("_", "-")
+    aliases: dict[str, VoiceTier] = {
+        "t0": VoiceTier.UNADORNED,
+        "clear": VoiceTier.UNADORNED,
+        "t1": VoiceTier.RADIO,
+        "t2": VoiceTier.BROADCAST_GHOST,
+        "t3": VoiceTier.MEMORY,
+        "t4": VoiceTier.UNDERWATER,
+        "t5": VoiceTier.GRANULAR_WASH,
+        "granular": VoiceTier.GRANULAR_WASH,
+        "t6": VoiceTier.OBLITERATED,
+        "max": VoiceTier.OBLITERATED,
+        "full": VoiceTier.OBLITERATED,
+    }
+    if key in aliases:
+        return aliases[key]
+    for tier, canonical in TIER_NAMES.items():
+        if canonical == key:
+            return tier
+    raise ValueError(
+        f"unknown voice tier: {name!r}. Accepted: {sorted(TIER_NAMES.values())} or t0..t6"
+    )

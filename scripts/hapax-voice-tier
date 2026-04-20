@@ -1,0 +1,167 @@
+#!/usr/bin/env -S uv run python
+"""hapax-voice-tier — operator CLI for live voice-tier selection.
+
+Writes a voice tier selection to ``/dev/shm/hapax-compositor/voice-
+tier-override.json`` and emits the CC deltas immediately via the
+daimonion's MIDI output. daimonion's voice-tier consumer (ships in
+Phase 2) reads the override with 600 s TTL.
+
+Usage:
+    hapax-voice-tier t0        # UNADORNED (clear narration)
+    hapax-voice-tier radio     # T1
+    hapax-voice-tier memory    # T3
+    hapax-voice-tier granular  # T5
+    hapax-voice-tier clear     # alias for T0
+    hapax-voice-tier status    # show current flag state
+
+Tier ladder (clear → obliterated):
+    T0 UNADORNED          intelligibility 1.00
+    T1 RADIO              intelligibility 0.95
+    T2 BROADCAST_GHOST    intelligibility 0.85
+    T3 MEMORY             intelligibility 0.65
+    T4 UNDERWATER         intelligibility 0.40
+    T5 GRANULAR_WASH      intelligibility 0.15  (engine mutex with Mode D)
+    T6 OBLITERATED        intelligibility 0.00  (15 s duration cap)
+
+Governance:
+
+- T5 + T6 require Evil Pet granular engine; cannot coexist with
+  vinyl Mode D (hapax-vinyl-mode). The CLI does NOT enforce this
+  yet — operator discipline until Phase 2 lease mechanism ships.
+- T6 has a 15 s duration cap per research §4. Not enforced by CLI;
+  operator is responsible until the director-loop consumer lands.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+import time
+from pathlib import Path
+
+import mido
+
+from shared.voice_tier import (
+    TIER_CATALOG,
+    VoiceTier,
+    profile_for,
+    tier_from_name,
+)
+
+FLAG = Path("/dev/shm/hapax-compositor/voice-tier-override.json")
+PORT_PREFIX = "MIDI Dispatch:MIDI Dispatch MIDI 1"
+
+
+def _resolve_port(configured: str) -> str | None:
+    names = list(mido.get_output_names())
+    if configured in names:
+        return configured
+    for name in names:
+        if name.rsplit(" ", 1)[0] == configured.rsplit(" ", 1)[0]:
+            return name
+    for name in names:
+        if configured in name:
+            return name
+    return None
+
+
+def _open_port():
+    resolved = _resolve_port(PORT_PREFIX)
+    if resolved is None:
+        print(f"MIDI port {PORT_PREFIX!r} not found", file=sys.stderr)
+        sys.exit(1)
+    return mido.open_output(resolved)
+
+
+def cmd_select(tier: VoiceTier) -> int:
+    profile = profile_for(tier)
+    print(f"Voice tier: {profile.tier.name} — {profile.description}")
+    print(f"  Intelligibility floor: {profile.intelligibility_floor:.2f}")
+    if profile.mutex_groups:
+        print(f"  Mutex groups: {sorted(profile.mutex_groups)}")
+    if profile.max_duration_s is not None:
+        print(f"  Duration cap: {profile.max_duration_s:.0f}s")
+
+    # Emit any CC overrides the tier declares (granular engagement for T5/T6).
+    if profile.cc_overrides:
+        with _open_port() as port:
+            for _device, channel, cc, value, note in profile.cc_overrides:
+                port.send(
+                    mido.Message("control_change", channel=channel, control=cc, value=value)
+                )
+                print(f"  CC{cc:3d} = {value:3d}  ({note})")
+                time.sleep(0.02)
+
+    # Publish override flag for director_loop consumer (Phase 2 reader).
+    FLAG.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "tier": int(profile.tier),
+        "tier_name": profile.tier.name,
+        "set_at": time.time(),
+        "ttl_s": 600.0,
+        "dimension_vector": profile.dimension_vector,
+        "source": "operator_cli",
+    }
+    tmp = FLAG.with_suffix(".tmp")
+    tmp.write_text(json.dumps(payload, indent=2))
+    tmp.rename(FLAG)
+    print(f"Flag written: {FLAG}")
+    return 0
+
+
+def cmd_status() -> int:
+    if not FLAG.exists():
+        print("Voice tier override: INACTIVE (director auto-selects)")
+        return 0
+    try:
+        payload = json.loads(FLAG.read_text())
+    except Exception as exc:
+        print(f"Flag present but unreadable: {exc}", file=sys.stderr)
+        return 1
+    set_at = payload.get("set_at", 0.0)
+    ttl = payload.get("ttl_s", 0.0)
+    age = time.time() - set_at
+    expired = age > ttl
+    print(f"Voice tier override: {payload.get('tier_name', '?')} (tier {payload.get('tier', '?')})")
+    print(f"  Set {age:.0f}s ago, TTL {ttl:.0f}s, expired={expired}")
+    return 0
+
+
+def cmd_list() -> int:
+    print("Voice tier catalog:")
+    for tier in sorted(TIER_CATALOG.keys(), key=lambda t: t.value):
+        profile = TIER_CATALOG[tier]
+        cap = f" (cap {profile.max_duration_s:.0f}s)" if profile.max_duration_s else ""
+        mutex = f" [mutex: {', '.join(sorted(profile.mutex_groups))}]" if profile.mutex_groups else ""
+        print(
+            f"  T{tier.value} {profile.tier.name:18s}  "
+            f"intelligibility={profile.intelligibility_floor:.2f}{cap}{mutex}"
+        )
+        print(f"      {profile.description}")
+    return 0
+
+
+def main() -> int:
+    p = argparse.ArgumentParser(prog="hapax-voice-tier", description=__doc__.split("\n", 1)[0])
+    p.add_argument(
+        "tier",
+        nargs="?",
+        help="tier name (unadorned/radio/broadcast-ghost/memory/underwater/granular-wash/obliterated) "
+        "or tN or alias (clear/max/granular) or 'status'/'list'",
+    )
+    args = p.parse_args()
+    if args.tier is None or args.tier == "list":
+        return cmd_list()
+    if args.tier == "status":
+        return cmd_status()
+    try:
+        tier = tier_from_name(args.tier)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    return cmd_select(tier)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
