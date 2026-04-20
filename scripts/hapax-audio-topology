@@ -16,13 +16,14 @@ Subcommands shipped in this phase:
 - ``diff <yaml_a> <yaml_b>`` — structural diff between two
   descriptors; shows node additions/removals/changes + edge changes.
 
-Subcommands deferred to Phase 4+ (require pw-dump live-graph
-inspection):
+Live-graph + recovery subcommands (Phase 4 + Phase 5):
 
-- ``verify``  — assert live graph matches descriptor
-- ``switch``  — atomically apply descriptor changes to live graph
-- ``audit``   — full drift report
-- ``watchdog`` — Ryzen codec pin-glitch auto-recovery
+- ``verify``    — assert live graph matches descriptor
+- ``audit``     — full drift report
+- ``watchdog``  — Ryzen codec pin-glitch recovery sequence (manual)
+- ``pin-check`` — single-shot pin-glitch detection with persisted
+  silence-window state for systemd-timer composition; --auto-fix
+  invokes the watchdog recovery on PIN_GLITCH
 
 Exit codes:
 
@@ -322,6 +323,113 @@ def cmd_audit(args: argparse.Namespace) -> int:
     return 0
 
 
+_DEFAULT_PIN_GLITCH_STATE_FILE = Path("/run/user/1000/hapax-pin-glitch-state.json")
+
+
+def _load_pin_glitch_state(path: Path) -> dict:
+    """Read the persisted pin-glitch detector state. Missing file → empty."""
+    if not path.exists():
+        return {}
+    try:
+        import json
+
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        # Corrupt state file — start fresh rather than crash the timer.
+        return {}
+
+
+def _save_pin_glitch_state(path: Path, payload: dict) -> None:
+    """Atomic-write detector state via tmp+rename."""
+    import json
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+    tmp.replace(path)
+
+
+def cmd_pin_check(args: argparse.Namespace) -> int:
+    """Single-shot pin-glitch detection with persisted silence-window state.
+
+    Designed for systemd-timer invocation: each tick passes the live
+    sink probe (state, has_active_input, RMS dB) as flags; this
+    subcommand reconstructs the PinGlitchDetector with persisted
+    silence_started_at so consecutive symptomatic ticks accumulate
+    elapsed time toward the min_silence_s threshold.
+
+    Probe inputs are flags rather than auto-discovered so the CLI is
+    composable, testable, and free of pactl/pw-cat dependencies. A
+    follow-on wrapper script (or the operator's hand) supplies the
+    probe values from the live PipeWire graph.
+
+    Exit codes:
+      - 0 — sink healthy (no diagnostic)
+      - 1 — PIN_GLITCH detected (auto-fix suppressed or failed)
+      - 0 — PIN_GLITCH detected AND --auto-fix succeeded (recovery applied)
+
+    With ``--auto-fix``, on PIN_GLITCH the watchdog recovery sequence
+    runs and exit code is 0 if recovery succeeded, 1 otherwise.
+    """
+    from shared.audio_pin_glitch import (
+        DIAGNOSTIC_PIN_GLITCH,
+        PinGlitchDetector,
+        SinkProbe,
+    )
+
+    state_path = Path(args.state_file) if args.state_file else _DEFAULT_PIN_GLITCH_STATE_FILE
+    persisted = _load_pin_glitch_state(state_path)
+
+    detector = PinGlitchDetector(
+        silence_threshold_db=args.silence_threshold_db,
+        min_silence_s=args.min_silence_s,
+    )
+    if persisted.get("silence_started_at") is not None:
+        detector._silence_started_at = float(persisted["silence_started_at"])  # noqa: SLF001
+
+    probe = SinkProbe(
+        state=args.state,
+        has_active_input=args.has_active_input,
+        monitor_rms_db=args.rms_db,
+    )
+    result = detector.detect(probe)
+
+    _save_pin_glitch_state(
+        state_path,
+        {"silence_started_at": detector.silence_started_at},
+    )
+
+    print(
+        f"sink={args.sink} state={probe.state} "
+        f"active_input={probe.has_active_input} rms_db={probe.monitor_rms_db:.2f} "
+        f"elapsed_silent_s={result.elapsed_silent_s:.2f} "
+        f"diagnostic={result.diagnostic or 'OK'}"
+    )
+
+    if result.diagnostic != DIAGNOSTIC_PIN_GLITCH:
+        return 0
+
+    if not args.auto_fix:
+        print(f"PIN_GLITCH detected on {args.sink} (auto-fix disabled)", file=sys.stderr)
+        return 1
+
+    # Delegate to the existing watchdog recovery sequence.
+    print("PIN_GLITCH detected — running auto-fix recovery", file=sys.stderr)
+    fix_args = argparse.Namespace(
+        card=args.card,
+        profile=args.profile,
+        dry_run=False,
+    )
+    fix_rc = cmd_watchdog(fix_args)
+    if fix_rc != 0:
+        print("auto-fix recovery FAILED", file=sys.stderr)
+        return 1
+    # Reset silence-window state after a successful recovery so the
+    # next tick starts fresh (the symptom should be gone).
+    _save_pin_glitch_state(state_path, {"silence_started_at": None})
+    return 0
+
+
 def cmd_watchdog(args: argparse.Namespace) -> int:
     """Run the Ryzen HDA codec pin-routing-stale recovery sequence.
 
@@ -443,6 +551,88 @@ def main() -> int:
         help="Print the pactl commands without executing.",
     )
     p_watchdog.set_defaults(func=cmd_watchdog)
+
+    p_pin_check = sub.add_parser(
+        "pin-check",
+        help=(
+            "Single-shot Ryzen pin-glitch detection (with persisted "
+            "silence-window state for systemd-timer composition)."
+        ),
+    )
+    p_pin_check.add_argument(
+        "--sink",
+        default="ryzen-analog-out",
+        help="Sink id this probe describes (label only; default: ryzen-analog-out).",
+    )
+    p_pin_check.add_argument(
+        "--state",
+        choices=("RUNNING", "IDLE", "SUSPENDED"),
+        required=True,
+        help="Sink state from `pactl list sinks`.",
+    )
+    p_pin_check.add_argument(
+        "--has-active-input",
+        dest="has_active_input",
+        action="store_true",
+        help="Set when at least one sink-input is currently bound.",
+    )
+    p_pin_check.add_argument(
+        "--no-active-input",
+        dest="has_active_input",
+        action="store_false",
+        help="Set when no sink-input is bound (alternative to --has-active-input).",
+    )
+    p_pin_check.set_defaults(has_active_input=False)
+    p_pin_check.add_argument(
+        "--rms-db",
+        dest="rms_db",
+        type=float,
+        required=True,
+        help=(
+            "Monitor port RMS in dBFS. Pass NaN or -inf to indicate "
+            "no signal at all (treated as silent by the detector)."
+        ),
+    )
+    p_pin_check.add_argument(
+        "--silence-threshold-db",
+        dest="silence_threshold_db",
+        type=float,
+        default=-50.0,
+        help="RMS dBFS below which the sink is considered silent (default: -50).",
+    )
+    p_pin_check.add_argument(
+        "--min-silence-s",
+        dest="min_silence_s",
+        type=float,
+        default=5.0,
+        help="Seconds of persistent silence before PIN_GLITCH fires (default: 5).",
+    )
+    p_pin_check.add_argument(
+        "--state-file",
+        dest="state_file",
+        help=(
+            "Path to the persisted silence-window state JSON. "
+            "Defaults to /run/user/1000/hapax-pin-glitch-state.json."
+        ),
+    )
+    p_pin_check.add_argument(
+        "--auto-fix",
+        dest="auto_fix",
+        action="store_true",
+        help=(
+            "On PIN_GLITCH, invoke the watchdog recovery automatically. "
+            "Exit 0 if recovery succeeds, 1 otherwise."
+        ),
+    )
+    p_pin_check.add_argument(
+        "--card",
+        help="ALSA card id for --auto-fix (default: alsa_card.pci-0000_73_00.6).",
+    )
+    p_pin_check.add_argument(
+        "--profile",
+        help="Profile to re-activate for --auto-fix (default: output:analog-stereo).",
+    )
+    p_pin_check.set_defaults(func=cmd_pin_check)
 
     args = parser.parse_args()
     return args.func(args)

@@ -321,6 +321,142 @@ class TestWatchdog:
         assert "output:hdmi-stereo" in result.stdout
 
 
+class TestPinCheck:
+    """Pin-check subcommand wires the pin-glitch detector into the CLI."""
+
+    def test_healthy_sink_exits_zero(self, tmp_path: Path) -> None:
+        """RUNNING + active input + audible signal → no diagnostic, exit 0."""
+        state = tmp_path / "state.json"
+        result = _run(
+            [
+                "pin-check",
+                "--state",
+                "RUNNING",
+                "--has-active-input",
+                "--rms-db",
+                "-12.0",
+                "--state-file",
+                str(state),
+            ]
+        )
+        assert result.returncode == 0, result.stderr
+        assert "diagnostic=OK" in result.stdout
+
+    def test_idle_sink_exits_zero(self, tmp_path: Path) -> None:
+        """IDLE sink → no diagnostic regardless of RMS."""
+        state = tmp_path / "state.json"
+        result = _run(
+            [
+                "pin-check",
+                "--state",
+                "IDLE",
+                "--no-active-input",
+                "--rms-db",
+                "-90.0",
+                "--state-file",
+                str(state),
+            ]
+        )
+        assert result.returncode == 0
+        assert "diagnostic=OK" in result.stdout
+
+    def test_first_silent_tick_no_fire_yet(self, tmp_path: Path) -> None:
+        """First symptomatic tick stamps silence_started_at but does not
+        fire the diagnostic — needs accumulation across ticks."""
+        state = tmp_path / "state.json"
+        result = _run(
+            [
+                "pin-check",
+                "--state",
+                "RUNNING",
+                "--has-active-input",
+                "--rms-db",
+                "-90.0",
+                "--state-file",
+                str(state),
+                "--min-silence-s",
+                "5.0",
+            ]
+        )
+        assert result.returncode == 0
+        assert "diagnostic=OK" in result.stdout
+        # State file must now carry a silence_started_at timestamp.
+        import json
+
+        persisted = json.loads(state.read_text())
+        assert persisted["silence_started_at"] is not None
+
+    def test_persisted_old_silence_fires_diagnostic(self, tmp_path: Path) -> None:
+        """If silence_started_at is far enough in the past, the next
+        symptomatic tick fires PIN_GLITCH and exits 1 (no auto-fix)."""
+        import json
+        import time
+
+        state = tmp_path / "state.json"
+        # Pre-seed with a silence start 10s ago — well past the 5s threshold.
+        state.write_text(json.dumps({"silence_started_at": time.time() - 10.0}))
+        result = _run(
+            [
+                "pin-check",
+                "--state",
+                "RUNNING",
+                "--has-active-input",
+                "--rms-db",
+                "-90.0",
+                "--state-file",
+                str(state),
+                "--min-silence-s",
+                "5.0",
+            ]
+        )
+        assert result.returncode == 1
+        assert "diagnostic=PIN_GLITCH" in result.stdout
+        assert "PIN_GLITCH detected" in result.stderr
+
+    def test_signal_returns_clears_state(self, tmp_path: Path) -> None:
+        """A non-symptomatic tick clears the persisted silence window
+        so a brief between-utterance silence doesn't persist into the
+        next quiet period and falsely fire."""
+        import json
+        import time
+
+        state = tmp_path / "state.json"
+        state.write_text(json.dumps({"silence_started_at": time.time() - 3.0}))
+        result = _run(
+            [
+                "pin-check",
+                "--state",
+                "RUNNING",
+                "--has-active-input",
+                "--rms-db",
+                "-12.0",  # signal returned
+                "--state-file",
+                str(state),
+            ]
+        )
+        assert result.returncode == 0
+        persisted = json.loads(state.read_text())
+        assert persisted["silence_started_at"] is None
+
+    def test_state_file_corrupt_starts_fresh(self, tmp_path: Path) -> None:
+        """Corrupt persisted state must not crash — fall back to empty."""
+        state = tmp_path / "state.json"
+        state.write_text("{not valid json")
+        result = _run(
+            [
+                "pin-check",
+                "--state",
+                "RUNNING",
+                "--has-active-input",
+                "--rms-db",
+                "-90.0",
+                "--state-file",
+                str(state),
+            ]
+        )
+        assert result.returncode == 0  # First tick after recovery — no fire yet.
+
+
 class TestInvalidDescriptor:
     def test_dangling_edge_exits_1(self, tmp_path: Path) -> None:
         bad = _write_yaml(
