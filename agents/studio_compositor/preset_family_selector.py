@@ -110,13 +110,39 @@ FAMILY_PRESETS: dict[str, tuple[str, ...]] = {
     ),
     # Neutral baseline — used as the default fallback when no family is
     # recruited. Avoids the "shuffle feel" of uniform random by keeping
-    # the fallback inside a coherent aesthetic register.
+    # the fallback inside a coherent aesthetic register. ALSO
+    # addressable under the alias ``audio-abstract`` (see
+    # ``FAMILY_ALIASES`` below) so the director_loop's preset-family
+    # vocabulary routes correctly when the LLM picks the alias.
     "neutral-ambient": (
         "nightvision",
         "screwed",
         "diff_preset",
     ),
 }
+
+# Family-name aliases — kept separate from FAMILY_PRESETS so iteration
+# (family_names, family_for_preset) stays canonical (one entry per
+# family). Aliases resolve via _resolve_family() inside the public
+# query helpers (pick_from_family, presets_for_family).
+#
+# Preset-variety Phase 2 (task #166): the director prompt offers
+# ``audio-abstract`` as one of the five vocabulary families to the
+# LLM, but the catalog only knew ``neutral-ambient`` — so an
+# audio-abstract pick returned an empty preset list and recruitment
+# fell through to the neutral-ambient fallback via random_mode, a
+# silent monoculture amplifier. The alias closes that gap without
+# renaming the canonical fallback key (which downstream code binds
+# to by name in random_mode + ward_fx_mapping).
+FAMILY_ALIASES: dict[str, str] = {
+    "audio-abstract": "neutral-ambient",
+}
+
+
+def _resolve_family(family: str) -> str:
+    """Resolve a family name via FAMILY_ALIASES (no-op if not aliased)."""
+    return FAMILY_ALIASES.get(family, family)
+
 
 # Module-level last-pick memory per family to avoid back-to-back repeats
 # without forcing a strict round-robin (which would be too predictable
@@ -145,8 +171,12 @@ def family_for_preset(preset_name: str) -> str | None:
 
 
 def presets_for_family(family: str) -> tuple[str, ...]:
-    """Return the preset list for ``family``, or empty tuple if unknown."""
-    return FAMILY_PRESETS.get(family, ())
+    """Return the preset list for ``family``, or empty tuple if unknown.
+
+    Resolves FAMILY_ALIASES first, so ``audio-abstract`` returns the
+    ``neutral-ambient`` preset list.
+    """
+    return FAMILY_PRESETS.get(_resolve_family(family), ())
 
 
 def pick_from_family(
@@ -160,8 +190,9 @@ def pick_from_family(
     Parameters
     ----------
     family
-        Family name (must be a key of :data:`FAMILY_PRESETS`). Unknown
-        family names log a warning and return ``None``.
+        Family name — either a key of :data:`FAMILY_PRESETS` or an
+        alias from :data:`FAMILY_ALIASES`. Unknown family names log a
+        warning and return ``None``.
     available
         Optional list of currently-loadable preset names. Useful for
         tests and for filtering against a runtime registry that may
@@ -178,10 +209,11 @@ def pick_from_family(
         A preset name from the family, or ``None`` when the family is
         unknown OR every family member is filtered out by ``available``.
     """
-    if family not in FAMILY_PRESETS:
+    canonical = _resolve_family(family)
+    if canonical not in FAMILY_PRESETS:
         log.warning("pick_from_family: unknown family %r", family)
         return None
-    candidates = list(FAMILY_PRESETS[family])
+    candidates = list(FAMILY_PRESETS[canonical])
     if available is not None:
         avail_set = set(available)
         candidates = [p for p in candidates if p in avail_set]
@@ -190,14 +222,14 @@ def pick_from_family(
             "pick_from_family: no candidates for family %r after filtering "
             "(family list: %s; available: %s)",
             family,
-            FAMILY_PRESETS[family],
+            FAMILY_PRESETS[canonical],
             None if available is None else len(available),
         )
         return None
-    last_seen = last if last is not None else _LAST_PICK.get(family)
+    last_seen = last if last is not None else _LAST_PICK.get(canonical)
     non_repeat = [p for p in candidates if p != last_seen]
     pick = random.choice(non_repeat) if non_repeat else random.choice(candidates)
-    _LAST_PICK[family] = pick
+    _LAST_PICK[canonical] = pick
     return pick
 
 
@@ -269,7 +301,8 @@ def pick_with_scene_bias(
         A preset name from the family, or ``None`` when the family is
         unknown OR every member was filtered out by ``available``.
     """
-    if family not in FAMILY_PRESETS:
+    canonical = _resolve_family(family)
+    if canonical not in FAMILY_PRESETS:
         log.warning("pick_with_scene_bias: unknown family %r", family)
         return None
 
@@ -278,7 +311,7 @@ def pick_with_scene_bias(
         # No bias to apply — fall through to the legacy non-repeat pick.
         return pick_from_family(family, available=available, last=last)
 
-    candidates = list(FAMILY_PRESETS[family])
+    candidates = list(FAMILY_PRESETS[canonical])
     if available is not None:
         avail_set = set(available)
         candidates = [p for p in candidates if p in avail_set]
@@ -287,12 +320,12 @@ def pick_with_scene_bias(
             "pick_with_scene_bias: no candidates for family %r after filtering "
             "(family list: %s; available: %s)",
             family,
-            FAMILY_PRESETS[family],
+            FAMILY_PRESETS[canonical],
             None if available is None else len(available),
         )
         return None
 
-    last_seen = last if last is not None else _LAST_PICK.get(family)
+    last_seen = last if last is not None else _LAST_PICK.get(canonical)
     non_repeat = [p for p in candidates if p != last_seen]
     pool = non_repeat if non_repeat else candidates
 
@@ -306,7 +339,7 @@ def pick_with_scene_bias(
 
     chooser = rng if rng is not None else random
     pick = chooser.choices(pool, weights=weights, k=1)[0]
-    _LAST_PICK[family] = pick
+    _LAST_PICK[canonical] = pick
     return pick
 
 
@@ -370,6 +403,7 @@ def pick_and_load_mutated(
 
 
 __all__ = [
+    "FAMILY_ALIASES",
     "FAMILY_PRESETS",
     "SCENE_TAG_BIAS",
     "family_for_preset",

@@ -84,3 +84,85 @@ class TestMemoryReset:
         # After reset, the next pick has no last-pick anchor.
         # Just verify the memory dict is empty by checking the module attr.
         assert pfs._LAST_PICK == {}
+
+
+# ── preset-variety Phase 2 — director-prompt ↔ catalog parity ─────────
+
+
+class TestFamilyAliases:
+    """Closes the gap where director_loop offers `audio-abstract` to the
+    LLM but the catalog only knew `neutral-ambient` — pre-fix, an
+    audio-abstract pick returned an empty preset list and recruitment
+    fell through to the random_mode neutral-ambient fallback (silent
+    monoculture amplifier per task #166 research §1).
+    """
+
+    def test_audio_abstract_alias_resolves_to_neutral_ambient(self):
+        """presets_for_family must return non-empty for the alias name."""
+        canonical = pfs.presets_for_family("neutral-ambient")
+        aliased = pfs.presets_for_family("audio-abstract")
+        assert canonical, "neutral-ambient catalog gone — fallback broken"
+        assert aliased == canonical
+
+    def test_pick_from_family_resolves_alias(self):
+        """pick_from_family with the alias name must return a real preset."""
+        pick = pfs.pick_from_family("audio-abstract")
+        assert pick is not None
+        # The returned preset must be a member of the canonical family.
+        assert pick in pfs.presets_for_family("neutral-ambient")
+
+    def test_alias_does_not_pollute_family_names(self):
+        """family_names() must still return canonical families only —
+        aliases are query-time conveniences, not first-class entries."""
+        names = pfs.family_names()
+        assert "audio-abstract" not in names
+
+    def test_family_for_preset_returns_canonical_name(self):
+        """family_for_preset reverse-lookup must return the canonical
+        family name (so emitted FXEvent labels are stable)."""
+        # neutral-ambient's first preset reverse-resolves to neutral-ambient,
+        # NOT audio-abstract.
+        nightvision_family = pfs.family_for_preset("nightvision")
+        assert nightvision_family == "neutral-ambient"
+
+    def test_aliases_dict_is_exported(self):
+        """FAMILY_ALIASES is the public extension point. If a future
+        prompt adds another alias, this is where it lives."""
+        assert "FAMILY_ALIASES" in pfs.__all__
+        assert pfs.FAMILY_ALIASES["audio-abstract"] == "neutral-ambient"
+
+
+class TestDirectorPromptCatalogParity:
+    """Pin the invariant: every family the director_loop prompt offers
+    to the LLM must be queryable from the catalog (canonical or alias).
+    Closes the bug class where prompt vocabulary drifts from catalog.
+    """
+
+    # The five families currently enumerated in the director_loop
+    # preset-family vocabulary. Updating the prompt MUST update this
+    # list AND ensure the family is queryable.
+    PROMPT_FAMILIES = (
+        "audio-reactive",
+        "glitch-dense",
+        "calm-textural",
+        "warm-minimal",
+        "audio-abstract",
+    )
+
+    def test_every_prompt_family_is_queryable(self):
+        for family in self.PROMPT_FAMILIES:
+            presets = pfs.presets_for_family(family)
+            assert presets, (
+                f"prompt family {family!r} has no presets — director can offer "
+                f"this family to the LLM but recruitment will return empty"
+            )
+
+    def test_every_prompt_family_has_at_least_three_presets(self):
+        """Plan §Phase 2 success criterion: ≥3 presets per family so
+        the cosine retrieval doesn't repeat the same top-1."""
+        for family in self.PROMPT_FAMILIES:
+            presets = pfs.presets_for_family(family)
+            assert len(presets) >= 3, (
+                f"family {family!r} has {len(presets)} presets; "
+                "Plan §Phase 2 requires ≥3 to avoid top-1 monoculture"
+            )
