@@ -190,6 +190,7 @@ class MonetizationEgressAudit:
 
 
 _DEFAULT_WRITER: MonetizationEgressAudit | None = None
+_DEFAULT_WRITER_LOCK = Lock()
 
 
 def default_writer() -> MonetizationEgressAudit:
@@ -198,8 +199,15 @@ def default_writer() -> MonetizationEgressAudit:
     Lazily constructed so tests that never call this don't touch
     ``~/hapax-state``. Production callers use this; tests instantiate
     their own ``MonetizationEgressAudit(path=tmp_path)``.
+
+    Thread-safe: the TOCTOU window between ``is None`` check and
+    assignment is guarded so concurrent first-callers don't construct
+    two writer instances (which would bypass each other's file locks
+    when they happen to land on the same path).
     """
     global _DEFAULT_WRITER
     if _DEFAULT_WRITER is None:
-        _DEFAULT_WRITER = MonetizationEgressAudit()
+        with _DEFAULT_WRITER_LOCK:
+            if _DEFAULT_WRITER is None:  # double-checked — re-read inside lock
+                _DEFAULT_WRITER = MonetizationEgressAudit()
     return _DEFAULT_WRITER

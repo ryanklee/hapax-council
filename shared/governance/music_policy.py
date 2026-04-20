@@ -35,8 +35,9 @@ Reference:
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
+from threading import Lock
 from typing import Any, Final, Protocol
 
 log = logging.getLogger(__name__)
@@ -116,78 +117,98 @@ class MusicPolicy:
     detector: MusicDetector = None  # type: ignore[assignment]
     window_s: float = PATH_B_DEFAULT_WINDOW_S
     _path_b_window_opened_at: float | None = None
+    # Guards the Path B window's read-modify-write pattern so concurrent
+    # CPAL + director_loop + compositor callers don't race on
+    # _path_b_window_opened_at. Wraps every evaluate() call end-to-end
+    # rather than just the window transition so reset_window() + window-
+    # check reads are also serialized.
+    _lock: Lock = field(default_factory=Lock)
 
     def __post_init__(self) -> None:
         if self.detector is None:
             self.detector = NullMusicDetector()
 
     def evaluate(self, audio_window: Any, *, now: float | None = None) -> MusicPolicyDecision:
-        """Inspect ``audio_window`` + apply the active-path policy."""
-        result = self.detector.detect(audio_window)
-        if not result.detected:
-            # Close any open Path B window when music stops.
-            if self.path == MusicPath.PATH_B:
-                self._path_b_window_opened_at = None
-            return MusicPolicyDecision(
-                should_mute=False,
-                surface_transcript=False,
-                reason="no music detected",
-                path=self.path,
-                detection=result,
-            )
-        if self.path == MusicPath.PATH_A:
+        """Inspect ``audio_window`` + apply the active-path policy.
+
+        Thread-safe: entire evaluate() serializes under ``self._lock`` so
+        Path B window transitions are atomic. The detector call is
+        inside the lock — acceptable because detectors are expected to
+        be fast and lock contention on music-detection cadence (~1 Hz)
+        is negligible. If a future detector is slow, move the call
+        outside the lock and only guard the window state.
+        """
+        with self._lock:
+            result = self.detector.detect(audio_window)
+            if not result.detected:
+                # Close any open Path B window when music stops.
+                if self.path == MusicPath.PATH_B:
+                    self._path_b_window_opened_at = None
+                return MusicPolicyDecision(
+                    should_mute=False,
+                    surface_transcript=False,
+                    reason="no music detected",
+                    path=self.path,
+                    detection=result,
+                )
+            if self.path == MusicPath.PATH_A:
+                return MusicPolicyDecision(
+                    should_mute=True,
+                    surface_transcript=True,
+                    reason=(
+                        f"music detected (conf={result.confidence:.2f}, "
+                        f"source={result.source}): Path A mute+transcript"
+                    ),
+                    path=self.path,
+                    detection=result,
+                )
+            # Path B: check window.
+            import time as _time
+
+            ts = now if now is not None else _time.time()
+            if self._path_b_window_opened_at is None:
+                self._path_b_window_opened_at = ts
+                return MusicPolicyDecision(
+                    should_mute=False,
+                    surface_transcript=False,
+                    reason=(
+                        f"music detected (conf={result.confidence:.2f}): "
+                        f"Path B window opened, {self.window_s:.1f} s budget"
+                    ),
+                    path=self.path,
+                    detection=result,
+                )
+            elapsed = ts - self._path_b_window_opened_at
+            if elapsed < self.window_s:
+                return MusicPolicyDecision(
+                    should_mute=False,
+                    surface_transcript=False,
+                    reason=(
+                        f"music detected: Path B window open, "
+                        f"{elapsed:.1f}/{self.window_s:.1f} s elapsed"
+                    ),
+                    path=self.path,
+                    detection=result,
+                )
             return MusicPolicyDecision(
                 should_mute=True,
                 surface_transcript=True,
                 reason=(
-                    f"music detected (conf={result.confidence:.2f}, "
-                    f"source={result.source}): Path A mute+transcript"
+                    f"music detected: Path B window expired after "
+                    f"{elapsed:.1f} s; mute engaged until operator resets"
                 ),
                 path=self.path,
                 detection=result,
             )
-        # Path B: check window.
-        import time as _time
-
-        ts = now if now is not None else _time.time()
-        if self._path_b_window_opened_at is None:
-            self._path_b_window_opened_at = ts
-            return MusicPolicyDecision(
-                should_mute=False,
-                surface_transcript=False,
-                reason=(
-                    f"music detected (conf={result.confidence:.2f}): "
-                    f"Path B window opened, {self.window_s:.1f} s budget"
-                ),
-                path=self.path,
-                detection=result,
-            )
-        elapsed = ts - self._path_b_window_opened_at
-        if elapsed < self.window_s:
-            return MusicPolicyDecision(
-                should_mute=False,
-                surface_transcript=False,
-                reason=(
-                    f"music detected: Path B window open, "
-                    f"{elapsed:.1f}/{self.window_s:.1f} s elapsed"
-                ),
-                path=self.path,
-                detection=result,
-            )
-        return MusicPolicyDecision(
-            should_mute=True,
-            surface_transcript=True,
-            reason=(
-                f"music detected: Path B window expired after "
-                f"{elapsed:.1f} s; mute engaged until operator resets"
-            ),
-            path=self.path,
-            detection=result,
-        )
 
     def reset_window(self) -> None:
-        """Operator-initiated reset of the Path B window (for re-authorisation)."""
-        self._path_b_window_opened_at = None
+        """Operator-initiated reset of the Path B window (for re-authorisation).
+
+        Thread-safe — takes the same lock evaluate() does so operator
+        reset never interleaves with a mid-evaluate read.
+        """
+        with self._lock:
+            self._path_b_window_opened_at = None
 
 
 def default_policy() -> MusicPolicy:
