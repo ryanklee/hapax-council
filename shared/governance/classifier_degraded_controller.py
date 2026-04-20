@@ -191,6 +191,10 @@ class ClassifierDegradedController:
             new_state.value,
             reason,
         )
+        # Prometheus transition counter (D-23).
+        from shared.governance.demonet_metrics import METRICS as _M
+
+        _M.inc_classifier_transition(old_state.value, new_state.value)
         self._fire_callback(old_state, new_state, reason)
 
     def _fire_callback(

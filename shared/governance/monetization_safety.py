@@ -30,6 +30,7 @@ from enum import StrEnum
 from typing import Any, Literal, Protocol
 
 from shared.affordance import MonetizationRisk
+from shared.governance.demonet_metrics import METRICS as _METRICS
 
 # Re-exports for Phase-1 call sites.
 __all__ = [
@@ -107,6 +108,22 @@ def _max_risk(a: str, b: str) -> str:
     return a if _RISK_ORDER.get(a, 0) >= _RISK_ORDER.get(b, 0) else b
 
 
+def _record_and_return(assessment: RiskAssessment) -> RiskAssessment:
+    """Tick the gate-decisions counter and return the assessment unchanged.
+
+    Factored out of ``assess()`` so every return path increments the
+    Prometheus counter without sprawling inline calls. The counter is
+    a no-op when prometheus_client isn't installed (see
+    ``shared.governance.demonet_metrics``).
+    """
+    _METRICS.inc_gate_decision(
+        risk=assessment.risk,
+        allowed=assessment.allowed,
+        surface=assessment.surface.value if assessment.surface else None,
+    )
+    return assessment
+
+
 class MonetizationRiskGate:
     """Pure filter — blocks high-risk always, gates medium-risk on programme.
 
@@ -150,13 +167,15 @@ class MonetizationRiskGate:
         # no Programme opt-in path. Saves the GPU round-trip on the
         # capabilities catalog already declares unsafe.
         if ring1_risk == "high":
-            return RiskAssessment(
-                allowed=False,
-                risk=ring1_risk,
-                reason=f"{name}: high-risk capability blocked unconditionally ({ring1_reason})".strip(
-                    " ()"
-                ),
-                surface=surface,
+            return _record_and_return(
+                RiskAssessment(
+                    allowed=False,
+                    risk=ring1_risk,
+                    reason=f"{name}: high-risk capability blocked unconditionally ({ring1_reason})".strip(
+                        " ()"
+                    ),
+                    surface=surface,
+                )
             )
 
         # Ring 2 pass — only when caller opted in + surface is broadcast.
@@ -184,20 +203,24 @@ class MonetizationRiskGate:
                 # If the fail-closed wrapper fired and blocked, surface
                 # that immediately; don't continue through opt-in logic.
                 if not decision.assessment.allowed and decision.used_fallback:
-                    return RiskAssessment(
-                        allowed=False,
-                        risk=effective_risk,  # type: ignore[arg-type]
-                        reason=f"{name}: ring2 degraded → {ring2_reason}",
-                        surface=surface,
+                    return _record_and_return(
+                        RiskAssessment(
+                            allowed=False,
+                            risk=effective_risk,  # type: ignore[arg-type]
+                            reason=f"{name}: ring2 degraded → {ring2_reason}",
+                            surface=surface,
+                        )
                     )
 
         # Effective-risk-high path: Ring 2 escalated to high.
         if effective_risk == "high":
-            return RiskAssessment(
-                allowed=False,
-                risk=effective_risk,  # type: ignore[arg-type]
-                reason=f"{name}: ring2 escalated to high ({ring2_reason})",
-                surface=surface,
+            return _record_and_return(
+                RiskAssessment(
+                    allowed=False,
+                    risk=effective_risk,  # type: ignore[arg-type]
+                    reason=f"{name}: ring2 escalated to high ({ring2_reason})",
+                    surface=surface,
+                )
             )
         if effective_risk == "medium":
             opted_in = False
@@ -211,23 +234,29 @@ class MonetizationRiskGate:
                     if ring2_used and ring2_reason and effective_risk != ring1_risk
                     else ""
                 )
-                return RiskAssessment(
-                    allowed=False,
+                return _record_and_return(
+                    RiskAssessment(
+                        allowed=False,
+                        risk=effective_risk,  # type: ignore[arg-type]
+                        reason=f"{name}: medium-risk capability requires programme opt-in{detail}",
+                        surface=surface,
+                    )
+                )
+            return _record_and_return(
+                RiskAssessment(
+                    allowed=True,
                     risk=effective_risk,  # type: ignore[arg-type]
-                    reason=f"{name}: medium-risk capability requires programme opt-in{detail}",
+                    reason=f"{name}: medium-risk capability opted in by active programme",
                     surface=surface,
                 )
-            return RiskAssessment(
+            )
+        return _record_and_return(
+            RiskAssessment(
                 allowed=True,
                 risk=effective_risk,  # type: ignore[arg-type]
-                reason=f"{name}: medium-risk capability opted in by active programme",
+                reason=f"{name}: {effective_risk}-risk capability — passed",
                 surface=surface,
             )
-        return RiskAssessment(
-            allowed=True,
-            risk=effective_risk,  # type: ignore[arg-type]
-            reason=f"{name}: {effective_risk}-risk capability — passed",
-            surface=surface,
         )
 
     def candidate_filter(

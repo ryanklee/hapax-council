@@ -1,0 +1,15 @@
+[Unit]
+Description=hapax — daily egress-audit rotation timer
+Documentation=file:///home/hapax/projects/hapax-council/docs/superpowers/plans/2026-04-20-demonetization-safety-plan.md
+
+[Timer]
+# 04:00 local — 45 min after systemd-reconcile (03:15), aligned with
+# other low-activity nightly timers. Persistent catches missed runs
+# after reboot.
+OnCalendar=*-*-* 04:00:00
+Persistent=true
+RandomizedDelaySec=300
+Unit=hapax-egress-audit-rotate.service
+
+[Install]
+WantedBy=timers.target

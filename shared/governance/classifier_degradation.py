@@ -129,6 +129,7 @@ def classify_with_fallback(
     surface: SurfaceKind,
     mode: DegradationMode | None = None,
     timeout_s: float = DEFAULT_CLASSIFIER_TIMEOUT_S,
+    audit_writer: Any = None,
 ) -> DegradationDecision:
     """Invoke ``classifier.classify`` with fail-closed (default) degradation.
 
@@ -149,7 +150,15 @@ def classify_with_fallback(
     ``ClassifierTimeout`` when the backend call exceeds its budget.
     ``timeout_s`` is forwarded to the classifier contract for callers
     that surface it on the Classifier Protocol (not required).
+
+    ``audit_writer`` (D-23) is an optional ``MonetizationEgressAudit``-
+    like object; when provided, every decision (success or fallback)
+    is recorded to the egress trail so the JSONL captures classifier
+    runtime verdicts alongside catalog-level Ring 1 decisions. Errors
+    in the writer are swallowed — the classifier is load-bearing,
+    audit is best-effort observability.
     """
+    decision: DegradationDecision
     try:
         start = time.monotonic()
         assessment = classifier.classify(
@@ -165,7 +174,9 @@ def classify_with_fallback(
             raise ClassifierTimeout(
                 f"classifier.classify took {elapsed:.2f} s > {timeout_s:.2f} s budget"
             )
-        return DegradationDecision(assessment=assessment, used_fallback=False)
+        decision = DegradationDecision(assessment=assessment, used_fallback=False)
+        _write_audit(audit_writer, capability_name, assessment, surface, used_fallback=False)
+        return decision
     except ClassifierUnavailable as exc:
         effective_mode = mode
         if effective_mode is None:
@@ -174,12 +185,50 @@ def classify_with_fallback(
                 if _fail_open_env_enabled()
                 else DegradationMode.FAIL_CLOSED
             )
-        return _degrade(
+        decision = _degrade(
             capability_name=capability_name,
             surface=surface,
             underlying=exc,
             mode=effective_mode,
         )
+        _write_audit(
+            audit_writer,
+            capability_name,
+            decision.assessment,
+            surface,
+            used_fallback=True,
+        )
+        return decision
+
+
+def _write_audit(
+    writer: Any,
+    capability_name: str,
+    assessment: RiskAssessment,
+    surface: SurfaceKind,
+    *,
+    used_fallback: bool,
+) -> None:
+    """Best-effort audit write + Prometheus tick (D-23); never raises."""
+    # Prometheus tick first (always runs, cheap).
+    try:
+        from shared.governance.demonet_metrics import METRICS as _M
+
+        _M.inc_classifier_call(assessment.risk, used_fallback)
+    except Exception:  # noqa: BLE001
+        log.debug("classifier_calls counter tick failed", exc_info=True)
+    # Audit write (optional writer; swallow on failure).
+    if writer is None:
+        return
+    try:
+        writer.record(
+            capability_name,
+            assessment,
+            surface=surface,
+            extra={"source": "ring2_classifier", "used_fallback": used_fallback},
+        )
+    except Exception:  # noqa: BLE001 — audit must never crash the classifier path
+        log.debug("audit_writer.record raised; suppressing", exc_info=True)
 
 
 def _degrade(

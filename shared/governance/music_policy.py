@@ -139,7 +139,31 @@ class MusicPolicy:
         outside the lock and only guard the window state.
         """
         with self._lock:
-            result = self.detector.detect(audio_window)
+            # D-23 detector fail-closed (AUDIT §9.2). Detector exceptions
+            # previously propagated out of evaluate() — caller had no
+            # governance-aware handling. Policy: treat detector failure
+            # as "music might be playing → Path A mute, Path B close
+            # window". Operator sees a warning, not a silent crash.
+            try:
+                result = self.detector.detect(audio_window)
+            except Exception as e:
+                log.warning(
+                    "music detector raised %s: %s — fail-closed to mute",
+                    type(e).__name__,
+                    e,
+                )
+                if self.path == MusicPath.PATH_B:
+                    self._path_b_window_opened_at = None
+                from shared.governance.demonet_metrics import METRICS as _M
+
+                _M.inc_music_mute(self.path.value, "detector_failure")
+                return MusicPolicyDecision(
+                    should_mute=True,
+                    surface_transcript=True,
+                    reason=(f"detector {type(e).__name__}: {e} — fail-closed mute"),
+                    path=self.path,
+                    detection=MusicDetectionResult(detected=False),
+                )
             if not result.detected:
                 # Close any open Path B window when music stops.
                 if self.path == MusicPath.PATH_B:
@@ -152,6 +176,9 @@ class MusicPolicy:
                     detection=result,
                 )
             if self.path == MusicPath.PATH_A:
+                from shared.governance.demonet_metrics import METRICS as _M
+
+                _M.inc_music_mute(self.path.value, "path_a_detected")
                 return MusicPolicyDecision(
                     should_mute=True,
                     surface_transcript=True,
