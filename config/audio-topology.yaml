@@ -76,6 +76,20 @@ nodes:
       count: 2
       positions: [FL, FR]
 
+  # ─── Vinyl-to-stream loopback (D-03 follow-up #217) ──────────────
+  # Virtual sink that accepts vinyl-source audio (Handytraxx, Korg,
+  # etc.) and forwards it to the livestream-tap so OBS + the
+  # compositor's monitor path both see it. Exists per
+  # config/pipewire/hapax-vinyl-to-stream.conf.
+  - id: vinyl-capture
+    kind: loopback
+    pipewire_name: hapax-vinyl-capture
+    description: Vinyl source → hapax-livestream-tap (loopback sink side)
+    target_object: hapax-livestream-tap
+    channels:
+      count: 2
+      positions: [FL, FR]
+
   # ─── Hardware endpoints ───────────────────────────────────────────
   - id: ryzen-analog-out
     kind: alsa_sink
