@@ -244,12 +244,21 @@ class TestIntegrationHelper:
         # FaceObscurer pass-through returns identity on empty bboxes.
         assert out is frame
 
-    def test_source_exception_degrades_to_passthrough(self):
-        """A detector crash must never take down the capture pipeline."""
+    def test_source_exception_fails_closed_to_full_frame_mask(self):
+        """A detector crash must NEVER leak the raw frame — fail-CLOSED.
+
+        Per beta audit F-AUDIT-1061-1 (2026-04-19): privacy-critical
+        surfaces treat 'pipeline broken' as 'all faces present' and
+        return a full-frame Gruvbox-dark mask, not the original frame.
+        Pass-through on detector failure was the previous behaviour and
+        is now a privacy violation.
+        """
 
         class _Boom:
             def detect(self, _frame: np.ndarray) -> list[BBox]:
                 raise RuntimeError("onnxruntime exploded")
+
+        from agents.studio_compositor.face_obscure import GRUVBOX_DARK_BGR
 
         frame = np.full((120, 160, 3), 77, dtype=np.uint8)
         out = obscure_frame_for_camera(
@@ -258,7 +267,14 @@ class TestIntegrationHelper:
             env={"HAPAX_FACE_OBSCURE_ACTIVE": "1"},
             source_factory=lambda _role: _Boom(),
         )
-        assert out is frame
+        # Fail-closed: returned frame is a uniform Gruvbox fill with the
+        # same shape/dtype as the input. Not the original frame.
+        assert out is not frame
+        assert out.shape == frame.shape
+        assert out.dtype == frame.dtype
+        assert np.all(out[:, :, 0] == GRUVBOX_DARK_BGR[0])
+        assert np.all(out[:, :, 1] == GRUVBOX_DARK_BGR[1])
+        assert np.all(out[:, :, 2] == GRUVBOX_DARK_BGR[2])
 
     def test_pipeline_cached_per_camera_role(self):
         """Repeated calls for a role must reuse the same pipeline instance."""
