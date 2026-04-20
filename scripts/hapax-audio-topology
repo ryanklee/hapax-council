@@ -243,7 +243,15 @@ def _diff_descriptors(a: TopologyDescriptor, b: TopologyDescriptor) -> bool:
 
 
 def cmd_verify(args: argparse.Namespace) -> int:
-    """Compare descriptor against live pw-dump graph (or a saved dump)."""
+    """Compare descriptor against live pw-dump graph (or a saved dump).
+
+    With ``--profile vinyl`` (D-24 §11.4), additionally runs
+    ``shared.vinyl_chain_verify.verify_vinyl_chain`` to surface
+    vinyl-broadcast-specific chain findings (L6 multitrack presence,
+    Handytraxx under Mode D, broadcast tap, S-4 USB-direct). The
+    vinyl profile fails the verify call if the chain carries any
+    ERROR-severity finding.
+    """
     declared = _load(args.descriptor)
     try:
         if args.dump_file:
@@ -261,11 +269,27 @@ def cmd_verify(args: argparse.Namespace) -> int:
         return 1
 
     drift = _diff_descriptors(declared, live)
+
+    vinyl_ok = True
+    if getattr(args, "profile", None) == "vinyl":
+        from shared.vinyl_chain_verify import (
+            format_report,
+            verify_vinyl_chain,
+        )
+
+        print("\n── vinyl profile — broadcast chain verification ──")
+        result = verify_vinyl_chain(live)
+        print(format_report(result))
+        vinyl_ok = result.ok
+
     if drift:
         print(
             "\nlive graph differs from descriptor — "
             "see diff above + rerun 'generate' if descriptor is authoritative."
         )
+        return 2
+    if not vinyl_ok:
+        print("\nvinyl profile FAIL — see report above")
         return 2
     print("live graph matches descriptor (no drift)")
     return 0
@@ -374,6 +398,16 @@ def main() -> int:
     p_verify.add_argument(
         "--dump-file",
         help="Saved pw-dump JSON path instead of invoking pw-dump live.",
+    )
+    p_verify.add_argument(
+        "--profile",
+        choices=("vinyl",),
+        default=None,
+        help=(
+            "Additional profile-specific verification (D-24 §11.4). "
+            "'vinyl' runs shared.vinyl_chain_verify.verify_vinyl_chain "
+            "and fails the invocation on any ERROR-severity finding."
+        ),
     )
     p_verify.set_defaults(func=cmd_verify)
 
