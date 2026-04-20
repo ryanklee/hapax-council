@@ -8,7 +8,7 @@ from enum import StrEnum
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 log = logging.getLogger(__name__)
 
@@ -60,17 +60,36 @@ class DaimonionConfig(BaseModel):
     context_gate_ambient_classification: bool = True
     context_gate_ambient_block_threshold: float = 0.15
 
-    # Audio hardware
-    # PipeWire's echo-cancel module is broken on PipeWire 1.6.x
-    # (ENOTSUP on capture node start). Use raw Yeti with application-level
-    # echo suppression: wake word + VAD gated during TTS playback,
-    # post-TTS cooldown to let room reflections decay.
-    # Raw Yeti mic. PipeWire AEC (WebRTC AEC3) loads but attenuates
-    # too aggressively (-16dB) — wake word can't detect in the quiet signal.
-    # Using application-level speexdsp AEC until PipeWire AEC is tuned.
-    audio_input_source: str = (
-        "alsa_input.usb-Blue_Microphones_Yeti_Stereo_Microphone_REV8-00.analog-stereo"
-    )
+    # Audio hardware — operator-preferred priority list. Resolver
+    # (agents/hapax_daimonion/audio_input.py::resolve_source) walks the
+    # list at daimonion start and picks the first source that pw-cli
+    # reports as live. The default lists the WebRTC AEC virtual source
+    # ahead of the raw Yeti so a freshly-installed
+    # config/pipewire/hapax-echo-cancel.conf takes effect without a
+    # config edit. Audio-pathways Phase 2 (#134).
+    #
+    # Backward compat: a single str is auto-wrapped to a 1-element list
+    # by the post-init validator below, with a deprecation warning.
+    audio_input_source: list[str] = [
+        "echo_cancel_capture",
+        "alsa_input.usb-Blue_Microphones_Yeti_Stereo_Microphone_REV8-00.analog-stereo",
+    ]
+
+    @field_validator("audio_input_source", mode="before")
+    @classmethod
+    def _wrap_legacy_string(cls, v):
+        """Audio-pathways Phase 2: accept the legacy single-string form
+        and auto-wrap into a 1-element list. Warn-once per process.
+        Drops after a +30 day deprecation window per usual convention.
+        """
+        if isinstance(v, str):
+            log.warning(
+                "audio_input_source as a single string is deprecated; "
+                "use list[str] of priority-ordered candidates "
+                "(e.g. ['echo_cancel_capture', '<yeti-source>'])"
+            )
+            return [v]
+        return v
 
     # Contact microphone (desk vibration sensing via PipeWire)
     contact_mic_source: str = "Contact Microphone"

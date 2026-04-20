@@ -10,6 +10,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import subprocess
+from collections.abc import Callable
 
 log = logging.getLogger(__name__)
 
@@ -19,6 +21,70 @@ _AEC_SOURCE_NAME = "echo_cancel_capture"
 # Fallback when HAPAX_AEC_ACTIVE is not set — the raw Yeti source.
 # Users keep this until the PipeWire drop-in is installed and verified.
 _RAW_YETI_PATTERN = "alsa_input.usb-Blue_Microphones_Yeti"
+
+# YT bundle / audio-pathways Phase 2: priority list resolver. Production
+# config writes a list[str] of candidate sources in operator-preferred
+# order; resolve_source walks the list and picks the first source that
+# pw-cli reports as live. Fall-through to the raw Yeti pattern if every
+# entry misses.
+DEFAULT_SOURCE_PRIORITY: list[str] = [_AEC_SOURCE_NAME, _RAW_YETI_PATTERN]
+
+
+PwCliRunner = Callable[[], str]
+
+
+def _default_pw_cli_runner() -> str:
+    """Run ``pw-cli ls Node`` and return stdout. Empty string on failure.
+
+    Production calls this at daimonion start; the result is parsed by
+    ``resolve_source`` to discover which candidate source is live.
+    Failures (pw-cli missing, pipewire down) return empty so the
+    resolver falls through to its caller's fallback.
+    """
+    try:
+        result = subprocess.run(
+            ["pw-cli", "ls", "Node"],
+            capture_output=True,
+            text=True,
+            timeout=5.0,
+        )
+        return result.stdout or ""
+    except Exception:
+        log.debug("pw-cli ls Node failed", exc_info=True)
+        return ""
+
+
+def resolve_source(
+    candidates: list[str],
+    *,
+    pw_cli: PwCliRunner = _default_pw_cli_runner,
+    fallback: str = _RAW_YETI_PATTERN,
+) -> str:
+    """Walk the candidate priority list, return the first present source.
+
+    A source is "present" when its name appears anywhere in the
+    ``pw-cli ls Node`` output. Substring match (the production names
+    contain device-id suffixes pw-cat copes with). Returns
+    ``fallback`` when no candidate matches AND when pw-cli output is
+    empty (degraded posture: still bring up daimonion against the raw
+    mic so wake word stays alive).
+    """
+    if not candidates:
+        return fallback
+    nodes = pw_cli()
+    if not nodes:
+        log.warning("pw-cli output empty; falling back to %s", fallback)
+        return fallback
+    for candidate in candidates:
+        if candidate in nodes:
+            log.info("audio source resolved: %s", candidate)
+            return candidate
+    log.warning(
+        "no candidate from %s present in pw-cli output; falling back to %s",
+        candidates,
+        fallback,
+    )
+    return fallback
 
 
 def _resolve_default_source() -> str:
