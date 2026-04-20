@@ -1,0 +1,15 @@
+[Unit]
+Description=hapax — mirror relay-yaml active_queue_items into Obsidian CC-task vault SSOT
+Documentation=file:///home/hapax/projects/hapax-council/docs/superpowers/plans/2026-04-20-cc-task-obsidian-ssot-plan.md
+OnFailure=notify-failure@%n.service
+
+[Service]
+Type=oneshot
+Nice=19
+StandardOutput=journal
+StandardError=journal
+WorkingDirectory=/home/hapax/projects/hapax-council
+ExecStart=/home/hapax/projects/hapax-council/.venv/bin/python -m agents.relay_to_cc_tasks
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,17 @@
+[Unit]
+Description=hapax — 5-min relay-yaml → CC-task vault mirror timer
+Documentation=file:///home/hapax/projects/hapax-council/docs/superpowers/plans/2026-04-20-cc-task-obsidian-ssot-plan.md
+
+[Timer]
+# 5-minute mirror keeps the operator's Obsidian dashboard within one
+# tick of the relay state. Lighter cadence than the rebuild-services
+# timer (also 5 min) — this is just per-relay-file YAML reads, no GPU
+# or build cost. Persistent catches missed runs after reboot.
+OnBootSec=2min
+OnUnitActiveSec=5min
+Persistent=true
+RandomizedDelaySec=15
+Unit=hapax-relay-to-cc-tasks.service
+
+[Install]
+WantedBy=timers.target
