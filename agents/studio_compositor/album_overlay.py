@@ -215,22 +215,17 @@ def _pip_fx_package(
     cr.fill()
     cr.restore()
 
-    # Step 5 (border) — 2-px sharp border in the ward's domain accent.
-    from .homage.rendering import _domain_accent  # type: ignore[attr-defined]
-
-    try:
-        br, bg, bb, ba = _domain_accent(package, ward_id)
-    except Exception:
-        try:
-            br, bg, bb, ba = package.resolve_colour("bright")
-        except Exception:
-            br, bg, bb, ba = 0.9, 0.9, 0.9, 1.0
-    cr.save()
-    cr.set_source_rgba(br, bg, bb, ba)
-    cr.set_line_width(2.0)
-    cr.rectangle(1, 1, w - 2, h - 2)
-    cr.stroke()
-    cr.restore()
+    # Step 5 (border) — RETIRED 2026-04-20.
+    # The 2-px sharp border in the ward's domain accent role was drawing
+    # an empty-container chrome around the entire 400x520 PiP surface even
+    # when the actual content (splattribution text + small cover image)
+    # was sparse — operator-visible "outline of a container that is not
+    # really containing anything". Per the CBIP (Chess Boxing Interpretive
+    # Plane, formerly album/vinyl ward) directive that this surface should
+    # do interpretive content not container chrome, the always-on border
+    # is dropped. If a future Programme variant wants emphasis chrome it
+    # should opt-in via paint_emphasis_border (which gates on
+    # ward_properties.glow_radius_px > 0.5 — operator-driven, not always-on).
 
 
 class AlbumOverlayCairoSource(HomageTransitionalSource):
