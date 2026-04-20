@@ -163,3 +163,121 @@ class TestImpingementPressureOverridesBias:
         prog = _FakeProgramme(biases={"biased_cap": 0.5})
         result = pipeline._apply_programme_bias([cand], prog)
         assert result[0].combined == pytest.approx(0.475)
+
+
+class TestInvariantCounter:
+    """``hapax_programme_candidate_set_reduction_total`` must stay at zero
+    under healthy operation. Increments only on implementation bug —
+    the validator on ``capability_bias_negative`` rejects 0.0, so the
+    helper *cannot* legitimately drop a candidate. These tests pin the
+    counter wiring without triggering the bug path.
+    """
+
+    def test_no_increment_on_healthy_path(self, pipeline, monkeypatch) -> None:
+        """Across the realistic scoring shape, counter stays untouched."""
+        from shared.governance import demonet_metrics
+
+        increments: list[str] = []
+        monkeypatch.setattr(
+            demonet_metrics.METRICS,
+            "inc_programme_candidate_set_reduction",
+            lambda pid: increments.append(pid),
+        )
+        cands = [_candidate("a", 0.4), _candidate("b", 0.7), _candidate("c", 0.2)]
+        prog = _FakeProgramme(biases={"a": 0.5, "b": 1.5, "c": 0.25})
+        pipeline._apply_programme_bias(cands, prog)
+        assert increments == [], "counter must not increment on healthy bias path"
+
+    def test_no_increment_on_pathological_all_negative(self, pipeline, monkeypatch) -> None:
+        from shared.governance import demonet_metrics
+
+        increments: list[str] = []
+        monkeypatch.setattr(
+            demonet_metrics.METRICS,
+            "inc_programme_candidate_set_reduction",
+            lambda pid: increments.append(pid),
+        )
+        cands = [_candidate("a", 0.5), _candidate("b", 0.5), _candidate("c", 0.5)]
+        prog = _FakeProgramme(biases={"a": 0.01, "b": 0.01, "c": 0.01})
+        pipeline._apply_programme_bias(cands, prog)
+        # Helper preserved set, so counter MUST stay quiet.
+        assert increments == []
+
+
+class TestRealProgrammeIntegration:
+    """The helper is documented against the structural type but real
+    deployment uses ``shared.programme.Programme``. These pin the
+    integration with the actual pydantic model so a future refactor
+    of ``bias_multiplier`` semantics is caught immediately.
+    """
+
+    def test_real_programme_negative_bias_attenuates(self, pipeline) -> None:
+        from shared.programme import (
+            Programme,
+            ProgrammeConstraintEnvelope,
+            ProgrammeRole,
+        )
+
+        prog = Programme(
+            programme_id="prog-listening-001",
+            role=ProgrammeRole.LISTENING,
+            planned_duration_s=300.0,
+            constraints=ProgrammeConstraintEnvelope(
+                capability_bias_negative={"speech_production": 0.2},
+            ),
+            parent_show_id="show-test",
+        )
+        cands = [_candidate("speech_production", 0.5), _candidate("camera.hero", 0.5)]
+        result = pipeline._apply_programme_bias(cands, prog)
+        assert result[0].combined == pytest.approx(0.1)  # 0.5 * 0.2
+        assert result[1].combined == pytest.approx(0.5)  # untouched
+        assert len(result) == 2
+
+    def test_real_programme_positive_bias_amplifies(self, pipeline) -> None:
+        from shared.programme import (
+            Programme,
+            ProgrammeConstraintEnvelope,
+            ProgrammeRole,
+        )
+
+        prog = Programme(
+            programme_id="prog-tutorial-001",
+            role=ProgrammeRole.TUTORIAL,
+            planned_duration_s=300.0,
+            constraints=ProgrammeConstraintEnvelope(
+                capability_bias_positive={"speech_production": 1.5},
+            ),
+            parent_show_id="show-test",
+        )
+        cands = [_candidate("speech_production", 0.4)]
+        result = pipeline._apply_programme_bias(cands, prog)
+        assert result[0].combined == pytest.approx(0.6)  # 0.4 * 1.5
+
+    def test_real_programme_set_size_invariant_under_bias(self, pipeline) -> None:
+        """Pin the architectural axiom against the real Programme model."""
+        from shared.programme import (
+            Programme,
+            ProgrammeConstraintEnvelope,
+            ProgrammeRole,
+        )
+
+        prog = Programme(
+            programme_id="prog-pathological-001",
+            role=ProgrammeRole.LISTENING,
+            planned_duration_s=300.0,
+            constraints=ProgrammeConstraintEnvelope(
+                capability_bias_negative={
+                    "a": 0.01,
+                    "b": 0.01,
+                    "c": 0.01,
+                    "d": 0.01,
+                },
+            ),
+            parent_show_id="show-test",
+        )
+        cands = [_candidate(name, 0.5) for name in ("a", "b", "c", "d")]
+        result = pipeline._apply_programme_bias(cands, prog)
+        assert len(result) == 4  # invariant: set size preserved
+        # And every score remains > 0 (validator forbade 0 multipliers)
+        for c in result:
+            assert c.combined > 0.0
