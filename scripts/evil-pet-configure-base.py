@@ -40,8 +40,8 @@ BASE_SCENE: list[tuple[int, int, str]] = [
     (11, 0, "Grains volume → 0 (granular off)"),
     (85, 0, "Overtone volume → 0 (digital osc off)"),
     # Master.
-    (40, 64, "Mix → 12 o'clock (50% wet/dry)"),
-    (7, 76, "Volume → 1 o'clock (~60%)"),
+    (40, 95, "Mix → 75% wet (audible Evil-Pet character over dry)"),
+    (7, 127, "Volume → max (L6 handles gain staging downstream)"),
     # Filter section.
     (80, 64, "Filter type → bandpass (stepped; mid-range = BP on typical EP encoding)"),
     (70, 76, "Filter freq → 1 o'clock (~60%, centered on voice midband)"),
