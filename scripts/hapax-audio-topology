@@ -79,7 +79,7 @@ def cmd_describe(args: argparse.Namespace) -> int:
     for e in d.edges:
         src = f"{e.source}:{e.source_port}" if e.source_port else e.source
         tgt = f"{e.target}:{e.target_port}" if e.target_port else e.target
-        gain = f" (+{e.makeup_gain_db:+.1f} dB)" if e.makeup_gain_db else ""
+        gain = f" ({e.makeup_gain_db:+.1f} dB)" if e.makeup_gain_db else ""
         print(f"  {src} → {tgt}{gain}")
     return 0
 

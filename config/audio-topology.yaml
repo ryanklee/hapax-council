@@ -1,0 +1,112 @@
+schema_version: 1
+description: |
+  Canonical workstation audio topology — source of truth for the PipeWire
+  graph that drives the livestream.
+
+  Regenerate ``config/pipewire/*.conf`` via:
+      hapax-audio-topology generate config/audio-topology.yaml
+          --output-dir /tmp/regen
+  and compare against the committed conf files to detect drift. In CI,
+  `hapax-audio-topology verify` (Phase 4, not yet shipped) will diff
+  the descriptor against the live graph.
+
+  History and rationale for each node live in the matching
+  ``config/pipewire/<name>.conf`` file — this descriptor captures the
+  shape of the graph, not the operator narrative.
+
+nodes:
+  # ─── Capture side — L6 multitrack 12-channel ─────────────────────
+  - id: l6-capture
+    kind: alsa_source
+    pipewire_name: alsa_input.usb-ZOOM_Corporation_L6-00.multitrack
+    description: ZOOM L6 multitrack 12-channel capture (Altset 2)
+    hw: hw:L6,0
+    channels:
+      count: 12
+      positions: [AUX0, AUX1, AUX2, AUX3, AUX4, AUX5, AUX6, AUX7, AUX8, AUX9, AUX10, AUX11]
+    params:
+      api.alsa.use-acp: false
+      api.alsa.disable-batch: true
+
+  # ─── Livestream tap (null-sink — OBS monitors this) ──────────────
+  - id: livestream-tap
+    kind: tap
+    pipewire_name: hapax-livestream-tap
+    description: Hapax Livestream (OBS monitor tap; null-sink keeps monitor live)
+    channels:
+      count: 2
+      positions: [FL, FR]
+
+  # ─── L6 Main Mix (AUX10+11) → livestream tap, +12 dB makeup ──────
+  - id: main-mix-tap
+    kind: filter_chain
+    pipewire_name: hapax-l6-evilpet-capture
+    description: L6 Main Mix (AUX10+11) capture → livestream tap with +12 dB makeup gain
+    target_object: hapax-livestream-tap
+    channels:
+      count: 2
+      positions: [FL, FR]
+
+  # ─── Voice-FX chain: Kokoro TTS → biquad chain → Ryzen ───────────
+  - id: voice-fx
+    kind: filter_chain
+    pipewire_name: hapax-voice-fx-capture
+    description: Hapax TTS FX chain → Ryzen analog-stereo
+    target_object: alsa_output.pci-0000_73_00.6.analog-stereo
+    channels:
+      count: 2
+      positions: [FL, FR]
+
+  # ─── Virtual sinks forwarding to Ryzen (straight loopback) ───────
+  - id: livestream-loopback
+    kind: loopback
+    pipewire_name: hapax-livestream
+    description: Hapax Livestream → Ryzen analog (→ L6 ch 5 via hardware)
+    target_object: alsa_output.pci-0000_73_00.6.analog-stereo
+    channels:
+      count: 2
+      positions: [FL, FR]
+
+  - id: private-loopback
+    kind: loopback
+    pipewire_name: hapax-private
+    description: Hapax Private → Ryzen analog (→ L6 ch 5 via hardware)
+    target_object: alsa_output.pci-0000_73_00.6.analog-stereo
+    channels:
+      count: 2
+      positions: [FL, FR]
+
+  # ─── Hardware endpoints ───────────────────────────────────────────
+  - id: ryzen-analog-out
+    kind: alsa_sink
+    pipewire_name: alsa_output.pci-0000_73_00.6.analog-stereo
+    description: Ryzen HD Audio rear line-out (→ L6 ch 5 physical input)
+    hw: hw:0,0
+    channels:
+      count: 2
+      positions: [FL, FR]
+
+edges:
+  # L6 Main Mix AUX10+11 → main-mix-tap with +12 dB makeup (tuned
+  # empirically against -18 dBFS broadcast target — see
+  # config/pipewire/hapax-l6-evilpet-capture.conf for the knob).
+  - source: l6-capture
+    source_port: AUX10
+    target: main-mix-tap
+    target_port: FL
+    makeup_gain_db: 12.0
+  - source: l6-capture
+    source_port: AUX11
+    target: main-mix-tap
+    target_port: FR
+    makeup_gain_db: 12.0
+
+  # Virtual sinks → Ryzen (software mix at the hardware sink).
+  - source: livestream-loopback
+    target: ryzen-analog-out
+  - source: private-loopback
+    target: ryzen-analog-out
+
+  # TTS → voice-fx → Ryzen.
+  - source: voice-fx
+    target: ryzen-analog-out
