@@ -264,6 +264,80 @@ class ConsentGatedQdrant:
         """Passthrough — deletes are always allowed (support revocation purge)."""
         return self.inner.delete(collection_name, **kwargs)
 
+    # --- Read-side mental-state redaction (#208 dead-bridge wiring) ----
+
+    def _redact_points(self, collection_name: str, points: Any) -> Any:
+        """Apply mental-state redaction to a read result when applicable.
+
+        Lazy-import + lazy-redact so callers paying for ConsentGatedQdrant
+        already get the read-side gate with no extra import on their end.
+        Points that are not dicts (or whose payload isn't a dict) pass
+        through — the redactor handles that shape-check itself.
+        """
+        if not points:
+            return points
+        try:
+            from shared.governance.mental_state_redaction import (
+                is_mental_state_collection,
+                redact_query_result,
+            )
+        except Exception:
+            # Importability failure must not break reads.
+            log.debug("mental_state_redaction unavailable; skipping redaction", exc_info=True)
+            return points
+        if not is_mental_state_collection(collection_name):
+            return points
+        # redact_query_result expects a list of dicts. Qdrant's ScoredPoint
+        # objects carry a .payload attribute rather than a dict key — convert
+        # to dict shape, redact, convert back by writing to .payload.
+        redacted = []
+        for pt in points:
+            if hasattr(pt, "payload") and isinstance(pt.payload, dict):
+                as_dict = {"payload": pt.payload}
+                new_payload = redact_query_result(collection_name, [as_dict])[0]["payload"]
+                # Mutate in-place so downstream consumers see the redacted
+                # view even if they held a reference before this call.
+                pt.payload = new_payload
+                redacted.append(pt)
+            elif isinstance(pt, dict):
+                redacted.extend(redact_query_result(collection_name, [pt]))
+            else:
+                redacted.append(pt)
+        return redacted
+
+    def search(self, collection_name: str, *args: Any, **kwargs: Any) -> Any:
+        """Consent-gated search + mental-state read redaction."""
+        result = self.inner.search(collection_name, *args, **kwargs)
+        return self._redact_points(collection_name, result)
+
+    def scroll(self, collection_name: str, *args: Any, **kwargs: Any) -> Any:
+        """Consent-gated scroll + mental-state read redaction.
+
+        Qdrant scroll returns ``(points, next_offset)``; redact only the
+        first tuple element.
+        """
+        result = self.inner.scroll(collection_name, *args, **kwargs)
+        if isinstance(result, tuple) and len(result) == 2 and isinstance(result[0], list):
+            return (self._redact_points(collection_name, result[0]), result[1])
+        return self._redact_points(collection_name, result)
+
+    def retrieve(self, collection_name: str, *args: Any, **kwargs: Any) -> Any:
+        """Consent-gated retrieve + mental-state read redaction."""
+        result = self.inner.retrieve(collection_name, *args, **kwargs)
+        return self._redact_points(collection_name, result)
+
+    def query_points(self, collection_name: str, *args: Any, **kwargs: Any) -> Any:
+        """Consent-gated query_points + mental-state read redaction.
+
+        Qdrant's newer query_points API returns a ``QueryResponse`` with a
+        ``.points`` attribute. Redact that attribute in-place and return
+        the response.
+        """
+        result = self.inner.query_points(collection_name, *args, **kwargs)
+        if hasattr(result, "points"):
+            result.points = self._redact_points(collection_name, result.points)
+        return result
+
     def reload_contracts(self) -> None:
         """Force reload of consent registry (after new contract created)."""
         self._contract_check = None
