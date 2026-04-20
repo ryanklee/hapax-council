@@ -149,11 +149,16 @@ class RtmpOutputBin:
             encoder.set_property("rc-mode", 2)  # 2 = cbr
             encoder.set_property("gop-size", self._gop_size)
             encoder.set_property("zerolatency", True)
-            # A+ Stage 0 (2026-04-17): preset p4 → p1 (fastest). On 3090
-            # at 720p30 CBR the visual difference vs p4 is inside the
-            # CBR-bitrate floor (quality is bitrate-pinned, not
-            # preset-pinned). p1 nets ~30-40% less encoder SM work.
-            encoder.set_property("preset", 1)  # 1 = p1 fastest
+            # 2026-04-20 (post-Tauri-decom): preset p1 → p5. The A+ Stage 0
+            # cut (2026-04-17) traded preset quality for SM headroom while
+            # the WebKit decoder was burning encoder-adjacent GPU on the
+            # Tauri preview. With hapax-logos decommissioned, the SM is
+            # available; p5 produces visibly cleaner motion at the new
+            # 9000 kbps ceiling (the bitrate-pinned argument from A+
+            # Stage 0 holds at 3000 but loosens substantially at 9000).
+            # Per docs/research/2026-04-20-tauri-decommission-freed-
+            # resources.md §11.
+            encoder.set_property("preset", 5)  # 5 = p5 (slow/high-quality)
             # A+ Stage 0: tune=ull (ultra low latency). ll keeps lookahead
             # buffer for quality; at CBR the buffer gains nothing since
             # bitrate is pinned. ull disables B-frames, lookahead, reorder.

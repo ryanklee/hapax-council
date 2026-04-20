@@ -271,10 +271,18 @@ def build_pipeline(compositor: Any) -> Any:
         gst=Gst,
         video_tee=output_tee,
         rtmp_location="rtmp://127.0.0.1:1935/studio",
-        # A+ Stage 0 (2026-04-17): 6000 → 3000 kbps. YouTube Live accepts
-        # 2500–4000 for 720p30; 6000 was inherited from a 1080p config and
-        # is over-bitrting smaller content.
-        bitrate_kbps=3000,
+        # 2026-04-20 (post-Tauri-decom): 3000 → 9000 kbps. The A+ Stage 0
+        # cut (2026-04-17) was a perf-headroom move when the WebKit JPEG
+        # decoder was burning ~60% CPU + 5-10% GPU rendering the Tauri
+        # preview surface. With hapax-logos.service decommissioned, we
+        # have headroom; reverting to a higher bitrate is the single
+        # highest-impact viewer-side quality win per
+        # docs/research/2026-04-20-tauri-decommission-freed-resources.md
+        # §11. YouTube Live accepts up to 9000 kbps for 720p30/60; 9000
+        # gives meaningful headroom for high-frequency-content scenes
+        # (HARDM cells, granular wash, halftone shaders) that were
+        # bitrate-starved at 3000.
+        bitrate_kbps=9000,
         # A+ Stage 0: GOP back to 2*fps (60) = 2s keyframe interval,
         # matching Twitch/YouTube recommendation for 720p30 and reducing
         # encoder work vs the 1-second keyframes. Operator's low-latency
