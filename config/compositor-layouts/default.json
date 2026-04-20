@@ -100,38 +100,6 @@
       ]
     },
     {
-      "id": "chat_ambient",
-      "kind": "cairo",
-      "backend": "cairo",
-      "params": {
-        "class_name": "ChatAmbientWard",
-        "natural_w": 560,
-        "natural_h": 40
-      },
-      "update_cadence": "rate",
-      "rate_hz": 2.0,
-      "tags": [
-        "legibility",
-        "chat"
-      ]
-    },
-    {
-      "id": "grounding_provenance_ticker",
-      "kind": "cairo",
-      "backend": "cairo",
-      "params": {
-        "class_name": "GroundingProvenanceTickerCairoSource",
-        "natural_w": 480,
-        "natural_h": 40
-      },
-      "update_cadence": "rate",
-      "rate_hz": 2.0,
-      "tags": [
-        "legibility",
-        "research"
-      ]
-    },
-    {
       "id": "impingement_cascade",
       "kind": "cairo",
       "backend": "cairo",
@@ -408,42 +376,6 @@
       "update_cadence": "always"
     },
     {
-      "id": "chat-legend-right",
-      "geometry": {
-        "kind": "rect",
-        "x": 1760,
-        "y": 400,
-        "w": 160,
-        "h": 400,
-        "mask": null,
-        "binding_name": null,
-        "target": null,
-        "render_target": null
-      },
-      "effect_chain": [],
-      "blend_mode": "over",
-      "z_order": 20,
-      "update_cadence": "always"
-    },
-    {
-      "id": "grounding-ticker-bl",
-      "geometry": {
-        "kind": "rect",
-        "x": 16,
-        "y": 900,
-        "w": 480,
-        "h": 40,
-        "mask": null,
-        "binding_name": null,
-        "target": null,
-        "render_target": null
-      },
-      "effect_chain": [],
-      "blend_mode": "over",
-      "z_order": 22,
-      "update_cadence": "always"
-    },
-    {
       "id": "impingement-cascade-midright",
       "geometry": {
         "kind": "rect",
@@ -618,22 +550,6 @@
       "opacity": 1.0,
       "per_assignment_effects": [],
       "non_destructive": true
-    },
-    {
-      "source": "chat_ambient",
-      "surface": "chat-legend-right",
-      "transform": {},
-      "opacity": 1.0,
-      "per_assignment_effects": [],
-      "non_destructive": true
-    },
-    {
-      "source": "grounding_provenance_ticker",
-      "surface": "grounding-ticker-bl",
-      "transform": {},
-      "opacity": 1.0,
-      "per_assignment_effects": [],
-      "non_destructive": false
     },
     {
       "source": "impingement_cascade",
