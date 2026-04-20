@@ -1,0 +1,312 @@
+"""Programme primitive — meso-tier content-programming layer.
+
+Implements the core data model from
+``docs/research/2026-04-19-content-programming-layer-design.md`` §3 and
+``docs/superpowers/plans/2026-04-20-programme-layer-plan.md`` §2 Phase 1.
+
+Architectural axiom — soft priors, never hard gates.
+Programmes EXPAND grounding opportunities, they never REPLACE grounding.
+The constraint envelope fields are score multipliers applied to the
+affordance pipeline's existing scoring function, not capability-set
+filters. A zero-bias would be a hard exclusion and is architecturally
+forbidden; the Pydantic validator rejects it at instantiation, so no
+downstream consumer can accidentally construct a hard gate.
+
+References:
+    - feedback memory: project_programmes_enable_grounding
+    - feedback memory: feedback_hapax_authors_programmes
+    - feedback memory: feedback_no_expert_system_rules
+    - feedback memory: feedback_grounding_exhaustive
+"""
+
+from __future__ import annotations
+
+import math
+import time
+from enum import StrEnum
+from typing import Literal
+
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+# Re-declared from agents.studio_compositor.structural_director to avoid
+# the compositor → shared import cycle (same pattern shared/director_intent.py
+# already uses for NarrativeHomageRotationMode).
+ProgrammePresetFamilyHint = Literal[
+    "audio-reactive",
+    "calm-textural",
+    "glitch-dense",
+    "warm-minimal",
+]
+
+ProgrammeHomageRotationMode = Literal[
+    "sequential",
+    "random",
+    "weighted_by_salience",
+    "paused",
+]
+
+
+class ProgrammeDisplayDensity(StrEnum):
+    """Mirrors agents.content_scheduler.DisplayDensity without importing it."""
+
+    SPARSE = "sparse"
+    STANDARD = "standard"
+    DENSE = "dense"
+
+
+class ProgrammeRole(StrEnum):
+    """Twelve roles cover the operator's livestream content space.
+
+    Closed set: widening produces decision paralysis for the Hapax-
+    authored programme planner.
+    """
+
+    LISTENING = "listening"
+    SHOWCASE = "showcase"
+    RITUAL = "ritual"
+    INTERLUDE = "interlude"
+    WORK_BLOCK = "work_block"
+    TUTORIAL = "tutorial"
+    WIND_DOWN = "wind_down"
+    HOTHOUSE_PRESSURE = "hothouse_pressure"
+    AMBIENT = "ambient"
+    EXPERIMENT = "experiment"
+    REPAIR = "repair"
+    INVITATION = "invitation"
+
+
+class ProgrammeStatus(StrEnum):
+    PENDING = "pending"
+    ACTIVE = "active"
+    COMPLETED = "completed"
+    ABORTED = "aborted"
+
+
+class ProgrammeConstraintEnvelope(BaseModel):
+    """Soft-prior biases applied by the affordance pipeline + directors.
+
+    Every bias multiplier must be strictly positive. Zero or negative
+    multipliers would act as hard gates, which the architectural axiom
+    forbids. ``capability_bias_negative`` is the down-weighting side but
+    its keys must still map to strictly positive multipliers in (0, 1].
+    """
+
+    # Negative bias — down-weight these capabilities' affordance scores.
+    # Multiplier must be in (0.0, 1.0]; 0.25 = "bias against but allow".
+    capability_bias_negative: dict[str, float] = Field(default_factory=dict)
+
+    # Positive bias — up-weight these capabilities' affordance scores.
+    # Multiplier must be >= 1.0; 4.0 = "strongly prefer".
+    capability_bias_positive: dict[str, float] = Field(default_factory=dict)
+
+    preset_family_priors: list[ProgrammePresetFamilyHint] = Field(default_factory=list)
+    homage_rotation_modes: list[ProgrammeHomageRotationMode] = Field(default_factory=list)
+    homage_package: str | None = None
+
+    ward_emphasis_target_rate_per_min: float | None = None
+    narrative_cadence_prior_s: float | None = None
+    structural_cadence_prior_s: float | None = None
+    surface_threshold_prior: float | None = None
+    reverie_saturation_target: float | None = None
+
+    display_density: ProgrammeDisplayDensity | None = None
+    consent_scope: str | None = None
+
+    @field_validator("capability_bias_negative")
+    @classmethod
+    def _negative_bias_strictly_positive(cls, v: dict[str, float]) -> dict[str, float]:
+        for name, mult in v.items():
+            if not math.isfinite(mult) or mult <= 0.0 or mult > 1.0:
+                raise ValueError(
+                    f"capability_bias_negative[{name!r}]={mult!r} — must be in (0.0, 1.0]. "
+                    "Zero is architecturally forbidden (hard gate). Use a small positive "
+                    "multiplier like 0.1 for strong bias-against."
+                )
+        return v
+
+    @field_validator("capability_bias_positive")
+    @classmethod
+    def _positive_bias_at_least_one(cls, v: dict[str, float]) -> dict[str, float]:
+        for name, mult in v.items():
+            if not math.isfinite(mult) or mult < 1.0:
+                raise ValueError(
+                    f"capability_bias_positive[{name!r}]={mult!r} — must be >= 1.0. "
+                    "Values below 1.0 belong in capability_bias_negative."
+                )
+        return v
+
+    @field_validator("ward_emphasis_target_rate_per_min")
+    @classmethod
+    def _rate_non_negative(cls, v: float | None) -> float | None:
+        if v is not None and (not math.isfinite(v) or v < 0.0):
+            raise ValueError(f"ward_emphasis_target_rate_per_min={v!r} — must be >= 0.")
+        return v
+
+    @field_validator(
+        "narrative_cadence_prior_s",
+        "structural_cadence_prior_s",
+    )
+    @classmethod
+    def _cadence_positive(cls, v: float | None) -> float | None:
+        if v is not None and (not math.isfinite(v) or v <= 0.0):
+            raise ValueError("cadence prior must be > 0 seconds")
+        return v
+
+    @field_validator("surface_threshold_prior", "reverie_saturation_target")
+    @classmethod
+    def _unit_interval(cls, v: float | None) -> float | None:
+        if v is not None and (not math.isfinite(v) or v < 0.0 or v > 1.0):
+            raise ValueError("value must be in [0.0, 1.0]")
+        return v
+
+    def bias_multiplier(self, capability_name: str) -> float:
+        """Composed bias multiplier for a capability (positive × negative)."""
+        pos = self.capability_bias_positive.get(capability_name, 1.0)
+        neg = self.capability_bias_negative.get(capability_name, 1.0)
+        return pos * neg
+
+    def expands_candidate_set(self, capability_name: str) -> bool:
+        """A programme envelope ALWAYS expands (or preserves) the candidate set.
+
+        Because zero multipliers are rejected by the validator, no envelope
+        can strictly exclude a capability. This property encodes the
+        architectural axiom at read time — consumers can use it as a
+        self-check without depending on validator execution.
+        """
+        return self.bias_multiplier(capability_name) > 0.0
+
+
+class ProgrammeContent(BaseModel):
+    """Concrete content grounding — perception inputs, never scripted text.
+
+    Hapax-authored only; operator never populates these fields directly.
+    ``narrative_beat`` is a 1-2 sentence prose intent the programme
+    planner emits as *direction* for the narrative director — not a
+    scripted utterance Hapax reads aloud.
+    """
+
+    music_track_ids: list[str] = Field(default_factory=list)
+    operator_task_ref: str | None = None
+    research_objective_ref: str | None = None
+    narrative_beat: str | None = None
+    invited_capabilities: set[str] = Field(default_factory=set)
+
+    @field_validator("narrative_beat")
+    @classmethod
+    def _narrative_beat_is_direction_not_script(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        stripped = v.strip()
+        if not stripped:
+            return None
+        if len(stripped) > 500:
+            raise ValueError(
+                "narrative_beat > 500 chars — programme direction, not a scripted utterance"
+            )
+        return stripped
+
+
+class ProgrammeRitual(BaseModel):
+    """Entry / exit choreography marking the programme boundary."""
+
+    entry_signature_artefact: str | None = None
+    entry_ward_choreography: list[str] = Field(default_factory=list)
+    entry_substrate_palette_shift: str | None = None
+    exit_signature_artefact: str | None = None
+    exit_ward_choreography: list[str] = Field(default_factory=list)
+    exit_substrate_palette_shift: str | None = None
+    boundary_freeze_s: float = 4.0
+
+    @field_validator("boundary_freeze_s")
+    @classmethod
+    def _boundary_freeze_reasonable(cls, v: float) -> float:
+        if not math.isfinite(v) or v < 0.0 or v > 30.0:
+            raise ValueError(f"boundary_freeze_s={v!r} — must be in [0, 30] seconds")
+        return v
+
+
+class ProgrammeSuccessCriteria(BaseModel):
+    """How the programme knows it is done (or should abort).
+
+    Predicates are NAMES looked up by the programme-monitor loop, not
+    inline code. This keeps the primitive declarative and JSON-round-
+    trippable.
+    """
+
+    completion_predicates: list[str] = Field(default_factory=list)
+    abort_predicates: list[str] = Field(default_factory=list)
+    min_duration_s: float = 60.0
+    max_duration_s: float = 1800.0
+
+    @model_validator(mode="after")
+    def _durations_ordered(self) -> ProgrammeSuccessCriteria:
+        if self.min_duration_s < 0 or self.max_duration_s <= 0:
+            raise ValueError("durations must be positive")
+        if self.min_duration_s > self.max_duration_s:
+            raise ValueError(
+                f"min_duration_s={self.min_duration_s} > max_duration_s={self.max_duration_s}"
+            )
+        return self
+
+
+class Programme(BaseModel):
+    programme_id: str
+    role: ProgrammeRole
+    status: ProgrammeStatus = ProgrammeStatus.PENDING
+    planned_duration_s: float
+
+    actual_started_at: float | None = None
+    actual_ended_at: float | None = None
+
+    constraints: ProgrammeConstraintEnvelope = Field(default_factory=ProgrammeConstraintEnvelope)
+    content: ProgrammeContent = Field(default_factory=ProgrammeContent)
+    ritual: ProgrammeRitual = Field(default_factory=ProgrammeRitual)
+    success: ProgrammeSuccessCriteria = Field(default_factory=ProgrammeSuccessCriteria)
+
+    parent_show_id: str
+    parent_condition_id: str | None = None
+    notes: str = ""
+
+    @field_validator("programme_id", "parent_show_id")
+    @classmethod
+    def _nonempty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("id must be non-empty")
+        return v
+
+    @field_validator("planned_duration_s")
+    @classmethod
+    def _planned_positive(cls, v: float) -> float:
+        if not math.isfinite(v) or v <= 0.0:
+            raise ValueError("planned_duration_s must be > 0")
+        return v
+
+    @model_validator(mode="after")
+    def _end_after_start(self) -> Programme:
+        if (
+            self.actual_started_at is not None
+            and self.actual_ended_at is not None
+            and self.actual_ended_at < self.actual_started_at
+        ):
+            raise ValueError("actual_ended_at precedes actual_started_at")
+        return self
+
+    @property
+    def elapsed_s(self) -> float | None:
+        """Seconds since programme activation; ``None`` if not started."""
+        if self.actual_started_at is None:
+            return None
+        end = self.actual_ended_at if self.actual_ended_at is not None else time.time()
+        return max(0.0, end - self.actual_started_at)
+
+    def bias_multiplier(self, capability_name: str) -> float:
+        """Shortcut: ``self.constraints.bias_multiplier(name)``."""
+        return self.constraints.bias_multiplier(capability_name)
+
+    def expands_candidate_set(self, capability_name: str) -> bool:
+        """Shortcut: always True under the architectural axiom."""
+        return self.constraints.expands_candidate_set(capability_name)
+
+    def validate_soft_priors_only(self) -> None:
+        """Re-run the envelope validators — callable by consumers as a self-check."""
+        ProgrammeConstraintEnvelope.model_validate(self.constraints.model_dump())
