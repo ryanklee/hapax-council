@@ -25,6 +25,9 @@ References:
 
 from __future__ import annotations
 
+import logging
+import os
+import random
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, Literal, Protocol
@@ -39,6 +42,18 @@ __all__ = [
     "RiskAssessment",
     "SurfaceKind",
 ]
+
+_log = logging.getLogger(__name__)
+
+# D-27: Phase 6 egress audit wire — sampling per plan §Phase 6 lines 393-395.
+# blocks + high-risk = SAMPLE_HIGH (default 100%); low/none allowed = SAMPLE_LOW
+# (default 10%). Disable entirely with HAPAX_DEMONET_AUDIT=0 (incident response).
+# Async queue is the proper async-write path (D-27b follow-on); current sync
+# write hits a per-instance lock in the writer — acceptable for the recruitment
+# path because the lock contention is bounded by sampling.
+_AUDIT_ENABLED = os.environ.get("HAPAX_DEMONET_AUDIT", "1") != "0"
+_SAMPLE_LOW = float(os.environ.get("HAPAX_EGRESS_AUDIT_SAMPLE_LOW", "0.1"))
+_SAMPLE_HIGH = float(os.environ.get("HAPAX_EGRESS_AUDIT_SAMPLE_HIGH", "1.0"))
 
 
 class SurfaceKind(StrEnum):
@@ -108,19 +123,64 @@ def _max_risk(a: str, b: str) -> str:
     return a if _RISK_ORDER.get(a, 0) >= _RISK_ORDER.get(b, 0) else b
 
 
-def _record_and_return(assessment: RiskAssessment) -> RiskAssessment:
-    """Tick the gate-decisions counter and return the assessment unchanged.
+def _should_sample_audit(assessment: RiskAssessment) -> bool:
+    """Sampling decision per plan §Phase 6.
+
+    Always-write (sample=1.0): blocks (allowed=False), and any high-risk
+    decision regardless of allowed. These are governance-critical and the
+    audit must capture every one.
+
+    Sampled (sample=SAMPLE_LOW, default 10%): low/none-risk allowed
+    decisions. These are the high-volume mundane case from the recruitment
+    hot path; sampling keeps the JSONL bounded without losing the ability
+    to characterize traffic.
+
+    Off entirely when ``HAPAX_DEMONET_AUDIT=0`` (incident response).
+    """
+    if not _AUDIT_ENABLED:
+        return False
+    if not assessment.allowed or assessment.risk == "high":
+        return random.random() < _SAMPLE_HIGH
+    return random.random() < _SAMPLE_LOW
+
+
+def _record_and_return(
+    assessment: RiskAssessment,
+    *,
+    capability_name: str | None = None,
+    programme_id: str | None = None,
+) -> RiskAssessment:
+    """Tick the gate-decisions counter, append to the egress audit, return.
 
     Factored out of ``assess()`` so every return path increments the
-    Prometheus counter without sprawling inline calls. The counter is
-    a no-op when prometheus_client isn't installed (see
-    ``shared.governance.demonet_metrics``).
+    Prometheus counter and lands in the audit JSONL without sprawling
+    inline calls. The counter is a no-op when prometheus_client isn't
+    installed (see ``shared.governance.demonet_metrics``).
+
+    Audit write (D-27, plan §Phase 6) is sampled per ``_should_sample_audit``
+    and uses the module-level ``default_writer()`` singleton. Failures in
+    the audit path are logged but never propagated — the gate's correctness
+    cannot depend on disk I/O succeeding.
     """
     _METRICS.inc_gate_decision(
         risk=assessment.risk,
         allowed=assessment.allowed,
         surface=assessment.surface.value if assessment.surface else None,
     )
+    if capability_name and _should_sample_audit(assessment):
+        # Deferred import keeps the gate module's import graph independent
+        # of the audit writer for callers (e.g. tests) that mock both.
+        try:
+            from shared.governance.monetization_egress_audit import default_writer
+
+            default_writer().record(
+                capability_name=capability_name,
+                assessment=assessment,
+                surface=assessment.surface,
+                programme_id=programme_id,
+            )
+        except Exception:  # noqa: BLE001 — audit must never break the gate
+            _log.warning("egress audit write failed", exc_info=True)
     return assessment
 
 
@@ -162,6 +222,10 @@ class MonetizationRiskGate:
         ring1_risk: MonetizationRisk = candidate.payload.get("monetization_risk", "none")
         ring1_reason = candidate.payload.get("risk_reason") or ""
         name = candidate.capability_name
+        # D-27: extract programme_id once for audit propagation. Programme
+        # primitive carries `programme_id` per `shared/programme.py`; getattr
+        # keeps the gate's structural-typing contract.
+        programme_id = getattr(programme, "programme_id", None) if programme else None
 
         # Short-circuit: ring-1 high is authoritative — no Ring 2 call,
         # no Programme opt-in path. Saves the GPU round-trip on the
@@ -175,7 +239,9 @@ class MonetizationRiskGate:
                         " ()"
                     ),
                     surface=surface,
-                )
+                ),
+                capability_name=name,
+                programme_id=programme_id,
             )
 
         # Ring 2 pass — only when caller opted in + surface is broadcast.
@@ -209,7 +275,9 @@ class MonetizationRiskGate:
                             risk=effective_risk,  # type: ignore[arg-type]
                             reason=f"{name}: ring2 degraded → {ring2_reason}",
                             surface=surface,
-                        )
+                        ),
+                        capability_name=name,
+                        programme_id=programme_id,
                     )
 
         # Effective-risk-high path: Ring 2 escalated to high.
@@ -220,7 +288,9 @@ class MonetizationRiskGate:
                     risk=effective_risk,  # type: ignore[arg-type]
                     reason=f"{name}: ring2 escalated to high ({ring2_reason})",
                     surface=surface,
-                )
+                ),
+                capability_name=name,
+                programme_id=programme_id,
             )
         if effective_risk == "medium":
             opted_in = False
@@ -240,7 +310,9 @@ class MonetizationRiskGate:
                         risk=effective_risk,  # type: ignore[arg-type]
                         reason=f"{name}: medium-risk capability requires programme opt-in{detail}",
                         surface=surface,
-                    )
+                    ),
+                    capability_name=name,
+                    programme_id=programme_id,
                 )
             return _record_and_return(
                 RiskAssessment(
@@ -248,7 +320,9 @@ class MonetizationRiskGate:
                     risk=effective_risk,  # type: ignore[arg-type]
                     reason=f"{name}: medium-risk capability opted in by active programme",
                     surface=surface,
-                )
+                ),
+                capability_name=name,
+                programme_id=programme_id,
             )
         return _record_and_return(
             RiskAssessment(
@@ -256,7 +330,9 @@ class MonetizationRiskGate:
                 risk=effective_risk,  # type: ignore[arg-type]
                 reason=f"{name}: {effective_risk}-risk capability — passed",
                 surface=surface,
-            )
+            ),
+            capability_name=name,
+            programme_id=programme_id,
         )
 
     def candidate_filter(
