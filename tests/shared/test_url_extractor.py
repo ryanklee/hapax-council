@@ -99,3 +99,84 @@ class TestEndToEnd:
 
     def test_message_with_no_urls(self) -> None:
         assert extract_urls("just chatting nothing linkable") == []
+
+
+# ── B2 / L#27 — extended YouTube URL coverage ──────────────────────────
+
+
+class TestYouTubeUrlForms:
+    """Pin the URL forms operators paste in chat. Audit Low #27 flagged
+    that the extractor was tested against only watch?v=… and youtu.be
+    forms, missing shorts/live/m./music. + tracking-param obfuscation."""
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            "https://youtube.com/watch?v=dQw4w9WgXcQ",
+            "https://m.youtube.com/watch?v=dQw4w9WgXcQ",
+            "https://music.youtube.com/watch?v=dQw4w9WgXcQ",
+            "https://youtu.be/dQw4w9WgXcQ",
+            "https://www.youtube.com/shorts/abc123def",
+            "https://youtube.com/shorts/abc123def",
+            "https://www.youtube.com/live/dQw4w9WgXcQ",
+            "https://youtube.com/live/dQw4w9WgXcQ",
+            # Embed URLs (sometimes pasted from channel-page sources)
+            "https://www.youtube.com/embed/dQw4w9WgXcQ",
+            # Channel + playlist URLs (operators sometimes share the
+            # source channel rather than a single video)
+            "https://www.youtube.com/@SomeChannel",
+            "https://www.youtube.com/playlist?list=PLabc",
+        ],
+    )
+    def test_youtube_form_classifies_as_youtube(self, url: str) -> None:
+        """Every YouTube URL form a chat author might paste classifies
+        as `youtube` — not `other`. Subdomain (m./music./www.) +
+        path variant (watch/shorts/live/embed/@channel/playlist) all
+        route through the same kind label."""
+        assert classify_url(url) == "youtube", f"misclassified: {url}"
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=42s",
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLabc&index=3",
+            "https://youtu.be/dQw4w9WgXcQ?si=Tr4ckin9P4r4m",
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ#t=1m23s",
+            # UTM tracking — sometimes appended by share dialogs
+            ("https://www.youtube.com/watch?v=dQw4w9WgXcQ&utm_source=email&utm_medium=share"),
+        ],
+    )
+    def test_youtube_obfuscated_with_tracking_params(self, url: str) -> None:
+        """Tracking-param obfuscation (?si=, &utm_*=, &t=, #t=) does NOT
+        change the classification — these are still YouTube videos."""
+        extracted = extract_urls(f"check this {url} now")
+        assert url in extracted, f"extractor dropped param-laden URL: {url}"
+        assert classify_url(url) == "youtube"
+
+    def test_youtube_url_in_markdown_link(self) -> None:
+        """Operators sometimes paste markdown — the URL must come out
+        clean (no leading [, no trailing ))."""
+        msg = "watch [this](https://www.youtube.com/shorts/abc123)"
+        extracted = extract_urls(msg)
+        assert "https://www.youtube.com/shorts/abc123" in extracted
+
+    def test_youtube_url_with_trailing_punctuation(self) -> None:
+        """Common chat-end punctuation must be stripped without
+        collapsing into the URL."""
+        for trailer in (".", ",", "!", "?", ")", '"'):
+            msg = f"see https://youtu.be/abc{trailer}"
+            extracted = extract_urls(msg)
+            assert "https://youtu.be/abc" in extracted, f"trailing {trailer!r} broke extraction"
+
+    def test_multiple_youtube_forms_coexist(self) -> None:
+        msg = (
+            "old: https://www.youtube.com/watch?v=aaa "
+            "short: https://youtube.com/shorts/bbb "
+            "live: https://www.youtube.com/live/ccc "
+            "share: https://youtu.be/ddd?si=xxx"
+        )
+        extracted = extract_urls(msg)
+        kinds = {classify_url(u) for u in extracted}
+        assert kinds == {"youtube"}
+        assert len(extracted) == 4
