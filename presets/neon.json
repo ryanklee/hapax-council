@@ -1,6 +1,6 @@
 {
   "name": "Neon",
-  "description": "Synthwave glowing edges",
+  "description": "Synthwave glowing edges with cycling palette + audio-reactive cycle rate",
   "transition_ms": 500,
   "nodes": {
     "edge": {
@@ -10,10 +10,19 @@
         "color_mode": 0.0
       }
     },
+    "palette": {
+      "type": "palette_remap",
+      "params": {
+        "palette_id": 0.0,
+        "cycle_rate": 0.3,
+        "n_bands": 12.0,
+        "blend": 1.0
+      }
+    },
     "colorgrade": {
       "type": "colorgrade",
       "params": {
-        "brightness": 1.1,
+        "brightness": 0.85,
         "contrast": 1.2,
         "saturation": 1.2
       }
@@ -49,6 +58,10 @@
     ],
     [
       "edge",
+      "palette"
+    ],
+    [
+      "palette",
       "colorgrade"
     ],
     [
@@ -70,12 +83,12 @@
   ],
   "modulations": [
     {
-      "node": "colorgrade",
-      "param": "hue_rotate",
-      "source": "time",
-      "scale": 6.0,
-      "offset": 0.0,
-      "smoothing": 0.0
+      "node": "palette",
+      "param": "cycle_rate",
+      "source": "audio_energy",
+      "scale": 0.5,
+      "offset": 0.3,
+      "smoothing": 0.2
     }
   ]
 }

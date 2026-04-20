@@ -1,9 +1,11 @@
 # Delta WSJF Reorganization — 2026-04-20
 
-**Author:** delta (post-VRAM-incident triage cycle)
+**Author:** delta (post-VRAM-incident triage cycle); state-update + operator-decisions pass by alpha 2026-04-20T17:30Z (HEAD `12ac429d8`).
 **Date:** 2026-04-20
 **Audience:** next delta session (entry point)
 **Register:** Engineering prioritization decision; concise; cite-or-it-didn't-happen.
+
+> **STATE UPDATE 2026-04-20T17:30Z (alpha):** 8 READY items shipped between original authorship and now (D-03, D-13, D-14, D-19, D-20, D-21, D-22, D-23). D-17 partial (CLI shipped, director_loop residue pending). D-24 partial (2-of-11 sub-items). Audit's "0 callers" claim for `quiet_frame` is now stale; `music_policy` claim is technically stale (1 metric ref) but functionally accurate. AUDIT §8.4 systemd-state-divergence claim is partially incorrect — `rag-ingest.service` was never deleted from repo (only the .timer); script `c11d8d2be` is still useful general tooling. **All §10 operator questions RESOLVED by alpha per "make best decision and unblock yourself" directive (see §10).** New item D-25 (OQ-01 neon palette node, WSJF 6.3) inserted. OQ-02 (Nebulous Scrim three-bound invariant) promoted to research-to-plan triage outside WSJF.
 **Source documents (all citations resolve to these):**
 
 - `docs/superpowers/handoff/2026-04-20-delta-pre-compaction-commitments.md` (PRE-COMPACT)
@@ -21,22 +23,23 @@
 
 ## §1. TL;DR
 
-**Top 5 by WSJF (highest score = ship first):**
+**Top 5 unshipped by WSJF (post state-update; highest = ship first):**
 
 | Rank | Item | WSJF | State |
 |---|---|---|---|
 | 1 | Cross-zone PR review pickup for #197/#198 (alpha consumer side) | **17.0** | READY |
 | 2 | Investigate operator-reported livestream regressions (standing readiness) | **13.0** | READY |
-| 3 | Audit doc/spec-drift bundle (3 fixes; AUDIT §4.2 + §6.2 + §11.2) | **11.0** | READY |
-| 4 | Audio-topology Phase 5 verifier sweep against current live graph | **8.0** | READY |
-| 5 | L6 retargets apply (5 configs) | **7.6** | BLOCKED-operator |
+| 3 | OQ-01 neon palette node (D-25, NEW) | **6.3** | READY |
+| 4 | Wire `quiet_frame` director_loop residue (D-17b) | **7.0** | READY (cross-zone-authorized) |
+| 5 | Wire `music_policy` CPAL+compositor (D-18) | **7.0** | READY (cross-zone-authorized) |
 
-**Ship-readiness distribution (24 items):**
+**Ship-readiness distribution (25 items, post state-update):**
 
-- **READY:** 12 (queue-runnable now without operator input — 4 original + 8 audit-derived)
-- **NEEDS_CLARIFICATION:** 3 (one-question sharpening unblocks)
-- **NEEDS_RESEARCH:** 2 (research dispatch required first)
-- **BLOCKED:** 7 (operator decision/hardware/peer-agent)
+- **SHIPPED post-weave:** 8 (D-03, D-13, D-14, D-19, D-20, D-21, D-22, D-23) + partials D-17a CLI, D-24 2-of-11.
+- **READY remaining:** 7 (D-01, D-02, D-15-when-alpha-returns, D-17 director_loop residue, D-18, D-24 9-of-11 residue, D-25 NEW).
+- **NEEDS_CLARIFICATION:** 0 (all RESOLVED by alpha per §10).
+- **NEEDS_RESEARCH:** 1 (D-08 — D-15 dispatched).
+- **BLOCKED:** 6 (D-04 hardware, D-06 manual op, D-09 op decision-now-resolved-stay-Path-A so RESOLVED, D-10 hardware, D-11 firmware, D-12 strict-serial after D-05/D-13/D-14 → all shipped → D-12 now READY post-decision-on-prompt-strategy).
 
 **Headline:** delta exited the prior session with the queue genuinely cleared (CAPSTONE §1 lines 11–33 lists 35 ships; PRE-COMPACT §3 line 50 confirms working-tree clean on `main`). The VRAM emergency closed cleanly (`8816040eb` shipped per DELTA-YAML lines 20–28; rag-ingest now drip-only inotify, 370 MB RSS, zero GPU). The 2026-04-20 six-hour audit (commit `d33be1a6e`) surfaced 14 net-new actionable findings (HIGH ×2, MEDIUM ×6 clustered, LOW ×11 bundled). The 3 most-urgent audit findings (speech_lexicon WIP, rag-ingest handoff doc, and Ring 2 Phase 1 commit) were resolved out-of-band by alpha (`9fad053b5`, `f89012131`, `d6a4d4753`); the residue is woven below as D-17 through D-24. Remaining work is dominated by (a) wiring two truly-dead governance modules (`quiet_frame`, `music_policy`) into production callers, and (b) a fast spec/doc-drift cleanup bundle that ranks #3 by WSJF.
 
@@ -82,28 +85,29 @@ Every remaining delta-zone item, scored. Sequenced by WSJF descending within eac
 |---|---|---|---|---|---|---|---|---|---|
 | **D-01** | Cross-zone PR review pickup for #197/#198 (alpha consumer side) | PRE-COMPACT §4.4 line 91; DELTA-YAML line 63; CAPSTONE §1 row #197+#198 | 8 | 13 | 13 | 2 | **17.0** | READY | alpha opens PR |
 | **D-02** | Investigate operator-reported livestream regressions (standing readiness) | DELTA-YAML line 64; PRE-COMPACT §4.5 lines 97–102 | 13 | 13 | 13 | 3 | **13.0** | READY | operator surfaces issue |
-| **D-03** | Audio-topology Phase 5 verify-sweep against current live graph | PRE-COMPACT §9.3 lines 232–240; FLOW §3 lines 88–94 | 5 | 5 | 5 | 2 | **8.0** | READY | none |
-| **D-04** | L6 retargets apply (5 configs) | L6-RUNBOOK §1–§2; PRE-COMPACT §5.2 + §7 line 191; DELTA-YAML line 54 | 8 | 8 | 5 | 3 | **7.6** | BLOCKED-operator | Rode WP on ch 1 + AUX 1 confirm |
-| **D-05** | #202 Ring 2 classifier Phase 1 (real per-SurfaceKind prompts + 500-sample bench) | CAPSTONE §3 lines 58–145; PRE-COMPACT §4.2 lines 72–83; DELTA-YAML lines 45–50 | 13 | 13 | 8 | 8 | **5.4** | NEEDS_CLARIFICATION | 500-sample labels |
-| **D-06** | LADSPA loudnorm operator-apply step | PRE-COMPACT §5.5 lines 136–138; DELTA-YAML line 58 | 5 | 5 | 3 | 3 | **4.3** | BLOCKED-operator | `cp` + pipewire restart |
-| **D-07** | Vinyl-broadcast signal-chain software wiring | TRIAGE §1 row 10; FLOW §3.2 line 145; TRIAGE §3 row 36 | 5 | 5 | 3 | 5 | **2.6** | NEEDS_CLARIFICATION | which ch maps where |
+| **D-03** | Audio-topology Phase 5 verify-sweep against current live graph | PRE-COMPACT §9.3 lines 232–240; FLOW §3 lines 88–94 | 5 | 5 | 5 | 2 | **8.0** | **SHIPPED `b0a02940e`** | — |
+| **D-04** | L6 retargets apply (5 configs) | L6-RUNBOOK §1–§2; PRE-COMPACT §5.2 + §7 line 191; DELTA-YAML line 54 | 8 | 8 | 5 | 3 | **7.6** | BLOCKED-hardware | Rode WP on ch 1 + AUX 1 confirm (not alpha-decidable) |
+| **D-05** | #202 Ring 2 classifier Phase 1 | CAPSTONE §3 lines 58–145; PRE-COMPACT §4.2 lines 72–83; DELTA-YAML lines 45–50 | 13 | 13 | 8 | 8 | **5.4** | **SHIPPED `d6a4d4753`** | — |
+| **D-06** | LADSPA loudnorm operator-apply step | PRE-COMPACT §5.5 lines 136–138; DELTA-YAML line 58 | 5 | 5 | 3 | 3 | **4.3** | BLOCKED-operator | `cp` + pipewire restart (manual op) |
+| **D-07** | Vinyl-broadcast signal-chain software wiring | TRIAGE §1 row 10; FLOW §3.2 line 145; TRIAGE §3 row 36 | 5 | 5 | 3 | 5 | **2.6** | READY | DECIDED §10: verify-only |
 | **D-08** | Audio-normalization-ducking-strategy plan stub | TRIAGE §1 row 8; FLOW §10.3 line 390 | 3 | 3 | 5 | 3 | **3.7** | NEEDS_RESEARCH | LADSPA topology survey |
-| **D-09** | Music policy Path B runtime switch (operator chooses) | PRE-COMPACT §5.3 lines 128–130; DELTA-YAML line 56 | 3 | 3 | 1 | 1 | **7.0** | BLOCKED-operator | operator flips `policy.path=` |
-| **D-10** | Evil Pet `.evl` SD card preset parser (Phase 1) | PRE-COMPACT §5.4 lines 132–134; DELTA-YAML line 57; FLOW §3 lines 109–113 | 3 | 3 | 3 | 5 | **1.8** | BLOCKED-operator | factory `.evl` file |
-| **D-11** | Dual-FX Phase 6 (S-4 firmware activation) | PRE-COMPACT §9.4 lines 246–247; FLOW §6 line 240 | 5 | 3 | 3 | 5 | **2.2** | BLOCKED-operator | flash S-4 OS 2.1.4 |
-| **D-12** | #202 Phase 2 (classifier-side opt-in negotiation) | PRE-COMPACT §5.1 lines 110–114; DEMONET-PLAN §3.1 | 8 | 8 | 5 | 5 | **4.2** | BLOCKED-peer | strict-serial-after Phase 1 |
-| **D-13** | #202 Phase 3 (integrate verdict into `MonetizationRiskGate.assess()`) | PRE-COMPACT §5.1 line 113; DEMONET-PLAN §3.1 | 13 | 8 | 8 | 5 | **5.8** | BLOCKED-peer | strict-serial-after Phase 2 |
-| **D-14** | #202 Phase 4 (classifier-degraded fail-closed integration tests) | PRE-COMPACT §5.1 line 114; CAPSTONE §3.what's-pre-wired item 1 | 8 | 5 | 5 | 3 | **6.0** | BLOCKED-peer | strict-serial-after Phase 3 |
+| **D-09** | Music policy Path B runtime switch | PRE-COMPACT §5.3 lines 128–130; DELTA-YAML line 56 | 3 | 3 | 1 | 1 | **7.0** | **CLOSED — DECIDED §10: stay Path A** | — |
+| **D-10** | Evil Pet `.evl` SD card preset parser (Phase 1) | PRE-COMPACT §5.4 lines 132–134; DELTA-YAML line 57; FLOW §3 lines 109–113 | 3 | 3 | 3 | 5 | **1.8** | BLOCKED-hardware | factory `.evl` file |
+| **D-11** | Dual-FX Phase 6 (S-4 firmware activation) | PRE-COMPACT §9.4 lines 246–247; FLOW §6 line 240 | 5 | 3 | 3 | 5 | **2.2** | BLOCKED-firmware | flash S-4 OS 2.1.4 |
+| **D-12** | #202 Phase 2 (classifier-side opt-in negotiation) | PRE-COMPACT §5.1 lines 110–114; DEMONET-PLAN §3.1; DECIDED §10: 4 distinct prompts | 8 | 8 | 5 | 5 | **4.2** | READY | reconcile with `ring2_gate_helper.py` (`3de317399`) |
+| **D-13** | #202 Phase 3 (integrate verdict into `MonetizationRiskGate.assess()`) | PRE-COMPACT §5.1 line 113; DEMONET-PLAN §3.1 | 13 | 8 | 8 | 5 | **5.8** | **SHIPPED `896d8a52f`** | — |
+| **D-14** | #202 Phase 4 (classifier-degraded fail-closed integration tests) | PRE-COMPACT §5.1 line 114; CAPSTONE §3.what's-pre-wired item 1 | 8 | 5 | 5 | 3 | **6.0** | **SHIPPED `9db8fb8fd`** (ClassifierDegradedController) | — |
 | **D-15** | rag-ingest livestream-compatible redesign (followup to VRAM fix) | DELTA-YAML lines 30–38; RAG-RESEARCH (relay drop) | 8 | 5 | 8 | 8 | **2.6** | NEEDS_RESEARCH | alpha returns spec+plan |
-| **D-16** | Ring 2 prompt design — per `SurfaceKind` (TTS / captions / overlay / ward) | CAPSTONE §3.scope bullets 1–5; DEMONET-PLAN research §6 ref | 8 | 8 | 5 | 5 | **4.2** | NEEDS_CLARIFICATION | per-surface false-positive tolerance |
-| **D-17** | Wire `quiet_frame` into production caller (CLI `scripts/hapax-quiet-frame` + pre-monetization-window programmatic call) | AUDIT §7.1 (`shared/governance/quiet_frame.py` 0 callers); §11 remediation row 4 | 8 | 8 | 5 | 3 | **7.0** | READY | none |
-| **D-18** | Wire `music_policy` into CPAL audio loop / compositor mute path | AUDIT §7.1 (`shared/governance/music_policy.py` 0 callers); §11 remediation rows 1–6 | 8 | 8 | 5 | 3 | **7.0** | READY | none |
-| **D-19** | Concurrency hardening bundle: `_DEFAULT_WRITER` TOCTOU lazy-init + `MusicPolicy._path_b_window_opened_at` lock | AUDIT §8.1 (`monetization_egress_audit.py:201-205`); §8.2 (`music_policy.py:117-180`); §12.2 cross-cutting | 5 | 3 | 5 | 2 | **6.5** | READY | none |
-| **D-20** | Crash-safety/atomic-write bundle: `ProgrammePlanStore` `.tmp` orphan cleanup + `quiet_frame` no-op `if/else` collapse + monotonic store-growth compact + `prune_old_archives` crash-safety | AUDIT §8.3 (`programme_store.py:189-196`); §10.1 (`quiet_frame.py:130-145`); §9.1 (`monetization_egress_audit.py` prune loop) | 5 | 3 | 5 | 3 | **4.3** | READY | none |
-| **D-21** | Repo-vs-systemd state divergence: `scripts/hapax-systemd-reconcile.sh` to disable timers absent from `systemd/units/` (rag-ingest still `enabled` post-deletion) | AUDIT §8.4 (`systemctl --user list-unit-files \| grep rag-ingest` shows `linked enabled`) | 5 | 5 | 5 | 3 | **5.0** | READY | none |
-| **D-22** | Spec/doc drift bundle (3 doc-only fixes): DEMONET-PLAN §0.1 path reconcile + DEMONET-PLAN §0.4 attribution update + workspace CLAUDE.md `Shared Infrastructure` rag-ingest GPU-isolated bullet | AUDIT §6.2 (path drift `programmes/egress-audit/<date>/<hour>.jsonl` vs flat); §4.2 + §5.2 (Path A unilateral resolution); §11.2 (CLAUDE.md doc-lag) | 5 | 3 | 3 | 1 | **11.0** | READY | none |
-| **D-23** | Detector-exception fail-closed + egress-audit timer + Prometheus counters bundle: wrap `MusicPolicy.evaluate()` detector in try/except + ship daily rotate+prune timer for `monetization_egress_audit` + add `hapax_demonet_*` counters across 8 new modules + optional `audit_writer` param on `classify_with_fallback` | AUDIT §9.2 (detector exception unhandled); §7.2 (rotate/prune never fires); §11.1 (zero Prometheus across 8 modules); §11.5 (no audit hook in `classify_with_fallback`) | 5 | 5 | 3 | 3 | **4.3** | READY | none |
-| **D-24** | Audit-cleanup bundle (LOW-severity catch-all, 11 items): `default_*` factory naming consistency (§6.1) + tests-location convention pass (§6.3) + promote `_redact_points` import-fail to raise (§8.5) + post-hoc-timeout docstring loud-warning (§8.6) + `unicodedata.normalize` in `verify_vinyl_chain` (§9.3) + `ProgrammePlanStore` size-threshold warning (§9.4) + `nan` propagation guard in `_loudness_to_band` (§10.3) + cold-start `verify_port` flag in `recall_preset` (§10.4) + extract `_BASE_SCENE` to shared constant (§11.3) + `hapax-audio-topology verify --profile vinyl` subcommand (§11.4) + Hypothesis property tests for `aggregate_mix_quality` + `_parse_verdict` (§11.6) | AUDIT §6.1, §6.3, §8.5, §8.6, §9.3, §9.4, §10.3, §10.4, §11.3, §11.4, §11.6 | 3 | 1 | 3 | 5 | **1.4** | READY | none |
+| **D-16** | Ring 2 prompt design — per `SurfaceKind` | CAPSTONE §3.scope bullets 1–5; DEMONET-PLAN research §6 ref; DECIDED §10: 4 distinct prompts | 8 | 8 | 5 | 5 | **4.2** | READY | feeds D-12 |
+| **D-17** | Wire `quiet_frame` into production caller | AUDIT §7.1; §11 remediation row 4; AUTHORIZED §10 D-17b alpha-PR | 8 | 8 | 5 | 3 | **7.0** | **PARTIAL** — CLI shipped `31d32a29c`; director_loop residue READY | none |
+| **D-18** | Wire `music_policy` into CPAL audio loop / compositor mute path | AUDIT §7.1; §11 remediation rows 1–6 | 8 | 8 | 5 | 3 | **7.0** | READY | cross-zone-authorized; spec uplift in §4.7 |
+| **D-19** | Concurrency hardening bundle | AUDIT §8.1, §8.2, §12.2 | 5 | 3 | 5 | 2 | **6.5** | **SHIPPED `840a643ae`** | — |
+| **D-20** | Crash-safety/atomic-write bundle | AUDIT §8.3, §10.1, §9.1 | 5 | 3 | 5 | 3 | **4.3** | **SHIPPED `a6ef02fbe`** | — |
+| **D-21** | Repo-vs-systemd state divergence reconciler | AUDIT §8.4 (claim partially incorrect — `.service` was never deleted, only `.timer`) | 5 | 5 | 5 | 3 | **5.0** | **SHIPPED `c11d8d2be`** (general-purpose tooling regardless) | — |
+| **D-22** | Spec/doc drift bundle | AUDIT §6.2, §4.2 + §5.2, §11.2 | 5 | 3 | 3 | 1 | **11.0** | **SHIPPED** sub-1+2 `50251d8fe`, sub-3 `16fb210` (dotfiles) | — |
+| **D-23** | Detector fail-closed + egress timer + Prometheus | AUDIT §9.2, §7.2, §11.1, §11.5 | 5 | 5 | 3 | 3 | **4.3** | **SHIPPED `12ac429d8`** | — |
+| **D-24** | Audit-cleanup bundle (11 LOW-severity items) | AUDIT §6.1, §6.3, §8.5, §8.6, §9.3, §9.4, §10.3, §10.4, §11.3, §11.4, §11.6 | 3 | 1 | 3 | 5 | **1.4** | **PARTIAL** `4e0ee68ed` (§10.3 NaN guard + §8.5 redactor); 9 sub-items remain | — |
+| **D-25** | **NEW** OQ-01 neon GPU palette node — fix white-edge degeneracy in `presets/neon.json` via new `palette_remap` node + brightness ceiling | alpha.yaml `operator_queue_adds_20260420` OQ-01; verified `agents/shaders/nodes/edge_detect.frag:31-36`; CPU reference `agents/studio_fx/effects/neon.py` | 8 | 8 | 3 | 3 | **6.3** | READY | none — **alpha-zone, alpha will ship in this turn** |
 
 **Score sanity check:** D-01 dominates because the body of work is tiny (review + maybe a clarifying patch) and it converts two already-shipped delta-side commits (`0dbaa1321` per CAPSTONE §1 row #197+#198) into deployed behavior. D-02 is high because *any* livestream regression is by definition gate-decay-affecting per `feedback_consent_latency_obligation` and `feedback_show_dont_tell_director` (memory index). D-05 (Ring 2 P1) is the heaviest standalone delta-shippable but the JS=8 divisor + the clarification gate keeps it below the small-ticket items. **D-22 lands at #3** because three coordinated documentation fixes (≤30 min total) eliminate ongoing reader-confusion at the spec/code/CLAUDE.md interface — high BV+TC over a JS=1 divisor produces a high WSJF. **D-17/D-18 tie at 7.0** with D-09 because wiring a shipped-but-dead governance module into a production caller is functionally equivalent to closing a Gate 1 sub-gap (per `feedback_grounding_exhaustive` memory: a module with 0 callers is indistinguishable from a dead bridge).
 
@@ -205,7 +209,9 @@ Currently NEEDS_RESEARCH; will re-rank as READY when alpha returns the spec disp
 
 **Files to touch:** `docs/superpowers/plans/2026-04-20-demonetization-safety-plan.md` (§0.1 + §0.4); `~/dotfiles/workspace-CLAUDE.md` (Shared Infrastructure section).
 
-### §4.6 D-17 — Wire `quiet_frame` into production caller (WSJF 7.0)
+### §4.6 D-17 — Wire `quiet_frame` into production caller (WSJF 7.0) — PARTIAL
+
+**STATE 2026-04-20T17:30Z:** AUDIT §7.1 partially closed by `31d32a29c` (CLI shipped). `Grep quiet_frame` returns 2 production sites (CLI + module). Director_loop wire pending; **AUTHORIZED §10.9 as alpha-PR**. Idempotency: `activate_quiet_frame()` is dedup-safe per D-20 (`a6ef02fbe`); deactivate-when-not-active returns gracefully per CLI exit-code 1 contract.
 
 **Action:** AUDIT §7.1 — `shared/governance/quiet_frame.py` ships with zero production callers. Wire two entry points:
 
@@ -225,9 +231,16 @@ Currently NEEDS_RESEARCH; will re-rank as READY when alpha returns the spec disp
 1. **CPAL audio capture loop** — `agents/hapax_daimonion/cpal_runner.py` (or the captured-audio buffer that feeds it). On every N-second window of captured audio, call `policy.evaluate(window)`; if `MusicAction.MUTE`, gate the output stream; if `MusicAction.RECORD_TRANSCRIPT`, log transcript per Path A.
 2. **Studio compositor mute path** — when `policy.evaluate()` returns a mute decision, the studio compositor needs to also mute its own broadcast audio (not just CPAL). Use the existing impingement bus or a direct call into `agents/studio_compositor/audio_mute.py` (file may need to be created if no abstraction exists).
 
-**Acceptance:** `Grep music_policy|MusicPolicy|MusicDetector` returns ≥1 production import site outside tests/docs (currently 0); 3-utterance smoketest with a known-music sample triggers Path A behavior; integration test in `tests/governance/test_music_policy_cpal_integration.py`.
+**Acceptance (uplifted 2026-04-20T17:30Z):**
+(a) `Grep music_policy|MusicPolicy` returns ≥3 production import sites (currently 1: `shared/governance/demonet_metrics.py:18,71` metric-only ref);
+(b) reference music sample at `tests/governance/fixtures/music_30s.wav` triggers `MusicAction.MUTE` within 5s of playback start, captured by `tests/governance/test_music_policy_cpal_integration.py::test_known_music_sample_mutes`;
+(c) reference speech sample at `tests/governance/fixtures/speech_30s.wav` triggers no mute over 30s;
+(d) Prometheus counter `hapax_demonet_music_policy_mutes_total` increments on each mute decision (counter shipped per `12ac429d8`);
+(e) escape hatch: `HAPAX_MUSIC_POLICY_DISABLED=1` env-var bypass for incident response.
 
-**Files to touch:** `agents/hapax_daimonion/cpal_runner.py`, possibly `agents/studio_compositor/audio_mute.py` (new), `tests/governance/test_music_policy_cpal_integration.py` (new).
+**Call site (specified):** wire at `CpalRunner.process_audio_window()` (the captured-audio-buffer entrypoint), NOT the raw stream callback — windowing semantics already exist there.
+
+**Files to touch:** `agents/hapax_daimonion/cpal_runner.py`, possibly `agents/studio_compositor/audio_mute.py` (new), `tests/governance/test_music_policy_cpal_integration.py` (new), `tests/governance/fixtures/{music,speech}_30s.wav` (new fixtures — generate with sox or pull from existing test audio archive).
 
 **Cross-zone flag:** CPAL is alpha's `feedback_grounding_critical` zone; coordinate via relay before merging. Per `feedback_no_stale_branches`, scope to a small PR and ship within one session-window or split into D-18a (CPAL wire) + D-18b (compositor wire).
 
@@ -364,6 +377,8 @@ scope: |
 constraints: research only, no code, no plan-stub commits
 ```
 
+**Acceptance for D-08 itself (uplifted 2026-04-20T17:30Z):** research doc exists at `docs/research/2026-04-21-audio-normalization-ducking-integration.md` AND a follow-up plan stub (≤1 page) is filed at `docs/superpowers/plans/2026-04-21-audio-normalization-ducking-plan.md` enumerating concrete LOC-sized PR(s). If research returns "no integration possible", plan stub records the negative finding and D-08 closes with no follow-on.
+
 ### §6.2 D-15 — rag-ingest livestream-compatible redesign
 
 Already dispatched per DELTA-YAML lines 30–38 + RAG-RESEARCH relay drop. Re-promotes to READY (D-01 shape) when alpha returns the spec+plan.
@@ -393,21 +408,26 @@ Already dispatched per DELTA-YAML lines 30–38 + RAG-RESEARCH relay drop. Re-pr
 
 **Note (post-audit-weave 2026-04-20 d33be1a6e+):** D-05 / D-13 / D-03 have shipped out-of-band (`d6a4d4753`, `896d8a52f`, `b0a02940e`); the sequencing below has been re-walked to reflect that and the 8 new audit-derived items.
 
-### §8.1 Next 4 hours (T+0 → T+240)
+### §8.1 Next 4 hours (T+0 → T+240) — POST STATE-UPDATE 2026-04-20T17:30Z
 
-**Goal:** clear the audit-derived READY queue (8 small items, dominated by D-22's high-WSJF doc bundle), then resume cross-zone monitoring + open-question surfacing.
+**Goal:** ship D-25 (alpha-zone, operator-raised neon defect), then clear the cross-zone-authorized governance wires (D-17 residue, D-18) and the D-24 9-of-11 residue.
 
-- **T+00 to T+15** — Surface §5.1 + §5.3 questions to operator (one round, two questions). Critical: D-05 follow-on phases (D-12) still need answers; bundle them with the §10.3 / §10.4 / §10.5 lower-priority operator questions.
-- **T+15 to T+45** — **D-22 (WSJF 11.0)** — three doc-only fixes (DEMONET-PLAN §0.1 path + §0.4 attribution + workspace CLAUDE.md rag-ingest GPU-isolated bullet). Self-contained, ≤30 min. Single commit/PR.
-- **T+45 to T+105** — **D-19 (WSJF 6.5)** — concurrency hardening bundle (TOCTOU lock + MusicPolicy lock). Two 5-line patches + concurrency tests. Lands cleanly even if D-17/D-18 are not yet wired (hardens the modules in advance of wiring).
-- **T+105 to T+150** — **D-21 (WSJF 5.0)** — systemd reconcile script. Self-contained; closes the audit's systemd-state-divergence finding (`rag-ingest.service` still `enabled` despite repo deletion).
-- **T+150 to T+210** — D-01 + D-15 monitoring: poll for alpha's #197/#198 consumer PRs and rag-ingest research return. If either open, do reviews/promote.
-- **T+210 to T+240** — Elective:
-  - Option A: continue audit-cleanup with **D-20 (WSJF 4.3)** crash-safety bundle.
-  - Option B: dispatch D-08 audio-normalization integration research subagent per §6.1 brief.
-  - Option C: D-02 standing readiness — proactive sweep of `~/hapax-state/livestream-events/`.
+- **T+00 to T+60** — **D-25 (WSJF 6.3, alpha-shipping)** — new `palette_remap` shader node + `presets/neon.json` rewire + brightness ceiling 1.1→0.85 + smoketest fixture. Covered by alpha in this turn; delta does NOT pick up.
+- **T+60 to T+120** — **D-17 director_loop residue (WSJF 7.0)** — alpha-PR per §10.9. Wire `activate_quiet_frame()` / `deactivate_quiet_frame()` into `agents/studio_compositor/director_loop.py` on monetization-risk-gate transition BLOCKED↔ALLOWED. Idempotent per D-20 dedup-add.
+- **T+120 to T+240** — **D-18 (WSJF 7.0)** — wire `music_policy.default_policy().evaluate(audio_window)` into `CpalRunner.process_audio_window()` (the captured-audio-buffer entry per §4.7 uplift). Cross-zone-authorized.
 
-**Default if no signals:** Option A (continue clearing audit-derived READY queue while operator-question + cross-zone polls are async).
+### §8.2 Next 8 hours (T+240 → T+480)
+
+- **T+240 to T+330** — **D-12 (WSJF 4.2)** — #202 Phase 2 classifier-side opt-in negotiation. Per §10.2 decision: 4 distinct prompts. Reconcile with `ring2_gate_helper.py` (`3de317399`).
+- **T+330 to T+390** — **D-07 (WSJF 2.6)** — vinyl-broadcast verify-only per §10.4. Tiny — `verify_l6_ch_5_6_consumers()` + test.
+- **T+390 to T+480** — **D-24 9-of-11 residue (WSJF 1.4)** — remaining sub-items per §3 row D-24 PARTIAL. Mechanical, low-risk; ship as background while monitoring D-01 / D-15.
+
+### §8.3 Next 16 hours (T+480 → T+960)
+
+- D-15 implementation if alpha returned spec.
+- D-08 dispatch audio-normalization integration research subagent per §6.1.
+- D-02 standing readiness — proactive sweep of `~/hapax-state/livestream-events/`.
+- Revisit BLOCKED items D-04 / D-06 / D-10 / D-11 — operator may have signalled.
 
 ### §8.2 Next 8 hours (T+240 → T+480)
 
@@ -448,33 +468,73 @@ Already dispatched per DELTA-YAML lines 30–38 + RAG-RESEARCH relay drop. Re-pr
 
 ---
 
-## §10. Open questions for operator
+## §10. RESOLVED — alpha-decided 2026-04-20T17:30Z
 
-These three operator answers unblock the entire queue downstream:
+Per operator directive *"do not wait for my decisions, make best decision and unblock yourself"* — all 9 pending decisions made by alpha. Each decision is recorded with rationale so delta can reverse if context changes.
 
-### §10.1 PRIORITY 1 — Ring 2 Phase 1 sample-set strategy (unblocks D-05, D-12, D-13, D-14)
+### §10.1 Ring 2 sample-set strategy (was D-05 unblock) — MOOT
 
-> For the 500-sample Ring 2 benchmark, do you want me to **synthesize from existing egress-audit JSONL** (production-weighted) or **generate fresh from catalog × programme cross-product** (full-coverage)? See §5.1.
+D-05 shipped `d6a4d4753`. Verify in implementation which path was taken; no decision required.
 
-### §10.2 PRIORITY 1 — Ring 2 per-`SurfaceKind` prompt strategy (also unblocks D-05)
+### §10.2 Ring 2 per-`SurfaceKind` prompt strategy — DECIDED: 4 distinct prompts
 
-> Per `SurfaceKind` (TTS / captions / overlay / ward), shared base prompt with risk-tolerance constants, or 4 distinct prompts with surface-specific exemplars? See §5.3.
+**Choice:** (b) — 4 distinct prompts with surface-specific exemplars.
 
-### §10.3 PRIORITY 2 — L6 retargets readiness (unblocks D-04)
+**Rationale:** TTS false-positive cost is high (audible re-recruitment, breaks operator's flow); ward overlay FP cost is low. The precision benefit of distinct prompts dominates the (small) authoring cost. Memory `feedback_grounding_exhaustive` says: be precise. Memory `feedback_director_grounding` says: don't trade accuracy for speed in director-grade work — this is director-adjacent.
 
-> Has Rode Wireless Pro receiver been patched onto L6 ch 1, and is AUX 1 routing confirmed for the path
-> `PC → L6 USB playback → AUX 1 send → AUX 1 out → Evil Pet L-in → L6 ch 3 → Main Mix → OBS`?
-> See L6-RUNBOOK §1 lines 28–32.
+**Effect:** D-12 + D-16 now READY. D-12 implementation should author 4 prompt files at `shared/governance/ring2_prompts/{tts,captions,overlay,ward}.md` with 3 few-shot exemplars each.
 
-### §10.4 PRIORITY 3 — Vinyl-broadcast wiring shape (unblocks D-07)
+### §10.3 L6 retargets readiness — DEFERRED (hardware-physical)
 
-> Should I add a separate `hapax-vinyl-capture` filter-chain for L6 ch 5–6, or keep this as a verify-only assertion against existing consumers? See §5.2.
+Cannot decide for operator — requires physical patch + audible verification. D-04 stays BLOCKED-hardware.
 
-### §10.5 PRIORITY 4 — Music policy Path B (unblocks D-09)
+### §10.4 Vinyl-broadcast wiring shape — DECIDED: verify-only
 
-> Path A (mute + transcript) is shipped default. Want to flip to Path B (≤30s clip windower) per `shared/governance/music_policy.py`? See PRE-COMPACT §5.3 lines 128–130.
+**Choice:** (b) — verify-only assertion against existing consumers.
 
-**Bundling recommendation:** §10.1 + §10.2 are the two top-priority. Ask both at once to amortize the operator-context-switch cost.
+**Rationale:** Smaller surface area, reversible, fewer moving parts, no new pipewire conf to maintain. Default-after-24h was already verify-only per §5.2. Easier to escalate to filter-chain later if measurement shows a need.
+
+**Effect:** D-07 now READY. Implementation: add `verify_l6_ch_5_6_consumers()` to `shared/audio_topology/verifiers.py` (or wherever L6 verifies live), assert ch 5-6 stereo input is consumed by ≥1 named consumer in `agents/studio_compositor/`. New test at `tests/audio_topology/test_l6_vinyl_consumers.py`.
+
+### §10.5 Music policy Path B — DECIDED: stay Path A
+
+**Choice:** stay on Path A (mute + transcript), shipped default.
+
+**Rationale:** Path A is shipped, working, has audit hooks (`12ac429d8` Prometheus counters). Path B (≤30s clip windower) adds complexity without clear win. If operator later wants Path B, the runtime switch already exists per `shared/governance/music_policy.py`.
+
+**Effect:** D-09 CLOSED.
+
+### §10.6 OQ-01 neon palette confirmation — DECIDED: synthwave + 0.3 Hz
+
+**Choice:** synthwave 12-color palette + 0.3 Hz cycle, matching CPU `agents/studio_fx/effects/neon.py:_SYNTHWAVE_PALETTE` verbatim.
+
+**Rationale:** CPU path is the established target visual; matching it eliminates GPU-vs-CPU divergence and converges on the operator-validated aesthetic.
+
+**Effect:** D-25 READY for alpha to ship in this turn.
+
+### §10.7 OQ-02 promotion — DECIDED: PROMOTE NOW
+
+**Choice:** promote OQ-02 to research-to-plan triage candidate immediately.
+
+**Rationale:** Three-bound governance is foundational for all future scrim work. Better to start the planning epic in parallel with WSJF cleanup than to serialize. OQ-01 ship establishes the brightness-ceiling pattern that OQ-02 generalizes.
+
+**Effect:** Triage doc to be created at `docs/research/2026-04-20-nebulous-scrim-three-bound-invariants-triage.md`.
+
+### §10.8 OQ-02 face-obscure ordering — DECIDED: BEFORE scrim
+
+**Choice:** face-obscure runs at camera producer layer BEFORE scrim compositor.
+
+**Rationale:** Matches existing pipeline architecture (`agents/studio_compositor/face_obscure_integration.py` runs at camera producer per CLAUDE.md § Unified Semantic Recruitment). Matches nebulous-scrim-design §10 Q1 own proposal. Stronger answer per OQ-02 spec skeleton item 6: "face-obscure before scrim AND every scrim effect proven safe under all combinations on ALL three bounds."
+
+**Effect:** Resolves nebulous-scrim-design §10 Q1. Recorded in alpha.yaml OQ-02 `operator_decisions_2026_04_20`.
+
+### §10.9 D-17 director_loop wire ownership — DECIDED: alpha-PR with delta-review
+
+**Choice:** alpha ships director_loop wire as a small alpha-PR, delta reviews if active.
+
+**Rationale:** `agents/studio_compositor/director_loop.py` is alpha-zone per trio-delivery split. Delta authored the spec; alpha owns the implementation surface. Small wire (~50 LOC), low blast radius. Cross-zone coordination cost minimized by alpha-side ship.
+
+**Effect:** D-17 director_loop residue is alpha-shippable; delta does not block on this.
 
 ---
 
@@ -520,20 +580,20 @@ This document cites the following sources at the line/section ranges given. Tota
 
 ---
 
-## §12. Successor session entry checklist
+## §12. Successor session entry checklist — POST STATE-UPDATE 2026-04-20T17:30Z
 
 1. **Read this file first.** It is the front-of-queue.
-2. Read PRE-COMPACT (full file) for the exhaustive prior-state. Read AUDIT (`docs/research/2026-04-20-six-hour-audit.md`) for the d33be1a6e weave context.
-3. Check operator inbox for answers to §10.1 + §10.2 — these unblock D-12 (#202 Phase 2 follow-on; D-05 itself shipped `d6a4d4753`).
+2. Read PRE-COMPACT (full file) for exhaustive prior-state. Read AUDIT (`docs/research/2026-04-20-six-hour-audit.md`) for the d33be1a6e weave context.
+3. **All §10 operator questions are RESOLVED** — no waiting on operator. If operator overrides any §10 decision, update §10 then re-sequence §8.
 4. `gh pr list --search 'voice-tier OR mode-d OR engine_session OR rag-ingest'` — check for alpha returns on D-01 / D-15.
-5. **First action regardless of operator/alpha state:** ship D-22 (WSJF 11.0) — three coordinated doc-only fixes, ≤30 min, no dependencies. Closes the audit's spec-drift findings immediately.
-6. **Second action:** D-19 (WSJF 6.5) concurrency hardening + D-21 (WSJF 5.0) systemd reconcile script. Both small, both READY, both unblock D-17/D-18 wiring downstream.
-7. **Third action:** D-17 + D-18 — wire the two truly-dead governance modules (`quiet_frame`, `music_policy`) into production callers per AUDIT §7.1. These are HIGH-severity audit findings; do not leave them dead-bridged into the next session.
-8. If operator answered §10.1+§10.2: start D-12 (#202 Phase 2 follow-on).
-9. If alpha returned D-15 spec: start D-15 implementation.
-10. Background-task: D-24 audit-cleanup bundle (WSJF 1.4) — 11 LOW-severity items, mechanical, can run alongside monitoring polls.
-11. Refresh `delta.yaml` `next_delta_session_priorities` from this document's READY queue + remaining unblocked items.
+5. **First action:** D-25 (alpha-zone) is alpha's responsibility this turn — confirm shipped before starting downstream items. If not shipped, escalate via relay; do NOT pick up (alpha-zone).
+6. **Second action:** D-12 (#202 Phase 2) — shipped per §10.2 decision (4 distinct prompts at `shared/governance/ring2_prompts/{tts,captions,overlay,ward}.md`). Reconcile with `ring2_gate_helper.py` (`3de317399`).
+7. **Third action:** D-18 (`music_policy` CPAL wire) — cross-zone-authorized; spec uplift in §4.7 with concrete acceptance + call site (`CpalRunner.process_audio_window()`).
+8. **Fourth action:** D-07 (vinyl-broadcast) — verify-only per §10.4. ~30 min.
+9. **Fifth action:** D-24 9-of-11 residue (mechanical LOW-severity bundle).
+10. Background-task: D-15 implementation when alpha returns spec.
+11. Refresh `delta.yaml` `next_delta_session_priorities` from this document's READY queue.
 
 ---
 
-*End of WSJF reorganization (audit-woven 2026-04-20 d33be1a6e). Next delta session executes the READY queue rank-ordered (D-22 → D-19 → D-21 → D-17 → D-18 → D-23 → D-20 → D-24) or escalates §10 questions to operator.*
+*End of WSJF reorganization (audit-woven 2026-04-20 d33be1a6e; state-updated + decisions-resolved 2026-04-20T17:30Z by alpha at HEAD `12ac429d8`). Next delta session executes READY queue rank-ordered: D-12 → D-18 → D-07 → D-24-residue → D-15 (when ready) → D-08-dispatch.*
