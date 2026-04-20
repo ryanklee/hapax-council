@@ -1,0 +1,43 @@
+# Voice routing paths — dual-FX topology map.
+#
+# Four addressable paths the voice-tier router can pick between. The
+# tier dictates the path in docs/superpowers/plans/2026-04-20-dual-fx-
+# routing-plan.md §3; operator can override via hapax-voice-tier CLI.
+#
+# Path names are lower_snake_case because they appear as selection
+# tokens in code paths; audio topology node ids stay kebab-case.
+paths:
+  dry:
+    description: Ryzen analog only, no DSP. Maximum intelligibility.
+    sink: alsa_output.pci-0000_73_00.6.analog-stereo
+    via_evil_pet: false
+    via_s4: false
+    default_for_tiers: [unadorned]
+  radio:
+    description: S-4 USB-direct pitched/reverb FX; no granular.
+    sink: alsa_output.usb-Torso_Electronics_S-4
+    via_evil_pet: false
+    via_s4: true
+    default_for_tiers: [radio]
+  evil_pet:
+    description: Ryzen → L6 ch 5 → AUX 1 → Evil Pet → return.
+    sink: alsa_output.pci-0000_73_00.6.analog-stereo
+    via_evil_pet: true
+    via_s4: false
+    # T2 through T4 route through Evil Pet. T5/T6 also route here
+    # (engine-engaged) but claim the granular-engine mutex — see
+    # shared.evil_pet_state.acquire_engine.
+    default_for_tiers:
+      - broadcast_ghost
+      - memory
+      - underwater
+      - granular_wash
+      - obliterated
+  both:
+    description: Parallel — S-4 direct alongside Evil Pet for wide stereo.
+    sink: alsa_output.pci-0000_73_00.6.analog-stereo
+    via_evil_pet: true
+    via_s4: true
+    # No tier defaults to both by construction; the narrative
+    # director can request it for specific high-salience impingements.
+    default_for_tiers: []
