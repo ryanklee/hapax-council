@@ -1,0 +1,17 @@
+[Unit]
+Description=hapax — reconcile systemd user units against council repo
+Documentation=file:///home/hapax/projects/hapax-council/docs/superpowers/handoff/2026-04-20-delta-wsjf-reorganization.md
+OnFailure=notify-failure@%n.service
+# Run as dry-run by default. Operator opts into --apply via a drop-in
+# override if they want automatic disable+unlink; safer default is to
+# detect drift + rely on the non-zero exit code propagating to ntfy.
+ExecStart=/home/hapax/projects/hapax-council/scripts/hapax-systemd-reconcile.sh
+
+[Service]
+Type=oneshot
+Nice=19
+StandardOutput=journal
+StandardError=journal
+# Non-zero exit from the script (drift detected in dry-run) is the
+# signal — do not let it trigger a restart loop.
+RestartPreventExitStatus=1

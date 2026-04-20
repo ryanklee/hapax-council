@@ -1,0 +1,14 @@
+[Unit]
+Description=hapax — daily systemd user unit drift check
+Documentation=file:///home/hapax/projects/hapax-council/docs/superpowers/handoff/2026-04-20-delta-wsjf-reorganization.md
+
+[Timer]
+# Daily at 03:15 local — aligns with claude-md-audit.timer precedent
+# (low-activity window; no conflict with rebuild-services cascade).
+OnCalendar=*-*-* 03:15:00
+Persistent=true
+RandomizedDelaySec=300
+Unit=hapax-systemd-reconcile.service
+
+[Install]
+WantedBy=timers.target
