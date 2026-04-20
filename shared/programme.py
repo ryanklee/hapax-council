@@ -112,6 +112,16 @@ class ProgrammeConstraintEnvelope(BaseModel):
     display_density: ProgrammeDisplayDensity | None = None
     consent_scope: str | None = None
 
+    # Voice tier band override — Phase 3 integration with voice-tier
+    # spectrum. When set, overrides the ProgrammeRole default band from
+    # _ROLE_TIER_DEFAULTS. Represents the structural-director's per-
+    # Programme prior; the narrative-director still picks inside it.
+    # Tuple of (low, high) tier IntEnum values; validator checks
+    # low ≤ high. Unset = "use the role default" (soft prior, never
+    # exclusion). Research §2.2 of 2026-04-20-voice-tier-director-
+    # integration.md.
+    voice_tier_band_prior: tuple[int, int] | None = None
+
     @field_validator("capability_bias_negative")
     @classmethod
     def _negative_bias_strictly_positive(cls, v: dict[str, float]) -> dict[str, float]:
@@ -150,6 +160,20 @@ class ProgrammeConstraintEnvelope(BaseModel):
     def _cadence_positive(cls, v: float | None) -> float | None:
         if v is not None and (not math.isfinite(v) or v <= 0.0):
             raise ValueError("cadence prior must be > 0 seconds")
+        return v
+
+    @field_validator("voice_tier_band_prior")
+    @classmethod
+    def _voice_tier_band_well_ordered(cls, v: tuple[int, int] | None) -> tuple[int, int] | None:
+        if v is None:
+            return v
+        low, high = v
+        if not (0 <= low <= 6 and 0 <= high <= 6):
+            raise ValueError(
+                f"voice_tier_band_prior={v!r} — each bound must be in 0..6 (VoiceTier range)."
+            )
+        if low > high:
+            raise ValueError(f"voice_tier_band_prior={v!r} — low ({low}) must be ≤ high ({high}).")
         return v
 
     @field_validator("surface_threshold_prior", "reverie_saturation_target")

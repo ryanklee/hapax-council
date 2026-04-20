@@ -7,12 +7,17 @@ from unittest.mock import MagicMock
 import pytest
 
 from shared.voice_tier import (
+    _ROLE_TIER_DEFAULTS,
     TIER_CATALOG,
     TIER_NAMES,
+    RoleTierBand,
     TierProfile,
     VoiceTier,
     apply_tier,
     profile_for,
+    resolve_tier,
+    role_tier_band,
+    stance_tier_delta,
     tier_from_name,
 )
 
@@ -179,6 +184,208 @@ class TestApplyTier:
             # Third positional or 'level' kwarg
             level = call.kwargs.get("level", call.args[2] if len(call.args) > 2 else None)
             assert level == 0.0
+
+
+class TestRoleTierBand:
+    """§2 of 2026-04-20-voice-tier-director-integration.md — per-role bands."""
+
+    def test_all_twelve_programme_roles_covered(self) -> None:
+        """Every ProgrammeRole value has a default band entry."""
+        from shared.programme import ProgrammeRole
+
+        for role in ProgrammeRole:
+            assert role.value in _ROLE_TIER_DEFAULTS
+
+    def test_all_seven_tiers_appear_somewhere(self) -> None:
+        """§2.1 coverage check — no tier is unused by the role map."""
+        tiers_seen: set[VoiceTier] = set()
+        for band in _ROLE_TIER_DEFAULTS.values():
+            low, high = band.default_band
+            for t in VoiceTier:
+                if int(low) <= int(t) <= int(high):
+                    tiers_seen.add(t)
+            tiers_seen |= band.excursion_set
+        assert tiers_seen == set(VoiceTier)
+
+    def test_bands_well_ordered(self) -> None:
+        for band in _ROLE_TIER_DEFAULTS.values():
+            assert int(band.default_band[0]) <= int(band.default_band[1])
+
+    def test_role_tier_band_accepts_enum_and_string(self) -> None:
+        from shared.programme import ProgrammeRole
+
+        by_enum = role_tier_band(ProgrammeRole.TUTORIAL)
+        by_str = role_tier_band("tutorial")
+        assert by_enum is by_str
+        assert isinstance(by_enum, RoleTierBand)
+
+    def test_role_tier_band_raises_on_unknown(self) -> None:
+        with pytest.raises(KeyError):
+            role_tier_band("not-a-role")
+
+    def test_tutorial_locked_to_t0(self) -> None:
+        """TUTORIAL: default band = T0 only; excursion T1 only."""
+        band = role_tier_band("tutorial")
+        assert band.default_band == (VoiceTier.UNADORNED, VoiceTier.UNADORNED)
+        assert band.excursion_set == frozenset({VoiceTier.RADIO})
+
+    def test_ritual_is_non_contiguous(self) -> None:
+        """RITUAL: anchor at T0, markers at T5/T6 — no middle band."""
+        band = role_tier_band("ritual")
+        assert band.default_band == (VoiceTier.UNADORNED, VoiceTier.UNADORNED)
+        assert band.excursion_set == frozenset({VoiceTier.GRANULAR_WASH, VoiceTier.OBLITERATED})
+
+    def test_ambient_has_no_excursions(self) -> None:
+        """AMBIENT must not abruptly wake the room — no excursions."""
+        assert role_tier_band("ambient").excursion_set == frozenset()
+
+    def test_experiment_spans_all_tiers(self) -> None:
+        """EXPERIMENT: structural director free across full ladder."""
+        band = role_tier_band("experiment")
+        assert band.default_band == (VoiceTier.UNADORNED, VoiceTier.OBLITERATED)
+
+
+class TestStanceTierDelta:
+    def test_seeking_biases_up(self) -> None:
+        assert stance_tier_delta("seeking") == 1
+
+    def test_nominal_zero(self) -> None:
+        assert stance_tier_delta("nominal") == 0
+
+    def test_cautious_zero(self) -> None:
+        assert stance_tier_delta("cautious") == 0
+
+    def test_degraded_returns_zero_delta(self) -> None:
+        """DEGRADED is handled by resolve_tier's cap, not additive delta."""
+        assert stance_tier_delta("degraded") == 0
+
+    def test_critical_returns_zero_delta(self) -> None:
+        """CRITICAL is handled by resolve_tier's clamp, not additive delta."""
+        assert stance_tier_delta("critical") == 0
+
+    def test_accepts_enum(self) -> None:
+        from shared.stimmung import Stance
+
+        assert stance_tier_delta(Stance.SEEKING) == 1
+        assert stance_tier_delta(Stance.NOMINAL) == 0
+
+
+class TestResolveTier:
+    """§3 + §3.2 — stance × band resolver."""
+
+    def test_nominal_picks_baseline(self) -> None:
+        """NOMINAL + listening (band 0–2) → baseline = ceil((0+2)/2) = 1."""
+        result = resolve_tier("listening", "nominal")
+        assert result == VoiceTier.RADIO
+
+    def test_seeking_biases_up_within_band(self) -> None:
+        """SEEKING +1 from baseline 1 → tier 2, still in band (0..2)."""
+        result = resolve_tier("listening", "seeking")
+        assert result == VoiceTier.BROADCAST_GHOST
+
+    def test_seeking_clamped_to_band_high(self) -> None:
+        """SEEKING cannot push past band_high."""
+        # Tutorial band is (0, 0), baseline 0, SEEKING +1 → clamps to 0.
+        result = resolve_tier("tutorial", "seeking")
+        assert result == VoiceTier.UNADORNED
+
+    def test_critical_clamps_to_band_low(self) -> None:
+        """CRITICAL → band_low regardless of role band."""
+        # Hothouse_pressure band (3,5). CRITICAL forces band_low = 3.
+        assert resolve_tier("hothouse_pressure", "critical") == VoiceTier.MEMORY
+        # Tutorial band (0,0). CRITICAL also 0.
+        assert resolve_tier("tutorial", "critical") == VoiceTier.UNADORNED
+
+    def test_degraded_caps_at_tier_3(self) -> None:
+        """DEGRADED caps at min(band_high, TIER_MEMORY)."""
+        # Experiment band (0,6). DEGRADED cap min(6,3) = MEMORY.
+        assert resolve_tier("experiment", "degraded") == VoiceTier.MEMORY
+        # Listening band (0,2). DEGRADED cap min(2,3) = 2.
+        assert resolve_tier("listening", "degraded") == VoiceTier.BROADCAST_GHOST
+
+    def test_degraded_band_low_above_three_clamps_to_low(self) -> None:
+        """If band_low > TIER_MEMORY, DEGRADED clamps to band_low."""
+        # Synthetic band (4,6). DEGRADED would normally cap at 3 but
+        # band_low=4 > 3, so we clamp to band_low.
+        result = resolve_tier(
+            "experiment",
+            "degraded",
+            programme_band_prior=(VoiceTier.UNDERWATER, VoiceTier.OBLITERATED),
+        )
+        assert result == VoiceTier.UNDERWATER
+
+    def test_programme_override_overrides_role(self) -> None:
+        """An explicit programme band prior overrides the role default."""
+        # Tutorial would normally return T0 for nominal; override band
+        # to (3,5) shifts baseline to 4.
+        result = resolve_tier(
+            "tutorial",
+            "nominal",
+            programme_band_prior=(VoiceTier.MEMORY, VoiceTier.GRANULAR_WASH),
+        )
+        assert result == VoiceTier.UNDERWATER
+
+    def test_programme_override_rejects_inverted_band(self) -> None:
+        with pytest.raises(ValueError, match="low must be"):
+            resolve_tier(
+                "tutorial",
+                "nominal",
+                programme_band_prior=(VoiceTier.MEMORY, VoiceTier.RADIO),
+            )
+
+    def test_accepts_enum_inputs(self) -> None:
+        from shared.programme import ProgrammeRole
+        from shared.stimmung import Stance
+
+        result = resolve_tier(ProgrammeRole.LISTENING, Stance.NOMINAL)
+        assert result == VoiceTier.RADIO
+
+    def test_ritual_steady_tick_returns_anchor(self) -> None:
+        """RITUAL: steady tick lands on the T0 anchor, not the T5-6 marker.
+
+        Excursion to marker happens via a separate code path (§4.2), not
+        via the resolver.
+        """
+        assert resolve_tier("ritual", "nominal") == VoiceTier.UNADORNED
+        assert resolve_tier("ritual", "seeking") == VoiceTier.UNADORNED
+
+
+class TestProgrammeVoiceTierBandPrior:
+    """Programme envelope field validator for voice_tier_band_prior."""
+
+    def test_accepts_well_ordered_tuple(self) -> None:
+        from shared.programme import ProgrammeConstraintEnvelope
+
+        env = ProgrammeConstraintEnvelope(voice_tier_band_prior=(1, 3))
+        assert env.voice_tier_band_prior == (1, 3)
+
+    def test_accepts_equal_bounds(self) -> None:
+        from shared.programme import ProgrammeConstraintEnvelope
+
+        env = ProgrammeConstraintEnvelope(voice_tier_band_prior=(2, 2))
+        assert env.voice_tier_band_prior == (2, 2)
+
+    def test_rejects_inverted(self) -> None:
+        from pydantic import ValidationError
+
+        from shared.programme import ProgrammeConstraintEnvelope
+
+        with pytest.raises(ValidationError, match="low .* must be"):
+            ProgrammeConstraintEnvelope(voice_tier_band_prior=(4, 1))
+
+    def test_rejects_out_of_range(self) -> None:
+        from pydantic import ValidationError
+
+        from shared.programme import ProgrammeConstraintEnvelope
+
+        with pytest.raises(ValidationError, match="0..6"):
+            ProgrammeConstraintEnvelope(voice_tier_band_prior=(0, 7))
+
+    def test_none_default(self) -> None:
+        from shared.programme import ProgrammeConstraintEnvelope
+
+        env = ProgrammeConstraintEnvelope()
+        assert env.voice_tier_band_prior is None
 
 
 class TestTierFromName:

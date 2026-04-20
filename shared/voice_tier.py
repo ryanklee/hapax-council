@@ -43,7 +43,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import IntEnum
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from shared.programme import ProgrammeRole
+    from shared.stimmung import Stance
 
 
 class VoiceTier(IntEnum):
@@ -289,6 +293,182 @@ def apply_tier(
                 midi_output.send_cc(channel=channel, cc=cc, value=value)
             except Exception:  # pragma: no cover — tolerate MIDI-down case
                 pass
+
+
+@dataclass(frozen=True)
+class RoleTierBand:
+    """Per-ProgrammeRole default tier band + excursion whitelist.
+
+    ``default_band`` is the (low, high) structural band the structural
+    director picks inside for a steady-state tick. ``excursion_set`` is
+    the whitelist of tiers the narrative director may *jump to* for a
+    single tick on an explicit impingement trigger (§4.2 of
+    2026-04-20-voice-tier-director-integration.md), bypassing the band
+    clamp. Excursion triggers are rate-limited (one per 60 s per
+    Programme instance) — that stateful guard is the narrative
+    director's concern, not this data's.
+    """
+
+    default_band: tuple[VoiceTier, VoiceTier]
+    excursion_set: frozenset[VoiceTier] = field(default_factory=frozenset)
+
+
+# Per-role defaults — see §2 of 2026-04-20-voice-tier-director-integration.md.
+#
+# Non-contiguous bands (RITUAL: TIER_0 *or* TIER_5-6) are encoded with the
+# anchor as the default band and the marker tiers in excursion_set — the
+# selector returns the anchor on a steady tick, and the narrative director
+# flips to the marker via an explicit excursion request on ritual beats.
+# This preserves the "no middle band" rule of RITUAL (the resolver would
+# never silently land between the two bands).
+_ROLE_TIER_DEFAULTS: dict[str, RoleTierBand] = {
+    # Keyed by ProgrammeRole.value (StrEnum). Lookup via role.value so
+    # this module has zero runtime coupling to shared.programme — the
+    # ProgrammeRole import is annotation-only (TYPE_CHECKING).
+    "listening": RoleTierBand(
+        default_band=(VoiceTier.UNADORNED, VoiceTier.BROADCAST_GHOST),
+        excursion_set=frozenset({VoiceTier.MEMORY}),
+    ),
+    "showcase": RoleTierBand(
+        default_band=(VoiceTier.RADIO, VoiceTier.MEMORY),
+        excursion_set=frozenset({VoiceTier.UNDERWATER}),
+    ),
+    "ritual": RoleTierBand(
+        default_band=(VoiceTier.UNADORNED, VoiceTier.UNADORNED),
+        excursion_set=frozenset({VoiceTier.GRANULAR_WASH, VoiceTier.OBLITERATED}),
+    ),
+    "interlude": RoleTierBand(
+        default_band=(VoiceTier.BROADCAST_GHOST, VoiceTier.MEMORY),
+        excursion_set=frozenset({VoiceTier.UNDERWATER}),
+    ),
+    "work_block": RoleTierBand(
+        default_band=(VoiceTier.UNADORNED, VoiceTier.RADIO),
+        excursion_set=frozenset({VoiceTier.BROADCAST_GHOST}),
+    ),
+    "tutorial": RoleTierBand(
+        default_band=(VoiceTier.UNADORNED, VoiceTier.UNADORNED),
+        excursion_set=frozenset({VoiceTier.RADIO}),
+    ),
+    "wind_down": RoleTierBand(
+        default_band=(VoiceTier.BROADCAST_GHOST, VoiceTier.UNDERWATER),
+        excursion_set=frozenset({VoiceTier.GRANULAR_WASH}),
+    ),
+    "hothouse_pressure": RoleTierBand(
+        default_band=(VoiceTier.MEMORY, VoiceTier.GRANULAR_WASH),
+        excursion_set=frozenset({VoiceTier.OBLITERATED}),
+    ),
+    "ambient": RoleTierBand(
+        default_band=(VoiceTier.UNADORNED, VoiceTier.BROADCAST_GHOST),
+        excursion_set=frozenset(),
+    ),
+    "experiment": RoleTierBand(
+        default_band=(VoiceTier.UNADORNED, VoiceTier.OBLITERATED),
+        excursion_set=frozenset(),
+    ),
+    "repair": RoleTierBand(
+        default_band=(VoiceTier.UNADORNED, VoiceTier.UNADORNED),
+        excursion_set=frozenset({VoiceTier.RADIO}),
+    ),
+    "invitation": RoleTierBand(
+        default_band=(VoiceTier.UNADORNED, VoiceTier.RADIO),
+        excursion_set=frozenset({VoiceTier.BROADCAST_GHOST}),
+    ),
+}
+
+
+def role_tier_band(role: ProgrammeRole | str) -> RoleTierBand:
+    """Look up the ``RoleTierBand`` for a ``ProgrammeRole``.
+
+    Accepts either the enum or the raw string value (StrEnum equality).
+    Raises ``KeyError`` on unknown roles — mirrors ``profile_for``.
+    """
+    key = role.value if hasattr(role, "value") else str(role)
+    return _ROLE_TIER_DEFAULTS[key]
+
+
+def stance_tier_delta(stance: Stance | str) -> int:
+    """Per-stance additive tier bias, before DEGRADED/CRITICAL override.
+
+    Per §3.1: SEEKING → +1 (tracks exploration_deficit); all other
+    non-override stances return 0. DEGRADED/CRITICAL are *not* additive
+    — they clamp/cap instead — and ``resolve_tier`` handles them before
+    this delta is even consulted.
+    """
+    key = stance.value if hasattr(stance, "value") else str(stance)
+    if key == "seeking":
+        return 1
+    return 0
+
+
+def _baseline_for_band(band: tuple[VoiceTier, VoiceTier]) -> VoiceTier:
+    """Band midpoint rounded *toward high* — §3.1 baseline rule.
+
+    Example: band (1, 3) → baseline 2; band (0, 2) → baseline 1; band
+    (0, 6) → baseline 3. Ceiling-division lifts (1,2) to 2 and (0,1) to
+    1 so the baseline never lands below the middle of an even-length
+    band.
+    """
+    low, high = int(band[0]), int(band[1])
+    return VoiceTier((low + high + 1) // 2)
+
+
+def resolve_tier(
+    role: ProgrammeRole | str,
+    stance: Stance | str,
+    programme_band_prior: tuple[VoiceTier, VoiceTier] | None = None,
+) -> VoiceTier:
+    """Pick a tier for the current tick from role + stance.
+
+    Per §2 and §3 of 2026-04-20-voice-tier-director-integration.md:
+
+    1. Effective band = ``programme_band_prior`` if the Programme
+       envelope overrides, else ``role_tier_band(role).default_band``.
+       Unset prior = "no preference, use the role default" (soft-prior
+       pattern — never an exclusion).
+    2. CRITICAL stance → clamp to band-low (maximal intelligibility for
+       recovery narration; overrides impingement-driven shifts).
+    3. DEGRADED stance → cap tier at ``min(band_high, TIER_MEMORY)``;
+       if band-low > TIER_MEMORY, clamp to band-low instead.
+    4. Other stances → baseline = midpoint→high, plus
+       ``stance_tier_delta(stance)``, clamped to the band.
+
+    Impingement-driven shifts (§4) and excursion jumps (§4.2) compose on
+    top of this pick — they live in the narrative director, not here.
+
+    Args:
+        role: ProgrammeRole or string role value.
+        stance: Stance or string stance value.
+        programme_band_prior: Optional override for the role default.
+            If given, takes precedence over the role default. Must
+            satisfy low ≤ high or the function raises ValueError.
+
+    Returns:
+        The selected VoiceTier.
+    """
+    if programme_band_prior is not None:
+        low, high = programme_band_prior
+        if int(low) > int(high):
+            raise ValueError(f"programme_band_prior={programme_band_prior!r} — low must be ≤ high")
+        band = (VoiceTier(int(low)), VoiceTier(int(high)))
+    else:
+        band = role_tier_band(role).default_band
+
+    band_low, band_high = band
+    stance_key = stance.value if hasattr(stance, "value") else str(stance)
+
+    if stance_key == "critical":
+        return band_low
+    if stance_key == "degraded":
+        # Cap at TIER_MEMORY unless band-low is already higher.
+        if int(band_low) > int(VoiceTier.MEMORY):
+            return band_low
+        cap = min(int(band_high), int(VoiceTier.MEMORY))
+        return VoiceTier(cap)
+
+    baseline = _baseline_for_band(band)
+    picked = int(baseline) + stance_tier_delta(stance)
+    picked = max(int(band_low), min(int(band_high), picked))
+    return VoiceTier(picked)
 
 
 def tier_from_name(name: str) -> VoiceTier:
