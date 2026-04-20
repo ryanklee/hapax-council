@@ -153,6 +153,21 @@ def precompute_pipeline_deps(daemon: VoiceDaemon) -> None:
     )
     _all_records.extend(VOCAL_CHAIN_RECORDS)
 
+    # Vinyl Mode D: granular-wash capability for Content-ID defeat on
+    # vinyl source. Shares the MIDI output with the vocal chain (both
+    # talk to Evil Pet + S-4) but is mutually exclusive with the vocal
+    # chain — only one set of base CCs can be on the device at a time.
+    # activate_mode_d() writes the granular-engaged scene; the vocal
+    # chain's startup scene wins when Mode D is not active.
+    from agents.hapax_daimonion.vinyl_chain import VINYL_CHAIN_RECORDS, VinylChainCapability
+
+    daemon._vinyl_chain = VinylChainCapability(
+        midi_output=daemon._midi_output,
+        evil_pet_channel=daemon.cfg.midi_evil_pet_channel,
+        s4_channel=daemon.cfg.midi_s4_channel,
+    )
+    _all_records.extend(VINYL_CHAIN_RECORDS)
+
     # System awareness
     from agents.hapax_daimonion.system_awareness import (
         SYSTEM_AWARENESS_DESCRIPTION,

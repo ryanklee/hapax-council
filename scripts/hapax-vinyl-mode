@@ -1,0 +1,144 @@
+#!/usr/bin/env -S uv run python
+"""hapax-vinyl-mode — operator CLI for Vinyl Mode D (granular-wash anti-DMCA).
+
+Activation path for the go-live gate 2 vinyl → Evil Pet granular defeat.
+
+Usage:
+    hapax-vinyl-mode on     # Engage Mode D: write granular scene to Evil Pet
+    hapax-vinyl-mode off    # Disengage: restore voice-safe Evil Pet base
+    hapax-vinyl-mode status # Show current mode + SHM flag state
+
+Behaviour:
+
+- ``on`` writes the 14-CC Mode D base scene to Evil Pet (grains ON,
+  mix fully wet, shimmer on) via the Erica Synths MIDI Dispatch. Drops
+  a flag file at ``/dev/shm/hapax-compositor/mode-d-active`` so the
+  compositor, director, and telemetry can observe the state change.
+- ``off`` reverts to voice-safe base (grains=0, mix=50, shimmer=0) and
+  clears the flag.
+- Hardware procedure (operator, on the L6 mixer):
+    Mode D ON:
+      ch 4 (vinyl) fader DOWN, AUX 1 send UP  → vinyl feeds Evil Pet only
+      ch 5 (TTS)   fader DOWN, AUX 1 send DOWN → mute TTS path during Mode D
+      ch 3 (EP return) fader UP               → granulated vinyl to Main Mix
+    Mode D OFF:
+      ch 4 fader UP (vinyl dry OK when not broadcasting), AUX 1 send anywhere
+      ch 5 fader DOWN, AUX 1 send UP          → TTS path restored
+
+Governance:
+
+- Mode D is ``medium``-risk per the MonetizationRiskGate; a Programme
+  with ``mode_d_granular_wash`` in ``monetization_opt_ins`` is required
+  for the capability to pass recruitment filtering. The CLI itself
+  always writes the CCs when invoked — the gate sits upstream at
+  capability recruitment, not at CC emission.
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+import time
+from pathlib import Path
+
+import mido
+
+FLAG = Path("/dev/shm/hapax-compositor/mode-d-active")
+PORT_PREFIX = "MIDI Dispatch:MIDI Dispatch MIDI 1"
+EVIL_PET_CH = 0
+
+
+def _resolve_port(configured: str) -> str | None:
+    names = list(mido.get_output_names())
+    if configured in names:
+        return configured
+    for name in names:
+        if name.rsplit(" ", 1)[0] == configured.rsplit(" ", 1)[0]:
+            return name
+    for name in names:
+        if configured in name:
+            return name
+    return None
+
+
+def _open_port():
+    resolved = _resolve_port(PORT_PREFIX)
+    if resolved is None:
+        print(f"MIDI port {PORT_PREFIX!r} not found", file=sys.stderr)
+        sys.exit(1)
+    print(f"MIDI port: {resolved}")
+    return mido.open_output(resolved)
+
+
+def _send_scene(port, scene: list[tuple[int, int, str]]) -> None:
+    for cc, value, note in scene:
+        port.send(mido.Message("control_change", channel=EVIL_PET_CH, control=cc, value=value))
+        print(f"  CC{cc:3d} = {value:3d}  ({note})")
+        time.sleep(0.02)
+
+
+def cmd_on() -> int:
+    from agents.hapax_daimonion.vinyl_chain import MODE_D_SCENE
+
+    with _open_port() as port:
+        print("Mode D: engaging granular wash on Evil Pet")
+        _send_scene(port, MODE_D_SCENE)
+    # Atomic flag publish.
+    tmp = FLAG.with_suffix(".tmp")
+    tmp.write_text(f"mode_d_active\ntimestamp={time.time()}\n")
+    tmp.rename(FLAG)
+    print(f"Flag written: {FLAG}")
+    print()
+    print("L6 procedure: fader ch 4 DOWN + AUX 1 UP; ch 5 DOWN + AUX 1 DOWN; ch 3 fader UP")
+    return 0
+
+
+def cmd_off() -> int:
+    # Re-run the voice-safe base scene so Evil Pet returns to clean FX processing.
+    from scripts import importer  # noqa: placeholder; we import the script directly
+
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "ep_base", str(Path(__file__).parent / "evil-pet-configure-base.py")
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    with _open_port() as port:
+        print("Mode D: deactivating, restoring voice-safe Evil Pet base")
+        _send_scene(port, mod.BASE_SCENE)
+    FLAG.unlink(missing_ok=True)
+    print(f"Flag cleared: {FLAG}")
+    print()
+    print("L6 procedure: fader ch 5 DOWN + AUX 1 UP; ch 3 fader UP; ch 4 as desired")
+    return 0
+
+
+def cmd_status() -> int:
+    if FLAG.exists():
+        content = FLAG.read_text().strip()
+        print(f"Mode D: ACTIVE\n{content}")
+    else:
+        print("Mode D: inactive")
+    return 0
+
+
+def main() -> int:
+    p = argparse.ArgumentParser(prog="hapax-vinyl-mode", description=__doc__.split("\n", 1)[0])
+    sub = p.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("on", help="Engage Mode D granular wash")
+    sub.add_parser("off", help="Disengage Mode D, restore voice-safe base")
+    sub.add_parser("status", help="Show Mode D flag state")
+    args = p.parse_args()
+    if args.cmd == "on":
+        return cmd_on()
+    if args.cmd == "off":
+        return cmd_off()
+    if args.cmd == "status":
+        return cmd_status()
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())
