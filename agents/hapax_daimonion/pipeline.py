@@ -192,17 +192,23 @@ def build_pipeline_task(
     # (UserStartedSpeakingFrame / UserStoppedSpeakingFrame) are observed
     # before they enter any downstream stage. Per LRR Phase 9 hook 4 —
     # publishes operator-speech-active state for compositor-side ducking.
+    from agents.hapax_daimonion.tts_state_publisher import TtsStatePublisher
     from agents.hapax_daimonion.vad_state_publisher import VadStatePublisher
 
     processors = [transport.input(), VadStatePublisher()]
     if frame_gate is not None:
         processors.append(frame_gate)
+    # TtsStatePublisher sits AFTER the TTS stage so it observes real
+    # TTS playback start/stop (vs the upstream LLM-emitted speech intent).
+    # Audio normalization PR-1 — publishes tts_active boolean alongside
+    # operator_speech_active for the broadcast-bound ducker (PR-2).
     processors.extend(
         [
             stt,
             context_aggregator.user(),
             llm,
             tts,
+            TtsStatePublisher(),
             transport.output(),
             context_aggregator.assistant(),
         ]

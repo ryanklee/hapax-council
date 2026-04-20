@@ -42,11 +42,48 @@ class AudioDuckable(Protocol):
     def restore(self) -> None: ...
 
 
+def _read_existing_state() -> dict:
+    """Read the current voice-state file, return ``{}`` on any error.
+
+    Existence-tolerant + JSON-tolerant: corrupt or missing files
+    yield an empty dict so the merge-and-write step always succeeds.
+    """
+    if not VOICE_STATE_FILE.exists():
+        return {}
+    try:
+        data = json.loads(VOICE_STATE_FILE.read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 def publish_vad_state(speech_active: bool) -> None:
-    """Atomically publish the current VAD speech-active state."""
+    """Atomically publish the current VAD speech-active state.
+
+    Audio normalization PR-1: read-modify-write so any other key in
+    the file (notably ``tts_active`` from the TtsStatePublisher) is
+    preserved across the publish.
+    """
     VOICE_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    payload = _read_existing_state()
+    payload["operator_speech_active"] = bool(speech_active)
     tmp = VOICE_STATE_FILE.with_suffix(".tmp")
-    payload = {"operator_speech_active": bool(speech_active)}
+    tmp.write_text(json.dumps(payload))
+    tmp.replace(VOICE_STATE_FILE)
+
+
+def publish_tts_state(tts_active: bool) -> None:
+    """Atomically publish TTS-active state into the voice-state file.
+
+    Audio normalization PR-1 — companion to ``publish_vad_state``.
+    Read-modify-write so the existing ``operator_speech_active`` key
+    is preserved when only the TTS key flips. The compositor-side
+    broadcast-bound ducker (PR-2) reads this key.
+    """
+    VOICE_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    payload = _read_existing_state()
+    payload["tts_active"] = bool(tts_active)
+    tmp = VOICE_STATE_FILE.with_suffix(".tmp")
     tmp.write_text(json.dumps(payload))
     tmp.replace(VOICE_STATE_FILE)
 
