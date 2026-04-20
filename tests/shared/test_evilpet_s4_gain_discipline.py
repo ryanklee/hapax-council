@@ -1,0 +1,134 @@
+"""Gain-discipline regression pins — evilpet-s4-routing Phase 3.
+
+Spec §9 invariant: software gain stages stay at unity unless the
+existing documented exceptions (currently the L6 main-mix +12 dB
+makeup) are explicitly justified in the conf header. Any new
+filter-chain gain stage must update this test to keep the invariant
+enforceable.
+
+Also pins the R1 routing spec invariants so a future spec edit
+can't silently delete the TTS → Evil Pet → livestream documentation
+that downstream wiring depends on.
+
+Plan: docs/superpowers/plans/2026-04-20-evilpet-s4-routing-plan.md §Phase 3
+Spec: docs/superpowers/specs/2026-04-20-evilpet-s4-routing-design.md §4 R1, §9
+"""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+import pytest
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+PIPEWIRE_DIR = REPO_ROOT / "config" / "pipewire"
+SPEC_PATH = REPO_ROOT / "docs" / "superpowers" / "specs" / "2026-04-20-evilpet-s4-routing-design.md"
+
+
+# Map of conf file → expected `Gain 1` linear value for the mixer
+# stage(s) it carries. Any conf NOT listed must not introduce a
+# `Gain 1` mixer control without updating this dict (the test below
+# enforces that). Linear 4.0 ≈ +12 dB; 1.0 ≈ unity.
+EXPECTED_MIXER_GAINS: dict[str, set[float]] = {
+    "hapax-l6-evilpet-capture.conf": {4.0},  # L6 main-mix +12 dB makeup
+    "hapax-livestream-duck.conf": {1.0},  # PR-3 ducker default = pass-through
+}
+
+GAIN_RE = re.compile(r'"Gain 1"\s*=\s*([\d.]+)')
+
+
+@pytest.fixture(scope="module")
+def conf_gains() -> dict[str, set[float]]:
+    """Parse every config/pipewire/*.conf and collect its Gain-1 values."""
+    out: dict[str, set[float]] = {}
+    for conf in sorted(PIPEWIRE_DIR.glob("*.conf")):
+        text = conf.read_text(encoding="utf-8")
+        values = {float(m.group(1)) for m in GAIN_RE.finditer(text)}
+        if values:
+            out[conf.name] = values
+    return out
+
+
+def test_only_expected_confs_carry_mixer_gain(
+    conf_gains: dict[str, set[float]],
+) -> None:
+    """Every conf with a `Gain 1` mixer must be in the expected map.
+
+    A new conf adding a gain stage must update EXPECTED_MIXER_GAINS;
+    the failure message tells the operator how to extend it.
+    """
+    actual = set(conf_gains.keys())
+    expected = set(EXPECTED_MIXER_GAINS.keys())
+    new = actual - expected
+    assert not new, (
+        f"new conf(s) introduced a `Gain 1` mixer stage: {sorted(new)}.\n"
+        "Update EXPECTED_MIXER_GAINS in this test with the new file's\n"
+        "expected linear gain value(s) and document the rationale in the\n"
+        "conf header (per spec §9)."
+    )
+
+
+def test_documented_mixer_gain_values_unchanged(
+    conf_gains: dict[str, set[float]],
+) -> None:
+    """The documented +12 dB makeup gain (L6) and unity duck default
+    must not silently regress. If a value changes, update both this
+    test and the conf header rationale together."""
+    for conf_name, expected_values in EXPECTED_MIXER_GAINS.items():
+        actual_values = conf_gains.get(conf_name, set())
+        assert actual_values == expected_values, (
+            f"{conf_name}: Gain 1 values changed.\n"
+            f"  expected: {sorted(expected_values)}\n"
+            f"  actual:   {sorted(actual_values)}"
+        )
+
+
+def test_no_new_gain_above_plus_12db_ceiling(
+    conf_gains: dict[str, set[float]],
+) -> None:
+    """Spec §9 ceiling: no software gain stage above +12 dB (linear 4.0).
+
+    Linear 4.0 ≈ +12 dB; 4.5 would be ~+13 dB. The existing L6 +12 dB
+    makeup is the documented maximum — any value strictly above is an
+    immediate regression flag (operator must explicitly justify and
+    downstream-attenuate per spec §9).
+    """
+    for conf_name, values in conf_gains.items():
+        for v in values:
+            assert v <= 4.0, (
+                f"{conf_name}: Gain 1 = {v} exceeds the +12 dB ceiling. "
+                "Spec §9 requires explicit justification + downstream attenuation."
+            )
+
+
+# ── R1 spec-doc invariants (TTS → Evil Pet → livestream) ──────────────
+
+
+@pytest.fixture(scope="module")
+def spec_text() -> str:
+    if not SPEC_PATH.exists():
+        pytest.skip(f"spec missing: {SPEC_PATH}")
+    return SPEC_PATH.read_text(encoding="utf-8")
+
+
+def test_spec_documents_r1_routing(spec_text: str) -> None:
+    """R1 (TTS → Evil Pet) must remain in the spec — it's the
+    cornerstone routing the daimonion + filter-chain depend on."""
+    assert "R1" in spec_text
+    assert "Evil Pet" in spec_text
+    assert "TTS" in spec_text or "Kokoro" in spec_text
+
+
+def test_spec_documents_r3_routing(spec_text: str) -> None:
+    """R3 (S-4 USB-direct, parallel to Evil Pet) — pinned because Phase 1
+    config + this test depend on the R3 wording staying live."""
+    assert "R3" in spec_text
+    assert "S-4" in spec_text
+
+
+def test_spec_documents_gain_discipline(spec_text: str) -> None:
+    """Spec §9 (gain discipline / signal quality) — the rationale this
+    test enforces. If §9 is removed from the spec, the operator must
+    decide whether the regression pins still apply."""
+    assert "§9" in spec_text or "Signal Quality" in spec_text or "gain discipline" in spec_text

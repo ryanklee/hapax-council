@@ -242,3 +242,15 @@ class TestRoutingAwarePresets:
             for cc, value in preset.ccs.items():
                 assert 0 <= cc <= 127, f"{name}: CC {cc} out of range"
                 assert 0 <= value <= 127, f"{name}: CC {cc} value {value} out of range"
+
+    def test_recall_emits_all_four_new_presets(self) -> None:
+        """Plan Task 2.6: recall_preset() must work for all 4 new presets
+        without raising. Each must emit exactly its preset.ccs count."""
+        for name in self.NEW_PRESETS:
+            midi = MagicMock()
+            n = recall_preset(name, midi, delay_s=0.0)
+            preset = get_preset(name)
+            assert n == len(preset.ccs), (
+                f"{name} emitted {n} CCs but preset declares {len(preset.ccs)}"
+            )
+            assert midi.send_cc.call_count == len(preset.ccs)
