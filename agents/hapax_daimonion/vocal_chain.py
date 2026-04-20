@@ -53,95 +53,105 @@ def cc_value_from_level(level: float, breakpoints: list[tuple[float, int]]) -> i
     return breakpoints[-1][1]
 
 
-_STD_CURVE = [(0.0, 0), (0.25, 20), (0.50, 50), (0.75, 85), (1.0, 127)]
-_GENTLE_CURVE = [(0.0, 0), (0.25, 15), (0.50, 35), (0.75, 65), (1.0, 100)]
-_CENTER_CURVE = [(0.0, 64), (0.25, 72), (0.50, 85), (0.75, 105), (1.0, 127)]
+def _ranged(cc_min: int, cc_max: int) -> list[tuple[float, int]]:
+    """Linear curve clamped to a sub-range of CC values (level 0 → cc_min, level 1 → cc_max)."""
+    return [(0.0, cc_min), (0.5, (cc_min + cc_max) // 2), (1.0, cc_max)]
 
+
+def _centered(center: int, span: int) -> list[tuple[float, int]]:
+    """Level 0.5 = center; 0.0 = center-span; 1.0 = center+span (clamped 0..127)."""
+    lo = max(0, center - span)
+    hi = min(127, center + span)
+    return [(0.0, lo), (0.5, center), (1.0, hi)]
+
+
+def _inverted(cc_high: int, cc_low: int) -> list[tuple[float, int]]:
+    """Level 0 = cc_high, level 1 = cc_low. Used for damping (more level = less damp)."""
+    return [(0.0, cc_high), (0.5, (cc_high + cc_low) // 2), (1.0, cc_low)]
+
+
+# CC map derived from docs/research/2026-04-19-evil-pet-s4-base-config.md §5.1–§5.2.
+# Research-approved ceilings keep speech intelligible and prevent anthropomorphic
+# coloration (no granular re-synthesis, no LFO wobble, no extreme resonance).
+# One CC per (device, dimension) — no within-device collisions between dimensions,
+# so activating one dimension never writes over another's CC on the same device.
 DIMENSIONS: dict[str, Dimension] = {
     "vocal_chain.intensity": Dimension(
         name="vocal_chain.intensity",
         description="Increases vocal energy and density. Speech becomes louder, more present, more forceful. Distinct from emotional valence — pure physical energy.",
         cc_mappings=[
-            CCMapping("evil_pet", 40, _STD_CURVE),
-            CCMapping("evil_pet", 46, _GENTLE_CURVE),
-            CCMapping("s4", 69, _STD_CURVE),
-            CCMapping("s4", 63, _GENTLE_CURVE),
+            CCMapping("evil_pet", 39, _ranged(0, 80)),  # saturator amount
+            CCMapping("s4", 95, _ranged(20, 60)),  # deform drive
         ],
     ),
     "vocal_chain.tension": Dimension(
         name="vocal_chain.tension",
         description="Constricts vocal timbre. Speech sounds strained, tight, forced through resistance. Harmonics sharpen, resonance builds. Distinct from volume.",
         cc_mappings=[
-            CCMapping("evil_pet", 71, _STD_CURVE),
-            CCMapping("evil_pet", 39, _GENTLE_CURVE),
-            CCMapping("s4", 79, _STD_CURVE),
-            CCMapping("s4", 94, _GENTLE_CURVE),
+            CCMapping("evil_pet", 70, _ranged(40, 100)),  # filter frequency
+            CCMapping("evil_pet", 71, _ranged(20, 60)),  # filter resonance
+            CCMapping("s4", 79, _ranged(40, 80)),  # ring cutoff
+            CCMapping("s4", 80, _ranged(15, 35)),  # ring resonance (conservative ceiling)
         ],
     ),
     "vocal_chain.diffusion": Dimension(
         name="vocal_chain.diffusion",
         description="Scatters vocal output across spatial field. Speech becomes ambient, sourceless, environmental. Words dissolve into texture at high levels.",
         cc_mappings=[
-            CCMapping("evil_pet", 42, _STD_CURVE),
-            CCMapping("evil_pet", 43, _GENTLE_CURVE),
-            CCMapping("s4", 67, _STD_CURVE),
-            CCMapping("s4", 66, _GENTLE_CURVE),
+            CCMapping("evil_pet", 91, [(0.0, 20), (0.7, 45), (1.0, 60)]),  # reverb amount (log)
+            CCMapping("s4", 115, _ranged(40, 90)),  # reverb size
         ],
     ),
     "vocal_chain.degradation": Dimension(
         name="vocal_chain.degradation",
         description="Corrupts vocal signal. Speech fractures into digital artifacts, broken transmission, static. System malfunction expressed through voice.",
         cc_mappings=[
-            CCMapping("evil_pet", 39, _STD_CURVE),
-            CCMapping("evil_pet", 84, [(0.0, 0), (0.5, 80), (1.0, 110)]),
-            CCMapping("s4", 96, _STD_CURVE),
-            CCMapping("s4", 98, _GENTLE_CURVE),
+            CCMapping(
+                "evil_pet", 84, [(0.0, 0), (0.49, 0), (0.5, 90), (1.0, 110)]
+            ),  # saturator type: stepped distortion→bit-crush
+            CCMapping("s4", 96, _ranged(50, 90)),  # deform compress (heavier under degradation)
         ],
     ),
     "vocal_chain.depth": Dimension(
         name="vocal_chain.depth",
         description="Places voice in reverberant space. Distant, cathedral-like, submerged. Speech recedes from foreground without losing content at low levels.",
         cc_mappings=[
-            CCMapping("evil_pet", 91, _STD_CURVE),
-            CCMapping("evil_pet", 93, _GENTLE_CURVE),
-            CCMapping("s4", 112, _STD_CURVE),
-            CCMapping("s4", 113, _GENTLE_CURVE),
+            CCMapping("evil_pet", 93, _ranged(20, 70)),  # reverb tail
+            CCMapping("s4", 114, _ranged(20, 55)),  # reverb amount
         ],
     ),
     "vocal_chain.pitch_displacement": Dimension(
         name="vocal_chain.pitch_displacement",
         description="Shifts vocal pitch away from natural register. Higher, lower, or unstable. Uncanny displacement without volume or timbre change.",
         cc_mappings=[
-            CCMapping("evil_pet", 44, _CENTER_CURVE),
-            CCMapping("s4", 62, _CENTER_CURVE),
-            CCMapping("s4", 68, _GENTLE_CURVE),
+            CCMapping("evil_pet", 44, _centered(64, 30)),  # pitch (centered)
+            CCMapping("s4", 82, _centered(64, 24)),  # ring pitch (centered, conservative span)
         ],
     ),
     "vocal_chain.temporal_distortion": Dimension(
         name="vocal_chain.temporal_distortion",
         description="Stretches, freezes, or stutters speech in time. Words elongate, fragment, or loop. Temporal continuity breaks down.",
         cc_mappings=[
-            CCMapping("evil_pet", 50, [(0.0, 100), (0.5, 60), (1.0, 10)]),
-            CCMapping("s4", 63, [(0.0, 64), (0.5, 30), (1.0, 5)]),
-            CCMapping("s4", 65, _STD_CURVE),
+            CCMapping("evil_pet", 96, _ranged(20, 80)),  # env-filter mod (signal-honest motion)
+            CCMapping("s4", 116, _ranged(20, 45)),  # delay feedback (clamped — prevents runaway)
         ],
     ),
     "vocal_chain.spectral_color": Dimension(
         name="vocal_chain.spectral_color",
         description="Shifts vocal brightness and metallicity. Dark, bright, hollow, metallic. Changes tonal character without changing pitch or volume.",
         cc_mappings=[
-            CCMapping("evil_pet", 70, _CENTER_CURVE),
-            CCMapping("s4", 83, _CENTER_CURVE),
-            CCMapping("s4", 88, _CENTER_CURVE),
+            CCMapping("evil_pet", 92, _centered(60, 20)),  # reverb tone (40..80)
+            CCMapping("s4", 118, _inverted(80, 40)),  # reverb damp (inverted: brighter = less damp)
         ],
     ),
     "vocal_chain.coherence": Dimension(
         name="vocal_chain.coherence",
         description="Controls intelligibility of speech. Master axis from clear human voice to pure abstract texture. Affects overall processing depth.",
         cc_mappings=[
-            CCMapping("evil_pet", 40, _STD_CURVE),
-            CCMapping("s4", 69, _STD_CURVE),
-            CCMapping("s4", 85, _GENTLE_CURVE),
+            CCMapping(
+                "evil_pet", 40, _ranged(40, 70)
+            ),  # master wet/dry mix (dryness floor keeps words clear)
+            CCMapping("s4", 103, _ranged(40, 70)),  # deform wet
         ],
     ),
 }

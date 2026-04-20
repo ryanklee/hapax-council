@@ -51,6 +51,32 @@ class TestDimensions:
         for name in DIMENSIONS:
             assert name.startswith("vocal_chain."), f"{name} must be prefixed"
 
+    def test_no_within_device_cc_collision_across_dimensions(self) -> None:
+        """Each (device, cc) pair must be owned by at most one dimension.
+
+        Without this, activating one dimension overwrites another's CC on the
+        same device — the two dims silently compete. Research §5 picks a
+        conflict-free map by design; pin it here so regressions scream loud.
+        """
+        ownership: dict[tuple[str, int], str] = {}
+        for dim in DIMENSIONS.values():
+            for m in dim.cc_mappings:
+                key = (m.device, m.cc)
+                assert key not in ownership or ownership[key] == dim.name, (
+                    f"CC collision: {dim.name} and {ownership[key]} both write {m.device} CC{m.cc}"
+                )
+                ownership[key] = dim.name
+
+    def test_density_never_wired(self) -> None:
+        """Governance: granular re-synthesis (CC 11, grains volume on Evil Pet)
+        must never be driven by any dimension. Research §5.1 clamps it OFF.
+        """
+        for dim in DIMENSIONS.values():
+            for m in dim.cc_mappings:
+                assert not (m.device == "evil_pet" and m.cc == 11), (
+                    f"{dim.name} writes CC11 (grains volume) — governance forbids"
+                )
+
 
 # ---------------------------------------------------------------------------
 # CapabilityRecords for Qdrant indexing
