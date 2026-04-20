@@ -44,9 +44,11 @@ from agents.programme_manager.transition import (
     TransitionChoreographer,
     TransitionImpingements,
 )
+from shared import programme_outcome_log as _outcome_log_module
 from shared.impingement import Impingement
 from shared.programme import Programme, ProgrammeStatus
 from shared.programme_observability import emit_programme_end, emit_programme_start
+from shared.programme_outcome_log import ProgrammeOutcomeLog
 from shared.programme_store import ProgrammePlanStore
 
 log = logging.getLogger(__name__)
@@ -108,6 +110,7 @@ class ProgrammeManager:
         abort_predicates: PredicateRegistry | None = None,
         unknown_predicate_satisfies: bool = False,
         now_fn: Callable[[], float] = time.time,
+        outcome_log: ProgrammeOutcomeLog | None = None,
     ) -> None:
         self.store = store
         self.choreographer = choreographer
@@ -119,6 +122,14 @@ class ProgrammeManager:
         )
         self.unknown_predicate_satisfies = unknown_predicate_satisfies
         self.now_fn = now_fn
+        # B3 Critical #5: per-programme JSONL outcome log under
+        # ~/hapax-state/programmes/<show>/<programme-id>.jsonl. Default
+        # singleton when caller doesn't inject; tests monkeypatch
+        # _outcome_log_module.get_default_log to inject a tmp_path-rooted
+        # instance (see tests/programme_manager/conftest.py).
+        self._outcome_log = (
+            outcome_log if outcome_log is not None else _outcome_log_module.get_default_log()
+        )
 
     # --- public API ------------------------------------------------
 
@@ -313,7 +324,10 @@ class ProgrammeManager:
                     status=terminal_status,
                     now=ts,
                 )
-                emit_programme_end(deactivated, reason=_reason_for_trigger(trigger))
+                end_reason = _reason_for_trigger(trigger)
+                emit_programme_end(deactivated, reason=end_reason)
+                # B3 Critical #5: also persist to per-programme JSONL.
+                self._outcome_log.record_event(deactivated, f"ended_{end_reason}")  # type: ignore[arg-type]
             except KeyError:
                 notes_parts.append(f"prior active {from_programme.programme_id!r} not in store")
 
@@ -321,6 +335,8 @@ class ProgrammeManager:
             try:
                 activated = self.store.activate(to_programme.programme_id, now=ts)
                 emit_programme_start(activated)
+                # B3 Critical #5: persist start event to JSONL.
+                self._outcome_log.record_event(activated, "started")
             except KeyError:
                 notes_parts.append(f"target {to_programme.programme_id!r} not in store")
 
