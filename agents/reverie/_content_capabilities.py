@@ -3,12 +3,21 @@
 Each handler writes content to /dev/shm/hapax-imagination/sources/ using
 the ContentSourceManager protocol. Only called when the AffordancePipeline
 recruits the corresponding affordance.
+
+**Privacy invariant (2026-04-20 incident):** any camera frame that enters
+reverie's content_layer MUST pass through the face-obscure pipeline first.
+Reverie is treated with the same anonymity discipline as other HOMAGE-ward
+surfaces and the livestream egress tee. Camera frames loaded here are
+fail-closed to a full-frame Gruvbox mask on detector failure. An operator
+emergency kill switch (``HAPAX_REVERIE_DISABLE_CAMERAS=1``) disables the
+camera path entirely so reverie can run without any identified imagery.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import os
 from collections import deque
 from pathlib import Path
 
@@ -16,6 +25,12 @@ log = logging.getLogger("reverie.content")
 
 DEFAULT_SOURCES = Path("/dev/shm/hapax-imagination/sources")
 DEFAULT_COMPOSITOR = Path("/dev/shm/hapax-compositor")
+
+
+def _cameras_disabled() -> bool:
+    """Emergency kill switch for camera→reverie. Env = '1' disables entirely."""
+    return os.environ.get("HAPAX_REVERIE_DISABLE_CAMERAS", "") == "1"
+
 
 CAMERA_MAP: dict[str, str] = {
     "content.overhead_perspective": "c920-overhead",
@@ -46,8 +61,19 @@ class ContentCapabilityRouter:
     def activate_camera(self, affordance_name: str, level: float) -> bool:
         """Capture a camera frame and write it to the sources protocol.
 
-        Returns True if frame was written, False if camera unavailable.
+        **Privacy invariant**: the frame is run through the face-obscure
+        pipeline (agents.studio_compositor.face_obscure_integration) before
+        being written into reverie's source directory. The pipeline is
+        fail-closed — any detector failure returns a full-frame Gruvbox
+        mask, not the raw frame.
+
+        Returns True if frame was written, False if camera unavailable,
+        kill-switch active, or obscure pipeline returned a block.
         """
+        if _cameras_disabled():
+            log.debug("Camera source %s skipped — HAPAX_REVERIE_DISABLE_CAMERAS=1", affordance_name)
+            return False
+
         cam_name = self.camera_for_affordance(affordance_name)
         if cam_name is None:
             return False
@@ -69,13 +95,33 @@ class ContentCapabilityRouter:
                 pass
 
         try:
+            import numpy as np
             from PIL import Image
 
-            img = Image.open(jpeg_path).convert("RGBA")
-            rgba_data = img.tobytes("raw", "RGBA")
-            width, height = img.width, img.height
+            from agents.studio_compositor.face_obscure_integration import (
+                obscure_frame_for_camera,
+            )
+
+            img = Image.open(jpeg_path).convert("RGB")
+            # face_obscure_integration expects a BGR uint8 numpy array
+            # (V4L2/GStreamer capture convention). Convert PIL RGB → BGR.
+            rgb = np.asarray(img, dtype=np.uint8)
+            bgr = rgb[:, :, ::-1].copy()
+            obscured_bgr = obscure_frame_for_camera(bgr, camera_role=cam_name)
+            # Convert back to RGBA for reverie's content_layer protocol.
+            obscured_rgb = obscured_bgr[:, :, ::-1]
+            alpha = np.full((obscured_rgb.shape[0], obscured_rgb.shape[1], 1), 255, dtype=np.uint8)
+            rgba_arr = np.concatenate([obscured_rgb, alpha], axis=2)
+            rgba_data = rgba_arr.tobytes()
+            width = obscured_rgb.shape[1]
+            height = obscured_rgb.shape[0]
         except Exception:
-            log.debug("Failed to convert %s", jpeg_path, exc_info=True)
+            # Fail-CLOSED: any failure in the obscure pipeline or conversion
+            # means we drop the frame entirely rather than leak a raw one.
+            # The face_obscure_integration helper itself fails closed to a
+            # mask; reaching this outer except means the conversion or
+            # import broke, which still must not produce a leak.
+            log.exception("Face-obscure pipeline failed for %s — dropping frame", cam_name)
             return False
 
         tmp_frame = source_dir / "frame.tmp"
