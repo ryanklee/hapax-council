@@ -254,3 +254,81 @@ class TestRoutingAwarePresets:
                 f"{name} emitted {n} CCs but preset declares {len(preset.ccs)}"
             )
             assert midi.send_cc.call_count == len(preset.ccs)
+
+
+# ── evilpet-s4-routing Phase 4: preset-recall observability ───────────
+
+
+class TestRecallObservability:
+    """recall_preset() emits Prometheus counters per preset name."""
+
+    def _read_counter(self, name: str, **labels: str) -> float:
+        from prometheus_client import REGISTRY
+
+        v = REGISTRY.get_sample_value(name, labels=labels) or 0.0
+        return float(v)
+
+    def test_metric_module_constants_exist(self) -> None:
+        """Counter handles must be importable for dashboards / scripts."""
+        from shared.evil_pet_presets import (
+            _METRICS_AVAILABLE,
+            _preset_recall_ccs_total,
+            _preset_recalls_total,
+        )
+
+        assert _METRICS_AVAILABLE is True
+        assert _preset_recalls_total is not None
+        assert _preset_recall_ccs_total is not None
+
+    def test_recall_increments_recall_counter(self) -> None:
+        """Each recall_preset call bumps hapax_evilpet_preset_recalls_total
+        by 1, labelled with the preset name."""
+        before = self._read_counter(
+            "hapax_evilpet_preset_recalls_total",
+            preset_name="hapax-bypass",
+        )
+        recall_preset("hapax-bypass", MagicMock(), delay_s=0.0)
+        after = self._read_counter(
+            "hapax_evilpet_preset_recalls_total",
+            preset_name="hapax-bypass",
+        )
+        assert after - before == 1.0
+
+    def test_recall_increments_cc_counter_by_ccs_emitted(self) -> None:
+        """The CC counter advances by the number of CCs successfully sent
+        — ties Prometheus telemetry to actual MIDI traffic."""
+        preset = get_preset("hapax-sampler-wet")
+        before = self._read_counter(
+            "hapax_evilpet_preset_recall_ccs_total",
+            preset_name="hapax-sampler-wet",
+        )
+        n = recall_preset("hapax-sampler-wet", MagicMock(), delay_s=0.0)
+        after = self._read_counter(
+            "hapax_evilpet_preset_recall_ccs_total",
+            preset_name="hapax-sampler-wet",
+        )
+        assert n == len(preset.ccs)
+        assert after - before == float(n)
+
+    def test_recall_counter_label_per_preset(self) -> None:
+        """Two different presets bump counters with separate labels."""
+        before_a = self._read_counter(
+            "hapax_evilpet_preset_recalls_total",
+            preset_name="hapax-drone-loop",
+        )
+        before_b = self._read_counter(
+            "hapax_evilpet_preset_recalls_total",
+            preset_name="hapax-bed-music",
+        )
+        recall_preset("hapax-drone-loop", MagicMock(), delay_s=0.0)
+        recall_preset("hapax-bed-music", MagicMock(), delay_s=0.0)
+        after_a = self._read_counter(
+            "hapax_evilpet_preset_recalls_total",
+            preset_name="hapax-drone-loop",
+        )
+        after_b = self._read_counter(
+            "hapax_evilpet_preset_recalls_total",
+            preset_name="hapax-bed-music",
+        )
+        assert after_a - before_a == 1.0
+        assert after_b - before_b == 1.0

@@ -47,6 +47,42 @@ log = logging.getLogger(__name__)
 
 EVIL_PET_MIDI_CHANNEL: Final[int] = 0  # channel 1 on the wire
 
+
+# Phase 4 observability — preset recall counters. Tolerates
+# prometheus_client absence (CPU-only test environments, headless
+# scripts) by falling back to a no-op stub. Operator dashboards scrape
+# the default registry; the metric name + label are stable contract.
+try:
+    from prometheus_client import Counter as _Counter
+
+    _preset_recalls_total = _Counter(
+        "hapax_evilpet_preset_recalls_total",
+        "Evil Pet preset recalls emitted via recall_preset(), per preset name.",
+        ("preset_name",),
+    )
+    _preset_recall_ccs_total = _Counter(
+        "hapax_evilpet_preset_recall_ccs_total",
+        "Total CCs successfully emitted by recall_preset(), per preset name.",
+        ("preset_name",),
+    )
+    _METRICS_AVAILABLE = True
+except Exception:  # pragma: no cover — prometheus_client missing in some envs
+    _preset_recalls_total = None
+    _preset_recall_ccs_total = None
+    _METRICS_AVAILABLE = False
+
+
+def _emit_recall_metrics(preset_name: str, ccs_emitted: int) -> None:
+    """Bump the recall counter + CC counter. No-op if prometheus absent."""
+    if not _METRICS_AVAILABLE:
+        return
+    try:
+        _preset_recalls_total.labels(preset_name=preset_name).inc()  # type: ignore[union-attr]
+        _preset_recall_ccs_total.labels(preset_name=preset_name).inc(ccs_emitted)  # type: ignore[union-attr]
+    except Exception:  # pragma: no cover — metric emit must never break recall
+        log.debug("evil_pet recall metric emit failed", exc_info=True)
+
+
 # Voice-safe base scene — applied as the starting point for every
 # non-granular preset so a recall into e.g. "hapax-tier-2" brings a
 # fresh voice-safe slate plus tier-specific overrides, not an
@@ -293,4 +329,5 @@ def recall_preset(
             )
         _time.sleep(delay_s)
     log.info("evil_pet recall %s: %d/%d CCs emitted", name, emitted, len(preset.ccs))
+    _emit_recall_metrics(name, emitted)
     return emitted
