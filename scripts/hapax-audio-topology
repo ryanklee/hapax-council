@@ -43,6 +43,10 @@ from shared.audio_topology import (
     TopologyDescriptor,
 )
 from shared.audio_topology_generator import generate_confs
+from shared.audio_topology_inspector import (
+    descriptor_from_dump_file,
+    descriptor_from_live,
+)
 
 
 def _load(path: str) -> TopologyDescriptor:
@@ -172,6 +176,105 @@ def cmd_diff(args: argparse.Namespace) -> int:
     return 2
 
 
+def _diff_descriptors(a: TopologyDescriptor, b: TopologyDescriptor) -> bool:
+    """Compare two descriptors; print report + return True if drift detected.
+
+    Structural comparison only — matches on node id (not pw-dump internal
+    id). Edge matching is source/target-based since Phase 4 live-graph
+    edges don't carry ports.
+    """
+    a_ids = {n.id: n for n in a.nodes}
+    b_ids = {n.id: n for n in b.nodes}
+    added = b_ids.keys() - a_ids.keys()
+    removed = a_ids.keys() - b_ids.keys()
+
+    drift = False
+    if added:
+        drift = True
+        print("+ nodes only in right (live extras):")
+        for node_id in sorted(added):
+            print(f"  + {_format_node(b_ids[node_id]).strip()}")
+    if removed:
+        drift = True
+        print("- nodes only in left (expected but missing):")
+        for node_id in sorted(removed):
+            print(f"  - {_format_node(a_ids[node_id]).strip()}")
+
+    a_edges = {(e.source, e.target) for e in a.edges}
+    b_edges = {(e.source, e.target) for e in b.edges}
+    added_edges = b_edges - a_edges
+    removed_edges = a_edges - b_edges
+
+    if added_edges:
+        drift = True
+        print("+ edges only in right:")
+        for s, t in sorted(added_edges):
+            print(f"  + {s} → {t}")
+    if removed_edges:
+        drift = True
+        print("- edges only in left (descriptor-declared but not live):")
+        for s, t in sorted(removed_edges):
+            print(f"  - {s} → {t}")
+
+    return drift
+
+
+def cmd_verify(args: argparse.Namespace) -> int:
+    """Compare descriptor against live pw-dump graph (or a saved dump)."""
+    declared = _load(args.descriptor)
+    try:
+        if args.dump_file:
+            live = descriptor_from_dump_file(args.dump_file)
+        else:
+            live = descriptor_from_live()
+    except FileNotFoundError:
+        print(
+            f"error: pw-dump file not found: {args.dump_file}",
+            file=sys.stderr,
+        )
+        return 1
+    except Exception as exc:
+        print(f"error: failed to load live graph: {exc}", file=sys.stderr)
+        return 1
+
+    drift = _diff_descriptors(declared, live)
+    if drift:
+        print(
+            "\nlive graph differs from descriptor — "
+            "see diff above + rerun 'generate' if descriptor is authoritative."
+        )
+        return 2
+    print("live graph matches descriptor (no drift)")
+    return 0
+
+
+def cmd_audit(args: argparse.Namespace) -> int:
+    """Print a full drift report between descriptor and live graph.
+
+    Same logic as ``verify``, different framing for operator use — exit
+    code always 0 so it can be piped into logs/ntfy without tripping
+    CI.
+    """
+    declared = _load(args.descriptor)
+    try:
+        if args.dump_file:
+            live = descriptor_from_dump_file(args.dump_file)
+        else:
+            live = descriptor_from_live()
+    except Exception as exc:
+        print(f"error: failed to load live graph: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"# audit — descriptor={args.descriptor}")
+    print(f"  declared nodes: {len(declared.nodes)}, edges: {len(declared.edges)}")
+    print(f"  live nodes:     {len(live.nodes)}, edges: {len(live.edges)}")
+    print()
+    drift = _diff_descriptors(declared, live)
+    if not drift:
+        print("\naudit clean — descriptor and live graph agree.")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         prog="hapax-audio-topology",
@@ -196,6 +299,28 @@ def main() -> int:
     p_diff.add_argument("left")
     p_diff.add_argument("right")
     p_diff.set_defaults(func=cmd_diff)
+
+    p_verify = sub.add_parser(
+        "verify",
+        help="Compare descriptor against the live PipeWire graph (or --dump-file).",
+    )
+    p_verify.add_argument("descriptor")
+    p_verify.add_argument(
+        "--dump-file",
+        help="Saved pw-dump JSON path instead of invoking pw-dump live.",
+    )
+    p_verify.set_defaults(func=cmd_verify)
+
+    p_audit = sub.add_parser(
+        "audit",
+        help="Full drift report — same comparison as verify, exit 0 always.",
+    )
+    p_audit.add_argument("descriptor")
+    p_audit.add_argument(
+        "--dump-file",
+        help="Saved pw-dump JSON path instead of invoking pw-dump live.",
+    )
+    p_audit.set_defaults(func=cmd_audit)
 
     args = parser.parse_args()
     return args.func(args)

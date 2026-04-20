@@ -184,6 +184,116 @@ class TestDiff:
         assert "livestream-tap" in result.stdout
 
 
+class TestVerify:
+    def test_match_live_exits_0(self, tmp_path: Path) -> None:
+        """Descriptor matches live pw-dump → exit 0."""
+        import json
+
+        descriptor = _write_yaml(
+            tmp_path / "d",
+            """
+            schema_version: 1
+            nodes:
+              - id: hapax-tap
+                kind: tap
+                pipewire_name: hapax-tap
+            """,
+        )
+        dump = tmp_path / "dump.json"
+        dump.write_text(
+            json.dumps(
+                [
+                    {
+                        "id": 100,
+                        "type": "PipeWire:Interface:Node",
+                        "info": {
+                            "props": {
+                                "node.name": "hapax-tap",
+                                "media.class": "Audio/Sink",
+                                "factory.name": "support.null-audio-sink",
+                            }
+                        },
+                    }
+                ]
+            )
+        )
+        result = _run(["verify", str(descriptor), "--dump-file", str(dump)])
+        assert result.returncode == 0
+        assert "matches" in result.stdout
+
+    def test_extra_live_node_exits_2(self, tmp_path: Path) -> None:
+        """Live graph has a node the descriptor doesn't know about."""
+        import json
+
+        descriptor = _write_yaml(
+            tmp_path / "d",
+            """
+            schema_version: 1
+            nodes:
+              - id: hapax-tap
+                kind: tap
+                pipewire_name: hapax-tap
+            """,
+        )
+        dump = tmp_path / "dump.json"
+        dump.write_text(
+            json.dumps(
+                [
+                    {
+                        "id": 100,
+                        "type": "PipeWire:Interface:Node",
+                        "info": {
+                            "props": {
+                                "node.name": "hapax-tap",
+                                "media.class": "Audio/Sink",
+                                "factory.name": "support.null-audio-sink",
+                            }
+                        },
+                    },
+                    {
+                        "id": 101,
+                        "type": "PipeWire:Interface:Node",
+                        "info": {
+                            "props": {
+                                "node.name": "hapax-extra",
+                                "media.class": "Audio/Sink",
+                                "factory.name": "support.null-audio-sink",
+                            }
+                        },
+                    },
+                ]
+            )
+        )
+        result = _run(["verify", str(descriptor), "--dump-file", str(dump)])
+        assert result.returncode == 2
+        assert "live extras" in result.stdout
+        assert "hapax-extra" in result.stdout
+
+
+class TestAudit:
+    def test_audit_prints_counts(self, tmp_path: Path) -> None:
+        """Audit always exits 0 and prints declared vs live totals."""
+        import json
+
+        descriptor = _write_yaml(
+            tmp_path / "d",
+            """
+            schema_version: 1
+            nodes:
+              - id: hapax-tap
+                kind: tap
+                pipewire_name: hapax-tap
+            """,
+        )
+        dump = tmp_path / "dump.json"
+        dump.write_text(json.dumps([]))
+        result = _run(["audit", str(descriptor), "--dump-file", str(dump)])
+        # Audit exit is always 0.
+        assert result.returncode == 0
+        assert "declared nodes: 1" in result.stdout
+        assert "live nodes:     0" in result.stdout
+
+
 class TestInvalidDescriptor:
     def test_dangling_edge_exits_1(self, tmp_path: Path) -> None:
         bad = _write_yaml(
