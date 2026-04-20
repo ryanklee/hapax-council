@@ -155,6 +155,7 @@ def recall_preset(
     *,
     channel: int = EVIL_PET_MIDI_CHANNEL,
     delay_s: float = 0.02,
+    verify_port: bool = False,
 ) -> int:
     """Emit the named preset's CC burst on ``midi_output``.
 
@@ -167,14 +168,33 @@ def recall_preset(
         delay_s: Gap between consecutive CC writes. 20 ms default
             matches the base-scene script's pacing; stays under the
             Erica MIDI Dispatch's 50 ms rate limit.
+        verify_port: D-24 §10.4 — when True, attempt one no-op CC ping
+            (CC 0 / value 0 on the target channel) BEFORE the burst to
+            surface a closed/missing MIDI port quickly. On ping failure,
+            raises ``RuntimeError`` instead of silently logging
+            send_cc failures for every CC in the burst. Default False
+            preserves the cold-start fire-and-log contract callers
+            already rely on.
 
     Returns the number of CCs emitted. Tolerates ``send_cc``
     exceptions (logs at WARNING + continues) so a single bad write
     doesn't abort the whole recall.
+
+    Raises:
+        RuntimeError: when ``verify_port=True`` and the pre-burst
+            ping fails — actionable signal that the MIDI port is dead.
     """
     import time as _time
 
     preset = get_preset(name)
+    if verify_port:
+        try:
+            midi_output.send_cc(channel=channel, cc=0, value=0)
+        except Exception as e:
+            raise RuntimeError(
+                f"evil_pet recall {name}: pre-burst port verify failed "
+                f"(channel={channel}); MIDI port likely closed or missing"
+            ) from e
     emitted = 0
     for cc, value in preset.ccs.items():
         try:

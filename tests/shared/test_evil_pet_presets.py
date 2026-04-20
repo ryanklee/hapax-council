@@ -134,6 +134,31 @@ class TestRecallPreset:
         with pytest.raises(KeyError):
             recall_preset("hapax-nonexistent", MagicMock(), delay_s=0.0)
 
+    def test_verify_port_default_off_preserves_fire_and_log(self) -> None:
+        """Default verify_port=False must NOT add the pre-burst ping."""
+        midi = MagicMock()
+        recall_preset("hapax-bypass", midi, delay_s=0.0)
+        ccs = get_preset("hapax-bypass").ccs
+        assert midi.send_cc.call_count == len(ccs)
+
+    def test_verify_port_pings_before_burst(self) -> None:
+        """D-24 §10.4: verify_port=True pings CC 0 / value 0 before burst."""
+        midi = MagicMock()
+        recall_preset("hapax-bypass", midi, delay_s=0.0, verify_port=True)
+        first_call = midi.send_cc.call_args_list[0]
+        assert first_call.kwargs.get("cc") == 0
+        assert first_call.kwargs.get("value") == 0
+
+    def test_verify_port_raises_on_ping_failure(self) -> None:
+        """When verify_port=True and the port is dead, raise loudly instead
+        of silently logging send_cc failures for every CC in the burst."""
+        midi = MagicMock()
+        midi.send_cc.side_effect = RuntimeError("port closed")
+        with pytest.raises(RuntimeError, match="pre-burst port verify failed"):
+            recall_preset("hapax-bypass", midi, delay_s=0.0, verify_port=True)
+        # Burst was NOT attempted — only the ping fired.
+        assert midi.send_cc.call_count == 1
+
 
 class TestPresetObjectShape:
     def test_dataclass_frozen(self) -> None:
