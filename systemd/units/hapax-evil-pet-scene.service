@@ -1,0 +1,38 @@
+[Unit]
+Description=Hapax — Evil Pet base-scene CC burst (deterministic MIDI startup)
+# The Evil Pet's 16-parameter CC scene ships voice-safe values: grains off,
+# mix 75 % wet, bandpass filter centred on voice midband, shimmer off,
+# reverb short + present. Runs once per session boot so the chain starts
+# in a known-good state before vocal_chain begins emitting dimension CCs
+# and before any operator-triggered Mode D activation.
+#
+# MIDI requires PipeWire's ALSA sequencer and the Erica Synths MIDI
+# Dispatch USB device to be enumerated — hence ordering after pipewire +
+# systemd-udev settling. hapax-secrets carries LiteLLM/Langfuse creds
+# that the script doesn't use directly, but it's daimonion's own entry
+# dependency so ordering relative to it is simplest.
+After=pipewire.service pipewire-pulse.service systemd-udev-settle.service
+Wants=pipewire-pulse.service
+
+[Service]
+Type=oneshot
+# RemainAfterExit=yes so daimonion's After=hapax-evil-pet-scene ordering
+# holds even though this unit doesn't run continuously.
+RemainAfterExit=yes
+WorkingDirectory=/home/hapax/projects/hapax-council
+# Use uv run here — the script imports only mido; no lightning/NeMo
+# version trap from daimonion's main venv is in play.
+ExecStart=/usr/bin/uv run python /home/hapax/projects/hapax-council/scripts/evil-pet-configure-base.py
+# Script exits 1 if MIDI Dispatch port is not found; don't restart in a
+# tight loop — this is expected when the USB device is unplugged. The
+# operator can start the unit manually once the device is back.
+Restart=no
+SyslogIdentifier=hapax-evil-pet-scene
+# Tight resource box — the script runs for ~1 second and exits.
+MemoryMax=256M
+Environment=PATH=/home/hapax/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=HOME=/home/hapax
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+
+[Install]
+WantedBy=default.target
