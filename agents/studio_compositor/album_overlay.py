@@ -260,39 +260,45 @@ class AlbumOverlayCairoSource(HomageTransitionalSource):
         # Per-ward visibility + alpha modulation lives in the runner
         # (``cairo_source.CairoSourceRunner._render_one_frame``); this
         # method draws unconditionally.
-        if self._vinyl_playing():
-            self._refresh_cover()
+        #
+        # 2026-04-20 fix: cover refresh + attribution draw are NO LONGER
+        # gated on vinyl_playing. Operator complaint: the album cover +
+        # splattribution were silently invisible whenever the OXI One
+        # MIDI transport wasn't actively PLAYING, even though
+        # /dev/shm/hapax-compositor/album-cover.png and album-state.json
+        # were fresh. The vinyl_playing signal still gates other
+        # consumers (twitch director "music is playing" framing, twitch
+        # programme rotation) — but this PiP should display the most
+        # recently identified album whenever the data exists. That's the
+        # operator's mental model for "the album panel".
+        self._refresh_cover()
         self._refresh_attribution()
 
-        if self._surface is None:
-            return
-
-        # Position the cover TEXT_BUFFER pixels down from the canvas top so
-        # the attribution text above the cover fits within the surface.
         cr.save()
         cr.translate(0, TEXT_BUFFER)
 
         if self._attrib_text:
             self._draw_attrib(cr)
 
-        sw = self._surface.get_width()
-        sh = self._surface.get_height()
-        if sw > 0 and sh > 0:
-            scale = SIZE / max(sw, sh)
-            cr.save()
-            cr.scale(scale, scale)
-            cr.set_source_surface(self._surface, 0, 0)
-            cr.paint_with_alpha(ALPHA)
-            cr.restore()
+        if self._surface is not None:
+            sw = self._surface.get_width()
+            sh = self._surface.get_height()
+            if sw > 0 and sh > 0:
+                scale = SIZE / max(sw, sh)
+                cr.save()
+                cr.scale(scale, scale)
+                cr.set_source_surface(self._surface, 0, 0)
+                cr.paint_with_alpha(ALPHA)
+                cr.restore()
 
-            # Phase A4: single package-palette PiP effect. Resolves the
-            # active package per-tick so a mid-flight package swap (e.g.
-            # consent-safe) carries through without reload.
-            try:
-                pkg = active_package()
-                _pip_fx_package(cr, SIZE, SIZE, pkg)
-            except Exception:
-                log.debug("album pip_fx_package failed", exc_info=True)
+                # Phase A4: single package-palette PiP effect. Resolves
+                # the active package per-tick so a mid-flight package
+                # swap (e.g. consent-safe) carries through without reload.
+                try:
+                    pkg = active_package()
+                    _pip_fx_package(cr, SIZE, SIZE, pkg)
+                except Exception:
+                    log.debug("album pip_fx_package failed", exc_info=True)
 
         cr.restore()
 
