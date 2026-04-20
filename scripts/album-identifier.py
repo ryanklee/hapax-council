@@ -21,7 +21,6 @@ import io
 import json
 import logging
 import os
-import random
 import subprocess
 import tempfile
 import threading
@@ -761,13 +760,21 @@ def main() -> None:
         h = image_hash(cropped)
         dist = hamming_distance(h, _last_hash) if _last_hash else 999
 
-        if dist < 8:
+        # Hash-distance threshold controls re-crop cadence. 8 was too tight —
+        # IR sensor noise + spinning-record shimmer routinely flipped 8+ bits
+        # on stable albums, causing a new random crop + re-tint every poll.
+        # 32 requires a real scene change (different album placed on deck,
+        # operator hand in frame) before re-rendering the cover PNG.
+        if dist < 32:
             continue
 
         log.info("Album zone changed (distance=%d), identifying...", dist)
         _last_hash = h
 
-        # Save cropped cover as PNG with random cheesy color tint (IR is monochrome)
+        # Save cropped cover as PNG. Colorization is deterministic per IR-
+        # frame hash so the same album keeps the same tint across re-crops
+        # (previously `random.choice(tints)` swapped colors on every tick
+        # and read to the operator as "crop coords changing").
         try:
             from PIL import Image, ImageOps
 
@@ -783,7 +790,7 @@ def main() -> None:
             img = img.rotate(-90, expand=True)
             # Downscale for overlay (no need for 1080p on a 300px bouncing tile)
             img = img.resize((512, 512), Image.LANCZOS)
-            # Random cheesy duotone colorization
+            # Duotone colorization — deterministic per hash (stable tint per album)
             tints = [
                 ((20, 0, 40), (255, 100, 50)),  # purple → orange
                 ((0, 20, 40), (50, 255, 200)),  # dark teal → mint
@@ -794,10 +801,16 @@ def main() -> None:
                 ((20, 0, 20), (255, 150, 255)),  # plum → lavender
                 ((10, 20, 0), (255, 255, 100)),  # olive → yellow
             ]
-            dark, light = random.choice(tints)
+            tint_idx = int.from_bytes(_last_hash[:1], "big") % len(tints)
+            dark, light = tints[tint_idx]
             colored = ImageOps.colorize(img, dark, light)
             colored.save(str(ALBUM_COVER_FILE), format="PNG")
-            log.info("Album cover saved with color tint (%dx%d)", colored.size[0], colored.size[1])
+            log.info(
+                "Album cover saved (%dx%d) tint=%d (deterministic per hash)",
+                colored.size[0],
+                colored.size[1],
+                tint_idx,
+            )
         except Exception:
             log.exception("Album cover save failed")
 
