@@ -352,6 +352,44 @@ class VocalChainCapability:
             self._levels[name] = 0.0
         self._activation_level = 0.0
 
+    def apply_tier(
+        self,
+        tier: Any,
+        impingement: Impingement | None = None,
+    ) -> None:
+        """Apply a VoiceTier profile — set 9 dim levels + emit extra CCs.
+
+        Convenience wrapper over shared.voice_tier.apply_tier that closes
+        over this chain's MidiOutput so the tier's non-9-dim CC overrides
+        (granular engine engagement for T5/T6) flow through the same
+        pipeline. Deactivates first so no stale dim levels from a prior
+        tier bleed into the new one.
+
+        Args:
+            tier: a VoiceTier enum value (from shared.voice_tier).
+            impingement: Optional Impingement for telemetry attribution.
+                If None, a synthetic one is constructed with
+                ``source="voice_tier"``.
+        """
+        from shared.voice_tier import apply_tier as _apply_tier_fn
+
+        if impingement is None:
+            import time as _time
+
+            from shared.impingement import Impingement as _Imp
+            from shared.impingement import ImpingementType as _ImpType
+
+            impingement = _Imp(
+                timestamp=_time.time(),
+                source="voice_tier",
+                type=_ImpType.STATISTICAL_DEVIATION,
+                strength=1.0,
+                content={"metric": f"tier_{int(tier)}"},
+            )
+
+        self.deactivate()
+        _apply_tier_fn(tier, vocal_chain=self, midi_output=self._midi, impingement=impingement)
+
     def _send_dimension_cc(self, dimension_name: str) -> None:
         """Send MIDI CC messages for a dimension at its current level."""
         dim = DIMENSIONS[dimension_name]

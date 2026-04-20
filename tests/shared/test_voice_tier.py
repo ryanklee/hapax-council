@@ -111,6 +111,44 @@ class TestProfileFor:
             profile_for(9999)  # type: ignore[arg-type]
 
 
+class TestVocalChainApplyTier:
+    def test_vocal_chain_apply_tier_delegates(self) -> None:
+        """VocalChainCapability.apply_tier() uses the shared helper."""
+        from agents.hapax_daimonion.vocal_chain import VocalChainCapability
+
+        midi = MagicMock()
+        chain = VocalChainCapability(midi_output=midi)
+        chain.apply_tier(VoiceTier.BROADCAST_GHOST)
+        # Each dim in the tier vector triggers a _send_dimension_cc call
+        # which fires midi.send_cc; expect at least 9 calls.
+        assert midi.send_cc.call_count >= 9
+
+    def test_vocal_chain_apply_tier_resets_before_set(self) -> None:
+        """Tier application deactivates prior state first."""
+        from agents.hapax_daimonion.vocal_chain import VocalChainCapability
+
+        midi = MagicMock()
+        chain = VocalChainCapability(midi_output=midi)
+        # Prime with a non-tier activation
+        import time as _time
+
+        from shared.impingement import Impingement as _Imp
+        from shared.impingement import ImpingementType as _ImpType
+
+        imp = _Imp(
+            timestamp=_time.time(),
+            source="test",
+            type=_ImpType.STATISTICAL_DEVIATION,
+            strength=1.0,
+            content={"metric": "test"},
+        )
+        chain.activate_dimension("vocal_chain.intensity", imp, 0.9)
+        assert chain.get_dimension_level("vocal_chain.intensity") == pytest.approx(0.9)
+        chain.apply_tier(VoiceTier.UNADORNED)
+        # UNADORNED zeros every dim
+        assert chain.get_dimension_level("vocal_chain.intensity") == 0.0
+
+
 class TestApplyTier:
     def test_applies_all_nine_dims(self) -> None:
         chain = MagicMock()
