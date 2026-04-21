@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# hapax-usb-bandwidth-watchdog — surgical recovery from xHCI bandwidth
+# wedges. Tails the kernel log, detects the "Not enough bandwidth for
+# altsetting N" retry pattern, and when a device emits >=3 such events
+# within 2 minutes, unbind+rebind JUST that device (not the whole
+# controller) to clear its partial bandwidth reservation.
+#
+# Installed after the 2026-04-20 incident where a continuous C920
+# altset-10 retry storm corrupted the xHCI bandwidth table on AMD
+# Bus 1, wedging ZOOM LiveTrak L-6 and L-12 UAC2 devices that tried
+# to enumerate on the same controller.
+
+set -uo pipefail
+
+LOG_TAG="hapax-usb-watchdog"
+# Map of "device path" -> "number of events in last 2 min"
+declare -A event_count
+declare -A event_first_ts
+
+# Window: events counted must be within 120s of the first
+THRESHOLD=3
+WINDOW_SEC=120
+
+log() { logger -t "$LOG_TAG" "$*"; echo "$(date -Iseconds) $*"; }
+
+rebind_device() {
+  local devpath="$1"
+  log "rebinding $devpath (bandwidth storm detected)"
+  echo "$devpath" | tee /sys/bus/usb/drivers/usb/unbind >/dev/null 2>&1 || {
+    log "unbind failed for $devpath"; return 1; }
+  sleep 0.3
+  echo "$devpath" | tee /sys/bus/usb/drivers/usb/bind >/dev/null 2>&1 || {
+    log "rebind failed for $devpath"; return 1; }
+  log "rebound $devpath OK"
+  return 0
+}
+
+log "starting — watching for xHCI bandwidth storms"
+
+journalctl -k -f --no-pager --since now 2>/dev/null | \
+while read -r line; do
+  # Extract usb path like "usb 1-2" or "usb 1-3.2"
+  if [[ "$line" =~ usb[[:space:]]+([0-9]+-[0-9.]+):.*[Nn]ot[[:space:]]+enough[[:space:]]+bandwidth ]]; then
+    dev="${BASH_REMATCH[1]}"
+    now=$(date +%s)
+
+    if [[ -z "${event_first_ts[$dev]:-}" ]]; then
+      event_first_ts["$dev"]=$now
+      event_count["$dev"]=1
+    else
+      first=${event_first_ts[$dev]}
+      if (( now - first > WINDOW_SEC )); then
+        # Window expired: reset
+        event_first_ts["$dev"]=$now
+        event_count["$dev"]=1
+      else
+        event_count["$dev"]=$((event_count[$dev] + 1))
+      fi
+    fi
+
+    n=${event_count[$dev]}
+    if (( n >= THRESHOLD )); then
+      log "threshold hit for $dev ($n events in $((now - event_first_ts[$dev]))s) — rebinding"
+      rebind_device "$dev"
+      # Reset counter after action
+      unset event_count["$dev"] event_first_ts["$dev"]
+    fi
+  fi
+done

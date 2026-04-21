@@ -1,0 +1,21 @@
+# Disable USB autosuspend for audio/video devices (vendor-ID-based,
+# applies to the usb_device parent where power/control lives).
+#
+# Logitech (046d) — BRIO + C920 webcams
+# Blue/Logitech (b58e) — Yeti
+# ZOOM (1686) — LiveTrak L-6/L-12
+# Rode (19f7) — Wireless Pro + charge cases
+# Zoom MIDI (381a) — Erica Synths (uses 381a not 1686 despite being audio)
+# Torso Electronics (1fc9 / alt) — S-4
+
+ACTION=="add", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="046d", ATTR{power/control}="on"
+ACTION=="add", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="b58e", ATTR{power/control}="on"
+ACTION=="add", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="1686", ATTR{power/control}="on"
+ACTION=="add", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="19f7", ATTR{power/control}="on"
+ACTION=="add", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="381a", ATTR{power/control}="on"
+
+# Catch-all for any USB interface that declares Audio or Video class
+# (fallback if vendor match misses something new).
+# Uses RUN to write into the parent device's power/control node.
+ACTION=="add", SUBSYSTEM=="usb", ATTR{bInterfaceClass}=="01", RUN+="/bin/sh -c 'echo on > /sys/%p/../power/control 2>/dev/null || true'"
+ACTION=="add", SUBSYSTEM=="usb", ATTR{bInterfaceClass}=="0e", RUN+="/bin/sh -c 'echo on > /sys/%p/../power/control 2>/dev/null || true'"
