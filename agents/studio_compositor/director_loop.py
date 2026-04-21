@@ -28,7 +28,7 @@ from shared.persona_prompt_composer import compose_persona_prompt
 from shared.stimmung import Stance
 
 
-def _silence_hold_impingement() -> CompositionalImpingement:
+def _silence_hold_impingement(reason: str = "silence_hold") -> CompositionalImpingement:
     """Stock silence-hold impingement for parser-error / legacy-shape fallbacks.
 
     Operator invariant (2026-04-18): every tick must emit at least one
@@ -37,6 +37,13 @@ def _silence_hold_impingement() -> CompositionalImpingement:
     ``compositional_impingements=[]`` — leaving the surface with nothing
     to recruit for the full narrative cadence. Populating a silence-hold
     micromove here keeps the invariant deterministically satisfied.
+
+    ``grounding_provenance=["fallback.<reason>"]`` declares this is a
+    deterministic-code fallback path, not an LLM emission with missing
+    grounding. Per the ``feedback_grounding_exhaustive`` architectural
+    axiom: the ground IS the fallback type. The UNGROUNDED audit fires
+    only on truly empty grounding (LLM bugs), not on system-state
+    fallbacks.
     """
     return CompositionalImpingement(
         narrative=(
@@ -46,6 +53,7 @@ def _silence_hold_impingement() -> CompositionalImpingement:
         intent_family="overlay.emphasis",
         material="void",
         salience=0.2,
+        grounding_provenance=[f"fallback.{reason}"],
     )
 
 
@@ -98,7 +106,8 @@ def _silence_hold_fallback_intent(
         activity=activity,  # type: ignore[arg-type]
         stance=Stance.NOMINAL,
         narrative_text=narrative_text,
-        compositional_impingements=[_silence_hold_impingement()],
+        grounding_provenance=[f"fallback.{reason}"],
+        compositional_impingements=[_silence_hold_impingement(reason=reason)],
         structural_intent=structural,
     )
 
@@ -1554,6 +1563,11 @@ class DirectorLoop:
                     material=material,  # type: ignore[arg-type]
                     salience=0.35,
                     dimensions={},
+                    # Deterministic-code fallback path; ground IS the reason
+                    # (matches the silence-hold pattern in
+                    # _silence_hold_impingement above). UNGROUNDED audit
+                    # then fires only on truly empty grounding (LLM bugs).
+                    grounding_provenance=[f"fallback.micromove.{reason}"],
                 )
             except Exception:
                 log.debug("micromove impingement construct failed", exc_info=True)
@@ -1580,7 +1594,7 @@ class DirectorLoop:
                     activity="observe",
                     stance=_Stance.NOMINAL,
                     narrative_text=f"[micromove:{reason}] {narrative}",
-                    grounding_provenance=[],
+                    grounding_provenance=[f"fallback.micromove.{reason}"],
                     compositional_impingements=[impingement],
                     structural_intent=structural,
                 )
