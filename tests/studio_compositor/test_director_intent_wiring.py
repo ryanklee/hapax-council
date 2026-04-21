@@ -280,3 +280,28 @@ class TestLegacyFlag:
     def test_legacy_mode_env_off(self, monkeypatch):
         monkeypatch.setenv("HAPAX_DIRECTOR_MODEL_LEGACY", "off")
         assert dl._director_model_legacy_mode() is False
+
+
+class TestSilenceHoldImpingementDiagnostic:
+    """``_silence_hold_impingement`` must mark itself ``diagnostic=True`` so
+    the ActivityHeader gloss never renders silence-hold routing text on
+    broadcast. Regression pin for the 2026-04-21 operator screenshot of
+    ``MUSIC | Silence hold: maintain the current surface. stay``.
+    """
+
+    def test_silence_hold_is_diagnostic(self):
+        imp = dl._silence_hold_impingement()
+        assert imp.diagnostic is True
+
+    def test_silence_hold_reason_propagates_to_grounding(self):
+        imp = dl._silence_hold_impingement(reason="parser_non_dict")
+        assert imp.grounding_provenance == ["fallback.parser_non_dict"]
+        assert imp.diagnostic is True
+
+    def test_parser_silence_fallback_carries_diagnostic_flag(self):
+        """End-to-end: an empty LLM result flows through the parser and
+        the resulting DirectorIntent's sole impingement is diagnostic."""
+        intent = dl._parse_intent_from_llm("")
+        assert intent.activity == "silence"
+        assert len(intent.compositional_impingements) == 1
+        assert intent.compositional_impingements[0].diagnostic is True

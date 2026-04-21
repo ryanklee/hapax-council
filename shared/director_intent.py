@@ -155,6 +155,19 @@ class CompositionalImpingement(BaseModel):
         ...,
         description="Tag family the pipeline's catalog routes to.",
     )
+    diagnostic: bool = Field(
+        default=False,
+        description=(
+            "Marks an impingement whose narrative is internal routing / "
+            "governance text that must not reach viewer-facing surfaces. "
+            "Set by deterministic-code fallbacks (silence_hold, parser "
+            "errors). On-screen consumers that render impingement "
+            "narrative (e.g. ActivityHeader gloss) MUST skip diagnostic "
+            "entries. The AffordancePipeline still recruits against them "
+            "— the flag is purely a 'show-don't-tell' fence for legibility "
+            "surfaces, not a recruitment gate."
+        ),
+    )
 
     @field_validator("narrative")
     @classmethod

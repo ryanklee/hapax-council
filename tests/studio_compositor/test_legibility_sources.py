@@ -386,3 +386,99 @@ class TestNoRoundedRectChrome:
         assert arcs_during_bg["n"] == 0, (
             f"{cls.__name__} bg chrome invoked {arcs_during_bg['n']} arcs"
         )
+
+
+# ── Diagnostic-gloss filter ────────────────────────────────────────────────
+
+
+class TestDiagnosticGlossFilter:
+    """The ActivityHeader gloss slot must SKIP impingements marked
+    ``diagnostic: true``. Regression pin for the 2026-04-21 operator
+    screenshot where the silence-hold routing narrative ("Silence hold:
+    maintain the current surface. stay") reached broadcast via the
+    gloss slot.
+    """
+
+    def test_non_diagnostic_impingement_renders_in_gloss(self, tmp_path):
+        _write_narrative_state(tmp_path, activity="music")
+        _write_intent(
+            tmp_path,
+            impingements=[
+                {
+                    "narrative": "drifting downtempo at dusk",
+                    "intent_family": "overlay.emphasis",
+                    "salience": 0.9,
+                    "diagnostic": False,
+                }
+            ],
+        )
+        _surf, spy = _render(ls.ActivityHeaderCairoSource, 800, 60)
+        joined = " | ".join(spy.show_text_calls)
+        assert "drifting downtempo at dusk" in joined
+
+    def test_diagnostic_only_impingement_suppresses_gloss(self, tmp_path):
+        """The exact pattern from the operator screenshot: the only
+        impingement is the silence-hold diagnostic, so the gloss slot
+        must render empty (no routing text on broadcast)."""
+        _write_narrative_state(tmp_path, activity="music")
+        _write_intent(
+            tmp_path,
+            impingements=[
+                {
+                    "narrative": "Silence hold: maintain the current surface.",
+                    "intent_family": "overlay.emphasis",
+                    "salience": 0.2,
+                    "diagnostic": True,
+                }
+            ],
+        )
+        _surf, spy = _render(ls.ActivityHeaderCairoSource, 800, 60)
+        joined = " | ".join(spy.show_text_calls)
+        assert "Silence hold" not in joined
+        assert "maintain the current surface" not in joined
+
+    def test_mix_prefers_non_diagnostic_even_at_lower_salience(self, tmp_path):
+        """If there's any non-diagnostic impingement it wins — even if
+        its salience is below the diagnostic's. The filter drops
+        diagnostics BEFORE the salience argmax."""
+        _write_narrative_state(tmp_path, activity="vinyl")
+        _write_intent(
+            tmp_path,
+            impingements=[
+                {
+                    "narrative": "Silence hold: maintain the current surface.",
+                    "intent_family": "overlay.emphasis",
+                    "salience": 0.9,
+                    "diagnostic": True,
+                },
+                {
+                    "narrative": "turntable focus",
+                    "intent_family": "camera.hero",
+                    "salience": 0.3,
+                    "diagnostic": False,
+                },
+            ],
+        )
+        _surf, spy = _render(ls.ActivityHeaderCairoSource, 800, 60)
+        joined = " | ".join(spy.show_text_calls)
+        assert "turntable focus" in joined
+        assert "Silence hold" not in joined
+
+    def test_missing_diagnostic_key_treated_as_non_diagnostic(self, tmp_path):
+        """Backward compat: legacy JSONL entries without a diagnostic key
+        must continue rendering in the gloss (default False)."""
+        _write_narrative_state(tmp_path, activity="react")
+        _write_intent(
+            tmp_path,
+            impingements=[
+                {
+                    "narrative": "a glimmer at the edge",
+                    "intent_family": "overlay.emphasis",
+                    "salience": 0.7,
+                    # no "diagnostic" key at all
+                }
+            ],
+        )
+        _surf, spy = _render(ls.ActivityHeaderCairoSource, 800, 60)
+        joined = " | ".join(spy.show_text_calls)
+        assert "a glimmer at the edge" in joined

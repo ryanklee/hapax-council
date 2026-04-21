@@ -54,6 +54,7 @@ def _silence_hold_impingement(reason: str = "silence_hold") -> CompositionalImpi
         material="void",
         salience=0.2,
         grounding_provenance=[f"fallback.{reason}"],
+        diagnostic=True,
     )
 
 
