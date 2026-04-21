@@ -1,0 +1,20 @@
+[Unit]
+Description=Hapax USB xHCI bandwidth-wedge surgical watchdog
+Documentation=file:///usr/local/bin/hapax-usb-bandwidth-watchdog
+After=systemd-udevd.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/hapax-usb-bandwidth-watchdog
+Restart=on-failure
+RestartSec=10s
+# Needs root to write /sys/bus/usb/drivers/usb/{bind,unbind}
+User=root
+# Hardening — only needs journal read + USB sysfs write
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/sys/bus/usb/drivers/usb
+
+[Install]
+WantedBy=multi-user.target

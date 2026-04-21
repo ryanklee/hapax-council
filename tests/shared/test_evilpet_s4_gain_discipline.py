@@ -31,8 +31,12 @@ SPEC_PATH = REPO_ROOT / "docs" / "superpowers" / "specs" / "2026-04-20-evilpet-s
 # `Gain 1` mixer control without updating this dict (the test below
 # enforces that). Linear 4.0 ≈ +12 dB; 1.0 ≈ unity.
 EXPECTED_MIXER_GAINS: dict[str, set[float]] = {
-    "hapax-l6-evilpet-capture.conf": {4.0},  # L6 main-mix +12 dB makeup
+    "hapax-l6-evilpet-capture.conf": {4.0},  # L6 main-mix +12 dB makeup (legacy)
     "hapax-livestream-duck.conf": {1.0},  # PR-3 ducker default = pass-through
+    # L-12 v5 per-channel pre-fader/post-comp software gain stages:
+    # contact mic +3.5 dB (1.5), evilpet/rode/sampler +6 dB (2.0),
+    # handytraxx vinyl +12 dB (4.0), PC line unity (1.0), L+R summing unity (1.0).
+    "hapax-l12-evilpet-capture.conf": {1.0, 1.5, 2.0, 4.0},
 }
 
 GAIN_RE = re.compile(r'"Gain 1"\s*=\s*([\d.]+)')
