@@ -147,7 +147,22 @@ def _find_stale_sources_impl(collection_name: str) -> list[str]:
                 if not source or source in seen:
                     continue
                 seen.add(source)
-                if not Path(source).exists():
+                # Per-source guard: some payloads in profile-facts hold a
+                # malformed concatenated-context string instead of a single
+                # path, which triggers OSError 36 (file name too long) on
+                # Path.exists(). Without this guard a single bad point
+                # kills the entire scan via the outer try/except below,
+                # leaving the maintenance timer effectively broken.
+                try:
+                    exists = Path(source).exists()
+                except (OSError, ValueError):
+                    log.debug(
+                        "Skipping malformed source in %s (len=%d)",
+                        collection_name,
+                        len(source),
+                    )
+                    continue
+                if not exists:
                     stale.add(source)
             if next_offset is None:
                 break
