@@ -422,3 +422,66 @@ def test_load_layout_or_fallback_rescales_to_canvas_size() -> None:
     chat_legend = next(s for s in layout.surfaces if s.id == "chat-legend-right")
     expected_chat_x = int(round(1760 * LAYOUT_COORD_SCALE))
     assert chat_legend.geometry.x == expected_chat_x
+
+
+def test_thinking_indicator_z_above_hardm_avoids_occlusion() -> None:
+    """Regression pin for the 2026-04-21 z-order collision fix.
+
+    HARDM's 256×256 rect at (1600, 20) entirely covers the
+    thinking_indicator's 170×44 rect at (1620, 20). Pre-fix, both lived
+    at z=26 (thinking) and z=28 (HARDM) respectively, so HARDM painted
+    on top and the thinking text was invisible. Post-fix, thinking
+    sits at z=32 (above HARDM's z=28) so it composites on top.
+
+    Any layout edit that drops thinking-indicator's z below HARDM's
+    must update both — there is no valid configuration in which
+    thinking lives under HARDM and is visible.
+    """
+    raw = json.loads(DEFAULT_JSON.read_text())
+    layout = Layout.model_validate(raw)
+    surfaces_by_id = {s.id: s for s in layout.surfaces}
+
+    thinking = surfaces_by_id["thinking-indicator-tr"]
+    hardm = surfaces_by_id["hardm-dot-matrix-ur"]
+
+    thinking_x_range = (thinking.geometry.x, thinking.geometry.x + thinking.geometry.w)
+    thinking_y_range = (thinking.geometry.y, thinking.geometry.y + thinking.geometry.h)
+    hardm_x_range = (hardm.geometry.x, hardm.geometry.x + hardm.geometry.w)
+    hardm_y_range = (hardm.geometry.y, hardm.geometry.y + hardm.geometry.h)
+
+    overlaps_x = thinking_x_range[0] < hardm_x_range[1] and hardm_x_range[0] < thinking_x_range[1]
+    overlaps_y = thinking_y_range[0] < hardm_y_range[1] and hardm_y_range[0] < thinking_y_range[1]
+    if overlaps_x and overlaps_y:
+        assert thinking.z_order > hardm.z_order, (
+            f"thinking-indicator z={thinking.z_order} must be greater than "
+            f"hardm-dot-matrix z={hardm.z_order} when their rects overlap "
+            f"(thinking x={thinking_x_range}, y={thinking_y_range} vs "
+            f"hardm x={hardm_x_range}, y={hardm_y_range})"
+        )
+
+
+def test_whos_here_z_above_hardm_avoids_occlusion() -> None:
+    """Regression pin: whos-here's right edge (x=1610) brushes HARDM's
+    left edge (x=1600), so a 10-pixel column overlaps. Pre-fix, both at
+    z=26 and z=28 meant the right edge of whos-here vanished under
+    HARDM. Post-fix, whos-here at z=32 sits above HARDM (z=28).
+    """
+    raw = json.loads(DEFAULT_JSON.read_text())
+    layout = Layout.model_validate(raw)
+    surfaces_by_id = {s.id: s for s in layout.surfaces}
+
+    whos = surfaces_by_id["whos-here-tr"]
+    hardm = surfaces_by_id["hardm-dot-matrix-ur"]
+
+    whos_x_range = (whos.geometry.x, whos.geometry.x + whos.geometry.w)
+    whos_y_range = (whos.geometry.y, whos.geometry.y + whos.geometry.h)
+    hardm_x_range = (hardm.geometry.x, hardm.geometry.x + hardm.geometry.w)
+    hardm_y_range = (hardm.geometry.y, hardm.geometry.y + hardm.geometry.h)
+
+    overlaps_x = whos_x_range[0] < hardm_x_range[1] and hardm_x_range[0] < whos_x_range[1]
+    overlaps_y = whos_y_range[0] < hardm_y_range[1] and hardm_y_range[0] < whos_y_range[1]
+    if overlaps_x and overlaps_y:
+        assert whos.z_order > hardm.z_order, (
+            f"whos-here z={whos.z_order} must be greater than "
+            f"hardm-dot-matrix z={hardm.z_order} when their rects overlap"
+        )

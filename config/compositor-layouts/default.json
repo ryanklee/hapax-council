@@ -564,7 +564,7 @@
       },
       "effect_chain": [],
       "blend_mode": "over",
-      "z_order": 26,
+      "z_order": 32,
       "update_cadence": "rate"
     },
     {
@@ -618,7 +618,7 @@
       },
       "effect_chain": [],
       "blend_mode": "over",
-      "z_order": 26,
+      "z_order": 32,
       "update_cadence": "rate"
     },
     {
