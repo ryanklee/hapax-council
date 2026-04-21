@@ -20,6 +20,7 @@ from agents.audio_router.policy import (
     arbitrate,
     compute_ramp_seconds,
 )
+from agents.audio_router.sticky import DEFAULT_STICK_WINDOW_S, StickyTracker
 from agents.audio_router.state import (
     AudioRouterState,
     BroadcasterState,
@@ -49,4 +50,7 @@ __all__ = [
     "apply_salience_modulation",
     "arbitrate",
     "compute_ramp_seconds",
+    # Sticky (utterance-boundary) tracker
+    "StickyTracker",
+    "DEFAULT_STICK_WINDOW_S",
 ]
