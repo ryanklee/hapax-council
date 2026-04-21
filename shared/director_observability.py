@@ -142,6 +142,11 @@ try:
         "random_mode preset picks, labelled by selection path.",
         ("chosen_via",),
     )
+    _random_mode_transition_total = Counter(
+        "hapax_random_mode_transition_total",
+        "random_mode chain-change transition picks, by capability name (Phase 7 of #166).",
+        ("transition",),
+    )
     # Director watchdog Phase 2 (§8 single-flight): counts ticks where the
     # director was about to call the LLM but the prior call had not yet
     # returned. Each increment is one tick the director silently skipped
@@ -808,6 +813,21 @@ def emit_random_mode_pick(chosen_via: str) -> None:
         log.warning("emit_random_mode_pick failed", exc_info=True)
 
 
+def emit_transition_pick(transition_name: str) -> None:
+    """Record a random_mode chain-change transition pick (Phase 7 of #166).
+
+    ``transition_name`` is one of the ``transition.*`` capability names
+    in ``transition_primitives.PRIMITIVES``. The Phase 9 entropy metric
+    derives from this counter.
+    """
+    if not _METRICS_AVAILABLE:
+        return
+    try:
+        _random_mode_transition_total.labels(transition=transition_name).inc()
+    except Exception:
+        log.warning("emit_transition_pick failed", exc_info=True)
+
+
 __all__ = [
     "canonicalize_grounding_signal",
     "emit_director_intent",
@@ -825,6 +845,7 @@ __all__ = [
     "emit_homage_violation",
     "emit_parse_failure",
     "emit_random_mode_pick",
+    "emit_transition_pick",
     "emit_ungrounded_audit",
     "emit_ungrounded_synth",
     "emit_vacuum_prevented",
