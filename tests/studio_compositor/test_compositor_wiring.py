@@ -75,6 +75,7 @@ class TestStartLayoutOnly:
             "activity_variety_log",
             "whos_here",
             "hardm_dot_matrix",
+            "gem",
         }
         assert {s.id for s in layout.sources} == expected_ids
         assert set(compositor.source_registry.ids()) == expected_ids
@@ -105,6 +106,7 @@ class TestStartLayoutOnly:
             "activity_variety_log",
             "whos_here",
             "hardm_dot_matrix",
+            "gem",
         }
 
     def test_broken_json_resolves_to_fallback(self, tmp_path: Path) -> None:

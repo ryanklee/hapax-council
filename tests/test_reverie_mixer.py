@@ -59,12 +59,13 @@ def test_mixer_has_same_interface_as_actuation_loop():
 
 
 def test_affordance_registration_includes_shader_nodes():
-    """Pipeline should register 12 shader node + 4 content + 3 legacy affordances.
+    """Pipeline should register 13 shader node + 3 content + 3 legacy affordances.
 
+    13th shader node is ``node.sierpinski_content`` (yt-reverie-sierpinski-separation Phase 1C).
+    Content affordances: content.narrative_text, content.waveform_viz, content.yt.feature.
+    GEM affordances were extracted from the reverie pipeline at Phase 5/6 retirement.
     Camera-perspective affordances moved to space.* domain in the shared registry.
     Episodic/knowledge/profile recall affordances live in knowledge.* domain.
-    Content affordances: content.narrative_text, content.waveform_viz, gem.emphasis,
-    gem.composition (GEM ward content expressed via CP437 raster surface).
     """
     from agents.reverie._affordances import (
         ALL_CONTENT_AFFORDANCES,
@@ -72,15 +73,15 @@ def test_affordance_registration_includes_shader_nodes():
         SHADER_NODE_AFFORDANCES,
     )
 
-    assert len(SHADER_NODE_AFFORDANCES) == 12
-    assert len(ALL_CONTENT_AFFORDANCES) == 4
+    assert len(SHADER_NODE_AFFORDANCES) == 13
+    assert len(ALL_CONTENT_AFFORDANCES) == 3
     assert len(LEGACY_AFFORDANCES) == 3
     # All shader nodes start with "node."
     for name, _ in SHADER_NODE_AFFORDANCES:
         assert name.startswith("node."), f"{name} should start with node."
-    # Content affordances are content-domain or GEM-domain expression surfaces.
+    # Content affordances all live in the content.* domain post GEM retirement.
     for name, _, _ops in ALL_CONTENT_AFFORDANCES:
-        assert name.startswith(("content.", "gem.")), f"{name} should start with content. or gem."
+        assert name.startswith("content."), f"{name} should start with content."
 
 
 def test_slot_opacities_from_fragment_salience():

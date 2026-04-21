@@ -66,10 +66,11 @@ def test_stereo_pair_present(raw_config: str) -> None:
         assert stage in raw_config, f"missing stereo stage {stage}"
 
 
-def test_threshold_pinned_at_minus_14db(raw_config: str) -> None:
+def test_threshold_pinned_at_minus_12db(raw_config: str) -> None:
     """YT bed wallpaper compression starting point. Heavier than voice
-    (-18 dB) because uploader variance is wider; tune from here."""
-    assert '"Threshold level (dB)" = -14' in raw_config
+    (-18 dB) because uploader variance is wider; tune from here.
+    Lifted from -14 to -12 dB after PR #1144 audio remediation."""
+    assert '"Threshold level (dB)" = -12' in raw_config
 
 
 def test_ratio_pinned_at_4_to_1(raw_config: str) -> None:
@@ -77,13 +78,14 @@ def test_ratio_pinned_at_4_to_1(raw_config: str) -> None:
     assert '"Ratio (1:n)" = 4' in raw_config
 
 
-def test_true_peak_ceiling_pinned_at_minus_1_5_dbtp(raw_config: str) -> None:
-    """Audit spec §3.4 target. Leaves 0.5 dB headroom under voice
-    (-1.0 dB) so YT bed can never out-peak the operator voice.
+def test_true_peak_ceiling_pinned_at_minus_1_0_dbtp(raw_config: str) -> None:
+    """Audit spec §3.4 target. Matches voice ceiling (-1.0 dB) post
+    PR #1144 audio remediation — earlier -1.5 dB target was lifted to
+    -1.0 to reduce duck-induced level dips on quiet YT segments.
 
     Control name is 'dB limit' on hard_limiter_1413 (NOT 'Limit (dB)'
     which is the fast_lookahead_limiter_1913 control name)."""
-    assert '"dB limit" = -1.5' in raw_config
+    assert '"dB limit" = -1.0' in raw_config
 
 
 def test_audio_rate_48k(raw_config: str) -> None:
