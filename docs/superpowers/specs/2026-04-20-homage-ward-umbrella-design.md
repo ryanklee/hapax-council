@@ -23,9 +23,9 @@
 
 ## §1 — Summary
 
-**Shipped by this spec:** A unified framework for Homage Ward enhancement + spatial-dynamism work across 16 wards (15 enhanceable + reverie substrate), locking recognizability invariants and use-case acceptance tests per ward. Three optical modulation rules (atmospheric perspective, defocus blur, motion parallax) that the Nebulous Scrim applies uniformly to all wards. A shared enhancement/effect-processing taxonomy (12 families, 40+ techniques) mapped to existing and three new effect-graph nodes. Two fixed annexes (CBIP, Vitruvian) with surface-specific enhancements + token-path patterns. The "wards live through the scrim" decision.
+**Shipped by this spec:** A unified framework for Homage Ward enhancement + spatial-dynamism work across 20 ward profiles (19 enhanceable + reverie substrate), locking recognizability invariants and use-case acceptance tests per ward. Three optical modulation rules (atmospheric perspective, defocus blur, motion parallax) that the Nebulous Scrim applies uniformly to all wards. A shared enhancement/effect-processing taxonomy (12 families, 40+ techniques) mapped to existing and three new effect-graph nodes. Two fixed annexes (CBIP, Vitruvian) with surface-specific enhancements + token-path patterns. The "wards live through the scrim" decision.
 
-**Ward count reconciliation (2026-04-21):** Ratified ward inventory is **16 wards** — the original 14 in YAML + GEM (#15, operator-directed 2026-04-19, replaces captions in lower-band) + chat_keywords (#16, operator-directed 2026-04-20). Captions, chat_ambient, grounding_provenance_ticker, and research_marker_overlay are already-shipped wards now profiled in `config/ward_enhancement_profiles.yaml`. Captions retires when GEM activates. Vitruvian is not a separate ward; it is the silhouette inside `token_pole`.
+**Ward count reconciliation (2026-04-21):** Ratified profile inventory is **20 entries** — the original 14 (13 wards + reverie substrate) + GEM (operator-directed 2026-04-19, replaces captions in the lower-band geometry) + chat_keywords (operator-directed 2026-04-20) + four already-shipped wards getting their first profile (captions, chat_ambient, grounding_provenance_ticker, research_marker_overlay). Captions is marked `deprecation: "Retires when GEM ward (task #191) ships."` — once GEM has been live for one stream cycle, captions drops to 19 entries (18 enhanceable + reverie). Vitruvian is not a separate ward; it is the silhouette inside `token_pole`. The shorthand "15 wards" / "16 wards" used in earlier drafts and delta's 2026-04-20 audit referred to the enhanceable subset visible in code; the umbrella now governs all profiled wards uniformly.
 
 **Not shipped:** Per-ward spec documents for the remaining 13 wards (deferred to Phase I—after recognizability invariants are locked). Switchability UI (director affordance for preset selection). Runtime ward registration/deregistration. Animation tweens on geometry changes.
 
@@ -109,9 +109,9 @@ The taxonomy (§5) is the authority. Per-ward specializations add context or bin
 
 ## §4 — Ward Inventory and Recognizability Invariants
 
-### 4.1 Ward table (16 wards — ratified 2026-04-21)
+### 4.1 Ward table (20 profiles — ratified 2026-04-21)
 
-> Originally drafted with 14 named wards; ratified 2026-04-21 to 16 (adds GEM, chat_keywords, captions, chat_ambient, grounding_provenance_ticker, research_marker_overlay; reverie remains as substrate, not a recruited ward). See `config/ward_enhancement_profiles.yaml` for the canonical per-ward profile (recognizability invariant + acceptance test + accepted/rejected enhancement categories + governance bindings). The original 14-row table below is preserved for diff continuity; the additional 6 wards are profiled in YAML and summarized at §4.1bis.
+> Originally drafted with 14 named wards; ratified 2026-04-21 to 20 profiles (adds GEM, chat_keywords, captions, chat_ambient, grounding_provenance_ticker, research_marker_overlay; reverie remains as substrate, not a recruited ward). See `config/ward_enhancement_profiles.yaml` for the canonical per-ward profile (recognizability invariant + acceptance test + accepted/rejected enhancement categories + governance bindings). The original 14-row table below is preserved for diff continuity; the additional 6 wards are profiled in YAML and summarized at §4.1bis.
 
 | Ward | Essential Intent | Use-case | Recognizability Invariant | Acceptance Test |
 |---|---|---|---|---|
@@ -488,7 +488,7 @@ No per-ward spec needed unless surface-specific governance applies (e.g., reveri
 
 ### 12.1 Unit tests
 
-- `test_ward_enhancement_profile_schema.py`: WardEnhancementProfile model round-trip, all 16 wards (15 enhanceable + reverie substrate) instantiable, serialization.
+- `test_ward_enhancement_profile_schema.py`: WardEnhancementProfile model round-trip, all 20 ward profiles (19 enhanceable + reverie substrate) instantiable, serialization.
 - `test_technique_taxonomy_coverage.py`: All 40+ techniques in taxonomy have at least one "applicable wards" binding; no orphaned techniques.
 - `test_recognizability_metrics_compute.py`: OCR, edge-IoU, pHash, palette delta-E all compute + threshold-compare correctly.
 
@@ -529,7 +529,7 @@ Before any enhancement family ships to livestream, run human spot-check on 10–
 
 **Phase skeleton (refine against umbrella research §9):**
 
-1. **WardEnhancementProfile model + registry** — Pydantic schema, YAML registry of all 16 wards (15 enhanceable + reverie substrate) + their invariants, test harness scaffold.
+1. **WardEnhancementProfile model + registry** — Pydantic schema, YAML registry of all 20 ward profiles (19 enhanceable + reverie substrate) + their invariants, test harness scaffold.
 2. **Shared technique-taxonomy library** — Effect-graph node definitions (existing + 4 new: posterize, kuwahara, palette_extract, edge_detect), technique-inventory table, recognizability-metrics computations.
 3. **OQ-02 three-bound test harness (per-ward)** — CI gate machinery, per-bound test implementations, audio-profile multiplexing (parallel with HSEA Phase 0).
 4. **Ward-through-scrim optical-modulation layer** — Compositor-side depth-conditioned blur/tint/parallax application, API contract fixation, face-obscure-before-scrim integration.
@@ -568,7 +568,7 @@ Dependencies: Phase 2 blocks Phase 3; Phase 4 unblocks Phase 5–6 in parallel; 
 
 Concrete, measurable. Tied to ward inventory + operator directive.
 
-**All 16 wards (15 enhanceable + reverie substrate):**
+**All 20 profiles (19 enhanceable + reverie substrate):**
 - ✓ Have explicit recognizability-invariant + use-case acceptance test documented in §4 and pinned in test code.
 - ✓ Have ≥1 enhancement profile defined (from the 5-family shared taxonomy or per-surface annex).
 - ✓ Pass OQ-02 three-bound gates under chosen enhancement profile(s).

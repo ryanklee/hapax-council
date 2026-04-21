@@ -115,6 +115,16 @@ class WardEnhancementProfile(BaseModel):
             "non-manipulation + anti-personification."
         ),
     )
+    deprecation: str | None = Field(
+        default=None,
+        description=(
+            "If set, marks the ward as scheduled for retirement and "
+            "explains the migration path. Used to keep the umbrella "
+            "governance gate covering the live render path while a "
+            "replacement ward is brought up — captions / GEM cutover "
+            "is the founding example."
+        ),
+    )
 
 
 class WardEnhancementProfileRegistry:

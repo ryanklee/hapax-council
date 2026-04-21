@@ -64,6 +64,19 @@ EXPECTED_WARDS = frozenset(
         "whos_here",
         "hardm_dot_matrix",
         "reverie",
+        # Ratified 2026-04-21 (operator decision): GEM (#15, replaces
+        # captions in lower-band geometry), chat_keywords (#16, aggregate
+        # keyword texture), and four already-shipped wards getting their
+        # first profile (captions [deprecating], chat_ambient,
+        # grounding_provenance_ticker, research_marker_overlay). See
+        # docs/superpowers/specs/2026-04-20-homage-ward-umbrella-design.md
+        # §0 ward count reconciliation.
+        "gem",
+        "chat_keywords",
+        "captions",
+        "chat_ambient",
+        "grounding_provenance_ticker",
+        "research_marker_overlay",
     }
 )
 
