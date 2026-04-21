@@ -1621,14 +1621,18 @@ class DirectorLoop:
                     ["impingement_cascade", "recruitment_candidate_panel"],
                     "random",
                 ),
-                (
-                    "gem.emphasis",
-                    "Stamp a small graffito on the lower band — hold the attention "
-                    "on a fragment of what's present.",
-                    "fire",
-                    ["gem"],
-                    "sequential",
-                ),
+                # NOTE (2026-04-21): gem.emphasis removed from the fallback
+                # cycle. The fallback micromove narrative is a meta-instruction
+                # for speak/log contexts ("Stamp a small graffito on the lower
+                # band — hold the attention on a fragment of what's present.")
+                # which the GEM producer (gem_producer._extract_emphasis_text)
+                # would treat as authentic graffito content and render inside
+                # the banner. GEM needs grounded mural content, not a
+                # description of what the mural should do. When the director's
+                # LLM emits a proper gem.emphasis DirectorIntent it still
+                # reaches GEM; when the fallback path fires, GEM stays on its
+                # static `» hapax «` frame rather than broadcasting
+                # director-internal prose.
                 (
                     "ward.highlight",
                     "Brighten the album face for a beat so the music stays legible.",
