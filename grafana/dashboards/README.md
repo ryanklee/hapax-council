@@ -9,6 +9,7 @@ Authoritative copies of Grafana dashboard JSON live in this directory. Grafana r
 | `studio-cameras.json` | (per-file) | Phase 4 of the camera 24/7 resilience epic. Source: `agents/studio_compositor/metrics.py` on `127.0.0.1:9482`. |
 | `lrr-per-condition.json` | `lrr-per-condition` | LRR Phase 10 §3.1 per-condition LLM call slicing. Every LLM call site publishes `hapax_llm_calls_total` / `hapax_llm_call_latency_seconds` / `hapax_llm_call_outcomes_total` tagged with the active research condition_id. |
 | `lrr-stimmung.json` | `lrr-stimmung` | LRR Phase 10 affect + system-state dashboard. 11 stimmung dimensions + overall stance + freshness. Source: `/api/predictions/metrics` (logos, scraped at 30s). |
+| `finding-x-grounding.json` | `finding-x-grounding` | FINDING-X grounding-provenance constitutional-invariant observability. Surfaces `hapax_director_ungrounded_total` (raw LLM empty rate, pre-synthesis) + `hapax_director_ungrounded_synth_total{intent_family}` (synth-fallback rate). Rising synth rate = LLM-compliance drift. Spec: `docs/superpowers/specs/2026-04-21-finding-x-grounding-synth-design.md` §5. |
 
 ## Install
 

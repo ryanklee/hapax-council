@@ -1,0 +1,140 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {"type": "grafana", "uid": "-- Grafana --"},
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "FINDING-X — grounding_provenance constitutional-invariant observability.\n\nSurfaces two counter families from shared/director_observability.py:\n  - hapax_director_ungrounded_total{condition_id,scope} — raw LLM empty rate, fired by emit_ungrounded_audit pre-synthesis. Scope ∈ {intent, impingement}.\n  - hapax_director_ungrounded_synth_total{intent_family} — how often the post-parse synthesis hook had to substitute a synthetic inferred.<stance>.<family> marker for an empty LLM emission.\n\nAfter the FINDING-X Phase 1 synth hook (PR #1153) every downstream CompositionalImpingement carries non-empty grounding_provenance by construction. The synth counter is the operator-visible signal of LLM-compliance drift — if it rises, LLMs are leaning harder on the synth fallback and the downstream wards start seeing generic 'inferred.*' markers instead of real perceptual-field keys.\n\nDeployment: symlink this file to ~/llm-stack/grafana/provisioning/dashboards/json/finding-x-grounding.json, then restart the grafana container or reload provisioning.\n\nSee docs/superpowers/specs/2026-04-21-finding-x-grounding-synth-design.md §5 for the full observability contract.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Raw LLM empty-provenance rate (pre-synthesis). Fires from emit_ungrounded_audit for every empty grounding_provenance the LLM emits, split by scope. scope=intent is the top-level DirectorIntent.grounding_provenance emptiness (not synthesized — top-level stays as-is per spec §4); scope=impingement is the per-CompositionalImpingement rate (synthesized by the hook).\n\nA sustained high impingement rate is the baseline LLM-compliance problem. A prompt improvement should move this down over time.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"drawStyle": "line", "fillOpacity": 20, "stacking": {"mode": "none"}},
+          "unit": "reqps"
+        }
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "id": 1,
+      "targets": [
+        {
+          "expr": "sum(rate(hapax_director_ungrounded_total[5m])) by (scope)",
+          "legendFormat": "scope={{scope}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Ungrounded rate (pre-synthesis, by scope)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Synthesized impingements per second, by intent_family. Every increment here is an impingement the LLM emitted without grounding_provenance that got a synthetic 'inferred.<stance>.<family>' marker. A rising rate or a dominant family signals LLM-compliance drift for that intent category.\n\nShould correlate 1:1 with hapax_director_ungrounded_total{scope=impingement}; divergence between the two means the synth hook and the audit counter are out of sync (should not happen; both fire on the same condition).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"drawStyle": "line", "fillOpacity": 30, "stacking": {"mode": "normal"}},
+          "unit": "reqps"
+        }
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "id": 2,
+      "targets": [
+        {
+          "expr": "sum(rate(hapax_director_ungrounded_synth_total[5m])) by (intent_family)",
+          "legendFormat": "{{intent_family}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Synth rate by intent_family",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "LLM-compliance ratio: fraction of recent compositional impingements that shipped WITH grounding_provenance from the LLM (not needing synthesis). Computed as 1 − (synth_rate / impingement_emission_rate). 1.0 = perfect LLM compliance, 0.0 = every impingement needed a synthetic marker.\n\nThe impingement-emission baseline uses hapax_compositional_impingement_total (existing counter) so the denominator is the full impingement flow, not a subset.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"drawStyle": "line", "fillOpacity": 20, "stacking": {"mode": "none"}},
+          "unit": "percentunit",
+          "max": 1,
+          "min": 0
+        }
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "id": 3,
+      "targets": [
+        {
+          "expr": "1 - (sum(rate(hapax_director_ungrounded_synth_total[5m])) / clamp_min(sum(rate(hapax_compositional_impingement_total[5m])), 1e-9))",
+          "legendFormat": "LLM-grounded fraction",
+          "refId": "A"
+        }
+      ],
+      "title": "LLM grounding-compliance ratio",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Current synth-count total since process start, per intent_family. Useful for spotting which families dominate the synthesis population without waiting for rate windows. Resets on compositor restart.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"align": "auto", "displayMode": "color-text"},
+          "unit": "short"
+        }
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "id": 4,
+      "options": {
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "expr": "sum(hapax_director_ungrounded_synth_total) by (intent_family)",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{intent_family}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Cumulative synth count by intent_family",
+      "type": "table",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {"Time": true},
+            "indexByName": {"intent_family": 0, "Value": 1},
+            "renameByName": {"Value": "synth count"}
+          }
+        }
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["finding-x", "director", "observability", "grounding"],
+  "templating": {"list": []},
+  "time": {"from": "now-1h", "to": "now"},
+  "timepicker": {},
+  "timezone": "",
+  "title": "FINDING-X — Grounding provenance",
+  "uid": "finding-x-grounding",
+  "version": 1,
+  "weekStart": ""
+}
