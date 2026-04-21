@@ -74,6 +74,37 @@ plan §Phase 5 "auto-fix subcommand" item. Designed for systemd-
 timer composition (silence_started_at persists across ticks via
 /run/user/1000/hapax-pin-glitch-state.json).
 
+### Audit-remediation sprint (3rd post-compaction run, after delta's audit)
+
+Delta filed `docs/superpowers/audits/2026-04-20-3h-work-audit-remediation.md`
+with 32 findings + 10 bundles. Alpha owns B1, B2, B3, B9 and shares
+B5 with delta-lead. CI was red on stale tests. Shipped:
+
+| Commit | What |
+|---|---|
+| `88c5f3e53` | **CI fix** — choreographer + substrate test isolation, e2e leak source. Two new conftest files (programme_manager + integration) prevent /dev/shm + ~/hapax-state pollution. |
+| `6721fb863` | B1 — VadStatePublisher gates on voice_gate.evaluate_and_emit (phantom-VAD remediation, fall-open default) |
+| `2c1820454` | B2 / Critical #2 — assemble_description renders attributions; sync_once reads via injectable AttributionFileWriter |
+| `3843e1806` | B3 / Medium #18 — capability_bias_positive clamped to [1.0, 5.0] (saturation prevention) |
+| `77098802c` | B3 / Critical #5 — ProgrammeOutcomeLog with rotation + manager wire-in + per-dir conftest isolation |
+| `72dd2cfae` | B3 / Critical #3 — 5 named abort predicates registered with conservative fail-open posture |
+| `3572ce7f7` | B9 — Grafana panels for Evil Pet preset recalls |
+| `d350e74bf` | B2 / L#27 — extended YouTube URL form coverage (40 new test cases) |
+| `9b2eed0fb` | B2 / H#13 — YT bed loudnorm filter chain (-16 LUFS / -1.5 dBTP) |
+| `dbc8b786b` | B5 — pin-check live-probe wrapper + systemd unit/timer |
+| `6d178f88f` | Stale-test cleanup: pyaudio → async pw-cat (15 false-positive fails removed) |
+| `4828e2c3a` | WorkingMode.FORTRESS + audio_input_source list-form tests |
+| `78168635b` | Layout: chat_ambient source/surface/assignment |
+| `f1a2f462c` | Layout: captions source/surface/assignment |
+| `4205d1563` | Layout: grounding_provenance_ticker source/surface/assignment |
+
+Critical #4 (Prometheus lifecycle) is a production wire-up issue,
+not a code defect — manager already calls emit_programme_start/end
+at lines 318/325; needs daimonion startup integration which is a
+larger workstream.
+
+B6, B7, B8, B10 are delta-owned or operator-decision-gated.
+
 ## Operator standing directives (still in force)
 
 - **Bias toward action.** Pick the obvious next item. "Always pick up
