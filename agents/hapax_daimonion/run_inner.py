@@ -47,6 +47,7 @@ RECREATE_TASKS: frozenset[str] = frozenset(
         "sidechat_consumer_loop",
         "actuation_loop",
         "gem_producer_loop",
+        "programme_manager_loop",
     }
 )
 LOG_AND_CONTINUE_TASKS: frozenset[str] = frozenset()
@@ -438,7 +439,22 @@ async def run_inner(daemon: VoiceDaemon) -> None:
         "gem_producer_loop",
         lambda: gem_producer_loop(daemon),
     )
-    log.info("CPAL runner + impingement consumers (CPAL + affordance + sidechat + gem) started")
+    # ProgrammeManager tick loop — closes B3 critical #4 (Prometheus
+    # lifecycle) + #5 (JSONL outcome log) wire-up gap. The manager is
+    # fully implemented in agents/programme_manager/manager.py but had
+    # no production runner until now. 1 Hz cadence; no-op when no
+    # programmes are scheduled.
+    from agents.hapax_daimonion.programme_loop import programme_manager_loop
+
+    _make_task(
+        daemon,
+        "programme_manager_loop",
+        lambda: programme_manager_loop(daemon),
+    )
+    log.info(
+        "CPAL runner + impingement consumers "
+        "(CPAL + affordance + sidechat + gem) + programme manager started"
+    )
 
     if daemon.cfg.mc_enabled or daemon.cfg.obs_enabled:
         _make_task(daemon, "actuation_loop", lambda: actuation_loop(daemon))
