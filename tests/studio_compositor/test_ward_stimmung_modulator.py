@@ -65,16 +65,28 @@ def test_stale_dims_skipped(enabled: None, current_path: Path) -> None:
 
 
 def test_default_plane_wards_untouched(enabled: None, current_path: Path) -> None:
-    """``on-scrim`` wards keep their values — modulator never overrides default plane."""
+    """``on-scrim`` wards NOT in the WARD_Z_PLANE_DEFAULTS map keep their values —
+    modulator never overrides the default plane for non-mapped wards."""
+    from agents.studio_compositor.z_plane_constants import WARD_Z_PLANE_DEFAULTS
+
     _write_current(current_path, {"depth": 1.0, "coherence": 0.0})
     mod = WardStimmungModulator(current_path=current_path, tick_every_n=1)
     base = WardProperties(z_plane="on-scrim", alpha=1.0)
+    captured_writes: list[str] = []
+
+    def _capture(ward_id: str, props: WardProperties, ttl_s: float) -> None:
+        captured_writes.append(ward_id)
+
     with (
         patch.object(_wsm, "get_specific_ward_properties", return_value=base),
-        patch.object(_wsm, "set_ward_properties") as setter,
+        patch.object(_wsm, "set_ward_properties", side_effect=_capture),
     ):
         mod.maybe_tick()
-    setter.assert_not_called()
+    # Wards NOT in the defaults map must not be touched.
+    for ward_id in captured_writes:
+        assert ward_id in WARD_Z_PLANE_DEFAULTS, (
+            f"modulator wrote to {ward_id} which has no default plane assignment"
+        )
 
 
 def test_beyond_scrim_attenuates_alpha_with_depth(enabled: None, current_path: Path) -> None:
@@ -142,6 +154,59 @@ def test_modulator_swallows_internal_exceptions(enabled: None, current_path: Pat
     with patch.object(mod, "_run", side_effect=RuntimeError("kaboom")):
         # Must not raise.
         mod.maybe_tick()
+
+
+def test_default_z_plane_applied_when_ward_has_no_override(
+    enabled: None, current_path: Path
+) -> None:
+    """Spec §4 default plane assignment fires for wards in WARD_Z_PLANE_DEFAULTS
+    when no explicit override exists."""
+    from agents.studio_compositor.z_plane_constants import WARD_Z_PLANE_DEFAULTS
+
+    _write_current(current_path, {"depth": 1.0, "coherence": 0.5})
+    mod = WardStimmungModulator(current_path=current_path, tick_every_n=1)
+    captured: dict[str, WardProperties] = {}
+
+    def _capture(ward_id: str, props: WardProperties, ttl_s: float) -> None:
+        captured[ward_id] = props
+
+    with (
+        patch.object(_wsm, "get_specific_ward_properties", return_value=None),
+        patch.object(_wsm, "set_ward_properties", side_effect=_capture),
+    ):
+        mod.maybe_tick()
+    # Each defaults-mapped ward should now have its mapped z_plane on disk.
+    for ward_id, expected_plane in WARD_Z_PLANE_DEFAULTS.items():
+        assert ward_id in captured, f"{ward_id} missing from modulator writes"
+        assert captured[ward_id].z_plane == expected_plane
+
+
+def test_default_plane_does_not_override_existing_assignment(
+    enabled: None, current_path: Path
+) -> None:
+    """Director-set z_plane is preserved — defaults only fire on on-scrim."""
+    _write_current(current_path, {"depth": 0.5, "coherence": 0.5})
+    mod = WardStimmungModulator(current_path=current_path, tick_every_n=1)
+    # chat_ambient is in defaults (mid-scrim), but director already set it
+    # to beyond-scrim — the modulator must NOT downgrade to mid-scrim.
+    director_set = WardProperties(z_plane="beyond-scrim", alpha=0.9)
+    captured: list[WardProperties] = []
+
+    def _capture(ward_id: str, props: WardProperties, ttl_s: float) -> None:
+        if ward_id == "chat_ambient":
+            captured.append(props)
+
+    with (
+        patch.object(
+            _wsm,
+            "get_specific_ward_properties",
+            side_effect=lambda w: director_set if w == "chat_ambient" else None,
+        ),
+        patch.object(_wsm, "set_ward_properties", side_effect=_capture),
+    ):
+        mod.maybe_tick()
+    assert captured, "chat_ambient should still get a write"
+    assert captured[0].z_plane == "beyond-scrim"
 
 
 def test_blit_with_depth_and_modulator_round_trip(enabled: None, current_path: Path) -> None:

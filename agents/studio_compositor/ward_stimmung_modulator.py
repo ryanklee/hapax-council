@@ -31,7 +31,10 @@ from agents.studio_compositor.ward_properties import (
     get_specific_ward_properties,
     set_ward_properties,
 )
-from agents.studio_compositor.z_plane_constants import _Z_INDEX_BASE
+from agents.studio_compositor.z_plane_constants import (
+    _Z_INDEX_BASE,
+    WARD_Z_PLANE_DEFAULTS,
+)
 
 log = logging.getLogger(__name__)
 
@@ -76,9 +79,19 @@ class WardStimmungModulator:
             _emit_modulator_stale()
             return
         for ward_id in WARD_DOMAIN:
-            base = get_specific_ward_properties(ward_id) or WardProperties()
+            existing = get_specific_ward_properties(ward_id)
+            base = existing or WardProperties()
+            # Apply spec §4 default z-plane assignment when no override
+            # exists (or override is on the default plane). Director
+            # ``placement_bias`` and recruitment metadata still take
+            # precedence — both write z_plane explicitly to non-default,
+            # which we honor below.
+            if base.z_plane == "on-scrim":
+                default_plane = WARD_Z_PLANE_DEFAULTS.get(ward_id)
+                if default_plane is not None:
+                    base = replace(base, z_plane=default_plane)
             updated = self._apply_dims(base, dims)
-            if updated is base:
+            if updated is base and existing is not None:
                 continue
             set_ward_properties(ward_id, updated, ttl_s=self.ward_properties_ttl_s)
             _emit_depth_attenuation(updated.z_plane, updated.z_index_float)

@@ -26,4 +26,36 @@ _Z_INDEX_BASE: Final[dict[str, float]] = {
 DEFAULT_Z_PLANE: Final[str] = "on-scrim"
 DEFAULT_Z_INDEX_FLOAT: Final[float] = 0.5
 
-__all__ = ["_Z_INDEX_BASE", "DEFAULT_Z_PLANE", "DEFAULT_Z_INDEX_FLOAT"]
+# Per-ward initial z-plane assignments (spec §4 taxonomy at
+# ``docs/superpowers/specs/2026-04-21-ward-stimmung-modulator-design.md``).
+# These apply only when no ward override exists yet — director
+# ``placement_bias`` and explicit recruitment metadata still take
+# precedence (spec §7). Wards not listed here resolve to the default
+# ``"on-scrim"`` plane.
+#
+# - ``surface-scrim`` (foreground, opacity ≈ 1.0): always-legible chrome
+#   that must read clearly even under heavy depth attenuation
+# - ``mid-scrim`` (informational backdrop, opacity ≈ 0.8 at depth=0.5):
+#   chrome that benefits from sitting slightly recessed so cameras +
+#   sierpinski + reverie content read forward
+# - ``beyond-scrim`` (atmosphere layer, opacity ≈ 0.68 at depth=0.5):
+#   immersive background pieces that should fade as the imagination
+#   ``depth`` dim rises
+WARD_Z_PLANE_DEFAULTS: Final[dict[str, str]] = {
+    # Surface — always legible
+    "stream_overlay": "surface-scrim",
+    # Mid — informational backdrop
+    "chat_ambient": "mid-scrim",
+    "impingement_cascade": "mid-scrim",
+    "thinking_indicator": "mid-scrim",
+    "hardm_dot_matrix": "mid-scrim",
+    # Beyond — atmosphere
+    "album": "beyond-scrim",
+}
+
+__all__ = [
+    "_Z_INDEX_BASE",
+    "DEFAULT_Z_INDEX_FLOAT",
+    "DEFAULT_Z_PLANE",
+    "WARD_Z_PLANE_DEFAULTS",
+]
