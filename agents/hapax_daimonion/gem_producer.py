@@ -128,7 +128,13 @@ def render_composition_template(text: str) -> list[GemFrame]:
 
 
 def frames_for_impingement(imp: Impingement) -> list[GemFrame]:
-    """Convert an impingement into ≤MAX_FRAMES_PER_IMPINGEMENT frames."""
+    """Convert an impingement into ≤MAX_FRAMES_PER_IMPINGEMENT frames.
+
+    Synchronous template path. The async variant
+    ``async_frames_for_impingement`` tries LLM authoring first when the
+    ``HAPAX_GEM_LLM_AUTHORING`` flag is set, and falls back here on any
+    failure or when the flag is off.
+    """
     if not _intent_matches(imp):
         return []
     text = _extract_emphasis_text(imp)
@@ -139,6 +145,34 @@ def frames_for_impingement(imp: Impingement) -> list[GemFrame]:
     else:
         frames = render_emphasis_template(text)
     return frames[:MAX_FRAMES_PER_IMPINGEMENT]
+
+
+async def async_frames_for_impingement(imp: Impingement) -> list[GemFrame]:
+    """Async authoring — LLM first when opted in, template fallback always.
+
+    LLM authoring opt-in: ``HAPAX_GEM_LLM_AUTHORING=1`` env flag (read
+    fresh each call so flips take effect without a restart). When the
+    flag is off, behavior matches ``frames_for_impingement`` exactly.
+    When on but the LLM call fails (network / timeout / Pydantic
+    validation / model unavailable), the template path is used.
+    """
+    if not _intent_matches(imp):
+        return []
+    text = _extract_emphasis_text(imp)
+    if not text:
+        return []
+
+    from agents.hapax_daimonion.gem_authoring_agent import (
+        author_sequence,
+        is_llm_authoring_enabled,
+    )
+
+    if is_llm_authoring_enabled():
+        sequence = await author_sequence(imp, text)
+        if sequence is not None and sequence.frames:
+            return [GemFrame(text=f.text, hold_ms=f.hold_ms) for f in sequence.frames]
+
+    return frames_for_impingement(imp)
 
 
 def write_frames_atomic(frames: list[GemFrame], path: Path) -> None:
@@ -188,7 +222,7 @@ async def gem_producer_loop(
     while daemon._running:
         try:
             for imp in consumer.read_new():
-                frames = frames_for_impingement(imp)
+                frames = await async_frames_for_impingement(imp)
                 if not frames:
                     continue
                 try:
@@ -212,6 +246,7 @@ __all__ = [
     "GEM_INTENT_PREFIXES",
     "MAX_FRAMES_PER_IMPINGEMENT",
     "MAX_FRAME_TEXT_CHARS",
+    "async_frames_for_impingement",
     "frames_for_impingement",
     "gem_producer_loop",
     "render_composition_template",
