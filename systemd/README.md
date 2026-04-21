@@ -100,15 +100,15 @@ Written to `/run/user/1000/hapax-secrets.env` (tmpfs, 0600). All services declar
 
 **Design principle**: prevent global OOM by bounding the transient memory spikers (cargo builds, ffmpeg) and giving kernel reclaim a larger buffer. Critical stack services are additionally protected via `OOMScoreAdjust=-500/-800` so the kernel strongly prefers killing unbounded leaf processes (interactive Claude sessions, transient tools) over the stack in a true crisis. Interactive Claude sessions run in `session-N.scope` under `user-1000.slice` (not `user@1000.service`) and are intentionally left uncapped + unprotected — they are the designated sacrifice target.
 
-## Ollama GPU Isolation
+## Ollama GPU Assignment
 
-Ollama runs CPU-only. TabbyAPI exclusively owns the GPU for inference.
+**Dual-GPU policy (2026-04-17):** Ollama runs on GPU 1 (5060 Ti, 16 GB); TabbyAPI runs exclusively on GPU 0 (3090, 24 GB). This replaces the earlier CPU-only isolation after the secondary GPU came online and the volitional-director rebalance freed the 3090 residency for Command-R 35B.
 
-**Enforcement**: `CUDA_VISIBLE_DEVICES=""` in `/etc/systemd/system/ollama.service.d/vram-optimize.conf` hides the GPU from the Ollama process entirely. This is the only reliable mechanism — `OLLAMA_NUM_GPU=0` is a default that API callers can override with `num_gpu: -1`, and per-model Modelfiles can be overwritten by `ollama pull`.
+**Enforcement**: `/etc/systemd/system/ollama.service.d/z-gpu-5060ti.conf` sets `CUDA_VISIBLE_DEVICES=1`, `OLLAMA_NUM_GPU=999`, `CUDA_DEVICE_ORDER=PCI_BUS_ID`. The `z-` prefix guarantees it is loaded last alphabetically, overriding the older `vram-optimize.conf` CPU-only settings. TabbyAPI's `config.yml` pins `gpu_split=[16, 10]` — TabbyAPI uses 16 GB on GPU 0 and 10 GB on GPU 1; Ollama uses the remaining ~6 GB on GPU 1. The two do not collide on GPU 0.
 
-**Why**: LiteLLM previously had fallback chains (`local-fast → qwen3:8b`) that loaded Ollama's qwen3:8b on GPU when TabbyAPI was slow. This caused a death spiral: qwen3:8b on GPU ate 5.5 GiB VRAM alongside TabbyAPI's 13 GiB (OOM on 24 GiB card), and on CPU ate 900% CPU (load average 38+, cascading timeouts, more fallbacks). The fallback chains for local models have been removed from `~/llm-stack/litellm-config.yaml`.
+**Historical context**: LiteLLM previously had fallback chains (`local-fast → qwen3:8b`) that loaded Ollama's qwen3:8b on GPU 0 when TabbyAPI was slow. This caused a death spiral on the single-GPU era (qwen3:8b GPU 5.5 GiB + TabbyAPI 13 GiB = OOM on 24 GiB card; CPU fallback ate 900% CPU). Fallback chains were removed from `~/llm-stack/litellm-config.yaml`. The 5060 Ti installation + `z-gpu-5060ti.conf` pinning (2026-04-17) now make a repeat impossible: any GPU-capable Ollama model lands on GPU 1, which cannot collide with TabbyAPI's GPU 0 residency.
 
-**Current Ollama role**: CPU embedding only (`nomic-embed-cpu`, called directly by `shared/config.py:embed()`). `qwen3:8b` has been deleted from Ollama and its model route removed from LiteLLM — even zombie retry requests cannot reload it.
+**Current Ollama role**: still embedding-heavy. `nomic-embed-cpu` (CPU-tagged, called directly by `shared/config.py:embed()`) is the only model typically loaded. `qwen3:8b` was deleted; `qwen3.5:27b` was deleted 2026-04-21 to eliminate the largest VRAM-splash risk. Steady-state Ollama VRAM footprint: ~256 MB (CUDA driver context only, no model weights). On-demand inference can load onto GPU 1's remaining ~6 GB.
 
 **Embed frequency optimization** (PR #617): Startup capability indexing batched from 142 individual Ollama calls to 1 `embed_batch()` call, with a disk-persisted cache (`~/.cache/hapax/embed-cache.json`) that eliminates re-embedding across restarts. Second-and-subsequent daimonion startups index 142 capabilities with zero Ollama calls. Steady-state impingement embeds deduplicated by rendered narrative text (~50% reduction). See `shared/embed_cache.py`, `shared/affordance_pipeline.py:index_capabilities_batch()`.
 

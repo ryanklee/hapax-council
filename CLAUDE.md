@@ -14,7 +14,7 @@ CLAUDE.md rotation policy: `docs/superpowers/specs/2026-04-13-claude-md-excellen
 
 **Three tiers**:
 - **Tier 1** — Interactive interfaces (hapax-logos Tauri native app, waybar GTK4 status bar, VS Code extension)
-- **Tier 2** — LLM-driven agents (pydantic-ai, routed through LiteLLM at :4000). Local: TabbyAPI serves Qwen3.5-9B (EXL3) on `:5000` for `local-fast`/`coding`/`reasoning`. Ollama is GPU-isolated (`CUDA_VISIBLE_DEVICES=""`) and used only for CPU embedding (`nomic-embed-cpu`) — never for inference. Cloud: Claude Sonnet/Opus for `balanced`/governance, Gemini Flash for `fast`/vision.
+- **Tier 2** — LLM-driven agents (pydantic-ai, routed through LiteLLM at :4000). Local: TabbyAPI serves **Command-R 35B EXL3 5.0bpw** on `:5000` for `local-fast`/`coding`/`reasoning`, `gpu_split=[16, 10]` (primary 3090 + secondary 5060 Ti), `cache_size=16384`/`max_seq_len=16384` at Q4 cache mode. Ollama runs on GPU 1 (5060 Ti) per `/etc/systemd/system/ollama.service.d/z-gpu-5060ti.conf` (`CUDA_VISIBLE_DEVICES=1 OLLAMA_NUM_GPU=999`) — currently loading only `nomic-embed-cpu` (CPU-tagged), but the dual-GPU pinning is intentional so LLM embedding / light inference can land on the secondary card without colliding with TabbyAPI's 3090 residency. Cloud: Claude Sonnet/Opus for `balanced`/governance, Gemini Flash for `fast`/vision.
 - **Tier 3** — Deterministic agents (sync, health, maintenance — no LLM calls)
 
 **Reactive engine** (`logos/engine/`): inotify watcher → rules → phased execution (deterministic first, then LLM semaphore-bounded at max 2 concurrent).
@@ -293,7 +293,7 @@ Destructive command detection strips quoted strings before matching to prevent f
 
 ## Key Modules
 
-- **`shared/config.py`** — Model aliases (`fast`→gemini-flash, `balanced`→claude-sonnet, `local-fast`/`coding`/`reasoning`→TabbyAPI Qwen3.5-9B), `get_model_adaptive()` for stimmung-aware routing, LiteLLM/Qdrant clients
+- **`shared/config.py`** — Model aliases (`fast`→gemini-flash, `balanced`→claude-sonnet, `local-fast`/`coding`/`reasoning`→TabbyAPI Command-R 35B EXL3 5bpw), `get_model_adaptive()` for stimmung-aware routing, LiteLLM/Qdrant clients
 - **`shared/working_mode.py`** — Reads `~/.cache/hapax/working-mode` (research/rnd). CLI: `hapax-working-mode`
 - **`shared/notify.py`** — `send_notification()` for ntfy + desktop
 - **`shared/frontmatter.py`** — Canonical frontmatter parser (never duplicate this)
