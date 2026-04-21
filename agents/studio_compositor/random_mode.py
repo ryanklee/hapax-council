@@ -5,6 +5,15 @@ historical "random_mode"). The loop name + control file kept for
 backward compatibility, but the inner logic no longer picks uniformly
 from the entire preset corpus. See :mod:`agents.studio_compositor.preset_family_selector`
 for the family-aware selection logic.
+
+Phase 7 of the preset-variety plan (#166): per-chain-change the loop
+also picks one of five transition primitives instead of always running
+the historical brightness fade. When the director has recruited a
+``transition.*`` capability within the cooldown the loop honors it;
+otherwise it samples uniformly across the 5 primitives so transition
+entropy stays well above the 0.6-bit acceptance bar without an
+ordered rotation. See :mod:`agents.studio_compositor.transition_primitives`
+for the primitive implementations.
 """
 
 import json
@@ -13,6 +22,12 @@ import random
 import time
 from pathlib import Path
 
+from agents.studio_compositor.transition_primitives import (
+    PRIMITIVES,
+    TRANSITION_NAMES,
+    TransitionFn,
+)
+
 log = logging.getLogger(__name__)
 
 PRESET_DIR = Path(__file__).parent.parent.parent / "presets"
@@ -20,12 +35,10 @@ SHM = Path("/dev/shm/hapax-compositor")
 CONTROL_FILE = SHM / "random-mode.txt"
 MUTATION_FILE = SHM / "graph-mutation.json"
 
-TRANSITION_STEPS = 12  # frames for fade
-# Drop #46 MB-1: 10 Hz write rate aligns 1:1 with state_reader_loop's 10 Hz
-# poll. Previously 80 ms (12.5 Hz) undersampled against the 10 Hz reader,
-# collapsing the 12-step fade to ~5-6 effective brightness steps per the
-# perceptual side.
-TRANSITION_STEP_MS = 100  # 12 steps × 100 ms ≈ 1.2 s total
+# Transition cooldown: same shape as ``_PRESET_BIAS_COOLDOWN_S`` below.
+# If the director recruited a ``transition.*`` capability within this
+# window, defer to it; otherwise sample uniformly.
+_TRANSITION_BIAS_COOLDOWN_S = 20.0
 
 
 def get_preset_names() -> list[str]:
@@ -45,32 +58,72 @@ def load_preset_graph(name: str) -> dict | None:
     return json.loads(path.read_text())
 
 
+def _write_mutation(graph: dict) -> None:
+    """Write a graph dict to the SHM mutation file (primitive callback)."""
+    MUTATION_FILE.write_text(json.dumps(graph))
+
+
+def _read_recruited_transition() -> str | None:
+    """Return the recently-recruited transition capability name, or None.
+
+    Reads ``recent-recruitment.json`` — the same surface used for
+    preset-family bias. ``compositional_consumer._mark_recruitment``
+    records each recruited capability under its full name; the newest
+    ``transition.*`` entry within the cooldown wins. Returns ``None``
+    so the caller falls back to uniform sampling when nothing matches.
+    """
+    try:
+        path = SHM / "recent-recruitment.json"
+        if not path.exists():
+            return None
+        data = json.loads(path.read_text(encoding="utf-8"))
+        families = data.get("families") or {}
+        best: tuple[float, str] | None = None
+        for fam_name, entry in families.items():
+            if not isinstance(fam_name, str) or not fam_name.startswith("transition."):
+                continue
+            ts = entry.get("last_recruited_ts") if isinstance(entry, dict) else None
+            if not isinstance(ts, (int, float)):
+                continue
+            if time.time() - float(ts) >= _TRANSITION_BIAS_COOLDOWN_S:
+                continue
+            if best is None or float(ts) > best[0]:
+                best = (float(ts), fam_name)
+        if best is None:
+            return None
+        name = best[1]
+        return name if name in PRIMITIVES else None
+    except Exception:
+        return None
+
+
+def _select_transition() -> tuple[str, TransitionFn]:
+    """Pick a transition for the next chain change.
+
+    Recruitment-bias first, uniform fallback second. The success
+    criterion (``rg 'transition.*if.*rotate' returns 0``) requires no
+    ordered rotation; each call samples independently.
+    """
+    recruited = _read_recruited_transition()
+    if recruited is not None:
+        return recruited, PRIMITIVES[recruited]
+    name = random.choice(TRANSITION_NAMES)
+    return name, PRIMITIVES[name]
+
+
 def apply_graph_with_brightness(graph: dict, brightness: float) -> None:
-    """Apply a preset graph with modified colorgrade brightness for transitions."""
-    g = json.loads(json.dumps(graph))  # deep copy
+    """Backwards-compatible shim. Pre-Phase-7 callers may still use this.
+
+    New callers should select a transition primitive from
+    ``transition_primitives.PRIMITIVES`` and run it with
+    ``_write_mutation`` instead.
+    """
+    g = json.loads(json.dumps(graph))
     for node in g.get("nodes", {}).values():
         if node.get("type") == "colorgrade":
             node["params"]["brightness"] = node["params"].get("brightness", 1.0) * brightness
             break
     MUTATION_FILE.write_text(json.dumps(g))
-
-
-def transition_out(current_graph: dict | None) -> None:
-    """Fade current preset to black."""
-    if current_graph is None:
-        return
-    for i in range(TRANSITION_STEPS):
-        brightness = 1.0 - (i + 1) / TRANSITION_STEPS
-        apply_graph_with_brightness(current_graph, max(brightness, 0.0))
-        time.sleep(TRANSITION_STEP_MS / 1000.0)
-
-
-def transition_in(new_graph: dict) -> None:
-    """Fade new preset from black to full."""
-    for i in range(TRANSITION_STEPS):
-        brightness = (i + 1) / TRANSITION_STEPS
-        apply_graph_with_brightness(new_graph, brightness)
-        time.sleep(TRANSITION_STEP_MS / 1000.0)
 
 
 _PRESET_BIAS_COOLDOWN_S = 20.0  # if a preset-bias was recruited within this
@@ -168,13 +221,23 @@ def run(interval: float = 30.0) -> None:
         if new_graph is None:
             continue
 
-        # Smooth transition: fade out → switch → fade in
-        transition_out(current_graph)
-        transition_in(new_graph)
+        # Phase 7 — pick a transition primitive per chain change so the
+        # chain-level vocabulary doesn't collapse to the historical fade.
+        transition_name, transition_fn = _select_transition()
+        log.info("random_mode transition: %s", transition_name)
+        try:
+            from shared.director_observability import emit_transition_pick
+
+            emit_transition_pick(transition_name)
+        except Exception:
+            pass
+        transition_fn(current_graph, new_graph, _write_mutation)
         current_graph = new_graph
 
-        # Hold at full brightness for the interval
-        time.sleep(max(0, interval - 2.0))  # subtract transition time
+        # Hold at full brightness for the interval (transition runtime
+        # bounded by primitive constants — at most ~1.4 s for the longest
+        # primitive, well within the original 2 s subtraction).
+        time.sleep(max(0, interval - 2.0))
 
 
 if __name__ == "__main__":

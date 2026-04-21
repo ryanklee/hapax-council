@@ -536,6 +536,42 @@ _HOMAGE_AFFORDANCES: list[CapabilityRecord] = (
 )
 
 
+# ── Transition affordances ────────────────────────────────────────────────
+# Phase 7 of preset-variety-plan (#166). Recruited per chain change
+# alongside the preset/family pick — doubles chain-level vocabulary
+# without enlarging the within-preset corpus. Implementations live in
+# ``agents/studio_compositor/transition_primitives.PRIMITIVES`` and
+# share a common ``(out, in_g, writer, sleep)`` signature.
+
+_TRANSITION: list[CapabilityRecord] = [
+    _record(
+        "transition.fade.smooth",
+        "smoothly fades the outgoing scene to black and the incoming scene up over about a second, "
+        "the gentlest hand-off and the right move when continuity matters more than punctuation",
+    ),
+    _record(
+        "transition.cut.hard",
+        "cuts straight to the next scene with no fade, the sharpest possible move and right "
+        "when a sudden shift in subject or energy is the point",
+    ),
+    _record(
+        "transition.netsplit.burst",
+        "drops the surface to black for a held beat then snaps the new scene in at full brightness, "
+        "the move when the room itself should feel reset before the next idea lands",
+    ),
+    _record(
+        "transition.ticker.scroll",
+        "uses a slower-start slower-end S-curve crossfade with a quick perceptual snap through the middle, "
+        "the move when the change should feel measured and considered rather than uniform",
+    ),
+    _record(
+        "transition.dither.noise",
+        "alternates rapidly between the outgoing and incoming scenes for a brief perceptual flicker "
+        "before settling, the move when the change itself wants to feel noisy or uncertain",
+    ),
+]
+
+
 # ── Catalog ────────────────────────────────────────────────────────────────
 
 COMPOSITIONAL_CAPABILITIES: list[CapabilityRecord] = (
@@ -547,6 +583,7 @@ COMPOSITIONAL_CAPABILITIES: list[CapabilityRecord] = (
     + _STREAM_MODE
     + _WARD_AFFORDANCES
     + _HOMAGE_AFFORDANCES
+    + _TRANSITION
 )
 
 
