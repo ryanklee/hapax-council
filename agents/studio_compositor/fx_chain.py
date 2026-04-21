@@ -9,6 +9,11 @@ from typing import TYPE_CHECKING, Any
 
 import cairo
 
+from agents.studio_compositor.z_plane_constants import (
+    _Z_INDEX_BASE,
+    DEFAULT_Z_INDEX_FLOAT,
+    DEFAULT_Z_PLANE,
+)
 from shared.compositor_model import SurfaceGeometry
 
 if TYPE_CHECKING:
@@ -96,6 +101,33 @@ def blit_scaled(
     cr.restore()
 
 
+def blit_with_depth(
+    cr: cairo.Context,
+    src: cairo.ImageSurface,
+    geom: SurfaceGeometry,
+    opacity: float,
+    blend_mode: str,
+    z_plane: str = DEFAULT_Z_PLANE,
+    z_index_float: float = DEFAULT_Z_INDEX_FLOAT,
+) -> None:
+    """``blit_scaled`` with z-plane depth attenuation applied to opacity.
+
+    Combines the ward's semantic ``z_plane`` (set by director / recruitment)
+    with the modulator-written ``z_index_float`` to produce a depth-conditioned
+    opacity multiplier. Default ``"on-scrim"`` + ``z_index_float=0.5`` yields
+    a multiplier of ~0.96 — visually indistinguishable from a plain
+    ``blit_scaled`` call. Deeper planes (``"beyond-scrim"``) drop to ~0.68.
+
+    Phase 1: opacity-only depth. Real per-plane Cairo blur is too expensive
+    in the hot path; differential blur + tint are routed through the Reverie
+    colorgrade GPU node in Phase 3.
+    """
+    z_base = _Z_INDEX_BASE.get(z_plane, _Z_INDEX_BASE[DEFAULT_Z_PLANE])
+    effective_z = max(0.0, min(1.0, z_base + (z_index_float - 0.5) * 0.2))
+    depth_opacity = 0.6 + 0.4 * effective_z
+    blit_scaled(cr, src, geom, opacity * depth_opacity, blend_mode)
+
+
 def pip_draw_from_layout(
     cr: cairo.Context,
     layout_state: LayoutState,
@@ -155,12 +187,20 @@ def pip_draw_from_layout(
         if effective_alpha <= 0.0:
             _emit_blit_skip(assignment.source, "alpha_clamped_to_zero")
             continue
-        blit_scaled(
+        # Local import to avoid the runtime import of ``ward_properties`` (and
+        # its ``cairo`` dependency for ``ward_render_scope``) before the
+        # registry/layout modules have settled. Hot-path import is cached.
+        from agents.studio_compositor.ward_properties import resolve_ward_properties
+
+        props = resolve_ward_properties(assignment.source)
+        blit_with_depth(
             cr,
             src,
             surface_schema.geometry,
             opacity=effective_alpha,
             blend_mode=surface_schema.blend_mode,
+            z_plane=props.z_plane,
+            z_index_float=props.z_index_float,
         )
         _emit_blit_success(assignment.source)
         _record_blit_observability(

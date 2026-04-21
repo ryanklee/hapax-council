@@ -92,6 +92,13 @@ class WardProperties:
     # Cadence
     rate_hz_override: float | None = None
 
+    # Depth (z-plane stratification — see ``z_plane_constants._Z_INDEX_BASE``).
+    # ``z_plane`` is the semantic category set by director / recruitment.
+    # ``z_index_float`` is sub-plane position [0.0 far, 1.0 near] written by
+    # the ward stimmung modulator. Both are read by ``fx_chain.blit_with_depth``.
+    z_plane: str = "on-scrim"
+    z_index_float: float = 0.5
+
     def merge_animation(self, animated: dict[str, float]) -> WardProperties:
         """Return a copy with animation-engine interpolated values applied.
 

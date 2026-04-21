@@ -163,9 +163,16 @@ def test_pip_draw_from_layout_walks_assignments_by_z_order() -> None:
     canvas.flush()
 
     # Overlap point (30, 30) — green (z=5) overlays red (z=1).
-    assert _pixel(canvas, 30, 30)[:3] == (0x00, 0xFF, 0x00)
+    # ``blit_with_depth`` attenuates default-plane opacity by ~4% (depth
+    # multiplier ≈ 0.96 for ``on-scrim``); the dominant channel must be
+    # green and the suppressed channel red must remain near zero.
+    r, g, _b, _a = _pixel(canvas, 30, 30)
+    assert g >= 240, f"green channel should dominate, got {g}"
+    assert r <= 12, f"red channel should be near zero (z-overlay), got {r}"
     # Red-only point (5, 5) — red (only the low-z surface).
-    assert _pixel(canvas, 5, 5)[:3] == (0xFF, 0x00, 0x00)
+    r, g, _b, _a = _pixel(canvas, 5, 5)
+    assert r >= 240
+    assert g <= 12
     # Outside both rects (80, 80) — still the black clear.
     assert _pixel(canvas, 80, 80)[:3] == (0x00, 0x00, 0x00)
 
