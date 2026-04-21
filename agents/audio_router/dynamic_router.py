@@ -57,6 +57,11 @@ EVIL_PET_STATE_FILE: Path = Path("/dev/shm/hapax-compositor/evil-pet-state.json"
 VOICE_TIER_OVERRIDE_FILE: Path = Path("/dev/shm/hapax-compositor/voice-tier-override.json")
 VOICE_STATE_FILE: Path = Path("/dev/shm/hapax-compositor/voice-state.json")
 
+# Router observability surface. Every tick's (state, intent, timestamp)
+# lands here so other components can see what the arbiter decided
+# without needing MIDI bus introspection.
+ROUTER_STATE_FILE: Path = Path("/dev/shm/hapax-audio-router/state.json")
+
 # Stimmung file's `stance` field uses the same vocabulary as the router
 # state — but a missing/malformed file falls back to NOMINAL so the
 # router still emits a sensible default rather than blocking on
@@ -286,6 +291,37 @@ def _intents_equivalent(a: RoutingIntent, b: RoutingIntent) -> bool:
     )
 
 
+def write_router_state_snapshot(
+    *,
+    state: AudioRouterState,
+    intent: RoutingIntent,
+    now: float,
+    path: Path | None = None,
+) -> None:
+    """Write the router's current (state, intent, timestamp) to SHM.
+
+    Fail-closed: any error is logged and swallowed so a disk hiccup
+    cannot take down the audio router daemon.
+
+    ``path`` is late-bound to ``ROUTER_STATE_FILE`` so test patches of
+    the module-level constant take effect.
+    """
+    if path is None:
+        path = ROUTER_STATE_FILE
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        snapshot = {
+            "generated_at": now,
+            "state": state.model_dump(mode="json"),
+            "intent": intent.model_dump(mode="json"),
+        }
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_text(json.dumps(snapshot))
+        tmp.replace(path)
+    except Exception:
+        log.debug("router state snapshot write failed", exc_info=True)
+
+
 class DynamicRouter:
     """The 5 Hz arbiter daemon.
 
@@ -369,6 +405,14 @@ class DynamicRouter:
             s4_program_for_scene_fn=self._s4_program_for_scene_fn,
         )
         self._last_intent = intent
+
+        # Observability: publish the full (state, intent) snapshot to SHM
+        # so other components can read what the arbiter decided without
+        # MIDI bus introspection. Uses wall-clock (time.time) rather than
+        # the tick's monotonic ``now`` so downstream consumers can compute
+        # staleness against their own clock.
+        write_router_state_snapshot(state=state, intent=intent, now=time.time())
+
         return intent
 
     def run(self) -> None:

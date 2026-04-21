@@ -27,8 +27,10 @@ from agents.audio_router.dynamic_router import (
     read_stimmung_state,
     read_voice_active,
     read_voice_tier_override,
+    write_router_state_snapshot,
 )
 from agents.audio_router.state import (
+    AudioRouterState,
     ProgrammeState,
     RoutingIntent,
 )
@@ -339,3 +341,67 @@ def test_dynamic_router_tick_drives_sticky_on_voice_transitions(
     router.tick(now=0.2)
     # Internal sticky tracker should have an active tier captured
     assert router._sticky._active_tier is not None
+
+
+# ── write_router_state_snapshot ─────────────────────────────────────
+
+
+def test_write_router_state_snapshot_round_trip(tmp_path: Path) -> None:
+    """Happy path: snapshot writes valid JSON with generated_at + state + intent."""
+    target = tmp_path / "state.json"
+    state = AudioRouterState()
+    intent = RoutingIntent()
+    write_router_state_snapshot(state=state, intent=intent, now=1700000000.0, path=target)
+    assert target.exists()
+    payload = json.loads(target.read_text())
+    assert payload["generated_at"] == 1700000000.0
+    assert payload["state"]["stimmung"]["stance"] == "NOMINAL"
+    assert payload["intent"]["topology"] == "D2_SPLIT"
+
+
+def test_write_router_state_snapshot_is_atomic(tmp_path: Path) -> None:
+    """No .tmp sidecar should remain after a successful write."""
+    target = tmp_path / "state.json"
+    write_router_state_snapshot(
+        state=AudioRouterState(),
+        intent=RoutingIntent(),
+        now=1.0,
+        path=target,
+    )
+    assert target.exists()
+    assert not target.with_suffix(target.suffix + ".tmp").exists()
+
+
+def test_write_router_state_snapshot_swallows_errors(tmp_path: Path) -> None:
+    """Write failures must not propagate — the router must keep ticking."""
+    # Make parent path a file so mkdir fails
+    blocker = tmp_path / "blocker"
+    blocker.write_text("")
+    bad_path = blocker / "nested" / "state.json"
+    # Should not raise
+    write_router_state_snapshot(
+        state=AudioRouterState(),
+        intent=RoutingIntent(),
+        now=1.0,
+        path=bad_path,
+    )
+    assert not bad_path.exists()
+
+
+def test_dynamic_router_tick_publishes_state_snapshot(
+    isolated_router_files: Path, tmp_path: Path
+) -> None:
+    """After tick, the ROUTER_STATE_FILE must contain the current snapshot."""
+    snapshot_path = tmp_path / "router-state.json"
+    with patch("agents.audio_router.dynamic_router.ROUTER_STATE_FILE", snapshot_path):
+        router = DynamicRouter(evilpet_midi=None, s4_midi_port=None)
+        router.tick(now=0.0)
+    assert snapshot_path.exists()
+    payload = json.loads(snapshot_path.read_text())
+    assert "generated_at" in payload
+    assert "state" in payload
+    assert "intent" in payload
+    # Intent should include the full RoutingIntent schema
+    assert "topology" in payload["intent"]
+    assert "tier" in payload["intent"]
+    assert "evilpet_preset" in payload["intent"]
