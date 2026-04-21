@@ -115,14 +115,22 @@ def pip_draw_from_layout(
     stay instantiated (backward compat during transition) but their
     ``draw()`` methods are only called by deprecated code paths that
     this callback has replaced.
+
+    FINDING-R diagnostics (2026-04-21 wiring audit): each skip path
+    increments a Prometheus counter labeled by ward_id + reason, and
+    each successful blit increments a counter labeled by ward_id.
+    Operators diagnosing visual-absence symptoms can rate-query the
+    skip counter to identify which wards are not blitting and why.
     """
     layout = layout_state.get()
     pairs: list[tuple[Any, Any]] = []
     for assignment in layout.assignments:
         surface_schema = layout.surface_by_id(assignment.surface)
         if surface_schema is None:
+            _emit_blit_skip(assignment.source, "surface_not_found")
             continue
         if surface_schema.geometry.kind != "rect":
+            # appsrc/wgpu/video_out paths — not a blit candidate.
             continue
         pairs.append((assignment, surface_schema))
     pairs.sort(key=lambda p: p[1].z_order)
@@ -131,8 +139,10 @@ def pip_draw_from_layout(
         try:
             src = source_registry.get_current_surface(assignment.source)
         except KeyError:
+            _emit_blit_skip(assignment.source, "source_not_registered")
             continue
         if src is None:
+            _emit_blit_skip(assignment.source, "source_surface_none")
             continue
         # Task #157: clamp alpha to the non-destructive ceiling when the
         # assignment opts in, so informational wards cannot visually
@@ -142,6 +152,9 @@ def pip_draw_from_layout(
             assignment.non_destructive,
             assignment.source,
         )
+        if effective_alpha <= 0.0:
+            _emit_blit_skip(assignment.source, "alpha_clamped_to_zero")
+            continue
         blit_scaled(
             cr,
             src,
@@ -149,6 +162,29 @@ def pip_draw_from_layout(
             opacity=effective_alpha,
             blend_mode=surface_schema.blend_mode,
         )
+        _emit_blit_success(assignment.source)
+
+
+def _emit_blit_skip(ward_id: str, reason: str) -> None:
+    """FINDING-R: count blit skips by ward + reason. Fail-open."""
+    try:
+        from agents.studio_compositor import metrics
+
+        if metrics.WARD_BLIT_SKIPPED_TOTAL is not None:
+            metrics.WARD_BLIT_SKIPPED_TOTAL.labels(ward=ward_id, reason=reason).inc()
+    except Exception:
+        pass
+
+
+def _emit_blit_success(ward_id: str) -> None:
+    """FINDING-R: count successful blits per ward. Fail-open."""
+    try:
+        from agents.studio_compositor import metrics
+
+        if metrics.WARD_BLIT_TOTAL is not None:
+            metrics.WARD_BLIT_TOTAL.labels(ward=ward_id).inc()
+    except Exception:
+        pass
 
 
 def _pip_draw(compositor: Any, cr: Any) -> None:

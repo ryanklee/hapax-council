@@ -131,6 +131,15 @@ HAPAX_AUDIO_DUCKING_STATE: Any = None
 HAPAX_IMAGINATION_SHADER_ROLLBACK_TOTAL: Any = None
 COMP_GLFEEDBACK_RECOMPILE_TOTAL: Any = None
 COMP_GLFEEDBACK_ACCUM_CLEAR_TOTAL: Any = None
+# FINDING-R diagnostics (2026-04-21 wiring audit): per-ward blit
+# accounting on the post-FX cairooverlay. WARD_BLIT_TOTAL counts every
+# successful blit_scaled call labeled by ward; WARD_BLIT_SKIPPED_TOTAL
+# counts every skip path labeled by ward + reason. Operators query
+# the skip counter to identify which of the 16 (now 20) wards aren't
+# blitting and why — the previous diagnosis path was "wards visually
+# absent, no signal," which led to a phantom architectural finding.
+WARD_BLIT_TOTAL: Any = None
+WARD_BLIT_SKIPPED_TOTAL: Any = None
 # Task #129 Stage 3 — per-camera face-obscure observability. Increments
 # every time ``face_obscure_integration.obscure_frame_for_camera`` is
 # called, labelled by camera role and whether any bboxes were obscured
@@ -217,6 +226,8 @@ def _init_metrics() -> None:
     global COMP_VOICE_ACTIVE
     global COMP_MUSIC_DUCKED
     global HAPAX_IMAGINATION_SHADER_ROLLBACK_TOTAL
+    global WARD_BLIT_TOTAL
+    global WARD_BLIT_SKIPPED_TOTAL
 
     if not _PROMETHEUS_AVAILABLE:
         return
@@ -348,6 +359,32 @@ def _init_metrics() -> None:
     HAPAX_IMAGINATION_SHADER_ROLLBACK_TOTAL = Counter(
         "hapax_imagination_shader_rollback_total",
         "Cumulative WGSL hot-reload rollback events (validation failures + runtime panics)",
+        registry=REGISTRY,
+    )
+
+    # FINDING-R diagnostics (2026-04-21 wiring audit): per-ward blit
+    # accounting at the post-FX cairooverlay. The pip_draw_from_layout
+    # callback emits one increment per blit decision: success → ward
+    # label only; skip → ward + reason. Operator queries:
+    #   rate(studio_compositor_ward_blit_total{ward="album"}[5m]) > 0
+    #     ⇒ album is rendering at the expected cadence
+    #   rate(studio_compositor_ward_blit_skipped_total{reason="source_surface_none"}[5m]) > 0
+    #     ⇒ that ward's runner returned a transparent surface (input
+    #     deprivation, HOLD-state at startup, render_content short-circuit)
+    WARD_BLIT_TOTAL = Counter(
+        "studio_compositor_ward_blit_total",
+        "Successful per-ward blit_scaled calls on the post-FX cairooverlay",
+        ["ward"],
+        registry=REGISTRY,
+    )
+    WARD_BLIT_SKIPPED_TOTAL = Counter(
+        "studio_compositor_ward_blit_skipped_total",
+        (
+            "Per-ward blit skips on the post-FX cairooverlay, labelled by reason: "
+            "surface_not_found | source_not_registered | source_surface_none | "
+            "alpha_clamped_to_zero"
+        ),
+        ["ward", "reason"],
         registry=REGISTRY,
     )
 

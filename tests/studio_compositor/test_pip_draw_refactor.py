@@ -261,3 +261,149 @@ def test_pip_draw_skips_unknown_source_ids() -> None:
     pip_draw_from_layout(cr, state, registry)
     canvas.flush()
     assert _pixel(canvas, 25, 25)[:3] == (0x00, 0x00, 0x00)
+
+
+# ── FINDING-R diagnostics: per-ward blit metrics ─────────────────────
+
+
+def test_blit_emits_success_counter_per_ward(monkeypatch) -> None:
+    """Each successful blit increments WARD_BLIT_TOTAL{ward=<id>}."""
+    increments: list[tuple[str, str]] = []
+
+    class _Counter:
+        def __init__(self) -> None:
+            self.calls: list[dict] = []
+
+        def labels(self, **kwargs):  # type: ignore[no-untyped-def]
+            self.calls.append(kwargs)
+            return self
+
+        def inc(self) -> None:
+            kw = self.calls[-1]
+            increments.append(("success" if "reason" not in kw else "skip", kw.get("ward", "")))
+
+    fake_total = _Counter()
+    fake_skipped = _Counter()
+    from agents.studio_compositor import metrics
+
+    monkeypatch.setattr(metrics, "WARD_BLIT_TOTAL", fake_total, raising=False)
+    monkeypatch.setattr(metrics, "WARD_BLIT_SKIPPED_TOTAL", fake_skipped, raising=False)
+
+    state = LayoutState(_layout_with_two_rect_surfaces())
+    registry = SourceRegistry()
+    registry.register("red", _CannedBackend(_solid_surface(10, 10, (1.0, 0.0, 0.0))))
+    registry.register("green", _CannedBackend(_solid_surface(10, 10, (0.0, 1.0, 0.0))))
+
+    canvas = cairo.ImageSurface(cairo.FORMAT_ARGB32, 200, 200)
+    cr = _paint_black(canvas)
+    pip_draw_from_layout(cr, state, registry)
+
+    success_wards = sorted(w for kind, w in increments if kind == "success")
+    assert success_wards == ["green", "red"]
+
+
+def test_skip_emits_source_surface_none_reason(monkeypatch) -> None:
+    """Source returning None → WARD_BLIT_SKIPPED_TOTAL{reason=source_surface_none}."""
+    skip_reasons: list[tuple[str, str]] = []
+
+    class _Counter:
+        def labels(self, **kwargs):  # type: ignore[no-untyped-def]
+            self._kw = kwargs
+            return self
+
+        def inc(self) -> None:
+            skip_reasons.append((self._kw.get("ward", ""), self._kw.get("reason", "")))
+
+    from agents.studio_compositor import metrics
+
+    monkeypatch.setattr(metrics, "WARD_BLIT_TOTAL", _Counter(), raising=False)
+    monkeypatch.setattr(metrics, "WARD_BLIT_SKIPPED_TOTAL", _Counter(), raising=False)
+
+    layout = Layout(
+        name="t",
+        sources=[SourceSchema(id="sleepy", kind="cairo", backend="cairo", params={})],
+        surfaces=[
+            SurfaceSchema(id="a", geometry=SurfaceGeometry(kind="rect", x=0, y=0, w=50, h=50))
+        ],
+        assignments=[Assignment(source="sleepy", surface="a")],
+    )
+    state = LayoutState(layout)
+    registry = SourceRegistry()
+    registry.register("sleepy", _CannedBackend(None))
+
+    canvas = cairo.ImageSurface(cairo.FORMAT_ARGB32, 60, 60)
+    cr = _paint_black(canvas)
+    pip_draw_from_layout(cr, state, registry)
+
+    assert ("sleepy", "source_surface_none") in skip_reasons
+
+
+def test_skip_emits_source_not_registered_reason(monkeypatch) -> None:
+    skip_reasons: list[tuple[str, str]] = []
+
+    class _Counter:
+        def labels(self, **kwargs):  # type: ignore[no-untyped-def]
+            self._kw = kwargs
+            return self
+
+        def inc(self) -> None:
+            skip_reasons.append((self._kw.get("ward", ""), self._kw.get("reason", "")))
+
+    from agents.studio_compositor import metrics
+
+    monkeypatch.setattr(metrics, "WARD_BLIT_TOTAL", _Counter(), raising=False)
+    monkeypatch.setattr(metrics, "WARD_BLIT_SKIPPED_TOTAL", _Counter(), raising=False)
+
+    layout = Layout(
+        name="t",
+        sources=[SourceSchema(id="real", kind="cairo", backend="cairo", params={})],
+        surfaces=[
+            SurfaceSchema(id="a", geometry=SurfaceGeometry(kind="rect", x=0, y=0, w=50, h=50))
+        ],
+        assignments=[Assignment(source="real", surface="a")],
+    )
+    state = LayoutState(layout)
+    registry = SourceRegistry()
+    # Deliberately do NOT register "real".
+
+    canvas = cairo.ImageSurface(cairo.FORMAT_ARGB32, 60, 60)
+    cr = _paint_black(canvas)
+    pip_draw_from_layout(cr, state, registry)
+
+    assert ("real", "source_not_registered") in skip_reasons
+
+
+def test_skip_emits_alpha_clamped_to_zero_reason(monkeypatch) -> None:
+    """Non-destructive clamp can push opacity to 0 → distinct skip reason."""
+    skip_reasons: list[tuple[str, str]] = []
+
+    class _Counter:
+        def labels(self, **kwargs):  # type: ignore[no-untyped-def]
+            self._kw = kwargs
+            return self
+
+        def inc(self) -> None:
+            skip_reasons.append((self._kw.get("ward", ""), self._kw.get("reason", "")))
+
+    from agents.studio_compositor import metrics
+
+    monkeypatch.setattr(metrics, "WARD_BLIT_TOTAL", _Counter(), raising=False)
+    monkeypatch.setattr(metrics, "WARD_BLIT_SKIPPED_TOTAL", _Counter(), raising=False)
+
+    layout = Layout(
+        name="t",
+        sources=[SourceSchema(id="muted", kind="cairo", backend="cairo", params={})],
+        surfaces=[
+            SurfaceSchema(id="a", geometry=SurfaceGeometry(kind="rect", x=0, y=0, w=50, h=50))
+        ],
+        assignments=[Assignment(source="muted", surface="a", opacity=0.0)],
+    )
+    state = LayoutState(layout)
+    registry = SourceRegistry()
+    registry.register("muted", _CannedBackend(_solid_surface(10, 10, (1.0, 0.0, 0.0))))
+
+    canvas = cairo.ImageSurface(cairo.FORMAT_ARGB32, 60, 60)
+    cr = _paint_black(canvas)
+    pip_draw_from_layout(cr, state, registry)
+
+    assert ("muted", "alpha_clamped_to_zero") in skip_reasons
