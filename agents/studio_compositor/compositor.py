@@ -575,6 +575,14 @@ class StudioCompositor:
         # time — see ``lifecycle.py``.
         self._audio_ducking: Any | None = None
 
+        # Ward stimmung modulator (z-axis spec Phase 2). Constructed
+        # unconditionally; the ``maybe_tick`` early-returns when
+        # ``HAPAX_WARD_MODULATOR_ACTIVE`` is unset so existing deploys
+        # see no behavior change. Wired into ``fx_tick_callback``.
+        from agents.studio_compositor.ward_stimmung_modulator import WardStimmungModulator
+
+        self._ward_stimmung_modulator = WardStimmungModulator()
+
         self._graph_runtime = init_graph_runtime(self)
 
         # Phase 2c: LayoutStore — loads Source/Surface/Assignment layouts.

@@ -140,6 +140,19 @@ COMP_GLFEEDBACK_ACCUM_CLEAR_TOTAL: Any = None
 # absent, no signal," which led to a phantom architectural finding.
 WARD_BLIT_TOTAL: Any = None
 WARD_BLIT_SKIPPED_TOTAL: Any = None
+# Ward stimmung modulator (Phase 2 of the z-axis spec). The modulator
+# runs at ~5 Hz when ``HAPAX_WARD_MODULATOR_ACTIVE=1`` and translates
+# imagination dimensions into per-ward depth attenuations. The four
+# metrics here let Grafana attribute "modulator never ran" vs
+# "imagination loop is dead" vs "the modulator is shifting depth on
+# these wards." Counters are total-since-process-start; the gauge
+# reflects current per-plane ward population; the histogram observes
+# the ``z_index_float`` value the modulator just wrote, labelled by
+# ``z_plane`` and ``driving_dim``.
+HAPAX_WARD_MODULATOR_TICK_TOTAL: Any = None
+HAPAX_WARD_MODULATOR_STALE_TOTAL: Any = None
+HAPAX_WARD_Z_PLANE_COUNT: Any = None
+HAPAX_WARD_DEPTH_ATTENUATION: Any = None
 # FINDING-W deepening (2026-04-21): per-ward source-surface dimensions.
 # Gauge labelled by ward holds the most recent source-surface
 # width × height (in pixels²) the post-FX cairooverlay just blitted.
@@ -406,6 +419,35 @@ def _init_metrics() -> None:
             "the source is producing a degenerate (1×1 / empty) surface."
         ),
         ["ward"],
+        registry=REGISTRY,
+    )
+
+    # Ward stimmung modulator (z-axis spec Phase 2).
+    global HAPAX_WARD_MODULATOR_TICK_TOTAL
+    global HAPAX_WARD_MODULATOR_STALE_TOTAL
+    global HAPAX_WARD_Z_PLANE_COUNT
+    global HAPAX_WARD_DEPTH_ATTENUATION
+    HAPAX_WARD_MODULATOR_TICK_TOTAL = Counter(
+        "hapax_ward_modulator_tick_total",
+        "Ward stimmung modulator ticks (successful dim reads + ward writes).",
+        registry=REGISTRY,
+    )
+    HAPAX_WARD_MODULATOR_STALE_TOTAL = Counter(
+        "hapax_ward_modulator_stale_total",
+        "Modulator ticks skipped because current.json was stale or missing.",
+        registry=REGISTRY,
+    )
+    HAPAX_WARD_Z_PLANE_COUNT = Gauge(
+        "hapax_ward_z_plane_count",
+        "Number of wards currently assigned to each z-plane.",
+        ["z_plane"],
+        registry=REGISTRY,
+    )
+    HAPAX_WARD_DEPTH_ATTENUATION = Histogram(
+        "hapax_ward_depth_attenuation",
+        "z_index_float values written by the modulator, labelled by z_plane and driving_dim.",
+        ["z_plane", "driving_dim"],
+        buckets=(0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0),
         registry=REGISTRY,
     )
 

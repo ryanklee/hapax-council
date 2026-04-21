@@ -1,0 +1,211 @@
+"""Continuous imagination-dim → ward-property modulator (~5 Hz).
+
+Phase 2 of ``docs/superpowers/specs/2026-04-21-ward-stimmung-modulator-design.md``.
+Reads ``/dev/shm/hapax-imagination/current.json`` every sixth fx tick
+(~5 Hz at 30 Hz fx cadence), computes per-ward depth attenuation for
+non-default-plane wards, and writes ``z_index_float`` + ``alpha`` deltas
+to the ward-properties SHM. Default-plane (``"on-scrim"``) wards are not
+touched so director / recruitment authority is preserved.
+
+Default-off behind ``HAPAX_WARD_MODULATOR_ACTIVE=1``. The instance is
+constructed unconditionally so production deploys can flip the flag
+without restarting the compositor.
+
+Phase 3 will add per-plane ``drift_amplitude_px`` and route per-plane
+colorgrade tint through the Reverie GPU node (depends on scrim Phase 2).
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+import time
+from dataclasses import dataclass, replace
+from pathlib import Path
+from typing import Any
+
+from agents.studio_compositor.ward_fx_mapping import WARD_DOMAIN
+from agents.studio_compositor.ward_properties import (
+    WardProperties,
+    get_specific_ward_properties,
+    set_ward_properties,
+)
+from agents.studio_compositor.z_plane_constants import _Z_INDEX_BASE
+
+log = logging.getLogger(__name__)
+
+CURRENT_PATH: Path = Path("/dev/shm/hapax-imagination/current.json")
+STALENESS_S: float = 10.0
+WARD_PROPERTIES_TTL_S: float = 0.4
+TICK_EVERY_N: int = 6
+ENABLE_ENV: str = "HAPAX_WARD_MODULATOR_ACTIVE"
+
+
+@dataclass
+class WardStimmungModulator:
+    """Per-fx-tick callable that runs the modulator at ~5 Hz."""
+
+    current_path: Path = CURRENT_PATH
+    ward_properties_ttl_s: float = WARD_PROPERTIES_TTL_S
+    tick_every_n: int = TICK_EVERY_N
+    _tick_counter: int = 0
+
+    def maybe_tick(self) -> None:
+        """Increment the tick counter and run when the divisor lands.
+
+        Returns immediately when ``HAPAX_WARD_MODULATOR_ACTIVE`` is unset
+        (the default) so existing deploys see no behavior change. Any
+        exception inside :meth:`_run` is swallowed; the modulator must
+        never raise into ``fx_tick_callback``.
+        """
+        if not _modulator_enabled():
+            return
+        self._tick_counter += 1
+        if self._tick_counter < self.tick_every_n:
+            return
+        self._tick_counter = 0
+        try:
+            self._run()
+        except Exception:
+            log.debug("ward stimmung modulator tick failed", exc_info=True)
+
+    def _run(self) -> None:
+        dims = self._read_dims()
+        if dims is None:
+            _emit_modulator_stale()
+            return
+        for ward_id in WARD_DOMAIN:
+            base = get_specific_ward_properties(ward_id) or WardProperties()
+            updated = self._apply_dims(base, dims)
+            if updated is base:
+                continue
+            set_ward_properties(ward_id, updated, ttl_s=self.ward_properties_ttl_s)
+            _emit_depth_attenuation(updated.z_plane, updated.z_index_float)
+        _emit_modulator_tick()
+        _emit_z_plane_counts()
+
+    def _read_dims(self) -> dict[str, Any] | None:
+        try:
+            raw = json.loads(self.current_path.read_text(encoding="utf-8"))
+        except Exception:
+            log.debug("modulator: current.json read failed", exc_info=True)
+            return None
+        ts = raw.get("timestamp")
+        if isinstance(ts, (int, float)) and (time.time() - float(ts)) > STALENESS_S:
+            return None
+        dims = raw.get("dimensions")
+        if not isinstance(dims, dict):
+            return None
+        return dims
+
+    def _apply_dims(
+        self,
+        base: WardProperties,
+        dims: dict[str, Any],
+    ) -> WardProperties:
+        """Compute the new ``WardProperties`` for a ward.
+
+        Phase 2 contract:
+        - Modulator MUST NOT touch ``z_plane`` (precedence §7).
+        - Modulator only writes ``z_index_float`` and ``alpha`` for wards
+          on non-default planes. Default-plane (``"on-scrim"``) wards are
+          owned by director / reactor and untouched.
+        - Returns ``base`` unchanged when no field shifts; the caller
+          uses identity equality to skip the SHM write.
+        """
+        z_plane = base.z_plane
+        if z_plane == "on-scrim":
+            return base
+        depth_val = _clip01(_safe_float(dims.get("depth"), 0.5))
+        coherence_val = _clip01(_safe_float(dims.get("coherence"), 0.5))
+        z_base = _Z_INDEX_BASE.get(z_plane, _Z_INDEX_BASE["on-scrim"])
+        # Coherence pulls deeper-plane wards forward at high coherence
+        # (convergence) and pushes them back at low coherence (divergence).
+        convergence = (coherence_val - 0.5) * 0.2
+        new_z_idx = _clip01(z_base - convergence)
+        # Depth dim attenuates beyond/mid-scrim alpha continuously.
+        if z_plane == "beyond-scrim":
+            new_alpha = _clip01(0.5 + 0.5 * (1.0 - depth_val))
+        elif z_plane == "mid-scrim":
+            new_alpha = _clip01(0.7 + 0.3 * (1.0 - depth_val))
+        else:  # "surface-scrim"
+            new_alpha = base.alpha
+        if abs(new_alpha - base.alpha) < 1e-6 and abs(new_z_idx - base.z_index_float) < 1e-6:
+            return base
+        return replace(base, alpha=new_alpha, z_index_float=new_z_idx)
+
+
+def _modulator_enabled() -> bool:
+    return os.environ.get(ENABLE_ENV, "0") == "1"
+
+
+def _safe_float(value: Any, default: float) -> float:
+    try:
+        return float(value) if value is not None else default
+    except (TypeError, ValueError):
+        return default
+
+
+def _clip01(value: float) -> float:
+    return max(0.0, min(1.0, value))
+
+
+def _emit_modulator_tick() -> None:
+    try:
+        from agents.studio_compositor import metrics as _m
+
+        if _m.HAPAX_WARD_MODULATOR_TICK_TOTAL is not None:
+            _m.HAPAX_WARD_MODULATOR_TICK_TOTAL.inc()
+    except Exception:
+        pass
+
+
+def _emit_modulator_stale() -> None:
+    try:
+        from agents.studio_compositor import metrics as _m
+
+        if _m.HAPAX_WARD_MODULATOR_STALE_TOTAL is not None:
+            _m.HAPAX_WARD_MODULATOR_STALE_TOTAL.inc()
+    except Exception:
+        pass
+
+
+def _emit_depth_attenuation(z_plane: str, z_index_float: float) -> None:
+    try:
+        from agents.studio_compositor import metrics as _m
+
+        if _m.HAPAX_WARD_DEPTH_ATTENUATION is not None:
+            _m.HAPAX_WARD_DEPTH_ATTENUATION.labels(z_plane=z_plane, driving_dim="depth").observe(
+                z_index_float
+            )
+    except Exception:
+        pass
+
+
+def _emit_z_plane_counts() -> None:
+    """Refresh per-plane ward counts based on the current SHM snapshot."""
+    try:
+        from agents.studio_compositor import metrics as _m
+        from agents.studio_compositor.ward_properties import all_resolved_properties
+
+        gauge = _m.HAPAX_WARD_Z_PLANE_COUNT
+        if gauge is None:
+            return
+        counts: dict[str, int] = {}
+        for props in all_resolved_properties().values():
+            counts[props.z_plane] = counts.get(props.z_plane, 0) + 1
+        for plane in ("beyond-scrim", "mid-scrim", "on-scrim", "surface-scrim"):
+            gauge.labels(z_plane=plane).set(counts.get(plane, 0))
+    except Exception:
+        pass
+
+
+__all__ = [
+    "CURRENT_PATH",
+    "ENABLE_ENV",
+    "STALENESS_S",
+    "TICK_EVERY_N",
+    "WARD_PROPERTIES_TTL_S",
+    "WardStimmungModulator",
+]

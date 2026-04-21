@@ -822,6 +822,12 @@ def fx_tick_callback(compositor: Any) -> bool:
 
     tick_governance(compositor, t)
     tick_modulator(compositor, t, energy, b)
+    # Ward stimmung modulator (z-axis spec Phase 2). Default-off behind
+    # ``HAPAX_WARD_MODULATOR_ACTIVE``; ``maybe_tick`` early-returns and
+    # never raises into the fx tick path.
+    modulator = getattr(compositor, "_ward_stimmung_modulator", None)
+    if modulator is not None:
+        modulator.maybe_tick()
     tick_slot_pipeline(compositor, t)
 
     # Flash scheduler: animate glvideomixer flash pad alpha
