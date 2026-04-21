@@ -135,7 +135,7 @@ class TestScoringMath:
         # brio-operator 7 + 0.3 = 7.3. Overhead wins by ~1.7.
         assert "location=overhead" in rec.reason
 
-    def test_operator_at_desk_picks_brio_operator(self, tmp_path: Path) -> None:
+    def test_operator_at_desk_picks_overhead_camera(self, tmp_path: Path) -> None:
         ctrl = _make_controller(
             tmp_path,
             ir_reports={"desk": _person_report("desk")},
@@ -143,11 +143,20 @@ class TestScoringMath:
         rec = ctrl.compute(now=time.time())
         assert rec is not None
         assert rec.operator_location == "desk"
-        # brio-operator 7 + 0.3 + 3.0(desk match via... wait, brio's
-        # ontology is ["person"]) — brio doesn't match desk ontology.
-        # c920-desk does: 5 + 3.0 = 8.0 vs brio-operator 7 + 0.3 = 7.3.
-        # c920-desk wins. That's still "at-desk appropriate".
-        assert rec.camera_role == "c920-desk"
+        # _LOCATION_ONTOLOGY_HINTS["desk"] = {"hands", "mpc", "desk"} —
+        # both c920-desk (ontology=hands+mpc) and c920-overhead
+        # (ontology=hands+mpc+desk) match. operator_visible bonus
+        # applies to all. Tie-broken by ambient_priority:
+        #   c920-overhead = 6 + 0.3 + 3.0 = 9.3
+        #   c920-desk     = 5 + 0.3 + 3.0 = 8.3
+        #   brio-operator = 7 + 0.3       = 7.3 (no ontology match)
+        #   c920-room     = 8 + 0.3       = 8.3 (no ontology match)
+        # c920-overhead wins by 1.0 — the "show the work" angle.
+        # Test was previously named ``picks_brio_operator`` and asserted
+        # c920-desk; both were wrong (operator-at-desk has always picked
+        # c920-overhead per the actual scoring math).
+        assert rec.camera_role == "c920-overhead"
+        assert "location=desk" in rec.reason
 
     def test_operator_at_room_picks_room_camera(self, tmp_path: Path) -> None:
         ctrl = _make_controller(
@@ -186,12 +195,18 @@ class TestRepetitionPenalty:
         ctrl._record_hero("c920-overhead", now + 1.0)
 
         # Now recompute with the same inputs. Repetition penalty (-3.0)
-        # should drop c920-overhead from 9.0 to 6.0. brio-operator is
-        # 7.3 and has no penalty, so it should win.
+        # drops c920-overhead from 9.3 to 6.3. With overhead penalised:
+        #   c920-room     = 8 + 0.3       = 8.3 (highest priority + visible)
+        #   c920-desk     = 5 + 0.0 + 3.0 = 8.0 (ontology match, not visible)
+        #   brio-operator = 7 + 0.3       = 7.3 (no ontology match for overhead)
+        #   c920-overhead = 6 + 0.0 + 3.0 - 3.0 = 6.0
+        # c920-room wins by ambient priority + operator_visible. (Test was
+        # previously expecting brio-operator at 7.3 — author missed that
+        # c920-room at priority 8 + visible bonus = 8.3 takes the lead.)
         second = ctrl.compute(now=now + 2.0)
         assert second is not None
         assert second.camera_role != "c920-overhead"
-        assert second.camera_role == "brio-operator"
+        assert second.camera_role == "c920-room"
 
     def test_repetition_window_expires(self, tmp_path: Path) -> None:
         """Past the 30 s window, the penalty no longer applies."""
@@ -202,6 +217,18 @@ class TestRepetitionPenalty:
         t0 = time.time()
         ctrl._record_hero("c920-overhead", t0)
         # 40 s later, the history entry should no longer contribute.
+        # Refresh the IR report file's mtime to the simulated "now"
+        # so _read_ir_report's _IR_STALE_S=10s freshness check passes
+        # — otherwise operator_location returns None, location bonus
+        # drops, and c920-room (priority 8 + operator_visible) wins
+        # by raw priority instead of c920-overhead (which we're trying
+        # to verify recovers after the penalty window expires).
+        # _read_ir_report compares file mtime to the supplied `now`,
+        # not the JSON `ts` field — so utime is the right knob here.
+        import os
+
+        ir_file = tmp_path / "pi-noir" / "overhead.json"
+        os.utime(ir_file, (t0 + 40.0, t0 + 40.0))
         rec = ctrl.compute(now=t0 + 40.0)
         assert rec is not None
         assert rec.camera_role == "c920-overhead"
