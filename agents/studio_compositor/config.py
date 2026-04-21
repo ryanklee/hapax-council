@@ -32,6 +32,12 @@ PROFILES_CONFIG_PATH = Path.home() / ".config" / "hapax-compositor" / "profiles.
 # 1080p canvas was upscale-then-downscale waste. Layout JSON coordinates
 # are scaled below via LAYOUT_COORD_SCALE.
 #
+# 2026-04-21 crispness pass considered reverting to 1920x1080 (Tier B of
+# the livestream-crispness research) but the 3090 is already at 22 GiB /
+# 24 GiB VRAM with TabbyAPI's Command-R 35B + compositor shader state;
+# doubling canvas pixel area would push past the VRAM cap. Stay at 720p
+# until VRAM headroom changes (model swap / rig migration).
+#
 # Override via HAPAX_COMPOSITOR_OUTPUT_WIDTH / _HEIGHT env vars for
 # debugging or A/B comparison without a code change.
 import os as _os
