@@ -20,7 +20,6 @@ from agents.audio_router.policy import (
     arbitrate,
     compute_ramp_seconds,
 )
-from agents.audio_router.sticky import DEFAULT_STICK_WINDOW_S, StickyTracker
 from agents.audio_router.state import (
     AudioRouterState,
     BroadcasterState,
@@ -32,6 +31,7 @@ from agents.audio_router.state import (
     Stance,
     StimmungState,
 )
+from agents.audio_router.sticky import DEFAULT_STICK_WINDOW_S, StickyTracker
 
 __all__ = [
     # State models

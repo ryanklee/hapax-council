@@ -186,10 +186,8 @@ class RoutingIntent(BaseModel):
         dual_granular_simultaneous."""
         if self.tier >= 5 and "voice_tier_granular" not in opt_ins:
             return False
-        if (
+        return not (
             self.tier >= 5
             and self.s4_vocal_scene == "SONIC-RITUAL"
             and "dual_granular_simultaneous" not in opt_ins
-        ):
-            return False
-        return True
+        )
