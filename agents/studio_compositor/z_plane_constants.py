@@ -42,12 +42,23 @@ DEFAULT_Z_INDEX_FLOAT: Final[float] = 0.5
 #   immersive background pieces that should fade as the imagination
 #   ``depth`` dim rises
 WARD_Z_PLANE_DEFAULTS: Final[dict[str, str]] = {
-    # Surface — always legible
+    # Surface — always legible. 2026-04-21 Tier D of the
+    # livestream-crispness research: the 4 smallest-surface-area
+    # wards — stance_indicator (4k px²), thinking_indicator (7.5k
+    # px²), whos_here (10.5k px²), pressure_gauge (15.6k px²), per
+    # the per-ward opacity audit PR #1161 — are status-of-self
+    # chrome. Recessing them under mid-scrim attenuation lost them
+    # against bright shader output. Elevating to surface-scrim so
+    # they render at full opacity. thinking_indicator demoted from
+    # mid-scrim to surface-scrim for the same reason.
     "stream_overlay": "surface-scrim",
+    "stance_indicator": "surface-scrim",
+    "thinking_indicator": "surface-scrim",
+    "whos_here": "surface-scrim",
+    "pressure_gauge": "surface-scrim",
     # Mid — informational backdrop
     "chat_ambient": "mid-scrim",
     "impingement_cascade": "mid-scrim",
-    "thinking_indicator": "mid-scrim",
     "hardm_dot_matrix": "mid-scrim",
     # Beyond — atmosphere
     "album": "beyond-scrim",
