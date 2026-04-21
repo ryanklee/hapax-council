@@ -31,6 +31,20 @@ NODES_DIR = Path(__file__).parent.parent.parent / "agents" / "shaders" / "nodes"
 PRESETS_DIR = Path(__file__).parent.parent.parent / "presets"
 
 
+def _is_graph_preset(p: Path) -> bool:
+    """``presets/*.json`` carries both EffectGraph instances and metadata files
+    (``shader_intensity_bounds.json`` etc.). Filter to graphs by frontmatter
+    shape so a non-graph file can land in ``presets/`` without breaking the
+    runtime-loading smoke tests."""
+    if p.name.startswith("_"):
+        return False
+    try:
+        raw = json.loads(p.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return False
+    return isinstance(raw, dict) and "nodes" in raw and "edges" in raw
+
+
 # ============================================================================
 # Fixtures
 # ============================================================================
@@ -987,7 +1001,7 @@ class TestPresetCompilation:
     """Every preset must compile successfully against the real registry."""
 
     def test_all_presets_compile(self, compiler: GraphCompiler):
-        for p in sorted(p for p in PRESETS_DIR.glob("*.json") if not p.name.startswith("_")):
+        for p in sorted(p for p in PRESETS_DIR.glob("*.json") if _is_graph_preset(p)):
             raw = json.loads(p.read_text())
             g = EffectGraph(**raw)
             plan = compiler.compile(g)
@@ -997,7 +1011,7 @@ class TestPresetCompilation:
 
     def test_all_preset_node_types_exist(self, registry: ShaderRegistry):
         """Every node type used in presets must exist in the registry."""
-        for p in sorted(p for p in PRESETS_DIR.glob("*.json") if not p.name.startswith("_")):
+        for p in sorted(p for p in PRESETS_DIR.glob("*.json") if _is_graph_preset(p)):
             raw = json.loads(p.read_text())
             g = EffectGraph(**raw)
             for nid, node in g.nodes.items():
@@ -1012,7 +1026,7 @@ class TestPresetRuntime:
     """Presets load correctly into the runtime."""
 
     def test_all_presets_load(self, runtime: GraphRuntime):
-        for p in sorted(p for p in PRESETS_DIR.glob("*.json") if not p.name.startswith("_")):
+        for p in sorted(p for p in PRESETS_DIR.glob("*.json") if _is_graph_preset(p)):
             raw = json.loads(p.read_text())
             g = EffectGraph(**raw)
             runtime.load_graph(g)
@@ -1021,7 +1035,7 @@ class TestPresetRuntime:
 
     def test_preset_modulations_applied(self, runtime: GraphRuntime):
         """Presets with modulations should have them loaded into the modulator."""
-        for p in sorted(p for p in PRESETS_DIR.glob("*.json") if not p.name.startswith("_")):
+        for p in sorted(p for p in PRESETS_DIR.glob("*.json") if _is_graph_preset(p)):
             raw = json.loads(p.read_text())
             g = EffectGraph(**raw)
             runtime.load_graph(g)
