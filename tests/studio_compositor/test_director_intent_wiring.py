@@ -103,6 +103,42 @@ class TestParseIntentFromLlm:
         assert intent.stance == Stance.NOMINAL  # silence-hold construction sets nominal
         assert len(intent.compositional_impingements) == 1  # silence-hold impingement
 
+    def test_markdown_code_fences_are_stripped(self):
+        """Local LLMs routinely wrap their JSON response in ```json\\n...\\n```
+        markdown fences even when the prompt asks for bare JSON. Without
+        stripping, ``text.startswith('{')`` returns False, ``obj`` stays
+        None, and _parse_intent_from_llm returns the parser_non_dict
+        silence fallback (activity='silence', narrative_text='').
+
+        Live regression seen 2026-04-21: every director tick through the
+        director LLM produced `UNGROUNDED intent (activity=silence)` and
+        `director micromove fallback reason=silence_or_empty`, because
+        every raw response was fenced. Broadcast narrative was empty for
+        hours until the fence was stripped.
+        """
+        fenced = (
+            "```json\n"
+            '{"activity": "music", "stance": "cautious",'
+            ' "narrative_text": "drifting downtempo at dusk"}\n'
+            "```"
+        )
+        intent = dl._parse_intent_from_llm(fenced)
+        assert intent.activity == "music"
+        assert "drifting" in intent.narrative_text
+
+    def test_markdown_fence_without_language_tag(self):
+        """Also handles ``` (no language tag) and trailing whitespace."""
+        fenced = '```\n{"activity": "observe", "react": "glimmer at the edge"}\n```\n'
+        intent = dl._parse_intent_from_llm(fenced)
+        assert intent.activity == "observe"
+        assert intent.narrative_text == "glimmer at the edge"
+
+    def test_plain_json_still_works_after_fence_strip(self):
+        """Regression guard: fence-strip must not break unfenced JSON."""
+        intent = dl._parse_intent_from_llm('{"activity": "react", "react": "no fences here"}')
+        assert intent.activity == "react"
+        assert intent.narrative_text == "no fences here"
+
 
 class TestEmitIntentArtifacts:
     @pytest.fixture

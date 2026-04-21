@@ -157,6 +157,20 @@ def _parse_intent_from_llm(
             tier=tier,
             condition_id=condition_id,
         )
+    # Strip markdown code fences if the LLM wrapped its JSON response.
+    # Local models commonly emit ```json\n...\n``` even when the prompt
+    # asks for bare JSON. Without stripping, `text.startswith("{")`
+    # below returns False, we hit `parser_non_dict`, and every intent
+    # becomes silence — breaking the broadcast narrative loop entirely.
+    # Observed 2026-04-21 during live incident: every LLM return was
+    # fenced, every tick dropped to silence_or_empty micromove fallback.
+    if text.startswith("```"):
+        # Drop the opening fence (```json, ```, or ```<lang>) and the
+        # trailing closing fence. split("\n", 1) leaves the body intact
+        # even if it contains further "```" in string literals.
+        _fenced = text.split("\n", 1)
+        if len(_fenced) > 1:
+            text = _fenced[1].rsplit("```", 1)[0].strip()
     try:
         obj = json.loads(text) if text.startswith("{") else None
     except (json.JSONDecodeError, TypeError):
