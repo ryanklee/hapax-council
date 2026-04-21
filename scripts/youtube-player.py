@@ -168,12 +168,21 @@ class VideoSlot:
             # Output (all slots): audio to PipeWire, tempo-shifted for
             # DMCA evasion. Each slot ends up on its own pulse stream so
             # the voice mixer can crossfade.
+            #
+            # `-device hapax-yt-loudnorm` routes the stream into the
+            # sc4 + hard_limiter loudnorm filter-chain sink before it
+            # hits the L-12/broadcast chain. Without this, pulse picks
+            # the default sink (role-multimedia) and the YT bed bypasses
+            # software normalisation entirely — the gap surfaced in the
+            # 2026-04-21 per-source normalisation audit.
             "-map",
             "1:a",
             "-af",
             audio_tempo,
             "-f",
             "pulse",
+            "-device",
+            "hapax-yt-loudnorm",
             "-ac",
             "2",
             f"youtube-audio-{self.slot_id}",
@@ -641,6 +650,10 @@ def play_video(youtube_url: str) -> None:
         "1:a",
         "-f",
         "pulse",
+        # Route through hapax-yt-loudnorm rather than the default sink
+        # (see slotted pipeline above for the rationale).
+        "-device",
+        "hapax-yt-loudnorm",
         "-ac",
         "2",
         "youtube-audio",
