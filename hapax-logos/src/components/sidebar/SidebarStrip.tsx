@@ -1,6 +1,6 @@
 import {
   Heart, Cpu, Server, FileText, Clock, Target,
-  DollarSign, Compass, GitBranch, Users, Accessibility, Timer,
+  DollarSign, Compass, GitBranch, Users, Accessibility, Timer, Sliders,
 } from "lucide-react";
 import type { ComponentType } from "react";
 
@@ -23,6 +23,7 @@ const stripItems: StripItem[] = [
   { id: "management", icon: Users, label: "Management" },
   { id: "accommodations", icon: Accessibility, label: "Accommodations" },
   { id: "timers", icon: Timer, label: "Timers" },
+  { id: "cbip", icon: Sliders, label: "CBIP intensity" },
 ];
 
 interface SidebarStripProps {

@@ -155,6 +155,7 @@ except Exception:
 
 from logos.api.routes.accommodations import router as accommodations_router
 from logos.api.routes.agents import router as agents_router
+from logos.api.routes.cbip import router as cbip_router
 from logos.api.routes.chat import router as chat_router
 from logos.api.routes.chronicle import router as chronicle_router
 from logos.api.routes.consent import router as consent_router
@@ -202,6 +203,7 @@ app.include_router(governance_router)
 app.include_router(studio_router)
 app.include_router(studio_effects_router)
 app.include_router(studio_compositor_router)
+app.include_router(cbip_router)
 app.include_router(logos_router)
 app.include_router(flow_router)
 app.include_router(fortress_router)

@@ -18,6 +18,7 @@ import { EnginePanel } from "./sidebar/EnginePanel";
 import { ProfilePanel } from "./sidebar/ProfilePanel";
 import { OverheadPanel } from "./sidebar/OverheadPanel";
 import { PrecedentPanel } from "./sidebar/PrecedentPanel";
+import { CbipPanel } from "./sidebar/CbipPanel";
 import { SidebarStrip } from "./sidebar/SidebarStrip";
 
 interface PanelEntry {
@@ -44,6 +45,7 @@ const panels: PanelEntry[] = [
   { id: "management", component: ManagementPanel, defaultOrder: 15 },
   { id: "accommodations", component: AccommodationPanel, defaultOrder: 16 },
   { id: "timers", component: TimersPanel, defaultOrder: 17 },
+  { id: "cbip", component: CbipPanel, defaultOrder: 18 },
 ];
 
 export function Sidebar() {
