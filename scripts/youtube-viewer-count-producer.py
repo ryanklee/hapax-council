@@ -94,8 +94,11 @@ def emit_freshness(seconds: float) -> None:
 def run_loop(*, _now=time.time, _sleep=time.sleep, _max_iters: int | None = None) -> None:
     """Main poll loop. ``_now``/``_sleep``/``_max_iters`` exist for
     deterministic testing — production calls run_loop() with defaults."""
+    # build_service signature: (api, version, scopes, *, pass_key) — it
+    # calls get_google_credentials internally. The Credentials object is
+    # still needed for resolve_active_broadcast_id / invalidate_cache.
     creds = get_google_credentials(SCOPES)
-    youtube = build_service("youtube", "v3", creds)
+    youtube = build_service("youtube", "v3", SCOPES)
     iters = 0
     while _max_iters is None or iters < _max_iters:
         broadcast_id, _ = resolve_active_broadcast_id(creds)
