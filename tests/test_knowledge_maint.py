@@ -154,6 +154,35 @@ def test_find_stale_sources_handles_error(mock_qdrant):
     assert stale == []
 
 
+@patch("agents.knowledge_maint.get_qdrant")
+def test_find_stale_sources_skips_malformed_oversized_path(mock_qdrant, tmp_path):
+    """A point whose ``source`` payload is too long for the OS (Errno 36)
+    must NOT abort the entire scan. Live profile-facts payload was
+    observed concatenating ~50 source strings into one ``source`` field;
+    without per-source guarding the resulting OSError killed the loop
+    via the outer try/except, leaving the maintenance timer broken."""
+    mock_client = MagicMock()
+    mock_qdrant.return_value = mock_client
+
+    existing_file = tmp_path / "real.md"
+    existing_file.write_text("content")
+    # Construct a path well over Linux's 255-byte filename limit so
+    # Path.exists() raises OSError 36 deterministically.
+    oversized = "/" + ("a" * 4096)
+
+    mock_real = MagicMock()
+    mock_real.payload = {"source": str(existing_file)}
+    mock_bad = MagicMock()
+    mock_bad.payload = {"source": oversized}
+    mock_client.scroll.return_value = ([mock_real, mock_bad], None)
+
+    stale = find_stale_sources("documents")
+    # Bad point is silently skipped; real point still processed (and not
+    # stale because it exists). Crucially: the scan completed.
+    assert oversized not in stale
+    assert str(existing_file) not in stale
+
+
 # ── Prune tests ──────────────────────────────────────────────────────────────
 
 
