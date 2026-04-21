@@ -367,7 +367,9 @@ class ActivityHeaderCairoSource(HomageTransitionalSource):
         intent = _read_latest_intent()
         activity = str(ns.get("activity") or intent.get("activity") or "—").upper()
         gloss = ""
-        imps = intent.get("compositional_impingements") or []
+        imps = [
+            i for i in (intent.get("compositional_impingements") or []) if not i.get("diagnostic")
+        ]
         if imps:
             best = max(imps, key=lambda i: i.get("salience", 0.0))
             gloss = str(best.get("narrative", ""))[:48]

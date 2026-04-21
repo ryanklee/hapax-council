@@ -214,3 +214,48 @@ class TestDirectorIntent:
             compositional_impingements=[_silence_hold_imp()],
         )
         assert intent.grounding_provenance == []
+
+
+class TestDiagnosticFlag:
+    """The ``diagnostic`` flag marks an impingement whose narrative is
+    internal routing text that must never reach viewer-facing surfaces.
+    Added 2026-04-21 after operator saw silence-hold narrative rendered
+    in the ActivityHeader gloss slot on broadcast.
+    """
+
+    def test_diagnostic_defaults_false(self):
+        imp = CompositionalImpingement(
+            narrative="turntable focus",
+            intent_family="camera.hero",
+        )
+        assert imp.diagnostic is False
+
+    def test_diagnostic_true_roundtrip(self):
+        imp = CompositionalImpingement(
+            narrative="Silence hold: maintain the current surface",
+            intent_family="overlay.emphasis",
+            diagnostic=True,
+        )
+        assert imp.diagnostic is True
+        payload = imp.model_dump()
+        assert payload["diagnostic"] is True
+        restored = CompositionalImpingement.model_validate(payload)
+        assert restored.diagnostic is True
+
+    def test_diagnostic_does_not_affect_other_fields(self):
+        """Diagnostic is purely a legibility fence — pipeline recruitment
+        score, narrative, salience, etc. unchanged."""
+        a = CompositionalImpingement(
+            narrative="the turntable is active",
+            intent_family="camera.hero",
+            salience=0.8,
+        )
+        b = CompositionalImpingement(
+            narrative="the turntable is active",
+            intent_family="camera.hero",
+            salience=0.8,
+            diagnostic=True,
+        )
+        assert a.narrative == b.narrative
+        assert a.intent_family == b.intent_family
+        assert a.salience == b.salience
