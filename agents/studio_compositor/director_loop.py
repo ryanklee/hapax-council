@@ -1622,6 +1622,14 @@ class DirectorLoop:
                     "random",
                 ),
                 (
+                    "gem.emphasis",
+                    "Stamp a small graffito on the lower band — hold the attention "
+                    "on a fragment of what's present.",
+                    "fire",
+                    ["gem"],
+                    "sequential",
+                ),
+                (
                     "ward.highlight",
                     "Brighten the album face for a beat so the music stays legible.",
                     "fire",
