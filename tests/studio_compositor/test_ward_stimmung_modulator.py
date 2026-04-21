@@ -1,0 +1,185 @@
+"""Regression tests for the ward stimmung modulator (Phase 2)."""
+
+from __future__ import annotations
+
+import json
+import time
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from agents.studio_compositor import ward_stimmung_modulator as _wsm
+from agents.studio_compositor.ward_properties import WardProperties
+from agents.studio_compositor.ward_stimmung_modulator import WardStimmungModulator
+
+
+@pytest.fixture
+def enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(_wsm.ENABLE_ENV, "1")
+
+
+@pytest.fixture
+def current_path(tmp_path: pytest.TempPathFactory) -> Path:
+    return Path(tmp_path) / "current.json"  # type: ignore[arg-type]
+
+
+def _write_current(path: Path, dims: dict[str, float], ts_offset: float = 0.0) -> None:
+    payload = {"dimensions": dims, "timestamp": time.time() + ts_offset}
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def test_disabled_by_default(monkeypatch: pytest.MonkeyPatch, current_path: Path) -> None:
+    """No ``HAPAX_WARD_MODULATOR_ACTIVE`` → ``maybe_tick`` is a no-op."""
+    monkeypatch.delenv(_wsm.ENABLE_ENV, raising=False)
+    mod = WardStimmungModulator(current_path=current_path, tick_every_n=1)
+    with patch.object(_wsm, "set_ward_properties") as setter:
+        for _ in range(10):
+            mod.maybe_tick()
+    setter.assert_not_called()
+
+
+def test_dims_read_fail_returns_none(enabled: None, current_path: Path) -> None:
+    """Missing ``current.json`` → no writes, stale counter increments."""
+    mod = WardStimmungModulator(current_path=current_path, tick_every_n=1)
+    with (
+        patch.object(_wsm, "set_ward_properties") as setter,
+        patch.object(_wsm, "_emit_modulator_stale") as stale_emit,
+    ):
+        mod.maybe_tick()
+    setter.assert_not_called()
+    stale_emit.assert_called_once()
+
+
+def test_stale_dims_skipped(enabled: None, current_path: Path) -> None:
+    """``timestamp`` 15s in the past → modulator treats as stale."""
+    _write_current(current_path, {"depth": 1.0, "coherence": 0.5}, ts_offset=-15.0)
+    mod = WardStimmungModulator(current_path=current_path, tick_every_n=1)
+    with (
+        patch.object(_wsm, "set_ward_properties") as setter,
+        patch.object(_wsm, "_emit_modulator_stale") as stale_emit,
+    ):
+        mod.maybe_tick()
+    setter.assert_not_called()
+    stale_emit.assert_called_once()
+
+
+def test_default_plane_wards_untouched(enabled: None, current_path: Path) -> None:
+    """``on-scrim`` wards keep their values — modulator never overrides default plane."""
+    _write_current(current_path, {"depth": 1.0, "coherence": 0.0})
+    mod = WardStimmungModulator(current_path=current_path, tick_every_n=1)
+    base = WardProperties(z_plane="on-scrim", alpha=1.0)
+    with (
+        patch.object(_wsm, "get_specific_ward_properties", return_value=base),
+        patch.object(_wsm, "set_ward_properties") as setter,
+    ):
+        mod.maybe_tick()
+    setter.assert_not_called()
+
+
+def test_beyond_scrim_attenuates_alpha_with_depth(enabled: None, current_path: Path) -> None:
+    """High ``depth`` dim drives ``beyond-scrim`` ``alpha`` down toward 0.5."""
+    _write_current(current_path, {"depth": 1.0, "coherence": 0.5})
+    mod = WardStimmungModulator(current_path=current_path, tick_every_n=1)
+    base = WardProperties(z_plane="beyond-scrim", alpha=1.0, z_index_float=0.5)
+    captured: dict[str, WardProperties] = {}
+
+    def _capture(ward_id: str, props: WardProperties, ttl_s: float) -> None:
+        captured[ward_id] = props
+
+    with (
+        patch.object(_wsm, "get_specific_ward_properties", return_value=base),
+        patch.object(_wsm, "set_ward_properties", side_effect=_capture),
+    ):
+        mod.maybe_tick()
+    assert captured, "modulator should write at least one beyond-scrim ward"
+    sample = next(iter(captured.values()))
+    assert sample.z_plane == "beyond-scrim"
+    assert sample.alpha < 1.0
+    # depth=1.0 → attenuation = 0.5
+    assert abs(sample.alpha - 0.5) < 1e-3
+
+
+def test_does_not_override_z_plane(enabled: None, current_path: Path) -> None:
+    """Modulator must never write a different ``z_plane`` than the input ward had."""
+    _write_current(current_path, {"depth": 0.5, "coherence": 0.5})
+    mod = WardStimmungModulator(current_path=current_path, tick_every_n=1)
+    base = WardProperties(z_plane="mid-scrim", alpha=0.8)
+    captured: list[WardProperties] = []
+
+    def _capture(ward_id: str, props: WardProperties, ttl_s: float) -> None:
+        captured.append(props)
+
+    with (
+        patch.object(_wsm, "get_specific_ward_properties", return_value=base),
+        patch.object(_wsm, "set_ward_properties", side_effect=_capture),
+    ):
+        mod.maybe_tick()
+    assert captured
+    for props in captured:
+        assert props.z_plane == "mid-scrim"
+
+
+def test_tick_divisor_runs_every_nth_call(enabled: None, current_path: Path) -> None:
+    """``maybe_tick`` only calls ``_run`` every ``tick_every_n`` invocations."""
+    _write_current(current_path, {"depth": 0.5, "coherence": 0.5})
+    mod = WardStimmungModulator(current_path=current_path, tick_every_n=6)
+    with patch.object(mod, "_run") as run_spy:
+        for _ in range(5):
+            mod.maybe_tick()
+        assert run_spy.call_count == 0
+        mod.maybe_tick()
+        assert run_spy.call_count == 1
+        for _ in range(6):
+            mod.maybe_tick()
+        assert run_spy.call_count == 2
+
+
+def test_modulator_swallows_internal_exceptions(enabled: None, current_path: Path) -> None:
+    """Any exception inside ``_run`` is logged but does not propagate."""
+    _write_current(current_path, {"depth": 0.5, "coherence": 0.5})
+    mod = WardStimmungModulator(current_path=current_path, tick_every_n=1)
+    with patch.object(mod, "_run", side_effect=RuntimeError("kaboom")):
+        # Must not raise.
+        mod.maybe_tick()
+
+
+def test_blit_with_depth_and_modulator_round_trip(enabled: None, current_path: Path) -> None:
+    """Modulator-written ``z_index_float`` is the value ``blit_with_depth`` reads."""
+    from agents.studio_compositor import fx_chain
+    from shared.compositor_model import SurfaceGeometry
+
+    _write_current(current_path, {"depth": 1.0, "coherence": 1.0})
+    mod = WardStimmungModulator(current_path=current_path, tick_every_n=1)
+    base = WardProperties(z_plane="beyond-scrim", alpha=1.0, z_index_float=0.5)
+    captured_props: list[WardProperties] = []
+
+    def _capture(ward_id: str, props: WardProperties, ttl_s: float) -> None:
+        captured_props.append(props)
+
+    with (
+        patch.object(_wsm, "get_specific_ward_properties", return_value=base),
+        patch.object(_wsm, "set_ward_properties", side_effect=_capture),
+    ):
+        mod.maybe_tick()
+    assert captured_props
+    # coherence=1.0 → convergence=+0.1 → z_idx = 0.2 - 0.1 = 0.1
+    sample = captured_props[0]
+    assert sample.z_index_float < base.z_index_float
+    # Now feed those values into blit_with_depth and confirm it produces
+    # a real attenuation (< default-plane multiplier).
+    cr = MagicMock()
+    src = MagicMock()
+    geom = SurfaceGeometry(kind="rect", x=0, y=0, w=10, h=10)
+    with patch.object(fx_chain, "blit_scaled") as blit_scaled:
+        fx_chain.blit_with_depth(
+            cr,
+            src,
+            geom,
+            opacity=1.0,
+            blend_mode="over",
+            z_plane=sample.z_plane,
+            z_index_float=sample.z_index_float,
+        )
+        opacity = blit_scaled.call_args.args[3]
+    assert opacity < 0.7  # beyond-scrim, well below the on-scrim ~0.96
