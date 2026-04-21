@@ -45,6 +45,10 @@ RECENCY_WEIGHT_ENV = "HAPAX_AFFORDANCE_RECENCY_WEIGHT"
 W_RECENCY_DEFAULT = 0.10
 # Recency tracker rolling window size (capabilities, not embeddings).
 RECENCY_WINDOW_SIZE = 10
+# Preset-variety Phase 4: Thompson posterior decay on non-recruitment.
+# 0.999 ≈ 700-tick half-life (gentle); 1.0 disables. Operator-tunable.
+THOMPSON_DECAY_ENV = "HAPAX_AFFORDANCE_THOMPSON_DECAY"
+THOMPSON_DECAY_DEFAULT = 0.999
 # Consent contract registry refresh window. Cheap to refresh (4 yaml files)
 # but pipeline.select() is hot-pathed (per-frame in reverie mixer, per-impingement
 # in run_loops_aux), so we cache for 60s instead of reading every call.
@@ -635,6 +639,20 @@ class AffordancePipeline:
         if winner is not None:
             winner_embedding = winner.payload.get("embedding") or embedding
             self._recency.record_apply(winner.capability_name, winner_embedding)
+        # Preset-variety Phase 4: decay Thompson posterior on every
+        # non-recruited candidate so dormant capabilities recover toward
+        # the Beta(2, 1) prior. Disabled by setting the env to "1.0".
+        try:
+            gamma_unused = float(os.environ.get(THOMPSON_DECAY_ENV, THOMPSON_DECAY_DEFAULT))
+        except (TypeError, ValueError):
+            gamma_unused = THOMPSON_DECAY_DEFAULT
+        if gamma_unused < 1.0:
+            winner_name = winner.capability_name if winner is not None else None
+            for c in candidates:
+                if c.capability_name == winner_name:
+                    continue
+                state = self._activation.setdefault(c.capability_name, ActivationState())
+                state.decay_unused(gamma_unused)
         self._metrics.record_selection(
             impingement_source=impingement.source,
             impingement_metric=impingement.content.get("metric", ""),

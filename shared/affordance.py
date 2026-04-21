@@ -90,6 +90,38 @@ class ActivationState(BaseModel):
         self.ts_beta = min(self._TS_CAP, self.ts_beta * gamma + 1.0)
         self.use_count += 1
 
+    # Preset-variety Phase 4 (task #166): time-decay the Thompson posterior
+    # toward the Beta(2, 1) prior on every non-recruitment tick so a long
+    # monopoly by capability A doesn't permanently freeze capability B's
+    # ``thompson_sample()``. ``decay_unused`` is a STATE update on the
+    # candidate, not a branch — there is no `if was_recruited: continue`.
+    # Decay-rate guidance:
+    #   gamma=1.000  → no decay (operator override to disable phase)
+    #   gamma=0.999  → ~700-tick half-life (gentle, hours)
+    #   gamma=0.99   → ~70-tick half-life (~1 min at 1 Hz)
+    #   gamma=0.95   → ~14-tick half-life (restless)
+    _PRIOR_ALPHA: float = 2.0
+    _PRIOR_BETA: float = 1.0
+
+    def decay_unused(self, gamma_unused: float = 0.999) -> None:
+        """Pull ``ts_alpha`` / ``ts_beta`` toward the Beta(2, 1) prior.
+
+        Idempotent for ``gamma_unused == 1.0`` (no decay). Floors are
+        enforced at ``_TS_FLOOR`` so a candidate cannot decay to zero.
+        Does NOT touch ``use_count`` / ``last_use_ts`` — those reflect
+        actual recruitment, not non-recruitment ticks.
+        """
+        if gamma_unused >= 1.0:
+            return
+        self.ts_alpha = max(
+            self._TS_FLOOR,
+            self.ts_alpha * gamma_unused + self._PRIOR_ALPHA * (1.0 - gamma_unused),
+        )
+        self.ts_beta = max(
+            self._TS_FLOOR,
+            self.ts_beta * gamma_unused + self._PRIOR_BETA * (1.0 - gamma_unused),
+        )
+
     def to_summary(self) -> dict[str, float]:
         """Summary for cross-daemon visibility via Qdrant payload."""
         total = self.ts_alpha + self.ts_beta
