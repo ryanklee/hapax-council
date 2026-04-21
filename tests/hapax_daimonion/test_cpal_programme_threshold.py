@@ -192,10 +192,16 @@ class TestThresholdClamping:
         assert eff.surface_threshold == pytest_approx(expected)
 
     def test_multiplier_max_clamp_prevents_pinned_silence(self) -> None:
-        prog = _programme(speech_pos_bias=10.0)
+        # B3 / Medium #18 (3843e1806) capped capability_bias_positive at
+        # 5.0 in the Pydantic validator — values above that are rejected
+        # at envelope construction. 5.0 is the new maximum legal bias;
+        # CPAL's adapter then clamps to its own SURFACE_MULTIPLIER_MAX
+        # (2.0) before applying. The end-state pinned-silence behavior
+        # the test verifies is unchanged.
+        prog = _programme(speech_pos_bias=5.0)
         adapter = ImpingementAdapter(programme_provider=lambda: prog)
         eff = adapter.adapt(_imp(0.5))
-        # pos 10 → multiplier clamped to MAX (2.0).
+        # pos 5 → multiplier clamped to MAX (2.0).
         # 0.7 * 2.0 = 1.4 → final clamp → 1.0
         assert eff.surface_threshold == 1.0
 
