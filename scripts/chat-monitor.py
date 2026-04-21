@@ -590,6 +590,10 @@ class ChatMonitor:
             try:
                 signals = self._signals_aggregator.compute_signals(now=time.time())
                 self._signals_aggregator.write_shm(signals)
+                # FINDING-V chat-state sidecar: emit the simpler
+                # {total_messages, unique_authors} schema alongside the
+                # canonical signals so stream_overlay's chat row renders.
+                self._signals_aggregator.write_chat_state(signals)
             except Exception:
                 log.debug("ChatSignalsAggregator publish failed", exc_info=True)
 
