@@ -340,3 +340,201 @@ wards:
     oq_02_bound_applicable: true
     hardm_binding: false
     cvs_bindings: []
+
+  # ── Wards #15 & #16 (operator-directed, designs landed pre-registry) ──
+
+  gem:
+    # Graffiti Emphasis Mural — Hapax-authored expression surface that
+    # replaces the captions strip in the lower-band geometry. Operator
+    # directive 2026-04-19 (b6ec4a723); design at
+    # docs/research/2026-04-19-gem-ward-design.md. Captions retires when
+    # GEM activates.
+    recognizability_invariant: >-
+      CP437 raster only (no anti-aliasing, no proportional fonts);
+      composition reads as glyph mural, never as a figure or face;
+      revision/erasure marks legible as authoring trace, not noise.
+    recognizability_tests:
+      - cp437_glyph_purity
+      - pearson_face_correlation
+      - mural_density_band
+    use_case_acceptance_test: >-
+      Observer reads emphasized text fragments + abstract glyph
+      compositions without the surface ever resolving into a humanoid
+      figure or speech transcription line.
+    acceptance_test_harness: tests/studio_compositor/test_gem_acceptance.py
+    accepted_enhancement_categories:
+      - halftone
+      - chromatic_aberration
+      - scanlines
+      - film_grain
+    rejected_enhancement_categories:
+      - kuwahara
+      - posterize
+      - lens_distortion
+      - perspective
+      - depth_of_field
+    spatial_dynamism_approved: true
+    oq_02_bound_applicable: true
+    hardm_binding: true
+    cvs_bindings:
+      - "CVS #8 non-manipulation"
+      - "CVS #16 anti-personification"
+
+  chat_keywords:
+    # Keyword texture from chat (what the room is talking ABOUT) vs.
+    # chat_ambient's rate/tier (how loud). Operator-authorized 2026-04-20;
+    # design at docs/research/2026-04-20-chat-keywords-ward-design.md.
+    # Constitutional axiom: interpersonal_transparency T0 — aggregate-only,
+    # never per-author content, never message bodies.
+    recognizability_invariant: >-
+      Aggregate keyword texture only; no author names, no message bodies,
+      no per-utterance attribution; BitchX-grammar typography preserved.
+    recognizability_tests:
+      - per_author_attribution_absent
+      - message_body_absent
+      - bitchx_grammar_compliance
+    use_case_acceptance_test: >-
+      Operator reads "what the room is discussing" as keyword cloud
+      without identifying any individual chatter.
+    acceptance_test_harness: tests/studio_compositor/test_chat_keywords_acceptance.py
+    accepted_enhancement_categories:
+      - halftone
+      - chromatic_aberration
+      - film_grain
+    rejected_enhancement_categories:
+      - kuwahara
+      - posterize
+      - lens_distortion
+      - perspective
+    spatial_dynamism_approved: true
+    oq_02_bound_applicable: true
+    hardm_binding: false
+    cvs_bindings:
+      - "CVS #16 anti-personification"
+      - "interpersonal_transparency (T0)"
+
+  # ── Already-shipped wards getting their first profile ──
+
+  captions:
+    # Bottom-strip closed-caption surface. RETIRES when GEM ships in the
+    # same lower-band geometry — kept profiled until then so the
+    # umbrella governance gate covers the live render path.
+    deprecation: "Retires when GEM ward (task #191) ships."
+    recognizability_invariant: >-
+      Caption text >=95% OCR; line height + baseline stable; no
+      type-effect distortion that defeats accessibility.
+    recognizability_tests:
+      - ocr_accuracy
+      - baseline_stability
+      - format_preservation
+    use_case_acceptance_test: >-
+      Viewer reads caption text without squinting under any approved
+      enhancement; accessibility never degraded.
+    acceptance_test_harness: tests/studio_compositor/test_captions_acceptance.py
+    accepted_enhancement_categories:
+      - chromatic_aberration
+    rejected_enhancement_categories:
+      - kuwahara
+      - posterize
+      - halftone
+      - glitch
+      - lens_distortion
+      - perspective
+      - depth_of_field
+    spatial_dynamism_approved: false
+    oq_02_bound_applicable: true
+    hardm_binding: false
+    cvs_bindings:
+      - "CVS #16 anti-personification"
+
+  chat_ambient:
+    # Aggregate room-temperature gauge: participation, research-keyword
+    # cadence, citation rate, engagement pulse. Spec at
+    # docs/superpowers/specs/2026-04-18-chat-ambient-ward-design.md.
+    # B5 gap: layout still points at legacy ChatKeywordLegendCairoSource;
+    # cutover lands in same PR as this profile.
+    recognizability_invariant: >-
+      Ambient gauge only; no author names, no message bodies; participation
+      magnitude and pulse legible as room-temperature, not as conversation.
+    recognizability_tests:
+      - per_author_attribution_absent
+      - message_body_absent
+      - magnitude_legibility
+    use_case_acceptance_test: >-
+      Operator senses room engagement level at glance without reading
+      individual messages.
+    acceptance_test_harness: tests/studio_compositor/test_chat_ambient_acceptance.py
+    accepted_enhancement_categories:
+      - halftone
+      - chromatic_aberration
+      - film_grain
+    rejected_enhancement_categories:
+      - kuwahara
+      - posterize
+      - lens_distortion
+    spatial_dynamism_approved: true
+    oq_02_bound_applicable: true
+    hardm_binding: false
+    cvs_bindings:
+      - "CVS #16 anti-personification"
+      - "interpersonal_transparency (T0)"
+
+  grounding_provenance_ticker:
+    # Bottom-left chrome strip listing sources/authorities cited by the
+    # director and narrative loops. Grounding-critical: enhancements must
+    # never make citations unreadable.
+    recognizability_invariant: >-
+      Source/authority text >=95% OCR; citation order preserved; ticker
+      cadence legible.
+    recognizability_tests:
+      - ocr_accuracy
+      - citation_order_preservation
+      - ticker_cadence_legibility
+    use_case_acceptance_test: >-
+      Operator/audience can read each cited source without losing
+      citations to enhancement effects.
+    acceptance_test_harness: tests/studio_compositor/test_grounding_provenance_ticker_acceptance.py
+    accepted_enhancement_categories:
+      - chromatic_aberration
+    rejected_enhancement_categories:
+      - kuwahara
+      - posterize
+      - halftone
+      - glitch
+      - lens_distortion
+      - perspective
+    spatial_dynamism_approved: false
+    oq_02_bound_applicable: true
+    hardm_binding: false
+    cvs_bindings:
+      - "CVS #16 anti-personification"
+
+  research_marker_overlay:
+    # Conditional 1280x64 banner indicating operator-declared research
+    # phase. Gated layer — only renders when research mode is active.
+    recognizability_invariant: >-
+      Research-phase label legible; banner unmistakable as a mode
+      indicator; never confusable with editorial content.
+    recognizability_tests:
+      - ocr_accuracy
+      - mode_indicator_unambiguity
+    use_case_acceptance_test: >-
+      Audience reads "research mode active" at a glance; no visual
+      ambiguity with editorial register.
+    acceptance_test_harness: tests/studio_compositor/test_research_marker_overlay_acceptance.py
+    accepted_enhancement_categories: []
+    rejected_enhancement_categories:
+      - kuwahara
+      - posterize
+      - halftone
+      - glitch
+      - chromatic_aberration
+      - lens_distortion
+      - perspective
+      - depth_of_field
+      - film_grain
+    spatial_dynamism_approved: false
+    oq_02_bound_applicable: true
+    hardm_binding: false
+    cvs_bindings:
+      - "CVS #16 anti-personification"

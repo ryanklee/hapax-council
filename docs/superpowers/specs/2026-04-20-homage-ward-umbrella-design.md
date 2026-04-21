@@ -23,7 +23,9 @@
 
 ## §1 — Summary
 
-**Shipped by this spec:** A unified framework for Homage Ward enhancement + spatial-dynamism work across 15 wards, locking recognizability invariants and use-case acceptance tests per ward. Three optical modulation rules (atmospheric perspective, defocus blur, motion parallax) that the Nebulous Scrim applies uniformly to all wards. A shared enhancement/effect-processing taxonomy (12 families, 40+ techniques) mapped to existing and three new effect-graph nodes. Two fixed annexes (CBIP, Vitruvian) with surface-specific enhancements + token-path patterns. The "wards live through the scrim" decision.
+**Shipped by this spec:** A unified framework for Homage Ward enhancement + spatial-dynamism work across 16 wards (15 enhanceable + reverie substrate), locking recognizability invariants and use-case acceptance tests per ward. Three optical modulation rules (atmospheric perspective, defocus blur, motion parallax) that the Nebulous Scrim applies uniformly to all wards. A shared enhancement/effect-processing taxonomy (12 families, 40+ techniques) mapped to existing and three new effect-graph nodes. Two fixed annexes (CBIP, Vitruvian) with surface-specific enhancements + token-path patterns. The "wards live through the scrim" decision.
+
+**Ward count reconciliation (2026-04-21):** Ratified ward inventory is **16 wards** — the original 14 in YAML + GEM (#15, operator-directed 2026-04-19, replaces captions in lower-band) + chat_keywords (#16, operator-directed 2026-04-20). Captions, chat_ambient, grounding_provenance_ticker, and research_marker_overlay are already-shipped wards now profiled in `config/ward_enhancement_profiles.yaml`. Captions retires when GEM activates. Vitruvian is not a separate ward; it is the silhouette inside `token_pole`.
 
 **Not shipped:** Per-ward spec documents for the remaining 13 wards (deferred to Phase I—after recognizability invariants are locked). Switchability UI (director affordance for preset selection). Runtime ward registration/deregistration. Animation tweens on geometry changes.
 
@@ -107,7 +109,9 @@ The taxonomy (§5) is the authority. Per-ward specializations add context or bin
 
 ## §4 — Ward Inventory and Recognizability Invariants
 
-### 4.1 Ward table (15 wards)
+### 4.1 Ward table (16 wards — ratified 2026-04-21)
+
+> Originally drafted with 14 named wards; ratified 2026-04-21 to 16 (adds GEM, chat_keywords, captions, chat_ambient, grounding_provenance_ticker, research_marker_overlay; reverie remains as substrate, not a recruited ward). See `config/ward_enhancement_profiles.yaml` for the canonical per-ward profile (recognizability invariant + acceptance test + accepted/rejected enhancement categories + governance bindings). The original 14-row table below is preserved for diff continuity; the additional 6 wards are profiled in YAML and summarized at §4.1bis.
 
 | Ward | Essential Intent | Use-case | Recognizability Invariant | Acceptance Test |
 |---|---|---|---|---|
@@ -125,6 +129,19 @@ The taxonomy (§5) is the authority. Per-ward specializations add context or bin
 | **whos_here** | `[hapax:1/N]` audience framing | Viewer-count change triggers refresh | Count accurate + readable; `hapax:` prefix persists; glyphs ≠ emoji/hand-wave | Operator/audience glance to see audience size |
 | **hardm_dot_matrix** | 16×16 dot-grid avatar; glow-through-fabric character | Per-cell ripple at family recruitment; RD underlay | Grid ≠ face (Pearson <0.6); cell count constant; glow-through-scrim bloom asymmetry non-negotiable | Observer sees abstract grid, not stylized face |
 | **reverie** | Nebulous Scrim itself; 8-pass RGBA substrate | Always-on permanent generative process | Reverie orthogonal to ward enhancement; OQ-02 brightness ceiling ≤0.55 | Reverie's depth-field substrate legible; scrim effects uniform |
+
+### 4.1bis Ward table addendum (ratified 2026-04-21)
+
+| Ward | Essential Intent | Use-case | Recognizability Invariant | Acceptance Test |
+|---|---|---|---|---|
+| **gem** | Graffiti Emphasis Mural — Hapax-authored CP437 raster expression surface (replaces captions in lower-band geometry) | Frame-by-frame glyph compositions, emphasized text, abstract animation | CP437 glyph purity; never resolves into figure/face; revision marks legible as authoring trace | Observer reads emphasized fragments + abstract compositions without humanoid emergence |
+| **chat_keywords** | Aggregate keyword texture (what the room is talking ABOUT) — distinct from chat_ambient (how loud) | Ticker-cycle on chat-classifier output | Aggregate-only; no per-author attribution; no message bodies; BitchX grammar | Operator reads "what the room is discussing" without identifying any chatter |
+| **captions** *(deprecating)* | Closed-caption strip (retires when GEM activates) | Reads STT transcript | Caption text ≥95% OCR; baseline stable | Accessibility never degraded under any approved enhancement |
+| **chat_ambient** | Room-temperature gauge — participation, engagement pulse, citation cadence | Polling on chat-signals aggregator | Aggregate gauge only; no author names/bodies | Operator senses room engagement without reading individuals |
+| **grounding_provenance_ticker** | Source/authority strip listing director + narrative citations | Ticker on new citation arrival | Source text ≥95% OCR; citation order preserved | Audience reads each cited source without loss to enhancement effects |
+| **research_marker_overlay** | Conditional banner: research-mode active | Renders only in research mode | Mode-indicator unambiguity; never confusable with editorial register | Audience reads "research mode" at glance |
+
+**Per-ward profiles:** see `config/ward_enhancement_profiles.yaml` for accepted/rejected enhancement categories, governance bindings, and acceptance-test harness paths.
 
 ### 4.2 Pydantic schema: WardEnhancementProfile
 
@@ -471,7 +488,7 @@ No per-ward spec needed unless surface-specific governance applies (e.g., reveri
 
 ### 12.1 Unit tests
 
-- `test_ward_enhancement_profile_schema.py`: WardEnhancementProfile model round-trip, all 15 wards instantiable, serialization.
+- `test_ward_enhancement_profile_schema.py`: WardEnhancementProfile model round-trip, all 16 wards (15 enhanceable + reverie substrate) instantiable, serialization.
 - `test_technique_taxonomy_coverage.py`: All 40+ techniques in taxonomy have at least one "applicable wards" binding; no orphaned techniques.
 - `test_recognizability_metrics_compute.py`: OCR, edge-IoU, pHash, palette delta-E all compute + threshold-compare correctly.
 
@@ -512,7 +529,7 @@ Before any enhancement family ships to livestream, run human spot-check on 10–
 
 **Phase skeleton (refine against umbrella research §9):**
 
-1. **WardEnhancementProfile model + registry** — Pydantic schema, YAML registry of all 15 wards + their invariants, test harness scaffold.
+1. **WardEnhancementProfile model + registry** — Pydantic schema, YAML registry of all 16 wards (15 enhanceable + reverie substrate) + their invariants, test harness scaffold.
 2. **Shared technique-taxonomy library** — Effect-graph node definitions (existing + 4 new: posterize, kuwahara, palette_extract, edge_detect), technique-inventory table, recognizability-metrics computations.
 3. **OQ-02 three-bound test harness (per-ward)** — CI gate machinery, per-bound test implementations, audio-profile multiplexing (parallel with HSEA Phase 0).
 4. **Ward-through-scrim optical-modulation layer** — Compositor-side depth-conditioned blur/tint/parallax application, API contract fixation, face-obscure-before-scrim integration.
@@ -539,7 +556,7 @@ Dependencies: Phase 2 blocks Phase 3; Phase 4 unblocks Phase 5–6 in parallel; 
 
 3. **Enhancement switchability.** Profiles operator-switchable per-ward via programme affordance + director override, or fully director-driven (stimmung-coupled only)? *Delta proposes: operator-switchable via preset affordance; director can override per-round.*
 
-4. **Reverie enhancement scope.** Reverie (the scrim substrate itself) ever enhanced, or always orthogonal? *Delta proposes: orthogonal; scrim is structural ground, not recruited content. Enhancement scope limited to 14 wards.*
+4. **Reverie enhancement scope.** Reverie (the scrim substrate itself) ever enhanced, or always orthogonal? *Delta proposes: orthogonal; scrim is structural ground, not recruited content. Enhancement scope limited to 15 wards (16 total minus reverie substrate).*
 
 5. **HARDM governance on anatomical overlays.** Are meridian lines, chakra nodes, proportional grids on the figure compatible with anti-anthropomorphization, or do they count as "personification"? *Delta proposes: compatible; they emphasize structure (abstract diagram), not subjectivity (character).*
 
@@ -551,7 +568,7 @@ Dependencies: Phase 2 blocks Phase 3; Phase 4 unblocks Phase 5–6 in parallel; 
 
 Concrete, measurable. Tied to ward inventory + operator directive.
 
-**All 15 wards:**
+**All 16 wards (15 enhanceable + reverie substrate):**
 - ✓ Have explicit recognizability-invariant + use-case acceptance test documented in §4 and pinned in test code.
 - ✓ Have ≥1 enhancement profile defined (from the 5-family shared taxonomy or per-surface annex).
 - ✓ Pass OQ-02 three-bound gates under chosen enhancement profile(s).
