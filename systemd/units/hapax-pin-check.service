@@ -8,6 +8,10 @@ PartOf=pipewire.service
 
 [Service]
 Type=oneshot
+# `uv run python` (the CLI's shebang) discovers the project + venv
+# from the current working directory. Without WorkingDirectory the
+# service runs from / and the CLI fails to import shared.* modules.
+WorkingDirectory=%h/projects/hapax-council
 # Wrapper assembles the live probe from pactl + pw-cat then invokes
 # `hapax-audio-topology pin-check` with persisted state. Exit code 0
 # = healthy or recovery succeeded; exit 1 = PIN_GLITCH detected and
