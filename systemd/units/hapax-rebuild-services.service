@@ -71,3 +71,10 @@ ExecStart=%h/projects/hapax-council/scripts/rebuild-service.sh --repo %h/project
 # studio-person-detector: camera-side person detection
 # (agents/studio_person_detector.py is the single-file module)
 ExecStart=%h/projects/hapax-council/scripts/rebuild-service.sh --repo %h/projects/hapax-council --service studio-person-detector.service --watch "agents/studio_person_detector.py shared/" --sha-key studio-person-detector
+
+# hapax-audio-router: 5 Hz Evil Pet + S-4 dynamic arbiter (Phase B of
+# the dual-processor routing epic, PR #1136). Restart on edits to the
+# router code OR its policy/state inputs (s4_midi, s4_scenes,
+# evil_pet_presets) so the live daemon picks up CC-table changes /
+# scene additions / preset additions without manual intervention.
+ExecStart=%h/projects/hapax-council/scripts/rebuild-service.sh --repo %h/projects/hapax-council --service hapax-audio-router.service --watch "agents/audio_router/ shared/s4_midi.py shared/s4_scenes.py shared/evil_pet_presets.py shared/" --sha-key audio-router
