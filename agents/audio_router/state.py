@@ -39,6 +39,11 @@ class ProgrammeState(BaseModel):
     voice_tier_ceiling: int | None = None
     intelligibility_gate_override: bool = False
     abort_predicates: list[str] = Field(default_factory=list)
+    # Operator/programme-level topology override per spec §6.8 escape
+    # hatches. When set, context_lookup returns this topology instead
+    # of the stance-derived default. UC1 (dual voice character) engages
+    # via this; UC5 serial mode toggles via ``D5_SERIAL_FALLBACK_PARALLEL``.
+    topology_override: str | None = None
 
 
 class BroadcasterState(BaseModel):

@@ -37,7 +37,7 @@ _PROGRAMME_OVERRIDES: dict[str, tuple[int | None, str | None, str | None]] = {
     "memory_narrator": (3, "MEMORY-COMPANION", "MUSIC-BED"),
     "research_mode": (0, "RECORD-DRY", "MUSIC-BED"),  # dry capture
     "sonic_ritual": (5, "SONIC-RITUAL", "MUSIC-DRONE"),  # opt-in gated
-    "live_performance": (1, "VOCAL-COMPANION", "BEAT-1"),
+    "live_performance": (0, "VOCAL-COMPANION", "BEAT-1"),  # TTS dry; beat + vinyl take FX space
 }
 
 
@@ -74,6 +74,20 @@ def apply_safety_clamps(intent: RoutingIntent, state: AudioRouterState) -> Routi
             s4_vocal_scene=None,
             s4_music_scene=None,
             clamp_reasons=["consent_critical"],
+        )
+
+    # 1b. FORTRESS stance emergency clean fallback (spec §6 UC7).
+    # FORTRESS isn't in the numeric arbitration list but is an
+    # operator-stressed stance that triggers bypass-all-FX. Treated as
+    # a safety clamp — overrides programme targets, but not consent.
+    if state.stimmung.stance == "FORTRESS":
+        return RoutingIntent(
+            topology="EP_LINEAR",
+            tier=0,
+            evilpet_preset="hapax-unadorned",
+            s4_vocal_scene="BYPASS" if state.hardware.s4_usb_enumerated else None,
+            s4_music_scene="BYPASS" if state.hardware.s4_usb_enumerated else None,
+            clamp_reasons=["fortress_stance"],
         )
 
     # 2. Mode D mutex — voice-tier-5+ re-routes to S-4 Mosaic
@@ -136,7 +150,10 @@ def apply_context_lookup(state: AudioRouterState) -> RoutingIntent:
         base_tier = state.programme.voice_tier_target
 
     # Topology selection
-    if state.stimmung.stance == "SEEKING" and state.stimmung.exploration_deficit > 0.6:
+    # Operator/programme topology_override wins (UC1 dual-voice, UC5 serial mode, etc.)
+    if state.programme.topology_override is not None:
+        topology = state.programme.topology_override
+    elif state.stimmung.stance == "SEEKING" and state.stimmung.exploration_deficit > 0.6:
         topology = "D3_SWAP"
     elif state.stimmung.stance == "FORTRESS":
         topology = "EP_LINEAR"
