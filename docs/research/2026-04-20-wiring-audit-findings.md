@@ -131,82 +131,72 @@ but do not block the ward render path.
 
 ## §2 audio routing (SMOKING GUN cluster)
 
-### ❌ FINDING-C — `set_yt_audio_active` defined but NEVER called (SMOKING GUN #4)
+### ✅ FINDING-C — `set_yt_audio_active` defined but NEVER called — RESOLVED 2026-04-20 (Task #183)
 
-- **Severity:** HIGH (root cause of `hapax_audio_ducking_state{state="normal"}=1.0` stuck)
-- **Where:**
-  - Producer side: `agents/studio_compositor/audio_ducking.py:286` (`set_yt_audio_active`)
-    is defined and listed in `__all__` at line 63, but `grep -rn 'set_yt_audio_active'`
-    finds zero call sites outside the definition itself
-  - SHM target: `/dev/shm/hapax-compositor/yt-audio-state.json` confirmed ABSENT
-- **Symptom:** `AudioDuckingController` reads `None` → `yt_active = False` permanently →
-  state machine never leaves NORMAL → ducker gauge stuck `normal=1, voice_active=0,
-  yt_active=0, both_active=0` (verified live)
-- **Audit-doc named fix paths:** (a) level-monitor on `hapax-ytube-ducked` sink calls
-  `set_yt_audio_active(level > threshold)` at ~10 Hz, OR (b) "is any slot ffmpeg alive"
-  heuristic, OR (c) hook `SlotAudioControl.discover_node` to publish state when at
-  least one slot sink-input has non-zero volume.
-- **Recommended:** path (c) (hooks at the SlotAudioControl level — single integration
-  point, no extra thread, naturally tied to the slot lifecycle).
+- **Resolution:** `scripts/youtube-player.py:771` (`_publish_yt_audio_active`) is an
+  inline mirror of `agents.studio_compositor.audio_ducking.set_yt_audio_active`,
+  duplicated to avoid the agents/ import path under system Python. Writes on EVERY
+  tick (idempotent tmp+rename) so consumers can use mtime as a liveness signal —
+  Task #183 fix from 2026-04-20.
+- **Verification (2026-04-21T09:55Z):**
+  ```
+  /dev/shm/hapax-compositor/yt-audio-state.json {"yt_audio_active": true}
+  hapax_audio_ducking_state{state="yt_active"} 1.0
+  hapax_audio_ducking_state{state="normal"}    0.0
+  ```
+  Ducker is no longer stuck at `normal=1` — state machine flipping correctly.
+- **Note:** fix path was variant of (b) (slot-side liveness heuristic from the producer
+  rather than consumer-side level monitor) — pragmatic given Python-import constraints
+  in the player script.
 
-### ❌ FINDING-D — `youtube_turn_taking.read_gate_state` is dead code (D2 read-only)
+### ✅ FINDING-D — `youtube_turn_taking.read_gate_state` is dead code — RESOLVED 2026-04-21
 
-- **Severity:** HIGH (D2 director→audio gate is not actually wired into the audio path)
-- **Where:** `agents/studio_compositor/youtube_turn_taking.py:166` defined,
-  exported at line 260, but `grep -n youtube_turn_taking agents/studio_compositor/director_loop.py`
-  returns ZERO hits. Sole reference outside the module is in `sierpinski_renderer`.
-- **Symptom:** D2 gate (director's youtube.direction → "which slot is active") never
-  reaches the audio mute logic. Whatever slot was muted at startup stays muted; new
-  director intents that should rotate the audible slot are silently ignored on the
-  audio side (visual side via sierpinski still works).
-- **Fix path:** integrate `read_gate_state()` into `director_loop._loop` (or
-  `_honor_youtube_direction`) and feed the resulting active slot into
-  `SlotAudioControl.mute_all_except(slot)` whenever the gate value changes.
+- **Resolution:** `agents/studio_compositor/audio_control.py:188` (`start_gate_poll`)
+  defaults `gate_reader` to `youtube_turn_taking.read_gate_state` (line 212). Wired
+  into the audio path via `director_loop.py:1155`
+  (`self._audio_control.start_gate_poll()`).
+- **Verification (2026-04-21T09:46:41Z journal):**
+  ```
+  studio-compositor[3638066]: SlotAudioControl gate-poll started (interval=2.0s)
+  ```
+  Polls every 2.0s, force-refreshes node cache each call (line 180), so respawned
+  ffmpegs get fresh node IDs.
 
-### ❌ FINDING-E — `SlotAudioControl.mute_all_except` only fires at startup + restore (SMOKING GUN #3)
+### ✅ FINDING-E — `SlotAudioControl.mute_all_except` only fires at startup + restore — RESOLVED 2026-04-21
 
-- **Severity:** HIGH (root cause of "three YouTube ffmpegs simultaneously audible")
-- **Where:** `agents/studio_compositor/director_loop.py:919` (startup) +
-  `:2386` (after `restore()`). NO periodic call inside `_loop()`. NO PipeWire
-  sink-input-added watcher in `audio_control.py`.
-- **Symptom:** when an ffmpeg slot finishes a video and respawns, the new sink-input
-  comes up at `volume=1.0`. The previously-issued mute targeted the OLD sink-input
-  ID; it has no effect on the new one. Multiple ffmpegs end up audible
-  simultaneously → cacophony.
-- **Fix path candidates:**
-  1. Periodic re-mute every director tick: `self._audio_control.mute_all_except(self._active_slot)`
-     inside `_loop()` (cheapest, may cause minor volume re-clamps on already-muted slots
-     but the API uses an envelope so it should be smooth)
-  2. PipeWire sink-input-added watcher in `SlotAudioControl` that auto-mutes new
-     youtube-audio-* nodes that don't match the active slot
-  3. Hook the slot-spawning code path in `scripts/youtube-player.py` to call back
-     into the compositor with "slot N respawned" so the audio control can re-issue mutes
-- **Operator's immediate relief:** YT slots 1+2 muted at PulseAudio level (operator
-  did this manually). Slot 0 audible. This is a band-aid; the wiring fix is one of
-  the above.
+- **Resolution:** same `start_gate_poll` thread (audio_control.py:221) re-applies
+  the gate state every 2.0s via `apply_gate_state` → `mute_all_except(active_slot)`.
+  Each iteration force-refreshes the node cache (line 180) so newly-spawned
+  ffmpeg sink-inputs are caught within a 2s window.
+- **Verification:** see FINDING-D — same poll thread satisfies both findings.
+- **Architectural note:** chose fix-path #1 (periodic re-mute) rather than the
+  PipeWire sink-input-added watcher (#2) — single thread, no inotify/dbus
+  subscription, naturally bounded latency.
 
-### ⚠️ FINDING-F — `/dev/shm/hapax-compositor/voice-state.json` ABSENT
+### ✅ FINDING-F — `/dev/shm/hapax-compositor/voice-state.json` ABSENT — RESOLVED 2026-04-21 (PR #1129)
 
-- **Severity:** MEDIUM (cascades into FINDING-C symptom path; ducker can never go to
-  `voice_active` even if other gates worked)
-- **Where:** `agents/hapax_daimonion/vad_state_publisher.py` is supposed to publish to
-  `voice-state.json` at 30ms cadence per audit §6.4. File confirmed ABSENT in SHM.
-- **Likely causes:**
-  1. `vad_state_publisher` not started in current daimonion process
-  2. Publishing to a different path than the audit doc claims
-  3. Daimonion's STT/VAD pipeline failed at startup and the publisher silently no-ops
-- **Investigation step:** `grep -rn "voice-state.json\|vad_state_publisher" agents/hapax_daimonion/`
-  to find the actual write path; check daimonion logs for VAD startup errors.
+- **Resolution:** PR #1129 (`fix(daimonion): publish voice-state.json baseline at
+  startup`) adds a `publish_vad_state(False)` call in `agents/hapax_daimonion/run_inner.py`
+  near startup so the SHM file exists with a known baseline from boot. Real
+  `VadStatePublisher` events overwrite as they arrive.
+- **Root cause was cause-list item #1:** `vad_state_publisher` was wired into the
+  conversation pipeline, but only spawned after `UserStartedSpeakingFrame` — a
+  quiet-operator startup left the file missing for the daemon's entire lifetime.
+- **Verification (2026-04-21T09:56Z, after rebuild-services.timer pulled merged main):**
+  ```
+  /dev/shm/hapax-compositor/voice-state.json  09:56  {"operator_speech_active": false}
+  ```
+  Test pin: `tests/hapax_daimonion/test_voice_state_baseline.py`.
 
-### §2 progress
+### §2 progress (post-resolution sweep)
 
 - §2.1 daimonion TTS routing — pending (need PipeWire link inspection)
 - §2.2 daimonion-stt — pending
 - §2.3 vinyl-on-stream routing (smoking gun #2) — pending (currently dormant since vinyl_playing=False, will check link existence regardless)
-- §2.4 YT 3 slots — ❌ FINDING-E confirmed
+- §2.4 YT 3 slots — ✅ FINDING-E resolved
 - §2.5 contact mic — pending
-- §2.6 audio ducking — ❌ FINDING-C + ⚠️ FINDING-F confirmed
-- §2.7 audio observability — partial (ducking metric exists but stuck per FINDING-C)
+- §2.6 audio ducking — ✅ FINDING-C + ✅ FINDING-F resolved
+- §2.7 audio observability — ducking metric flowing (`yt_active=1`, no longer stuck `normal`)
 
 ---
 
