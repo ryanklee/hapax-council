@@ -37,6 +37,7 @@ import json
 import math
 import os
 import tempfile
+import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Final
@@ -48,11 +49,18 @@ __all__ = [
     "ChatSignals",
     "ChatSignalsAggregator",
     "DEFAULT_CHAT_SIGNALS_PATH",
+    "DEFAULT_CHAT_STATE_PATH",
     "compute_audience_engagement",
 ]
 
 DEFAULT_CHAT_SIGNALS_PATH: Final = Path("/dev/shm/hapax-chat-signals.json")
 """Bundle 9 §2.5 canonical SHM path for stimmung consumer."""
+
+DEFAULT_CHAT_STATE_PATH: Final = Path("/dev/shm/hapax-compositor/chat-state.json")
+"""FINDING-V chat-state sidecar — simpler 2-field schema that
+``stream_overlay.StreamOverlayCairoSource`` reads (``total_messages``,
+``unique_authors``). Derived from :class:`ChatSignals` alongside the
+canonical write_shm path."""
 
 
 @dataclass(frozen=True)
@@ -195,10 +203,12 @@ class ChatSignalsAggregator:
         queue: StructuralSignalQueue,
         *,
         output_path: Path | None = None,
+        chat_state_path: Path | None = None,
         tier_window_seconds: float = 60.0,
     ) -> None:
         self._queue = queue
         self._output_path = output_path or DEFAULT_CHAT_SIGNALS_PATH
+        self._chat_state_path = chat_state_path or DEFAULT_CHAT_STATE_PATH
         self._tier_window_seconds = tier_window_seconds
         # Each entry: (ts, tier_int, short_author_hash). No text, no raw handle.
         self._tier_events: list[tuple[float, int, str]] = []
@@ -296,19 +306,45 @@ class ChatSignalsAggregator:
 
     def write_shm(self, signals: ChatSignals) -> None:
         """Atomically write ``signals`` to the configured output path."""
-        self._output_path.parent.mkdir(parents=True, exist_ok=True)
-        payload = json.dumps(asdict(signals), sort_keys=True)
+        self._atomic_write_json(self._output_path, asdict(signals))
+
+    def write_chat_state(self, signals: ChatSignals) -> None:
+        """Emit the simpler 2-field ``chat-state.json`` sidecar.
+
+        FINDING-V chat-state sidecar. ``StreamOverlayCairoSource`` in
+        ``agents/studio_compositor/stream_overlay.py`` reads
+        ``/dev/shm/hapax-compositor/chat-state.json`` expecting
+        ``{total_messages, unique_authors}`` only — a simpler schema than
+        the canonical ``hapax-chat-signals.json`` (8 fields). This
+        projection runs alongside ``write_shm`` on the same 30s tick, so
+        the sidecar stays in lock-step with the canonical file.
+
+        Identity invariants match ``write_shm``: author handles enter
+        only as hashes (``_count_unique_author_hashes``); no raw
+        content / sentiment leaks through.
+        """
+        payload = {
+            "generated_at": time.time(),
+            "total_messages": signals.message_count_60s,
+            "unique_authors": signals.unique_authors_60s,
+        }
+        self._atomic_write_json(self._chat_state_path, payload)
+
+    def _atomic_write_json(self, path: Path, data: dict) -> None:
+        """Shared atomic-write helper (tmp + rename)."""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = json.dumps(data, sort_keys=True)
         tmp_fd, tmp_path_s = tempfile.mkstemp(
-            prefix=f".{self._output_path.name}.",
+            prefix=f".{path.name}.",
             suffix=".tmp",
-            dir=str(self._output_path.parent),
+            dir=str(path.parent),
         )
         try:
             with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
                 f.write(payload)
                 f.flush()
                 os.fsync(f.fileno())
-            os.replace(tmp_path_s, self._output_path)
+            os.replace(tmp_path_s, path)
         except Exception:
             tmp_path = Path(tmp_path_s)
             if tmp_path.exists():
