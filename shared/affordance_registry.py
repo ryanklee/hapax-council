@@ -755,11 +755,21 @@ CONTENT_AFFORDANCES = [
         daemon="reverie",
         operational=OperationalProperties(latency_class="fast", medium="visual"),
     ),
-    # GEM (Graffiti Emphasis Mural) — operator-directed 2026-04-19 (b6ec4a723).
-    # Hapax authors mural keyframes that land on /dev/shm/hapax-compositor/
-    # gem-frames.json, picked up by GemCairoSource at the gem-mural-bottom
-    # surface. See docs/superpowers/plans/2026-04-21-gem-ward-activation-plan.md
-    # and docs/research/2026-04-19-gem-ward-design.md.
+]
+
+# ---------------------------------------------------------------------------
+# GEM (Graffiti Emphasis Mural) affordances — operator-directed 2026-04-19.
+# Distinct list (not under CONTENT_AFFORDANCES) so the "all CONTENT_AFFORDANCES
+# names start with content." invariant in tests/test_reverie_mixer.py stays
+# intact. Both still flow into ALL_AFFORDANCES below for pipeline recruitment.
+#
+# Hapax authors mural keyframes that land on /dev/shm/hapax-compositor/
+# gem-frames.json, picked up by GemCairoSource at the gem-mural-bottom
+# surface. See docs/superpowers/plans/2026-04-21-gem-ward-activation-plan.md
+# and docs/research/2026-04-19-gem-ward-design.md.
+# ---------------------------------------------------------------------------
+
+GEM_AFFORDANCES = [
     CapabilityRecord(
         name="gem.emphasis",
         description=(
@@ -841,5 +851,6 @@ ALL_AFFORDANCES: list[CapabilityRecord] = (
     [r for domain in AFFORDANCE_DOMAINS.values() for r in domain]
     + SHADER_NODE_AFFORDANCES
     + CONTENT_AFFORDANCES
+    + GEM_AFFORDANCES
     + LEGACY_AFFORDANCES
 )
