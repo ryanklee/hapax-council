@@ -91,6 +91,20 @@ IntentFamily = Literal[
     "homage.cycle",
     "homage.recede",
     "homage.expand",
+    # GEM (Graffiti Emphasis Mural) ward authoring. Producer at
+    # agents/hapax_daimonion/gem_producer.py tails the impingement
+    # bus and renders CP437 keyframes to /dev/shm/hapax-compositor/
+    # gem-frames.json on any gem.* impingement. The GEM ward without
+    # these intent-family slots sat stuck on its static "» hapax «"
+    # fallback — the producer was spawning, the consumer was polling,
+    # but the director's Pydantic schema refused any intent_family
+    # the GEM stack could act on. Plan:
+    # docs/superpowers/plans/2026-04-21-gem-ward-activation-plan.md
+    # §1 Phase 3 was registered as affordances (commit 18944c10e1e0)
+    # but never reached this Literal. Adding them here closes the
+    # gap end-to-end.
+    "gem.emphasis",
+    "gem.composition",
 ]
 
 # Imagination-fragment material taxonomy (matches
