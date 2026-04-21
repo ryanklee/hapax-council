@@ -728,6 +728,24 @@ SHADER_NODE_AFFORDANCES = [
         daemon="reverie",
         operational=OperationalProperties(latency_class="realtime", medium="visual"),
     ),
+    # yt-content-reverie-sierpinski-separation Phase 1C (2026-04-21).
+    # Sierpinski tiles a YouTube frame inside a triangular composition
+    # at scene cut-points. Tagged ``slot_family: "youtube_pip"`` in the
+    # shader manifest so the Rust runtime (Phase 1B) binds only YT-slot
+    # sources here — Reverie's narrative substrate stays unbled.
+    # Recruitment via the affordance pipeline produces the
+    # ``sat_sierpinski_content`` graph node per CLAUDE.md § Reverie
+    # Vocabulary Integrity.
+    CapabilityRecord(
+        name="node.sierpinski_content",
+        description=(
+            "Tile a YouTube frame inside a Sierpinski triangular composition "
+            "during scene cut-points to feature broadcast video without "
+            "letting it bleed into the generative substrate"
+        ),
+        daemon="reverie",
+        operational=OperationalProperties(latency_class="realtime", medium="visual"),
+    ),
 ]
 
 # ---------------------------------------------------------------------------
