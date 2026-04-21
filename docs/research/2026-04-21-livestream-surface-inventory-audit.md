@@ -240,6 +240,23 @@ Zones registered in `overlay_zones.ZONES` + SHM consumers ready, but no active w
 **Coupled to:** GEM activation (item A). Captions retire when GEM takes the lower-band slot.
 **Disposition:** sequence AFTER GEM activation lands.
 
+### K. HAPAX_TTS_TARGET bypassed — voice skips voice-fx-chain entirely
+
+**Source:** live PipeWire introspection 2026-04-21 after operator "hapax voice still coming into l12 from pc super hot."
+**Symptom:** voice reaches Ryzen → L-12 CH 11/12 without any of the designed voice-specific processing (biquad EQ, voice-fx-chain presence/air boost, voice-fx-loudnorm SC4 + limiter). Ends up 15–20 dB hotter than designed on broadcast.
+**Evidence:**
+- sink 102 (`hapax-voice-fx-capture`) = IDLE; nothing writes to it.
+- sink 517 (`input.loopback.sink.role.assistant`) = RUNNING; `pw-cat` with `media.role=Assistant` writes here.
+- SI516 (`output.loopback.sink.role.assistant`) forwards to Ryzen (sink 482) at 100% — no loudnorm in between.
+- daimonion systemd env declares `HAPAX_TTS_TARGET=hapax-voice-fx-capture` but the flag isn't honored.
+**Root cause hypothesis:** `pw-cat` subprocess (spawned by daimonion TTS) tags streams with `media.role=Assistant`. WirePlumber's role-based policy steers any assistant-role stream into the role.assistant loopback, overriding the explicit `--target` / `target.object` hint. Net effect: `HAPAX_TTS_TARGET` is a no-op for any stream that carries a role.
+**Live band-aid (2026-04-21):** SI516 sink-input volume dropped to 35% (-27 dB). Non-persistent — resets on PipeWire restart.
+**Disposition:** NEW WORK — two candidate fixes:
+1. **Daimonion-side:** make pw-cat invocation not tag `media.role=Assistant` (drop the role, or set to an explicit "no-policy" role). Then `--target hapax-voice-fx-capture` will stick.
+2. **WirePlumber-side:** add a node rule that retargets `output.loopback.sink.role.assistant` to `hapax-voice-fx-capture` instead of default sink.
+Option 1 is cleaner (keeps policy layer honest). Option 2 is more resilient (per-role routing becomes explicit infrastructure).
+Cross-ref `reference_default_sink_elevation_breaks_roles.md` (related class of role-loopback routing failures).
+
 ### J. HOMAGE ward blinking — operator-reported watchability violation
 
 **Source:** operator feedback, 2026-04-21 session — *"way too much BLINKING for the homage wards. it's not even an interesting behavior and it is extremely hard to look at."*

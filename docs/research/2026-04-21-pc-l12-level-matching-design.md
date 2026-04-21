@@ -1,0 +1,143 @@
+---
+date: 2026-04-21
+author: delta
+audience: operator + delta (implementation)
+register: scientific, neutral
+status: design — ready for operator ratification of target LUFS
+scope: level-matching design for every PC-originated stream entering L-12 CH 11/12 via Ryzen analog-stereo, so the single hardware fader calibrates once across a dissimilar source set
+source_trigger: operator 2026-04-21 — "figure out the optimal levels for every stream that enters my l12 via pc so that fader isn't doing dumb things over a dissimilar group of streams"
+---
+
+# PC → L-12 CH 11/12 level-matching design
+
+## Problem
+
+L-12 CH 11/12 receives Ryzen analog-stereo output, which mixes a dissimilar set of PC-originated streams:
+
+| Stream source | Typical unprocessed peak | Typical unprocessed RMS | Spectral character |
+|---|---|---|---|
+| YouTube music beds (via yt-loudnorm OR raw) | −3 to 0 dBFS | −14 to −9 LUFS | broadband, wide dynamics |
+| Hapax voice (Kokoro TTS) | −3 to −1 dBFS | −16 to −12 LUFS | mid-band dominant, fast transients |
+| Browser / streaming video | −1 to 0 dBFS | −24 to −9 LUFS (highly variable) | broadband, unpredictable |
+| Notifications (chimes, system) | 0 dBFS | −18 to −6 LUFS peak-heavy | transient, sparse |
+| PC-audio general | wildly variable | wildly variable | anything |
+
+With unmatched levels, a single L-12 CH 11/12 trim is a compromise: set too high, voice + chimes clip; set too low, YT music is inaudible. Operator spends cognitive load on the fader that should be spent on the stream.
+
+## Principle
+
+**Every PC-originated stream must exit Ryzen at the same target loudness.** The target is defined as:
+
+- **Integrated loudness:** **−20 LUFS**
+- **True peak:** **−3 dBTP** (3 dB hard ceiling for inter-sample peaks)
+- **Rationale:** −20 LUFS leaves ~12 dB of broadcast headroom against −8 LUFS stream-target; −3 dBTP leaves 3 dB for downstream ADC / codec tolerance. Below radio-loud (−14) so music beds don't dominate voice, above hearing-threshold so chimes remain audible.
+
+When every source hits Ryzen at −20 LUFS / −3 dBTP, the L-12 CH 11/12 trim becomes a **single additive offset** (e.g. +6 dB trim to reach −14 LUFS at main mix) that works identically for voice, music, video, notifications.
+
+## Stream-by-stream design
+
+### 1. YouTube music beds
+
+**Current path:** ffmpeg (yt-player) → role.multimedia loopback → pc-loudnorm → Ryzen.
+
+**Current config (`config/pipewire/pc-loudnorm.conf`):**
+- threshold −14 dB, ratio 3:1, makeup +3 dB, limit −1 dBTP
+- Integrated loudness output: ~−14 LUFS
+
+**Target config changes:**
+- Lower threshold to −18 dB (more aggressive compression floor)
+- Keep ratio 3:1
+- **Drop makeup gain from +3 dB to −3 dB**
+- Lower limit from −1 to −3 dBTP
+- Integrated loudness output becomes ~−20 LUFS
+
+Alternatively, add a dedicated yt-loudnorm between the yt-player ffmpeg output and pc-loudnorm so YT's wide dynamics get pre-conditioned before hitting pc-loudnorm's broadband compressor. This is already scaffolded as `hapax-yt-loudnorm` sink (see yt-loudnorm.conf) but it's IDLE — ffmpeg bypasses it. Wiring yt-player through it is a separate fix (not in this design's scope).
+
+### 2. Hapax voice (TTS)
+
+**Designed path:** daimonion pw-cat → voice-fx-chain (biquad EQ) → voice-fx-loudnorm (SC4 + limiter) → Ryzen.
+
+**Currently BYPASSED** — streams hit role.assistant loopback → Ryzen directly. See `docs/research/2026-04-21-livestream-surface-inventory-audit.md` §3.K and cc-task lssh-012. Persistent fix lands in `config/wireplumber/55-hapax-voice-role-retarget.conf` (this repo).
+
+**Current voice-fx-loudnorm config:**
+- SC4 threshold −18 dB, ratio 3:1, makeup 0 dB
+- Limiter ceiling −1 dBTP
+- Integrated loudness output: ~−14 LUFS (matches pc-loudnorm old target)
+
+**Target config changes:**
+- Keep SC4 threshold −18 dB, ratio 3:1
+- **Add −3 dB makeup gain** (so output sits at −20 LUFS)
+- Lower limiter ceiling from −1 to −3 dBTP
+- Voice-fx-chain UPSTREAM stays unchanged (EQ is intent-preserving; loudness math is on voice-fx-loudnorm).
+
+### 3. Browser / streaming video (generic PC audio)
+
+**Current path:** browser → role.multimedia loopback → pc-loudnorm → Ryzen. Shared with YouTube beds.
+
+**Target:** same pc-loudnorm re-tune as YouTube beds (−20 LUFS / −3 dBTP). No separate config needed.
+
+**Caveat:** if video and music beds play simultaneously, pc-loudnorm's compressor sums them before the broadband curve fires — mix could sound over-compressed. If operator reports this, add a per-source pre-chain later. Not worth pre-solving.
+
+### 4. Notifications (chimes, system sounds)
+
+**Current path:** `role.notification` loopback → `hapax-private` → `hapax-private-playback` → Ryzen. Does NOT go through pc-loudnorm.
+
+**Current normalization:** NONE. Chimes hit Ryzen at native app levels — typically 0 dBFS peaks.
+
+**Target:** route notifications through a dedicated `hapax-notification-loudnorm` filter chain that applies:
+- Peak limiter at −3 dBTP (no compression — notifications are short; don't kill transient)
+- Gain offset to match −20 LUFS peak target (roughly −10 dB padding from 0 dBFS)
+- Insert between `hapax-notification-private` and `hapax-private`
+
+Alternatively (simpler): drop `hapax-private-playback` sink-input volume to 30% as a static attenuation. Less precise than a filter chain but close enough for chimes. Trade: notifications stop being transient-rich.
+
+### 5. Hapax-private (DMN-internal audio)
+
+**Current path:** Same as notifications but semantically distinct — DMN internal audio uses this path for operator-private monitoring. Goes to Ryzen today.
+
+**Target:** leave at native levels. DMN-private is not broadcast (routed separately via L-6 ch 5 per the `hapax-private` node description). If it hits Ryzen → L-12 CH 11/12, that's a routing bug separate from level-matching.
+
+## Summary — proposed end-state
+
+| Source | Path | Loudness target | Config location |
+|---|---|---|---|
+| YouTube beds | role.multimedia → pc-loudnorm → Ryzen | −20 LUFS / −3 dBTP | pc-loudnorm.conf (re-tune) |
+| Browser / video | role.multimedia → pc-loudnorm → Ryzen | −20 LUFS / −3 dBTP | pc-loudnorm.conf (shared) |
+| Hapax voice | role.assistant → voice-fx-chain → voice-fx-loudnorm → Ryzen | −20 LUFS / −3 dBTP | voice-fx-loudnorm.conf (re-tune) + 55-hapax-voice-role-retarget.conf (routing fix) |
+| Notifications | role.notification → hapax-notification-loudnorm → Ryzen | peak −3 dBTP, no comp | new conf + wire into hapax-private path |
+| DMN-private | (private monitoring; not broadcast) | unchanged | — |
+
+After these changes land:
+
+- L-12 CH 11/12 trim calibrated ONCE for −20 LUFS input.
+- All PC-originated audio arrives at that reference level regardless of source.
+- Fader does one job, predictably.
+
+## Operator decision points
+
+1. **Ratify the −20 LUFS / −3 dBTP target**, or specify a different pair. Common alternatives: −18 LUFS (hotter, radio-like) or −23 LUFS (EBU R128 broadcast standard).
+2. **Notification handling:** dedicated loudnorm or static attenuation?
+3. **Deployment timing:** config changes require PipeWire restart. Operator picks a low-risk window to apply.
+
+## Current live band-aid (non-persistent, 2026-04-21 ~23:10-23:15 UTC)
+
+Per-stream sink-input volume attenuation to approximate the −20 LUFS design without waiting for config deploy:
+
+| Stream | sink-input | Volume | dB |
+|---|---|---|---|
+| pc-loudnorm → Ryzen | SI100 | 40% | −24 dB |
+| voice-fx-loudnorm → Ryzen (dormant path) | SI105 | 50% | −18 dB |
+| role.assistant → Ryzen (actual voice path) | SI516 | 35% | −27 dB |
+| hapax-private → Ryzen | SI93 | 100% | 0 dB |
+
+All reset on next PipeWire restart. The persistent fixes in `config/pipewire/pc-loudnorm.conf` + `config/pipewire/voice-fx-loudnorm.conf` + the new notification loudnorm replace the need for these attenuations.
+
+## References
+
+- Audit: `docs/research/2026-04-21-livestream-surface-inventory-audit.md` §3.K (TTS bypass) + general audio paths
+- Related: `reference_ryzen_codec_pin_glitch.md` (Ryzen HDA recovery — do not redeploy pipewire mid-stream)
+- Related: `reference_default_sink_elevation_breaks_roles.md` (role-loopback routing class of failures)
+- Voice chain config: `config/pipewire/voice-fx-chain.conf`, `config/pipewire/voice-fx-loudnorm.conf`
+- PC loudnorm config: `config/pipewire/pc-loudnorm.conf`
+- New retarget rule: `config/wireplumber/55-hapax-voice-role-retarget.conf`
+- cc-tasks: lssh-012 (TTS bypass fix), lssh-013 (this design's implementation)

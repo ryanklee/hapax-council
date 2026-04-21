@@ -15,6 +15,7 @@ Ten findings from the 2026-04-21 audit, sequenced for execution. Priority rankin
 
 | # | Finding | Priority | Owner | Depends on | cc-task slug |
 |---|---|---|---|---|---|
+| K | HAPAX_TTS_TARGET bypassed — voice skips voice-fx-chain | P0 | delta | none | ls-shepherd-tts-target-bypass |
 | J | HOMAGE ward blinking | P0 | alpha | none | ls-shepherd-blink-audit |
 | A2 | GEM rendering redesign (ticker-tape → mural) | P0 | alpha | brainstorming + operator input | ls-shepherd-gem-rendering-redesign |
 | A1 | GEM recruitment pipeline | P1 | alpha | #1175 merged | ls-shepherd-gem-recruitment |
