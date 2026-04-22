@@ -65,6 +65,14 @@ RECRUITMENT_LOG_FILE = Path.home() / "hapax-state" / "affordance" / "recruitment
 # Operator-runtime override of recruitment-log writing.
 # Set ``HAPAX_RECRUITMENT_LOG=0`` to disable (default-on).
 RECRUITMENT_LOG_ENV = "HAPAX_RECRUITMENT_LOG"
+# Dispatch-trace log — one line per ``select()`` call. Records the gate at
+# which the impingement was dropped (or ``dispatched`` when a winner emerged)
+# so the dispatch-dropout investigation can distinguish family-filter empty
+# from threshold-miss from consent-veto. See
+# ``docs/research/2026-04-22-dispatch-dropout-investigation.md`` for context.
+# Set ``HAPAX_DISPATCH_TRACE=0`` to disable (default-on).
+DISPATCH_TRACE_FILE = Path.home() / "hapax-state" / "affordance" / "dispatch-trace.jsonl"
+DISPATCH_TRACE_ENV = "HAPAX_DISPATCH_TRACE"
 # Preset-variety Phase 4: Thompson posterior decay on non-recruitment.
 # 0.999 ≈ 700-tick half-life (gentle); 1.0 disables. Operator-tunable.
 THOMPSON_DECAY_ENV = "HAPAX_AFFORDANCE_THOMPSON_DECAY"
@@ -531,6 +539,21 @@ class AffordancePipeline:
         top_k: int = DEFAULT_TOP_K,
         context: dict[str, Any] | None = None,
     ) -> list[SelectionCandidate]:
+        # Dispatch-dropout investigation (2026-04-22): build a trace dict
+        # populated at each gate so we can attribute the ~98% dropout
+        # observed for ``studio_compositor.director.compositional`` source
+        # impingements to a specific stage. ``dropout_at`` stays ``None``
+        # only when survivors are returned. Trace flushed to JSONL on
+        # every return path via ``_emit_dispatch_trace``.
+        trace: dict[str, Any] = {
+            "timestamp": time.time(),
+            "impingement_id": impingement.id,
+            "source": impingement.source,
+            "metric": impingement.content.get("metric", ""),
+            "intent_family": impingement.intent_family,
+            "dropout_at": None,
+            "stages": {},
+        }
         if impingement.interrupt_token:
             handlers = self._interrupt_handlers.get(impingement.interrupt_token, [])
             if handlers:
@@ -553,16 +576,28 @@ class AffordancePipeline:
                     winner_combined=1.0,
                     was_interrupt=True,
                 )
+                trace["stages"]["interrupt_handlers"] = len(result)
+                trace["winner"] = winner.capability_name if winner else None
+                self._emit_dispatch_trace(trace)
                 return result
             else:
                 # Interrupt token with no registered handler — don't fall through
                 # to general retrieval; the token was intended for a specific handler.
+                trace["dropout_at"] = "interrupt_no_handler"
+                trace["interrupt_token"] = impingement.interrupt_token
+                self._emit_dispatch_trace(trace)
                 return []
         if self._is_inhibited(impingement):
+            trace["dropout_at"] = "inhibited"
+            self._emit_dispatch_trace(trace)
             return []
         embedding = self._get_embedding(impingement)
         if embedding is None:
-            return self._fallback_keyword_match(impingement)
+            fallback = self._fallback_keyword_match(impingement)
+            trace["dropout_at"] = "no_embedding_fallback" if not fallback else None
+            trace["stages"]["fallback_keyword_match"] = len(fallback)
+            self._emit_dispatch_trace(trace)
+            return fallback
         # Stage 1 routing fix (2026-04-18): if the impingement carries an
         # ``intent_family`` (set by the studio compositor's director on
         # CompositionalImpingements), restrict the recruitment search to
@@ -575,14 +610,23 @@ class AffordancePipeline:
         # to the legacy global-catalog scoring behavior.
         if impingement.intent_family:
             candidates = self._retrieve_family(embedding, impingement.intent_family, top_k)
+            trace["stages"]["retrieve_family"] = len(candidates)
         else:
             candidates = self._retrieve(embedding, top_k)
+            trace["stages"]["retrieve_global"] = len(candidates)
         if not candidates:
+            trace["dropout_at"] = (
+                "retrieve_family_empty" if impingement.intent_family else "retrieve_global_empty"
+            )
+            self._emit_dispatch_trace(trace)
             return []
         # Consent gate — closes the audit-surfaced enforcement gap. See
         # _consent_allows() for the rationale and fail-closed semantics.
         candidates = [c for c in candidates if self._consent_allows(c)]
+        trace["stages"]["after_consent"] = len(candidates)
         if not candidates:
+            trace["dropout_at"] = "consent_filter_empty"
+            self._emit_dispatch_trace(trace)
             return []
         # Monetization-risk gate (task #165, plan Phase 1). High-risk always
         # blocked; medium-risk requires a programme opt-in. D-26 (plan
@@ -599,7 +643,10 @@ class AffordancePipeline:
         quiet_frame_subscriber.install()
         active_programme = self._active_programme_cached()
         candidates = _MONET_GATE.candidate_filter(candidates, programme=active_programme)
+        trace["stages"]["after_monetization"] = len(candidates)
         if not candidates:
+            trace["dropout_at"] = "monetization_filter_empty"
+            self._emit_dispatch_trace(trace)
             return []
         now = time.time()
         # Preset-variety Phase 3: read recency weight per-call so operator
@@ -643,6 +690,10 @@ class AffordancePipeline:
         if priority:
             priority.sort(key=lambda c: -c.combined)
             self._log_cascade(impingement, priority)
+            trace["stages"]["priority_floor_winners"] = len(priority)
+            trace["winner"] = priority[0].capability_name
+            trace["winner_combined"] = round(priority[0].combined, 3)
+            self._emit_dispatch_trace(trace)
             return priority
         if len(normal) > 1:
             normal.sort(key=lambda c: -c.combined)
@@ -655,6 +706,22 @@ class AffordancePipeline:
         survivors = [c for c in normal if c.combined > effective_threshold]
         survivors.sort(key=lambda c: -c.combined)
         self._log_cascade(impingement, survivors)
+        # Threshold-miss detail: when survivors is empty but normal had
+        # candidates, capture the top score and the threshold so PR-A2 can
+        # see how far below the bar the best score landed.
+        trace["stages"]["normal_candidates"] = len(normal)
+        trace["stages"]["effective_threshold"] = round(effective_threshold, 4)
+        if normal and not survivors:
+            top = max(normal, key=lambda c: c.combined)
+            trace["dropout_at"] = "threshold_miss"
+            trace["top_score"] = round(top.combined, 4)
+            trace["top_similarity"] = round(top.similarity, 4)
+            trace["top_capability"] = top.capability_name
+        elif survivors:
+            trace["winner"] = survivors[0].capability_name
+            trace["winner_combined"] = round(survivors[0].combined, 4)
+            trace["winner_similarity"] = round(survivors[0].similarity, 4)
+            trace["survivors"] = len(survivors)
         winner = survivors[0] if survivors else None
         # Preset-variety Phase 3: feed the winner into the recency tracker
         # so the next ``select()`` call scores its peers as more novel.
@@ -708,6 +775,7 @@ class AffordancePipeline:
         _apply_exploration_noise(survivors, sig, self._exploration.sigma_explore)
         survivors.sort(key=lambda c: -c.combined)
 
+        self._emit_dispatch_trace(trace)
         return survivors
 
     def record_success(self, capability_name: str) -> None:
@@ -1151,6 +1219,23 @@ class AffordancePipeline:
             RECRUITMENT_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
             with RECRUITMENT_LOG_FILE.open("a", encoding="utf-8") as f:
                 f.write(json.dumps(line) + "\n")
+        except OSError:
+            pass
+
+    def _emit_dispatch_trace(self, trace: dict[str, Any]) -> None:
+        """Append a dispatch-trace JSONL record for the dropout investigation.
+
+        Fail-open; recruitment must never break on logging failure.
+        Disabled via ``HAPAX_DISPATCH_TRACE=0``. Each line attributes one
+        ``select()`` call to its outcome: ``dropout_at`` names the gate
+        that returned [], or stays ``None`` when survivors emerged.
+        """
+        if os.environ.get(DISPATCH_TRACE_ENV, "1") == "0":
+            return
+        try:
+            DISPATCH_TRACE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            with DISPATCH_TRACE_FILE.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(trace, default=str) + "\n")
         except OSError:
             pass
 
