@@ -738,16 +738,9 @@ def _read_research_marker() -> str | None:
 def _get_litellm_key() -> str:
     global LITELLM_KEY
     if not LITELLM_KEY:
-        try:
-            result = subprocess.run(
-                ["pass", "show", "litellm/master-key"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            LITELLM_KEY = result.stdout.strip()
-        except Exception:
-            log.debug("pass show litellm/master-key failed", exc_info=True)
+        from shared.config import LITELLM_KEY as key
+
+        LITELLM_KEY = key
     return LITELLM_KEY
 
 
