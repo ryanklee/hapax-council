@@ -1974,6 +1974,10 @@ class DirectorLoop:
             # appreciation. ``album_info`` now carries rate/RPM/BPM/track
             # position when those signals are available (2026-04-19).
             parts.append(f"Current music signal: {album_info}.")
+        else:
+            parts.append(
+                "The vinyl turntable is currently EMPTY and NOT PLAYING. The music is playing digitally from a YouTube playlist. Do NOT mention vinyl, records, or the turntable."
+            )
         parts.append(f"Time: {datetime.now().strftime('%H:%M')}.")
 
         # ─── HARDM anchor status (task #160) ───────────────────────
