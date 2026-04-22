@@ -95,6 +95,8 @@ Pick the role that best matches each programme window. Closed set:
    hard gate and is REJECTED. If you want a capability quiet, use
    `0.1` not `0.0`.
 9. `capability_bias_positive` values: `>= 1.0`.
+10. NEVER use `null`. If a field or object (like `ritual`) is not needed, omit the key entirely instead of setting it to `null`.
+11. `preset_family_priors` must ONLY contain these exact strings: "audio-reactive", "calm-textural", "glitch-dense", or "warm-minimal".
 
 ## Soft guidance (you may deviate when context demands)
 
