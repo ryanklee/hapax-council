@@ -7,6 +7,7 @@ emphasized text, abstract glyph compositions, and frame-by-frame visual
 sequences in BitchX CP437 grammar.
 
 Design: ``docs/research/2026-04-19-gem-ward-design.md``.
+Brainstorm (Candidate C): ``docs/research/2026-04-22-gem-rendering-redesign-brainstorm.md``.
 Profile: ``config/ward_enhancement_profiles.yaml::wards.gem``.
 Producer: ``agents/hapax_daimonion/gem_producer.py`` (writes
 ``/dev/shm/hapax-compositor/gem-frames.json``).
@@ -21,6 +22,17 @@ Render contract:
   refused at render time and a fallback frame is shown.
 * HARDM gate (anti-anthropomorphization): a Pearson face-correlation
   scan over the rendered pixels that exceeds 0.6 triggers fallback.
+
+Candidate C — Phase 1 (operator decision 2026-04-22, "C and then go,
+start with 24 Hz, yes text wins"): a Gray-Scott reaction-diffusion
+substrate (`gem_substrate.GemSubstrate`) is rendered as a background
+layer beneath the text mural. Substrate brightness is hard-clamped via
+`SUBSTRATE_BRIGHTNESS_CEILING` (0.35) so the brightest substrate cell is
+always dimmer than the text layer (alpha ≥0.95). The substrate is *not*
+a recruitable affordance and *not* a perception input; it is a fixed
+background process owned by this renderer. Phase 2 will add nested CP437
+box-draw rooms on top of the substrate; Phase 3 will add per-room
+fragment punch-in. v1 single-text frames continue to work unchanged.
 """
 
 from __future__ import annotations
@@ -127,6 +139,7 @@ class GemCairoSource(HomageTransitionalSource):
         *,
         frames_path: Path | None = None,
         font_description: str = DEFAULT_FONT_DESCRIPTION,
+        enable_substrate: bool = True,
     ) -> None:
         super().__init__(source_id="gem")
         self._frames_path = frames_path or DEFAULT_FRAMES_PATH
@@ -135,6 +148,13 @@ class GemCairoSource(HomageTransitionalSource):
         self._frame_index: int = 0
         self._frame_started_ts: float = 0.0
         self._last_loaded_mtime: float = 0.0
+        # Candidate C Phase 1 — Gray-Scott substrate ticked once per render.
+        # Lazily constructed so a numpy-less environment doesn't break the
+        # source at import time (the render path silently degrades to text-
+        # only when the substrate cannot initialize).
+        self._enable_substrate = enable_substrate
+        self._substrate: object | None = None
+        self._substrate_init_attempted = False
 
     # ── CairoSource protocol ───────────────────────────────────────────
 
@@ -158,6 +178,12 @@ class GemCairoSource(HomageTransitionalSource):
         state: dict[str, Any],
     ) -> None:
         del t
+        # Layer 1 (Candidate C Phase 1) — substrate paints first, beneath text.
+        # Step + paint happen before text so text composites on top. The
+        # SUBSTRATE_BRIGHTNESS_CEILING enforces "text wins" — substrate
+        # peak brightness is 0.35, text alpha is 0.95+.
+        self._render_substrate(cr, canvas_w, canvas_h)
+
         text = state.get("text") or FALLBACK_FRAME_TEXT
         if contains_emoji(text):
             log.warning("gem: refusing emoji-containing frame %r — falling back", text)
@@ -200,6 +226,137 @@ class GemCairoSource(HomageTransitionalSource):
         return current
 
     # ── Render ────────────────────────────────────────────────────────
+
+    def _ensure_substrate(self) -> object | None:
+        """Lazily construct the Gray-Scott substrate.
+
+        Failure to construct (e.g. numpy missing in a stripped venv) is
+        swallowed and recorded so we never retry — the source then renders
+        text-only, which preserves the v1 behavior.
+        """
+        if self._substrate is not None or self._substrate_init_attempted:
+            return self._substrate
+        self._substrate_init_attempted = True
+        if not self._enable_substrate:
+            return None
+        try:
+            from .gem_substrate import GemSubstrate
+
+            self._substrate = GemSubstrate()
+        except Exception:
+            log.warning("gem: substrate init failed — rendering text-only", exc_info=True)
+            self._substrate = None
+        return self._substrate
+
+    def _render_substrate(
+        self,
+        cr: cairo.Context,
+        canvas_w: int,
+        canvas_h: int,
+    ) -> None:
+        """Step the Gray-Scott field once and blit it as a dim background."""
+        substrate = self._ensure_substrate()
+        if substrate is None:
+            return
+        try:
+            substrate.step()
+            bright = substrate.brightness_array()
+            grid_h, grid_w = bright.shape
+        except Exception:
+            log.debug("gem: substrate step failed — skipping background", exc_info=True)
+            return
+
+        # Build a Cairo ImageSurface from the brightness grid. Each cell
+        # becomes one pixel on the small surface; Cairo upscales to the
+        # canvas via a translation+scale paint. We use a content_colour
+        # tinted by the brightness so the substrate matches the active
+        # HOMAGE palette rather than appearing as a neutral grey.
+        try:
+            tint = self._substrate_tint_rgba()
+            self._paint_substrate_grid(cr, bright, grid_w, grid_h, canvas_w, canvas_h, tint)
+        except Exception:
+            log.debug("gem: substrate paint failed — skipping", exc_info=True)
+
+    def _substrate_tint_rgba(self) -> tuple[float, float, float]:
+        """Resolve the substrate base RGB from the active HOMAGE palette."""
+        try:
+            from .homage.rendering import active_package
+
+            package = active_package()
+            r, g, b, _ = package.resolve_colour(package.grammar.content_colour_role)
+            return (r, g, b)
+        except Exception:
+            # Gruvbox-dark warm-yellow fallback — same as the text default.
+            return (0.95, 0.92, 0.78)
+
+    def _paint_substrate_grid(
+        self,
+        cr: cairo.Context,
+        bright: object,  # np.ndarray[grid_h, grid_w] of float32 in [0, ceiling]
+        grid_w: int,
+        grid_h: int,
+        canvas_w: int,
+        canvas_h: int,
+        tint_rgb: tuple[float, float, float],
+    ) -> None:
+        """Upscale the substrate brightness grid into the canvas.
+
+        Builds a transient cairo.ImageSurface at grid resolution, then
+        Cairo paints it with a translation+scale matrix. The default
+        Cairo filter (BILINEAR for upscaled patterns) gives a soft
+        organic look that matches the Gray-Scott aesthetic.
+        """
+        import struct
+
+        try:
+            import cairo as _cairo  # type: ignore[import-not-found]
+        except ImportError:
+            return
+
+        # Pack float32 brightness × tint RGB into BGRA32 bytes that Cairo
+        # ARGB32 surface expects (little-endian: B, G, R, A in memory).
+        # Alpha is the brightness value itself so the substrate composites
+        # additively-feeling against whatever is beneath.
+        tr, tg, tb = tint_rgb
+        # Vectorise the per-cell pack via numpy when available; fall back
+        # to a Python loop for environments without numpy (tests).
+        try:
+            import numpy as np
+
+            b_chan = np.clip(bright * tb * 255.0, 0, 255).astype(np.uint8)
+            g_chan = np.clip(bright * tg * 255.0, 0, 255).astype(np.uint8)
+            r_chan = np.clip(bright * tr * 255.0, 0, 255).astype(np.uint8)
+            a_chan = np.clip(bright * 255.0, 0, 255).astype(np.uint8)
+            stacked = np.stack([b_chan, g_chan, r_chan, a_chan], axis=-1)
+            buf = stacked.tobytes()
+        except ImportError:
+            buf_parts: list[bytes] = []
+            for row in range(grid_h):
+                for col in range(grid_w):
+                    v = float(bright[row][col])
+                    buf_parts.append(
+                        struct.pack(
+                            "BBBB",
+                            int(min(255, max(0, v * tb * 255))),
+                            int(min(255, max(0, v * tg * 255))),
+                            int(min(255, max(0, v * tr * 255))),
+                            int(min(255, max(0, v * 255))),
+                        )
+                    )
+            buf = b"".join(buf_parts)
+
+        stride = grid_w * 4
+        surface = _cairo.ImageSurface.create_for_data(
+            bytearray(buf), _cairo.FORMAT_ARGB32, grid_w, grid_h, stride
+        )
+        cr.save()
+        try:
+            cr.scale(canvas_w / grid_w, canvas_h / grid_h)
+            cr.set_source_surface(surface, 0, 0)
+            cr.get_source().set_filter(_cairo.FILTER_BILINEAR)
+            cr.paint()
+        finally:
+            cr.restore()
 
     def _render_text_centered(
         self,

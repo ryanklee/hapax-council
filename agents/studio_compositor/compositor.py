@@ -247,6 +247,13 @@ _FALLBACK_LAYOUT = Layout(
                 "class_name": "GemCairoSource",
                 "natural_w": 1840,
                 "natural_h": 240,
+                # Candidate C Phase 1 (operator decision 2026-04-22):
+                # bump to 24 Hz so the Gray-Scott substrate animation
+                # reads as smooth motion. The substrate ticks once per
+                # render, so cadence directly governs evolution speed.
+                # Substrate CPU cost ~0.5 ms/tick (numpy 230x30 grid at
+                # 4 GS steps/tick), well under the per-tick budget.
+                "fps": 24,
             },
         ),
     ],
