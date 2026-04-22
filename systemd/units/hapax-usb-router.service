@@ -1,0 +1,14 @@
+[Unit]
+Description=Hapax L-12 USB Router (forces stereo apps to RL/RR)
+After=pipewire.service wireplumber.service
+Requires=pipewire.service wireplumber.service
+BindsTo=pipewire.service
+
+[Service]
+Type=oneshot
+ExecStartPre=/bin/sleep 3
+ExecStart=/usr/bin/python3 %h/projects/hapax-council/scripts/usb-router.py
+RemainAfterExit=yes
+
+[Install]
+WantedBy=default.target
