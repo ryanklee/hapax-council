@@ -780,7 +780,23 @@ class StudioCompositor:
                 # src_name == "hls-sink" and missed the children.
                 # EMFILE errors from hls-sink write paths surface on
                 # giostreamsink0 and must not escalate to self.stop().
-                log.warning("HLS sink error (non-fatal): %s", err.message)
+                #
+                # 2026-04-23: "Failed to delete fragment file ...: No
+                # such file or directory" is the expected outcome of
+                # racing with ``hls_archive.rotate_segment``: the
+                # rotator moves aged-out segments to the research
+                # archive ~10 s after close, hlssink2 then tries to
+                # unlink the same file ~20 s later for playlist
+                # rotation, and os.unlink raises ENOENT. The race is
+                # by design (rotator must move before hlssink unlinks,
+                # or the archive would miss segments) — demote to
+                # DEBUG so the real EMFILE / permission errors stay
+                # visible at WARNING.
+                msg = err.message or ""
+                if "Failed to delete fragment file" in msg and "No such file" in msg:
+                    log.debug("HLS rotator-race (benign): %s", msg)
+                else:
+                    log.warning("HLS sink error (non-fatal): %s", msg)
             else:
                 log.error("Pipeline error from %s: %s (debug: %s)", src_name, err.message, debug)
                 self.stop()
