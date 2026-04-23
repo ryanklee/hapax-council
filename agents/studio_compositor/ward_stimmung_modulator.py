@@ -45,8 +45,22 @@ CURRENT_PATH: Path = Path("/dev/shm/hapax-imagination/current.json")
 # almost continuously; 120s tracks the long tail of fragment cadence.
 STALENESS_S: float = 120.0
 STALENESS_ENV: str = "HAPAX_WARD_MODULATOR_STALENESS_S"
-WARD_PROPERTIES_TTL_S: float = 0.4
+# 2026-04-23 raised 0.4 → 2.5s. The earlier 0.4s TTL caused the 500 ms
+# sinewave blink operator flagged: modulator ticks at ~200 ms (tick_every_n=6
+# at 30 Hz fx cadence), so with TTL=0.4s any jitter in tick scheduling let
+# the ward-properties entry expire BETWEEN writes — alpha decayed to the
+# default 1.0 for a frame, producing a visible flash. TTL=2.5s covers
+# ~12 tick cycles worth of slack, so entries never expire between writes.
+# Combined with the MIN_DELTA epsilon below, this eliminates both sources
+# of 5 Hz alpha churn.
+WARD_PROPERTIES_TTL_S: float = 2.5
 TICK_EVERY_N: int = 6
+# 2026-04-23 blink-kill: only write if the new value is meaningfully
+# different from what's in the existing ward-properties snapshot. 0.02
+# (2% of the [0,1] range) kills micro-oscillation from imagination-depth
+# jitter, while still letting meaningful state shifts propagate on the
+# next tick. Epsilon applied to alpha AND z_index_float.
+MIN_DELTA: float = 0.02
 ENABLE_ENV: str = "HAPAX_WARD_MODULATOR_ACTIVE"
 
 
@@ -149,7 +163,16 @@ class WardStimmungModulator:
             new_alpha = _clip01(0.7 + 0.3 * (1.0 - depth_val))
         else:  # "surface-scrim"
             new_alpha = base.alpha
-        if abs(new_alpha - base.alpha) < 1e-6 and abs(new_z_idx - base.z_index_float) < 1e-6:
+        # 2026-04-23 blink-kill: epsilon-gate. Only write if the new
+        # alpha / z_index has moved by at least MIN_DELTA (0.02 of the
+        # [0,1] range) since the last resolved value. The previous
+        # 1e-6 threshold made every micro-jitter in imagination depth
+        # trigger a SHM rewrite, which — combined with the prior 0.4s
+        # TTL — produced visible 5 Hz alpha oscillation.
+        if (
+            abs(new_alpha - base.alpha) < MIN_DELTA
+            and abs(new_z_idx - base.z_index_float) < MIN_DELTA
+        ):
             return base
         return replace(base, alpha=new_alpha, z_index_float=new_z_idx)
 
