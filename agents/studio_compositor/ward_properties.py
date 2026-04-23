@@ -38,6 +38,11 @@ from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
+from agents.studio_compositor.z_plane_constants import (
+    DEFAULT_Z_INDEX_FLOAT,
+    DEFAULT_Z_PLANE,
+)
+
 log = logging.getLogger(__name__)
 
 WARD_PROPERTIES_PATH = Path("/dev/shm/hapax-compositor/ward-properties.json")
@@ -200,10 +205,36 @@ def set_ward_properties(
         WARD_PROPERTIES_PATH.parent.mkdir(parents=True, exist_ok=True)
         current = _safe_load_raw()
         wards = current.get("wards") or {}
-        wards[ward_id] = {
+        new_entry = {
             **_dataclass_to_jsonable(properties),
             "expires_at": time.time() + ttl_s,
         }
+        # 2026-04-23 race-safe preservation of modulator-owned fields
+        # (``z_plane`` + ``z_index_float``). The ``ward_stimmung_modulator``
+        # writes these every ~200 ms from imagination depth; non-modulator
+        # consumers (compositional_consumer, fx_chain_ward_reactor) use a
+        # read-modify-write merge pattern whose cached read can go stale
+        # between the modulator's write and the consumer's. Without this
+        # preservation the consumer's stale-read ``z_plane`` (default
+        # ``on-scrim``) silently clobbers the modulator's write, and wards
+        # like sierpinski never leave the default plane. The heuristic:
+        # if caller passes defaults AND disk already holds non-default
+        # values, assume caller is round-tripping and preserve disk.
+        # z_plane + z_index_float have no non-default callers outside the
+        # modulator today (2026-04-23 grep), so this is a safe merge.
+        existing = wards.get(ward_id)
+        if existing is not None:
+            if (
+                new_entry.get("z_plane") == DEFAULT_Z_PLANE
+                and existing.get("z_plane", DEFAULT_Z_PLANE) != DEFAULT_Z_PLANE
+            ):
+                new_entry["z_plane"] = existing["z_plane"]
+            if (
+                new_entry.get("z_index_float") == DEFAULT_Z_INDEX_FLOAT
+                and existing.get("z_index_float", DEFAULT_Z_INDEX_FLOAT) != DEFAULT_Z_INDEX_FLOAT
+            ):
+                new_entry["z_index_float"] = existing["z_index_float"]
+        wards[ward_id] = new_entry
         out = {"wards": wards, "updated_at": time.time()}
         tmp = WARD_PROPERTIES_PATH.with_suffix(WARD_PROPERTIES_PATH.suffix + ".tmp")
         tmp.write_text(json.dumps(out), encoding="utf-8")
