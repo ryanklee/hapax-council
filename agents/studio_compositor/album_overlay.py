@@ -45,6 +45,32 @@ ATTRIB_PATH = "/dev/shm/hapax-compositor/music-attribution.txt"
 ALPHA = 0.85
 RENDER_FPS = 10
 
+# 2026-04-23 Gemini-reapproach Plan B Phase B3 — audio-reactive chromatic
+# aberration. Max pixel offset between red and blue channel shifts at peak
+# bass. Operator directive: "audio reactivity is good. Blinking is bad." —
+# translate (displacement) and channel-shift magnitude are permitted
+# modulations; alpha modulation is FORBIDDEN.
+_CHROMATIC_MAX_OFFSET_PX = 6.0
+_CHROMATIC_CHANNEL_ALPHA = 0.55
+
+
+def _read_bass_band() -> float:
+    """Read the blended ``bass_band`` signal from the unified reactivity bus.
+
+    Returns 0.0 when SHM is missing / malformed / bus is dormant. This is a
+    positive-only signal (monotonic audio energy in [0, 1]); consumers can
+    treat 0.0 as "no audio" without distinguishing "no bus" from "silent".
+    """
+    try:
+        from shared.audio_reactivity import read_shm_snapshot
+
+        snapshot = read_shm_snapshot()
+        if snapshot is None:
+            return 0.0
+        return float(snapshot.blended.bass_band)
+    except Exception:
+        return 0.0
+
 
 # --- mIRC-16 package-palette PiP effect ------------------------------------
 #
@@ -161,6 +187,35 @@ def _pil_to_cairo_surface(img: Any) -> cairo.ImageSurface | None:
     return surface
 
 
+def _paint_channel_shift(
+    cr: cairo.Context,
+    source: cairo.ImageSurface,
+    *,
+    offset_px: float,
+    channel_rgb: tuple[float, float, float],
+    direction: tuple[float, float],
+    alpha: float,
+) -> None:
+    """Mask ``source`` by ``channel_rgb``, translate, additive-composite.
+
+    ``alpha`` is the constant composite opacity — never time-varying.
+    """
+    r, g, b = channel_rgb
+    dx, dy = direction
+    cr.save()
+    cr.translate(offset_px * dx, offset_px * dy)
+    cr.push_group()
+    cr.set_source_surface(source, 0, 0)
+    cr.paint()
+    cr.set_operator(cairo.OPERATOR_IN)
+    cr.set_source_rgba(r, g, b, 1.0)
+    cr.paint()
+    cr.pop_group_to_source()
+    cr.set_operator(cairo.OPERATOR_ADD)
+    cr.paint_with_alpha(alpha)
+    cr.restore()
+
+
 def _pip_fx_package(
     cr: cairo.Context,
     w: int,
@@ -168,10 +223,13 @@ def _pip_fx_package(
     package: Any,
     *,
     ward_id: str = "album_overlay",
+    cover_surface: cairo.ImageSurface | None = None,
+    bass_band: float = 0.0,
+    cover_scale: float = 1.0,
 ) -> None:
-    """Apply the single package-palette PiP effect.
+    """Apply the single package-palette PiP effect + audio-reactive aberration.
 
-    Steps per spec §5.2:
+    Steps per spec §5.2 + 2026-04-23 Phase B3:
 
     1. Quantise the cover (already composited below) to the package's
        16-role palette via PIL ordered-dither. No-op if PIL missing.
@@ -179,6 +237,12 @@ def _pip_fx_package(
     3. Ordered-dither shadow mask in ``accent_magenta`` α=0.22 along
        the bottom 25% of the PiP.
     4. 2-px sharp border in the ward's domain-accent role.
+    5. (optional) R/B chromatic aberration at magnitude ∝ ``bass_band``.
+       Uses ``push_group`` / ``pop_group_to_source`` to mask each channel
+       of the underlying cover surface, translate by ±offset, and additive-
+       composite back at constant α. The OFFSET modulates with audio;
+       the ALPHA does NOT — this is what ``feedback_no_blinking_homage_wards``
+       demands.
     """
     # Step 3 (scanlines) — package.muted at 3-px cadence.
     try:
@@ -215,7 +279,34 @@ def _pip_fx_package(
     cr.fill()
     cr.restore()
 
-    # Step 5 (border) — RETIRED 2026-04-20.
+    # Step 5 (chromatic aberration) — 2026-04-23 Phase B3.
+    # Only fires when both the cover surface AND audio reactivity are
+    # available. Bass band ∈ [0, 1] scales pixel offset in [0, _CHROMATIC_MAX_OFFSET_PX].
+    # Uses constant alpha at both channel paints AND the additive composite
+    # so the effect is never a flash/strobe.
+    if cover_surface is not None and bass_band > 0.02:
+        offset_px = min(max(bass_band, 0.0), 1.0) * _CHROMATIC_MAX_OFFSET_PX
+        # The cover was painted into ``cr`` after ``cr.scale(cover_scale, ...)``
+        # so the surface coordinate system is the un-scaled cover space. We
+        # translate in cover-space pixels — cover_scale maps to surface pixels.
+        _paint_channel_shift(
+            cr,
+            cover_surface,
+            offset_px=offset_px,
+            channel_rgb=(1.0, 0.0, 0.0),
+            direction=(1.0, 0.0),
+            alpha=_CHROMATIC_CHANNEL_ALPHA,
+        )
+        _paint_channel_shift(
+            cr,
+            cover_surface,
+            offset_px=offset_px,
+            channel_rgb=(0.0, 0.4, 1.0),
+            direction=(-1.0, 0.0),
+            alpha=_CHROMATIC_CHANNEL_ALPHA,
+        )
+
+    # Step 6 (border) — RETIRED 2026-04-20.
     # The 2-px sharp border in the ward's domain accent role was drawing
     # an empty-container chrome around the entire 400x520 PiP surface even
     # when the actual content (splattribution text + small cover image)
@@ -289,9 +380,21 @@ class AlbumOverlayCairoSource(HomageTransitionalSource):
                 # Phase A4: single package-palette PiP effect. Resolves
                 # the active package per-tick so a mid-flight package
                 # swap (e.g. consent-safe) carries through without reload.
+                # 2026-04-23 Phase B3: adds audio-reactive chromatic
+                # aberration via _read_bass_band(). Effect only engages
+                # when the reactivity bus is populated AND bass_band
+                # exceeds 0.02 — silent idle stays effect-free.
                 try:
                     pkg = active_package()
-                    _pip_fx_package(cr, SIZE, SIZE, pkg)
+                    _pip_fx_package(
+                        cr,
+                        SIZE,
+                        SIZE,
+                        pkg,
+                        cover_surface=self._surface,
+                        bass_band=_read_bass_band(),
+                        cover_scale=scale,
+                    )
                 except Exception:
                     log.debug("album pip_fx_package failed", exc_info=True)
 
