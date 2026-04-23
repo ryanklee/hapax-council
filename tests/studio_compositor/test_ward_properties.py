@@ -100,3 +100,68 @@ class TestColorRoundtrip:
         wp.set_ward_properties("album", wp.WardProperties(color_override_rgba=red), ttl_s=10.0)
         wp.clear_ward_properties_cache()
         assert wp.resolve_ward_properties("album").color_override_rgba == red
+
+
+class TestModulatorFieldPreservation:
+    """Regression pin for the 2026-04-23 read-modify-write race.
+
+    ``ward_stimmung_modulator`` writes ``z_plane`` + ``z_index_float`` on a
+    5 Hz cadence. Non-modulator consumers use a read-modify-write merge
+    pattern whose cached read can go stale between the modulator's write
+    and the consumer's. Without preservation, the consumer's stale-read
+    (``z_plane="on-scrim"`` default) silently clobbers the modulator's
+    non-default write. These tests pin the preserve-on-write behavior.
+    """
+
+    def test_consumer_default_preserves_modulator_zplane(self):
+        # Modulator writes non-default z_plane first.
+        wp.set_ward_properties(
+            "sierpinski",
+            wp.WardProperties(z_plane="beyond-scrim", z_index_float=0.2, alpha=0.7),
+            ttl_s=10.0,
+        )
+        wp.clear_ward_properties_cache()
+        # Consumer writes a default z_plane (simulating a stale-read merge)
+        # with a different alpha. The modulator's z_plane must survive.
+        wp.set_ward_properties(
+            "sierpinski",
+            wp.WardProperties(z_plane="on-scrim", z_index_float=0.5, alpha=0.9),
+            ttl_s=10.0,
+        )
+        wp.clear_ward_properties_cache()
+        props = wp.resolve_ward_properties("sierpinski")
+        assert props.z_plane == "beyond-scrim"
+        assert props.z_index_float == 0.2
+        # Non-modulator fields from the consumer's write still land.
+        assert props.alpha == 0.9
+
+    def test_explicit_nondefault_zplane_overwrites(self):
+        # When the caller passes a non-default z_plane, that's an explicit
+        # modulator-domain write and must overwrite whatever was there.
+        wp.set_ward_properties(
+            "album",
+            wp.WardProperties(z_plane="beyond-scrim", z_index_float=0.2),
+            ttl_s=10.0,
+        )
+        wp.clear_ward_properties_cache()
+        wp.set_ward_properties(
+            "album",
+            wp.WardProperties(z_plane="mid-scrim", z_index_float=0.5),
+            ttl_s=10.0,
+        )
+        wp.clear_ward_properties_cache()
+        props = wp.resolve_ward_properties("album")
+        assert props.z_plane == "mid-scrim"
+        # z_index_float at default 0.5 when disk was non-default triggers
+        # preservation — this is by design (modulator owns both fields).
+        assert props.z_index_float == 0.2
+
+    def test_first_write_with_defaults_persists_defaults(self):
+        # No existing entry, caller writes defaults → defaults are written
+        # (no preservation source to pull from).
+        wp.set_ward_properties("hardm_dot_matrix", wp.WardProperties(alpha=0.8), ttl_s=10.0)
+        wp.clear_ward_properties_cache()
+        props = wp.resolve_ward_properties("hardm_dot_matrix")
+        assert props.z_plane == "on-scrim"
+        assert props.z_index_float == 0.5
+        assert props.alpha == 0.8
