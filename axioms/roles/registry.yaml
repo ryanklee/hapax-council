@@ -107,6 +107,17 @@ roles:
       - character-performer
       - emotional-presence
       - parasocial-companion
+      # 2026-04-23 Gemini-audit Phase 2 — these four entries pull the
+      # specific anti-narration scopes that the director prompt's BANNED
+      # NARRATION block (agents/studio_compositor/director_loop.py)
+      # enumerates up into the role-registry. The prompt block remains
+      # as fine-grained phrase enforcement; the role scope is the
+      # architectural invariant that any director-facing LLM prompt
+      # composer must inject via ``role_scope_line("livestream-host")``.
+      - passive-observer-narrator
+      - museum-docent
+      - self-reflexive-meta-narrator
+      - stage-director-speaking-their-own-blocking
     amendment_gated: false
     description: >
       Hapax hosts the Legomena Live broadcast. This role subsumes the

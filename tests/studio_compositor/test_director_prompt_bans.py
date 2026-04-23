@@ -100,12 +100,18 @@ def test_prompt_contains_stage_directions_ban() -> None:
 
 
 def test_prompt_contains_what_to_do_instead_block() -> None:
-    """The positive instruction block must accompany the bans."""
+    """The positive instruction block must accompany the bans.
+
+    Text updated 2026-04-22 (PR #1210) from ``host making a livestream,
+    not a system announcer`` → ``ACTIVE LIVESTREAM HOST, not a dumb
+    observer or a museum docent``. Test assertions follow.
+    """
     director = _director()
     prompt = director._build_unified_prompt()
     assert "WHAT TO DO INSTEAD" in prompt
-    assert "host making a livestream, not a system announcer" in prompt
-    assert "Be concrete. Be crunchy. Be blunt. Be a host, not" in prompt
+    assert "ACTIVE LIVESTREAM HOST" in prompt
+    assert "Be concrete. Be crunchy. Be blunt." in prompt
+    assert "host running the show" in prompt
 
 
 def test_silence_hold_reactions_filtered_from_recent_reactions() -> None:
