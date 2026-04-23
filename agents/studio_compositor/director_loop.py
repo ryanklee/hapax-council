@@ -24,7 +24,7 @@ from agents.studio_compositor import metrics
 from agents.studio_compositor.audio_control import SlotAudioControl
 from agents.studio_compositor.tts_client import DaimonionTtsClient
 from shared.director_intent import CompositionalImpingement, DirectorIntent
-from shared.persona_prompt_composer import compose_persona_prompt
+from shared.persona_prompt_composer import compose_persona_prompt, role_scope_line
 from shared.stimmung import Stance
 
 
@@ -1952,6 +1952,17 @@ class DirectorLoop:
             parts.append("Every utterance is practice toward mutual understanding.")
         else:
             parts.append(compose_persona_prompt(role_id="livestream-host"))
+            # 2026-04-23 Gemini-audit Phase 2 — role_scope_line injects
+            # the role's ``is_not:`` negation surface (from
+            # axioms/roles/registry.yaml) as a one-line architectural
+            # invariant. Defense-in-depth alongside the BANNED NARRATION
+            # block: the role scope expresses *why* the specific phrases
+            # are forbidden (Hapax in the livestream-host role is NOT a
+            # passive-observer-narrator / museum-docent / self-reflexive-
+            # meta-narrator / stage-director-speaking-their-own-blocking).
+            scope = role_scope_line("livestream-host")
+            if scope:
+                parts.append(scope)
             parts.append("")
             parts.append("## Current situation")
             parts.append(f"This is Legomena Live. {music_framing}")
