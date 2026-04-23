@@ -360,8 +360,20 @@ class MusicProgrammer:
             # Source had no admissible track; remove from this round and retry.
             weights = dict(weights)
             weights[source] = 0.0
-        # Last resort: any pool track that passes recency + artist streak.
-        return self._pick_candidate(pool, ts=ts, ignore_source_streak=True)
+        # Last resort, tier 1: any pool track that passes recency +
+        # artist streak (source streak ignored — degenerate-state recovery).
+        candidate = self._pick_candidate(pool, ts=ts, ignore_source_streak=True)
+        if candidate is not None:
+            return candidate
+        # Last resort, tier 2: drop the artist-streak comfort gate too.
+        # When the pool only contains tracks by one artist (e.g. only
+        # oudepode is ingested), strict streak enforcement returns None
+        # forever and the stream goes silent. Comfort > silence: pick
+        # ANY safe non-recently-played track.
+        log.debug("all sources + artist streak yielded no candidate; dropping artist-streak")
+        return self._pick_candidate(
+            pool, ts=ts, ignore_source_streak=True, ignore_artist_streak=True
+        )
 
     def _pick_candidate(
         self,
@@ -369,8 +381,22 @@ class MusicProgrammer:
         *,
         ts: float,
         ignore_source_streak: bool = False,
+        ignore_artist_streak: bool = False,
     ) -> LocalMusicTrack | None:
-        """Filter candidates by recency + artist streak; pick uniformly."""
+        """Filter candidates by recency + artist streak; pick uniformly.
+
+        ``ignore_source_streak`` is read at the call site (the source
+        streak gate runs in :func:`adjust_weights`, not here, so the
+        flag is informational — present for symmetry with the
+        artist-streak override and to keep the call-site contract
+        explicit).
+
+        ``ignore_artist_streak=True`` skips the artist-streak filter.
+        Used by the second-tier degenerate-pool fallback so a single-
+        artist pool (e.g. only oudepode ingested) can still return a
+        candidate instead of silencing the stream.
+        """
+        del ignore_source_streak  # informational at this layer
         admissible: list[LocalMusicTrack] = []
         for track in candidates:
             if track_recently_played(
@@ -380,7 +406,11 @@ class MusicProgrammer:
                 cooldown_s=self.config.track_cooldown_s,
             ):
                 continue
-            if artist_streak_count(self._history, track.artist) >= self.config.max_artist_streak:
+            if (
+                not ignore_artist_streak
+                and artist_streak_count(self._history, track.artist)
+                >= self.config.max_artist_streak
+            ):
                 continue
             admissible.append(track)
         if not admissible:
