@@ -428,7 +428,7 @@
       "geometry": {
         "kind": "rect",
         "x": 1800,
-        "y": 24,
+        "y": 290,
         "w": 100,
         "h": 40,
         "mask": null,
@@ -499,8 +499,8 @@
       "id": "grounding-ticker-bl",
       "geometry": {
         "kind": "rect",
-        "x": 16,
-        "y": 900,
+        "x": 440,
+        "y": 770,
         "w": 480,
         "h": 40,
         "mask": null,
@@ -553,7 +553,7 @@
       "id": "thinking-indicator-tr",
       "geometry": {
         "kind": "rect",
-        "x": 1620,
+        "x": 1380,
         "y": 20,
         "w": 170,
         "h": 44,
@@ -607,8 +607,8 @@
       "id": "whos-here-tr",
       "geometry": {
         "kind": "rect",
-        "x": 1460,
-        "y": 20,
+        "x": 1380,
+        "y": 80,
         "w": 150,
         "h": 46,
         "mask": null,

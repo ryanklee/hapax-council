@@ -314,9 +314,12 @@ _FALLBACK_LAYOUT = Layout(
             geometry=SurfaceGeometry(kind="rect", x=560, y=16, w=800, h=56),
             z_order=30,
         ),
+        # 2026-04-23 Gemini-reapproach Plan B Phase B1 — move stance-indicator
+        # DOWN from y=24 to y=290 to escape occlusion over HARDM's 256×256
+        # block at (1600, 20 → 1856, 276). New y=290 clears HARDM's bottom edge.
         SurfaceSchema(
             id="stance-indicator-tr",
-            geometry=SurfaceGeometry(kind="rect", x=1800, y=24, w=100, h=40),
+            geometry=SurfaceGeometry(kind="rect", x=1800, y=290, w=100, h=40),
             z_order=35,
         ),
         SurfaceSchema(
@@ -324,9 +327,13 @@ _FALLBACK_LAYOUT = Layout(
             geometry=SurfaceGeometry(kind="rect", x=1760, y=400, w=160, h=400),
             z_order=20,
         ),
+        # 2026-04-23 Gemini-reapproach Plan B Phase B1 — move grounding-ticker
+        # ABOVE gem-mural-bottom (y=820..1060) and to the RIGHT of pip-ll
+        # (x=20..420, the album quadrant). New (440, 770, 480, 40) sits in
+        # the dead strip between pip-lr/activity-variety-log-mid and GEM.
         SurfaceSchema(
             id="grounding-ticker-bl",
-            geometry=SurfaceGeometry(kind="rect", x=16, y=900, w=480, h=40),
+            geometry=SurfaceGeometry(kind="rect", x=440, y=770, w=480, h=40),
             z_order=22,
         ),
         # Epic 2 Phase C (2026-04-17) — hothouse pressure surfaces.
@@ -340,9 +347,12 @@ _FALLBACK_LAYOUT = Layout(
             geometry=SurfaceGeometry(kind="rect", x=560, y=80, w=800, h=60),
             z_order=24,
         ),
+        # 2026-04-23 Gemini-reapproach Plan B Phase B1 — move thinking-indicator
+        # LEFT from x=1620 to x=1380 to escape HARDM's 1600..1856 x-range.
+        # Keeps right edge at 1380+170=1550, 50-px gap before HARDM.
         SurfaceSchema(
             id="thinking-indicator-tr",
-            geometry=SurfaceGeometry(kind="rect", x=1620, y=20, w=170, h=44),
+            geometry=SurfaceGeometry(kind="rect", x=1380, y=20, w=170, h=44),
             z_order=26,
         ),
         SurfaceSchema(
@@ -355,10 +365,14 @@ _FALLBACK_LAYOUT = Layout(
             geometry=SurfaceGeometry(kind="rect", x=440, y=540, w=400, h=140),
             z_order=24,
         ),
-        # Epic 2 Phase D — operator-always-here, top-center-right.
+        # Epic 2 Phase D — operator-always-here.
+        # 2026-04-23 Gemini-reapproach Plan B Phase B1 — stack whos-here
+        # UNDER thinking-indicator at x=1380 (same column, left of HARDM
+        # at x=1600). y=80 clears activity-header-top (y=16..72) and
+        # recruitment-candidate-top (x=560..1360, so no x-overlap).
         SurfaceSchema(
             id="whos-here-tr",
-            geometry=SurfaceGeometry(kind="rect", x=1460, y=20, w=150, h=46),
+            geometry=SurfaceGeometry(kind="rect", x=1380, y=80, w=150, h=46),
             z_order=26,
         ),
         # HOMAGE #121 HARDM dot-matrix — upper-right corner.
