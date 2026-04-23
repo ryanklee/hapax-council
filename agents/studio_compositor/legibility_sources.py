@@ -38,7 +38,6 @@ from __future__ import annotations
 
 import json
 import logging
-import math
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -301,33 +300,24 @@ def _paint_inverse_flash(
     cr.restore()
 
 
-def _flash_alpha(t: float, flash_started_at: float | None) -> float:
-    """Return the inverse-flash alpha at ``t`` given the flash start time.
+def _flash_alpha(
+    t: float,  # noqa: ARG001 — kept for backward-compat signature
+    flash_started_at: float | None,  # noqa: ARG001
+) -> float:
+    """Return 0.0 always — inverse-flash retired 2026-04-23.
 
-    Sine bell envelope: 0 at start, peak at midpoint, 0 at end. lssh-001
-    Phase A (PR #1181) softened the decay tail but left the START as a
-    step from off → peak alpha in a single frame; the lssh-001 Phase B
-    luminance harness caught that as a 1.49-per-500-ms rendered
-    luminance jump (vs the 0.40 threshold) because the START itself was
-    a blink. The bell envelope adds a smooth ramp-in symmetric with the
-    ramp-out, so the flash reads as a soft pulse from any direction.
+    Operator directive "no flashing of any kind on any of the homage
+    wards" retires the inverse-flash bell envelope entirely. Transition
+    events (stance change, activity change, preset-family change) now
+    signal through non-alpha channels (text content, z-order nudge,
+    position change). The ``_paint_inverse_flash`` consumer early-
+    returns when alpha is 0.0, so no further callsite changes are
+    needed.
 
-    Mathematically: ``peak * sin(progress * π)``. At progress=0 → 0
-    (no jump from off-state), at progress=0.5 → peak, at progress=1 → 0.
-    The maximum slope is ``peak * π / duration`` which for the current
-    constants (peak 0.15, duration 400 ms) gives a peak alpha-rate of
-    1.18 per second — well within the 40 % per 500 ms heuristic when
-    the flash sits over the existing ward field rather than against
-    pure black.
+    Signature preserved so call-sites that pass ``t`` and the stored
+    timestamp keep compiling; the parameters are no-ops.
     """
-    if flash_started_at is None:
-        return 0.0
-    dt = t - flash_started_at
-    if dt < 0.0 or dt >= _INVERSE_FLASH_DURATION_S:
-        return 0.0
-    progress = dt / _INVERSE_FLASH_DURATION_S
-    # Sine bell: 0 → peak → 0 across the window.
-    return _INVERSE_FLASH_PEAK_ALPHA * math.sin(progress * math.pi)
+    return 0.0
 
 
 def _emissive_structural(

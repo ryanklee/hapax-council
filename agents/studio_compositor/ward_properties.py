@@ -32,7 +32,6 @@ from __future__ import annotations
 
 import json
 import logging
-import math
 import time
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field, fields
@@ -290,20 +289,16 @@ def _finalize_ward_emphasis(
     try:
         cr.pop_group_to_source()
         effective_alpha = max(0.0, min(1.0, props.alpha))
-        if props.scale_bump_pct > 0.001 and canvas_w > 0 and canvas_h > 0:
-            # Scale-bump renders the source content around its centre
-            # without breaking the outer dimensions.
-            scale = 1.0 + max(0.0, min(0.5, float(props.scale_bump_pct)))
-            cx = canvas_w * 0.5
-            cy = canvas_h * 0.5
-            cr.save()
-            cr.translate(cx, cy)
-            cr.scale(scale, scale)
-            cr.translate(-cx, -cy)
-            cr.paint_with_alpha(effective_alpha)
-            cr.restore()
-        else:
-            cr.paint_with_alpha(effective_alpha)
+        # 2026-04-23 operator "homage wards keep falling off the screen" —
+        # scale_bump_pct was the culprit. Audio-kick / chain-swap / preset-
+        # family-change events were pushing ward content up to 50% larger
+        # around its centre, which punched surface edges past the 1920x1080
+        # canvas intermittently. The scale_bump code path is disabled here;
+        # upstream events (fx_chain_ward_reactor) continue to write
+        # scale_bump_pct values but this painter ignores them. If a future
+        # need reintroduces scale emphasis, it must clamp scale so the
+        # transformed rect stays inside canvas_w × canvas_h at ALL times.
+        cr.paint_with_alpha(effective_alpha)
 
         if canvas_w <= 0 or canvas_h <= 0:
             return
@@ -350,9 +345,11 @@ def _paint_emissive_glow(
     if r <= 0.1:
         return
     r_red, g, b, a_base = rgba
-    # Slow shimmer — 0.30 Hz so the glow breathes rather than flickers.
-    shimmer = 0.85 + 0.15 * math.sin(time.monotonic() * 2.0 * math.pi * 0.30)
-    peak_alpha = float(max(0.0, min(1.0, a_base * 0.75 * shimmer)))
+    # 2026-04-23 operator "no flashing of any kind" — shimmer retired.
+    # The glow now renders at a static peak alpha of a_base * 0.75 *
+    # baseline (0.85) so the edge-glow effect remains but no longer
+    # modulates in time. Any breathing belongs in geometry not alpha.
+    peak_alpha = float(max(0.0, min(1.0, a_base * 0.75 * 0.85)))
 
     def _edge(x0: float, y0: float, x1: float, y1: float, fx: float, fy: float) -> None:
         # Gradient axis goes from the edge inward by ``r`` px.
@@ -388,16 +385,19 @@ def _paint_border_pulse(
 ) -> None:
     """Stroke the ward's rectangular outline with a sinusoidally pulsing alpha.
 
-    The pulse frequency is ``hz``; the baseline / amplitude are chosen so
-    the border is always legibly present (min alpha 0.30) but visibly
-    modulates (max alpha 1.00). Line width is 2 px for screen-clear
-    visibility at 720p. No rounded corners — HOMAGE grammar refuses.
+    2026-04-23 operator directive "no flashing of any kind" — the
+    sinusoidal ``pulse_alpha`` modulation is removed. The border still
+    renders at its full base alpha; consumers that set
+    ``border_pulse_hz > 0.01`` now get a static, legible border rather
+    than a time-varying one. This preserves the SEMANTIC (border
+    emphasised) while removing the FLASH. Signature + ``hz`` parameter
+    retained for backward compat so the reactor callers don't need to
+    be re-threaded.
     """
+    _ = hz  # intentionally unused; see docstring.
     r, g, b, a_base = rgba
-    phase = math.sin(time.monotonic() * 2.0 * math.pi * float(hz))
-    pulse_alpha = 0.30 + 0.70 * (phase * 0.5 + 0.5)
     cr.save()
-    cr.set_source_rgba(r, g, b, max(0.0, min(1.0, a_base * pulse_alpha)))
+    cr.set_source_rgba(r, g, b, max(0.0, min(1.0, a_base)))
     cr.set_line_width(2.0)
     cr.rectangle(1.0, 1.0, max(0.0, w - 2.0), max(0.0, h - 2.0))
     cr.stroke()

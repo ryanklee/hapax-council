@@ -91,30 +91,32 @@ STANCE_HZ: dict[str, float] = {
 
 
 def paint_breathing_alpha(
-    t: float,
+    t: float,  # noqa: ARG001 — kept for backward-compat signature
     *,
-    hz: float = 1.0,
+    hz: float = 1.0,  # noqa: ARG001
     baseline: float = BREATHING_BASELINE,
-    amplitude: float = BREATHING_AMPLITUDE,
-    phase: float = 0.0,
+    amplitude: float = BREATHING_AMPLITUDE,  # noqa: ARG001
+    phase: float = 0.0,  # noqa: ARG001
 ) -> float:
-    """Return a sinusoidal alpha multiplier clamped to [0, 1].
+    """Return the baseline alpha as a STATIC constant.
 
-    ``baseline`` is the mid-alpha (default 0.85); ``amplitude`` is the
-    half-range (default 0.15). At ``hz=1.0`` the modulator completes one
-    full cycle per second. ``phase`` is a per-element phase offset in
-    radians — use it to de-synchronise neighbouring elements so the
-    surface doesn't strobe.
+    2026-04-23 operator directive "no flashing of any kind on any of
+    the homage wards. Audio reactivity is good. Blinking is bad." — this
+    function previously applied ``baseline + amplitude * sin(2pi*hz*t +
+    phase)`` which modulated alpha per frame. Pulsing alpha at any
+    frequency, any amplitude, is forbidden on broadcast surfaces.
+    Audio-reactivity is permitted through translate / channel-shift /
+    geometric displacement (see ``album_overlay._pip_fx_package`` for
+    the constant-alpha chromatic-aberration pattern), never through
+    alpha modulation.
 
-    Clamped because callers multiply this into an RGBA alpha directly
-    and Cairo will hard-fail on out-of-range alphas in some contexts.
+    Signature kept for backward-compat so the 8+ callers need no
+    rewrite; they all multiply the return into an alpha value which now
+    just multiplies a constant. Amplitude / hz / phase are retained as
+    no-op parameters so future reverts can be atomic without
+    re-threading.
     """
-    value = baseline + amplitude * math.sin(2.0 * math.pi * hz * t + phase)
-    if value < 0.0:
-        return 0.0
-    if value > 1.0:
-        return 1.0
-    return value
+    return baseline
 
 
 def paint_emissive_bg(
