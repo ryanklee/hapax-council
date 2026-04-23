@@ -514,9 +514,15 @@ class TokenPoleCairoSource(HomageTransitionalSource):
         # sepia ink. The package-scoped tint ensures a palette swap carries
         # the figure.
         if self._bg_surface is not None:
-            from .homage.emissive_base import paint_breathing_alpha
-
-            shimmer = paint_breathing_alpha(t_now, hz=pulse_hz, phase=0.0)
+            # 2026-04-23 operator "no flashing of any kind" — previously
+            # ``shimmer = paint_breathing_alpha(t_now, hz=pulse_hz, phase=0.0)``
+            # modulated the Vitruvian tint per frame. paint_breathing_alpha
+            # itself now returns a static baseline, so the effect is
+            # constant — but the expression ``0.55 * shimmer`` remained
+            # as a lint target. Replaced with the static product
+            # ``0.55 * 0.85 = 0.4675`` so the static-scan regression test
+            # passes and the intent is explicit.
+            _TINT_ALPHA = 0.4675  # 0.55 * paint_breathing_alpha baseline
             td_r, td_g, td_b, _ = palette.terminal_default
             cr.save()
             sw = self._bg_surface.get_width()
@@ -524,13 +530,13 @@ class TokenPoleCairoSource(HomageTransitionalSource):
             scale = NATURAL_SIZE / max(sw, sh) if max(sw, sh) > 0 else 1
             cr.scale(scale, scale)
             cr.set_source_surface(self._bg_surface, 0, 0)
-            cr.paint_with_alpha(0.55 * shimmer)
+            cr.paint_with_alpha(_TINT_ALPHA)
             cr.restore()
             # Tinting pass — multiply the figure with terminal_default so
             # the ink reads grey rather than raw.
             cr.save()
             cr.set_operator(__import__("cairo").OPERATOR_MULTIPLY)
-            cr.set_source_rgba(td_r, td_g, td_b, 0.55 * shimmer)
+            cr.set_source_rgba(td_r, td_g, td_b, _TINT_ALPHA)
             cr.rectangle(0, 0, NATURAL_SIZE, NATURAL_SIZE)
             cr.fill()
             cr.restore()
