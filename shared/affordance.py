@@ -11,6 +11,46 @@ from pydantic import BaseModel, Field
 
 MonetizationRisk = Literal["none", "low", "medium", "high"]
 
+# Provenance/ContentID risk taxonomy. Distinct axis from `monetization_risk`
+# (which classifies SEMANTIC content risk: profanity, reaction-content, etc.).
+# `content_risk` classifies BROADCAST PROVENANCE risk: where the audio/visual
+# came from and whether playing it on YouTube can trigger ContentID claims.
+#
+# Per `docs/superpowers/research/2026-04-23-content-source-registry-research.md`
+# §6.1 — five tiers, gated independently of monetization_risk:
+#
+#   tier_0_owned             — operator-owned, generated, hardware-captured
+#                              (oudepode catalog, wgpu shaders, studio cameras)
+#   tier_1_platform_cleared  — Epidemic, Storyblocks, Streambeats, YT Audio
+#                              Library — channel-whitelisted at the platform
+#   tier_2_provenance_known  — verified CC0 (Freesound hand-checked),
+#                              Internet Archive raw PD uploads
+#   tier_3_uncertain         — direct Bandcamp permission per release,
+#                              CC-BY (attribution required), public-domain
+#                              compositions of post-1923 recordings
+#   tier_4_risky             — vinyl, commercial music, raw type-beats,
+#                              stream-ripped YouTube, uncleared TV/film
+#
+# Default is `tier_0_owned` — most existing capabilities (cameras, generated
+# visuals, daimonion voice) qualify. Only capabilities that pull EXTERNAL
+# content into broadcast (SC adapter, Epidemic adapter, future YouTube
+# embed ward) need explicit re-tagging at higher tiers.
+#
+# Gate semantics in `shared/governance/content_risk.py`:
+#   tier_4 → unconditional block
+#   tier_3 → permitted only with operator session unlock
+#            (HAPAX_CONTENT_RISK_UNLOCK_TIER env var)
+#   tier_2 → permitted only when programme opts in via
+#            Programme.content_opt_ins
+#   tier_0 / tier_1 → always permitted
+ContentRisk = Literal[
+    "tier_0_owned",
+    "tier_1_platform_cleared",
+    "tier_2_provenance_known",
+    "tier_3_uncertain",
+    "tier_4_risky",
+]
+
 
 class OperationalProperties(BaseModel, frozen=True):
     requires_gpu: bool = False
@@ -32,6 +72,13 @@ class OperationalProperties(BaseModel, frozen=True):
     # for the classification rubric.
     monetization_risk: MonetizationRisk = "none"
     risk_reason: str | None = None
+
+    # Provenance/ContentID risk — see ContentRisk Literal above.
+    # Default tier_0_owned: capabilities that don't pull external content
+    # (cameras, shaders, daimonion voice) require no further tagging.
+    # Capabilities that DO pull external broadcast content must override.
+    content_risk: ContentRisk = "tier_0_owned"
+    content_risk_reason: str | None = None
 
 
 class CapabilityRecord(BaseModel, frozen=True):

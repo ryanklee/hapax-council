@@ -272,6 +272,8 @@ class AffordancePipeline:
                             "medium": record.operational.medium,
                             "monetization_risk": record.operational.monetization_risk,
                             "risk_reason": record.operational.risk_reason,
+                            "content_risk": record.operational.content_risk,
+                            "content_risk_reason": record.operational.content_risk_reason,
                             "activation_summary": self._activation.get(
                                 record.name, ActivationState()
                             ).to_summary(),
@@ -638,6 +640,7 @@ class AffordancePipeline:
         # dedupes), so calling on every select() is cheap and avoids module-
         # import-time side effects.
         from shared.governance import quiet_frame_subscriber
+        from shared.governance.content_risk import GATE as _CONTENT_RISK_GATE
         from shared.governance.monetization_safety import GATE as _MONET_GATE
 
         quiet_frame_subscriber.install()
@@ -646,6 +649,16 @@ class AffordancePipeline:
         trace["stages"]["after_monetization"] = len(candidates)
         if not candidates:
             trace["dropout_at"] = "monetization_filter_empty"
+            self._emit_dispatch_trace(trace)
+            return []
+        # Content-source registry Phase 1 (PR for plan §1): filter on
+        # provenance/ContentID risk independently of monetization_risk.
+        # tier_4 unconditionally blocked; tier_3 requires session unlock;
+        # tier_2 requires programme opt-in; tier_0/tier_1 pass.
+        candidates = _CONTENT_RISK_GATE.candidate_filter(candidates, programme=active_programme)
+        trace["stages"]["after_content_risk"] = len(candidates)
+        if not candidates:
+            trace["dropout_at"] = "content_risk_filter_empty"
             self._emit_dispatch_trace(trace)
             return []
         now = time.time()
