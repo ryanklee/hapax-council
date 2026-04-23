@@ -489,11 +489,14 @@ class OverlayZone:
         if self._cached_surface is None:
             return
 
-        offset_x = int(props.position_offset_x)
-        offset_y = int(props.position_offset_y)
-        # Paint the pre-rendered outlined text surface — single blit per frame
+        # position_offset_x/y neutralized: drift-sine / drift-circle capabilities
+        # oscillate wards up to ±20 px, which pushed right-edge content past the
+        # 1920×1080 canvas. Operator 2026-04-23 ("still off screen") after the
+        # scale_bump disable in PR #1236. Regression pin:
+        # tests/studio_compositor/test_no_ward_position_drift.py.
+        offset_x = 0
+        offset_y = 0
         if self._scroll:
-            # Scroll: text moves upward from bottom
             scroll_y = canvas_h - self._scroll_offset
             cr.set_source_surface(self._cached_surface, self.x - 2 + offset_x, scroll_y + offset_y)
         else:
