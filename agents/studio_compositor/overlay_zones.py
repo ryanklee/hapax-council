@@ -52,7 +52,13 @@ ZONES: list[dict[str, Any]] = [
         "max_width": 1000,
         "font": "JetBrains Mono Bold 20",
         "color": (1.0, 0.97, 0.90, 1.0),
-        "randomize_position": True,
+        # 2026-04-23 operator "wards off screen" (intermittent, drift-cycle
+        # dependent). _tick_float drifts wards near canvas edges on a DVD
+        # bounce; when Pango overflows ``max_width`` on a long token the
+        # oversized surface clips at the right edge during the bounce
+        # window. Disabled until a proper repositioning story ships with
+        # the video-container epic. Wards stay at declared x/y anchor.
+        "randomize_position": False,
     },
     {
         "id": "research",
@@ -65,7 +71,7 @@ ZONES: list[dict[str, Any]] = [
         "max_width": 1000,
         "font": "JetBrains Mono Bold 18",
         "color": (0.90, 0.95, 1.00, 1.0),
-        "randomize_position": True,
+        "randomize_position": False,
         # Only cycle research content when Hapax is in a study-oriented
         # objective window; outside of that the audience doesn't need it
         # and the main zone owns the space.
@@ -254,6 +260,15 @@ class OverlayZone:
         elif self._float_y + sh >= canvas_h - margin:
             self._float_y = canvas_h - sh - margin
             self._vy = -abs(self._vy)
+
+        # 2026-04-23 operator "wards off screen" — belt-and-suspenders
+        # clamp post-bounce. Guarantees the ward stays within
+        # [margin, canvas_w-margin-sw] even if Pango renders a surface
+        # wider than max_width (long-token overflow) or the bounce math
+        # drifts due to velocity accumulation. Also clamps y. No-op for
+        # the common case where bounce already placed the ward in bounds.
+        self._float_x = max(float(margin), min(self._float_x, float(canvas_w - margin - sw)))
+        self._float_y = max(float(margin), min(self._float_y, float(canvas_h - margin - sh)))
 
         self.x = int(self._float_x)
         self.y = int(self._float_y)
