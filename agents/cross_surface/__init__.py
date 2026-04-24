@@ -1,7 +1,7 @@
 """Cross-surface federation (ytb-010).
 
-Phase 1 (this module): Discord webhook poster.
-Phase 2 (deferred): Bluesky client (atproto).
+Phase 1: Discord webhook poster (PR #1319).
+Phase 2 (this module): Bluesky client (atproto).
 Phase 3 (deferred): Mastodon client (Mastodon.py).
 
 All three surfaces consume `broadcast_rotated` events from
