@@ -333,6 +333,56 @@ palettes:
           - {t: 1.0000, lab: [ 84.20,   0.00,   0.00]}  # slot 15 light_grey
     temporal_profile: steady
 
+  # --- Moksha (E17) authentic UI palettes (ytb-AUTH-PALETTE Phase 1) ---
+  #
+  # LAB values below are authored approximations of the Moksha /
+  # Enlightenment E17 default themes. Phase 2 (``shared.aesthetic_library_loader``)
+  # replaces these with values extracted from the authentic .edc theme
+  # file once Moksha assets are acquired. Aesthetic invariants asserted
+  # under the no-operator-approval-waits rule (2026-04-24); operator
+  # reverts if the register is off.
+  - id: moksha-dark-chrome
+    display_name: Moksha Dark Chrome
+    description: >-
+      E17/Moksha dark-chrome UI skeleton — steel-grey mid-L, cool low-
+      chroma register. E-panel chrome terminal aesthetic without the
+      saturation of mIRC. Phase 1 inline-authored approximation;
+      Phase 2 ingests the Moksha .edc directly.
+    semantic_tags: [moksha, dark, chrome, metal, ui-authentic, enlightenment,
+                    cool, steel]
+    working_mode_affinity: [rnd, any]
+    warmth_axis: 0.2
+    saturation_axis: 0.15
+    lightness_axis: 0.35
+    dominant_lab: [46.0, -1.0, -4.0]
+    accent_lab: [24.0, -2.0, -8.0]
+    curve:
+      mode: lab_shift
+      params: {delta_l: 0.0, delta_a: -2.0, delta_b: -6.0}
+      preserve_luminance: true
+    temporal_profile: steady
+
+  - id: moksha-light-paper
+    display_name: Moksha Light Paper
+    description: >-
+      E17/Moksha paper-light UI — warm off-white high-L, low-chroma with
+      slight amber undertone. Research-mode UI readability twin of
+      moksha-dark-chrome. Phase 1 inline-authored approximation.
+    semantic_tags: [moksha, light, paper, parchment, ui-authentic,
+                    enlightenment, warm, readable]
+    working_mode_affinity: [research, any]
+    warmth_axis: 0.55
+    saturation_axis: 0.2
+    lightness_axis: 0.75
+    dominant_lab: [85.0, 4.0, 12.0]
+    accent_lab: [42.0, 6.0, 16.0]
+    curve:
+      mode: lab_shift
+      params: {delta_l: -2.0, delta_a: 2.0, delta_b: 6.0}
+      preserve_luminance: false
+      clip_s_curve: [20.0, 95.0]
+    temporal_profile: steady
+
 chains:
   - id: day-arc
     display_name: Day Arc
@@ -408,3 +458,23 @@ chains:
         dwell_s: 2700.0
         transition_mode: crossfade
         transition_s: 60.0
+
+  - id: authentic-daywork
+    display_name: Authentic Daywork
+    description: >-
+      Oscillate between terminal precision (mirc-16-standard, BitchX
+      kin) and UI readability (moksha-light-paper, Enlightenment kin)
+      for research-mode whiteboard work. Short dwells; 1.5s crossfade
+      keeps the transition ambient.
+    semantic_tags: [authentic, daywork, research, terminal, ui, oscillation,
+                    mirc-kin, moksha-kin]
+    loop: true
+    steps:
+      - palette_id: mirc-16-standard
+        dwell_s: 45.0
+        transition_mode: crossfade
+        transition_s: 1.5
+      - palette_id: moksha-light-paper
+        dwell_s: 60.0
+        transition_mode: crossfade
+        transition_s: 1.5
