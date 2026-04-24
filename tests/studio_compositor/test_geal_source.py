@@ -181,6 +181,39 @@ def test_s2_apex_weights_rebalance_on_stance() -> None:
         assert abs(total - 1.0) < 0.02, f"{stance} weights sum to {total}"
 
 
+def test_budget_scale_reduces_alpha_under_video_attention() -> None:
+    """Spec §5.1 — GEAL halves its output when video_attention peaks."""
+    source = _fresh_source(enabled=True)
+    # Baseline budget scale (no video attention).
+    source._video_attention = 0.0
+    baseline = source._budget_scale()
+    # Peak attention → (1.0 - 0.7 × 1.0) = 0.30.
+    source._video_attention = 1.0
+    peaked = source._budget_scale()
+    assert baseline == pytest.approx(1.0)
+    assert peaked == pytest.approx(0.30)
+    # Monotonic: higher attention → lower scale.
+    scales = [
+        source._budget_scale()
+        for va in (0.0, 0.25, 0.5, 0.75, 1.0)
+        if (setattr(source, "_video_attention", va) or True)
+    ]
+    for a, b in zip(scales[:-1], scales[1:], strict=True):
+        assert b <= a
+
+
+def test_budget_scale_reads_missing_shm_as_full_activation(tmp_path, monkeypatch) -> None:
+    """When /dev/shm/hapax-compositor/video-attention.f32 is absent,
+    GEAL runs at full (budget_scale = 1.0). Missing producer must not
+    accidentally dim the avatar.
+    """
+    missing = tmp_path / "does-not-exist.f32"
+    monkeypatch.setattr("agents.studio_compositor.geal_source.VIDEO_ATTENTION_PATH", missing)
+    source = _fresh_source(enabled=True)
+    assert source._read_video_attention() == 0.0
+    assert source._budget_scale() == pytest.approx(1.0)
+
+
 def test_never_paints_inside_inscribed_video_rect() -> None:
     """GEAL layers 3, 4, 6, 7 clip to the three sliver + centre-void
     regions — the inscribed 16:9 YT rects must remain uncovered.

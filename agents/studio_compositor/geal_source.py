@@ -40,6 +40,7 @@ import cairo
 
 from agents.studio_compositor.cairo_source import CairoSource
 from agents.studio_compositor.sierpinski_renderer import (
+    VIDEO_ATTENTION_PATH,
     GeometryCache,
     SierpinskiCairoSource,
 )
@@ -201,6 +202,11 @@ class GealCairoSource(CairoSource):
     # (daimonion not running), GEAL falls back to the Phase 1 constant
     # voice gate so the render path stays alive.
     _tts_envelope_reader: TtsEnvelopeReader = field(default_factory=TtsEnvelopeReader)
+    # Per-tick cached video-attention scalar (spec §5.1). Read from
+    # ``/dev/shm/hapax-compositor/video-attention.f32`` at the top of
+    # every render; used to scale every GEAL layer's alpha so the
+    # avatar never fights active video for the viewer's attention.
+    _video_attention: float = 0.0
     # Smoothed voice envelope (RMS) for V2 halo drive.
     _voice_rms_lp: SecondOrderLP = field(
         default_factory=lambda: SecondOrderLP(omega=12.0, zeta=0.7)
@@ -353,6 +359,11 @@ class GealCairoSource(CairoSource):
         palette = self._palette_bridge.resolve_palette(stance).palette
         roles = self._palette_bridge.halo_roles(palette.id, register)
 
+        # Spec §5.1 — read ``video_attention`` and shrink every GEAL
+        # layer's alpha by ``(1.0 - 0.7 × attention)``. Active YT rect
+        # → GEAL backs off to ~30 % intensity; empty rect → full.
+        self._video_attention = self._read_video_attention()
+
         # Expire old events BEFORE rendering so we don't waste a tick on
         # envelopes whose time has passed.
         self._active_wavefronts = [
@@ -370,6 +381,32 @@ class GealCairoSource(CairoSource):
         self._paint_wavefronts(cr, geom, t)
 
     # -- Internal paint helpers --------------------------------------------
+
+    def _read_video_attention(self) -> float:
+        """Read the scalar the Sierpinski source writes each tick.
+
+        Returns 0.0 on any error (missing file, truncated, permission
+        denied) — GEAL then runs at full activation. Safe in the hot
+        path: one stat + one 4-byte read.
+        """
+        try:
+            with open(VIDEO_ATTENTION_PATH, "rb") as fh:
+                data = fh.read(4)
+        except OSError:
+            return 0.0
+        if len(data) != 4:
+            return 0.0
+        import struct as _struct
+
+        return max(0.0, min(1.0, _struct.unpack("<f", data)[0]))
+
+    def _budget_scale(self) -> float:
+        """Spec §5.1 activation budget multiplier.
+
+        ``1.0 - 0.7 × video_attention`` — at attention 1.0 GEAL sits
+        at 0.3 intensity; at 0.0 it runs at full.
+        """
+        return max(0.0, 1.0 - 0.7 * self._video_attention)
 
     def _current_palette_id(self) -> str:
         """Snapshot current palette id for attaching to a wavefront at fire time."""
@@ -479,7 +516,9 @@ class GealCairoSource(CairoSource):
             # and let SEEKING / CAUTIOUS redistribute intensity.
             weight_scale = 3.0 * s2_weights[idx]
             gradient = cairo.RadialGradient(cx, cy, 0.0, cx, cy, radius)
-            gradient.add_color_stop_rgba(0.0, r, g, b, halo_alpha * radius_scale * weight_scale)
+            gradient.add_color_stop_rgba(
+                0.0, r, g, b, halo_alpha * radius_scale * weight_scale * self._budget_scale()
+            )
             gradient.add_color_stop_rgba(1.0, r, g, b, 0.0)
             cr.set_source(gradient)
             cr.arc(cx, cy, radius, 0.0, 2.0 * math.pi)
@@ -545,7 +584,9 @@ class GealCairoSource(CairoSource):
             for x, y in poly[1:]:
                 cr.line_to(x, y)
             cr.close_path()
-            cr.set_source_rgba(fill[0], fill[1], fill[2], min(0.55, amp * 0.85))
+            cr.set_source_rgba(
+                fill[0], fill[1], fill[2], min(0.55, amp * 0.85) * self._budget_scale()
+            )
             cr.fill()
         cr.restore()
 
@@ -590,7 +631,7 @@ class GealCairoSource(CairoSource):
             for x, y in poly[1:]:
                 cr.line_to(x, y)
             cr.close_path()
-            cr.set_source_rgba(r, g, b, min(0.7, amp))
+            cr.set_source_rgba(r, g, b, min(0.7, amp) * self._budget_scale())
             cr.fill()
         cr.restore()
 
@@ -641,7 +682,7 @@ class GealCairoSource(CairoSource):
             cx, cy = centre
             gradient = cairo.RadialGradient(cx, cy, max(0.0, radius - 40.0), cx, cy, radius + 40.0)
             gradient.add_color_stop_rgba(0.0, r, g, b, 0.0)
-            gradient.add_color_stop_rgba(0.5, r, g, b, amp * 0.45)
+            gradient.add_color_stop_rgba(0.5, r, g, b, amp * 0.45 * self._budget_scale())
             gradient.add_color_stop_rgba(1.0, r, g, b, 0.0)
             cr.set_source(gradient)
             cr.arc(cx, cy, radius + 40.0, 0.0, 2.0 * math.pi)
