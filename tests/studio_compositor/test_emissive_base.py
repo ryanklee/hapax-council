@@ -26,20 +26,20 @@ from typing import Any
 import pytest
 
 from agents.studio_compositor.homage.emissive_base import (
-    BREATHING_AMPLITUDE,
+    BREATHING_AMPLITUDE,  # noqa: F401 — kept as retired-contract witness
     BREATHING_BASELINE,
-    CENTRE_DOT_RADIUS_PX,
+    CENTRE_DOT_RADIUS_PX,  # noqa: F401
     GRUVBOX_BG0,
-    HALO_RADIUS_PX,
-    OUTER_GLOW_RADIUS_PX,
-    SHIMMER_HZ_DEFAULT,
+    HALO_RADIUS_PX,  # noqa: F401
+    OUTER_GLOW_RADIUS_PX,  # noqa: F401
+    SHIMMER_HZ_DEFAULT,  # noqa: F401
     STANCE_HZ,
     paint_breathing_alpha,
     paint_emissive_bg,
     paint_emissive_glyph,
     paint_emissive_point,
     paint_emissive_stroke,
-    paint_scanlines,
+    paint_scanlines,  # noqa: F401
     stance_hz,
 )
 
@@ -65,13 +65,23 @@ def _update_golden_requested() -> bool:
 
 
 def _make_surface(width: int, height: int) -> tuple[Any, Any]:
-    """Return (surface, cr) ARGB32 with a painted dark ground."""
+    """Return (surface, cr) ARGB32 pre-filled with GRUVBOX_BG0.
+
+    Production code retires the flat-fill bg (paint_emissive_bg is a no-op
+    per 2026-04-23 operator directive "zero container opacity"). Tests
+    still need a known ground to assert "pixel stays at bg" vs "pixel was
+    painted", so they pre-fill with GRUVBOX_BG0 here explicitly rather
+    than through the retired helper.
+    """
     import cairo
 
     surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, width, height)
     cr = cairo.Context(surface)
-    # Ground — mirror paint_emissive_bg so tests are self-contained.
-    paint_emissive_bg(cr, width, height)
+    cr.save()
+    cr.set_source_rgba(*GRUVBOX_BG0)
+    cr.rectangle(0, 0, width, height)
+    cr.fill()
+    cr.restore()
     return surface, cr
 
 
@@ -117,39 +127,48 @@ def _surfaces_match(actual: Any, expected: Any, tolerance: int) -> tuple[bool, s
 
 
 class TestPaintBreathingAlpha:
+    """2026-04-23 operator directive retired alpha modulation on homage wards.
+
+    paint_breathing_alpha is now a back-compat shim returning ``baseline``
+    as a static constant. Modulation (sin sweep across t/hz/phase) is
+    forbidden on broadcast surfaces — pulsing alpha violates the
+    no-flashing-of-any-kind invariant.
+    """
+
     def test_midpoint_returns_baseline(self):
-        # sin(0) == 0 ⇒ baseline exactly.
         assert paint_breathing_alpha(0.0, hz=1.0, phase=0.0) == pytest.approx(BREATHING_BASELINE)
 
-    def test_peak_returns_baseline_plus_amplitude(self):
-        # Quarter cycle at hz=1 is t=0.25 s ⇒ sin = 1.
+    def test_peak_equals_baseline_post_retirement(self):
+        # Pre-retirement: baseline + amplitude at peak. Post-retirement:
+        # static baseline regardless of t/hz/phase.
         v = paint_breathing_alpha(0.25, hz=1.0, phase=0.0)
-        assert v == pytest.approx(BREATHING_BASELINE + BREATHING_AMPLITUDE)
+        assert v == pytest.approx(BREATHING_BASELINE)
 
-    def test_trough_returns_baseline_minus_amplitude(self):
-        # Three-quarter cycle ⇒ sin = -1.
+    def test_trough_equals_baseline_post_retirement(self):
         v = paint_breathing_alpha(0.75, hz=1.0, phase=0.0)
-        assert v == pytest.approx(BREATHING_BASELINE - BREATHING_AMPLITUDE)
+        assert v == pytest.approx(BREATHING_BASELINE)
 
-    def test_phase_offset_is_equivalent_to_time_shift(self):
-        # phase=pi/2 at t=0 should equal phase=0 at t=0.25 s (hz=1).
+    def test_phase_offset_is_noop_post_retirement(self):
+        # Phase parameter is retained for signature-compat but no longer
+        # shifts the output. Both calls return baseline exactly.
         a = paint_breathing_alpha(0.0, hz=1.0, phase=math.pi / 2.0)
         b = paint_breathing_alpha(0.25, hz=1.0, phase=0.0)
         assert a == pytest.approx(b)
+        assert a == pytest.approx(BREATHING_BASELINE)
 
-    def test_clamped_to_zero_one(self):
-        # Force an out-of-range amplitude.
-        v_hi = paint_breathing_alpha(0.25, hz=1.0, baseline=0.9, amplitude=0.5)
-        v_lo = paint_breathing_alpha(0.75, hz=1.0, baseline=0.1, amplitude=0.5)
-        assert 0.0 <= v_hi <= 1.0
-        assert 0.0 <= v_lo <= 1.0
-        assert v_hi == pytest.approx(1.0)
-        assert v_lo == pytest.approx(0.0)
+    def test_baseline_parameter_overrides_default(self):
+        # Callers can still override the baseline constant (e.g., to
+        # dim a ward uniformly). No sin modulation is applied on top.
+        v = paint_breathing_alpha(0.25, hz=1.0, baseline=0.5, amplitude=0.4)
+        assert v == pytest.approx(0.5)
 
-    def test_different_frequencies_produce_different_values(self):
+    def test_frequency_has_no_effect_post_retirement(self):
+        # Pre-retirement: different hz → different values at same t.
+        # Post-retirement: both return baseline (amplitude=0 effectively).
         a = paint_breathing_alpha(0.1, hz=0.5)
         b = paint_breathing_alpha(0.1, hz=2.0)
-        assert a != pytest.approx(b)
+        assert a == pytest.approx(b)
+        assert a == pytest.approx(BREATHING_BASELINE)
 
 
 # ── Stance table ────────────────────────────────────────────────────────
@@ -182,7 +201,14 @@ class TestStanceHz:
 
 @requires_cairo
 class TestPaintEmissiveBg:
-    def test_fills_entire_surface_with_ground_rgba(self):
+    """2026-04-23 operator directive retired the flat-fill container ground.
+
+    paint_emissive_bg is now a no-op; signature preserved for back-compat
+    across ~8 callers. Dot-matrix emissive points render on a fully
+    transparent substrate.
+    """
+
+    def test_no_op_leaves_surface_transparent(self):
         import cairo
 
         w, h = 8, 8
@@ -191,13 +217,10 @@ class TestPaintEmissiveBg:
         paint_emissive_bg(cr, w, h)
         surface.flush()
         r, g, b, a = _pixel_rgba(surface, 4, 4)
-        # GRUVBOX_BG0 = (0x1D, 0x20, 0x21, 0xFF).
-        assert r == 0x1D
-        assert g == 0x20
-        assert b == 0x21
-        assert a == 0xFF
+        assert (r, g, b, a) == (0, 0, 0, 0)
 
-    def test_custom_ground_rgba(self):
+    def test_custom_ground_rgba_parameter_is_no_op(self):
+        # Signature retained but ignored — caller's ground_rgba has no effect.
         import cairo
 
         w, h = 4, 4
@@ -205,9 +228,8 @@ class TestPaintEmissiveBg:
         cr = cairo.Context(surface)
         paint_emissive_bg(cr, w, h, ground_rgba=(1.0, 0.0, 0.0, 1.0))
         surface.flush()
-        r, _g, _b, a = _pixel_rgba(surface, 1, 1)
-        assert r == 0xFF
-        assert a == 0xFF
+        r, g, b, a = _pixel_rgba(surface, 1, 1)
+        assert (r, g, b, a) == (0, 0, 0, 0)
 
     def test_restores_cairo_state(self):
         import cairo

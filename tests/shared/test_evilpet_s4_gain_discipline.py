@@ -37,14 +37,14 @@ EXPECTED_MIXER_GAINS: dict[str, set[float]] = {
     # PipeWire's builtin mixer SUMS inputs (it does not divide-by-N),
     # so the prior +3.5 / +6 dB per-channel software makeup stages
     # would clip the broadcast on sum. Post-revert the conf carries
-    # only unity mixer stages; per-channel makeup is applied upstream.
-    # Phase A2 (PR #1115) also moved the +12 dB handytraxx stage into
-    # Evil Pet's L6 chain (4.0 there).
+    # only unity mixer stages; per-channel makeup is applied upstream
+    # (L6 Evil Pet chain carries the +12 dB via 4.0).
     "hapax-l12-evilpet-capture.conf": {1.0},
-    # Phase 4 sidechain-ducking framework (#1273) — per-role ducker
-    # sinks with two mono mixers each, default unity passthrough. The
-    # hapax-audio-ducker.service sets live Gain 1 at runtime; the conf
-    # only pins the default 1.0 passthrough stage.
+    # Phase 4 sidechain-ducking framework (PR #1273) — two ducker
+    # filter-chains with per-channel mixer stages. Defaults are 1.0
+    # (passthrough); hapax-audio-ducker.service modulates Gain 1 at
+    # runtime to 0.251 (-12 dB) or 0.398 (-8 dB) depending on
+    # operator-VAD / TTS activity. The conf only pins the default.
     "hapax-music-duck.conf": {1.0},
     "hapax-tts-duck.conf": {1.0},
 }

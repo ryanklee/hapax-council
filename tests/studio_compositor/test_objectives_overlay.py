@@ -201,13 +201,20 @@ class TestRender:
         cr = cairo.Context(surface)
 
         overlay.render(cr, 1920, 1080, 0.0, overlay.state())
-        # After drawing the panel, some non-transparent pixels should exist
-        # near the top-left where the panel lives
+        # 2026-04-23 operator directive retired the panel scrim + accent bar;
+        # the overlay now renders text directly on the substrate, so between-
+        # glyph pixels are transparent by design. Scan the panel region
+        # (top-left ~540×200 box) for any non-zero pixel — text ink lands
+        # somewhere in there.
         data = bytes(surface.get_data())
         stride = surface.get_stride()
-        # Sample a row well inside the panel (row y=60, col x=40)
-        idx = 60 * stride + 40 * 4
-        assert any(b != 0 for b in data[idx : idx + 4]), "overlay did not render"
+        found_ink = False
+        for y in range(0, 200, 4):
+            row = data[y * stride : y * stride + 540 * 4]
+            if any(b != 0 for b in row):
+                found_ink = True
+                break
+        assert found_ink, "overlay did not render ink within top-left panel region"
 
 
 class TestInit:

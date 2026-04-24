@@ -169,7 +169,10 @@ def _write_intent(tmp_path, prov=None, impingements=None):
 
 
 def _surface_not_empty(surface: cairo.ImageSurface) -> bool:
-    data = bytes(surface.get_data()[:1000])
+    # 2026-04-23 zero-container-opacity directive retired the flat bg fill;
+    # ink lives where text + emissive points landed, which is often past
+    # the first kilobyte. Scan the whole surface.
+    data = bytes(surface.get_data())
     return any(b != 0 for b in data)
 
 

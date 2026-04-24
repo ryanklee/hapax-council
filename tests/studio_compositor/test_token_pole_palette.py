@@ -142,6 +142,15 @@ class TestPaletteSwap:
         # Yellow → blue channel near zero.
         assert b <= 80, f"centre B {b} - expected near-zero blue for yellow"
 
+    @pytest.mark.skip(
+        reason=(
+            "2026-04-23 operator directive retired the HomagePackage-background "
+            "flat card (zero-container-opacity). Non-spiral pixels are now "
+            "transparent, not package.resolve_colour('background'). Regression "
+            "pin for palette routing is test_bitchx_baseline_is_distinct_from_stub "
+            "below, which compares role-colour renders between packages."
+        )
+    )
     def test_background_uses_package_background(self) -> None:
         """The flat card uses ``palette.background``. Stubbed to dark
         blue with full alpha; sampled corner pixel must be close."""

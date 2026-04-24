@@ -260,7 +260,7 @@ class TestEmergentAbort:
             store,
             chor,
             now_fn=lambda: 60.0,
-            abort_predicates={"bad": lambda p: True},
+            abort_predicates={"bad": lambda programme, state: True},
         )
         decision = mgr.tick()
         assert decision.trigger == BoundaryTrigger.EMERGENT

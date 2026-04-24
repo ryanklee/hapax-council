@@ -76,8 +76,11 @@ class TestResearchMarkerRenders:
         overlay = ResearchMarkerOverlay(now_fn=lambda: datetime(2026, 4, 19, 12, 0, 0, tzinfo=UTC))
         overlay._draw_banner(cr, 1920, 120, "cond-phase-a-homage-active-001")
         surface.flush()
+        # 2026-04-23 zero-container-opacity retirement: banner substrate is
+        # transparent; ink lands on emissive points + text. Scan the whole
+        # surface rather than just the first row for any rendered pixel.
         data = bytes(surface.get_data())
-        assert any(byte != 0 for byte in data[:8192])
+        assert any(byte != 0 for byte in data), "banner rendered no ink"
 
 
 @requires_cairo
