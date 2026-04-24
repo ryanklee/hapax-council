@@ -65,12 +65,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libcairo2-dev libgirepository-2.0-dev gobject-introspection
       - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
       - run: uv sync --extra ci
       - run: uv run pyright
 
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 22
     steps:
       - uses: actions/checkout@v6
       - name: Install system deps (cairo, gobject, gst, pango)
@@ -95,6 +97,8 @@ jobs:
           fc-list | grep -i 'Px437.*IBM VGA 8x16' \
             || (echo "font install failed (fc-list)" >&2; exit 1)
       - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
       - run: uv sync --extra ci
       - name: Verify Pango can resolve Px437 IBM VGA 8x16
         # Pango consults fontconfig but has its own per-process cache; a
@@ -112,17 +116,21 @@ jobs:
           LANGFUSE_HOST: "http://0.0.0.0:1"
         run: |
           # pytest hangs post-session due to open sockets from module-level
-          # LiteLLM/Qdrant clients. Tests complete in ~11-15 min post-HOMAGE-
-          # completion (was ~3 min pre-epic); hang after completion is
-          # infinite. Use timeout to kill after 25 min, pipe to tee to
-          # capture output, then parse the summary line for the real exit
-          # code. 2026-04-19 PR #1109 bump from 15m → 25m after the Pango
-          # probe + gir1.2-pango-1.0 install pushed the pre-test setup
-          # from ~1m44s to ~8m18s; the tests themselves still finish in
-          # ~11m but total job time exceeded the previous 15m KILL.
+          # LiteLLM/Qdrant clients. Root conftest.py has a pytest_sessionfinish
+          # that force-closes cached Qdrant + LiteLLM + httpx clients, so
+          # teardown exits cleanly (~0.1s) instead of hanging to the timeout.
+          #
+          # Parallelism: pytest-xdist -n 2 --dist loadfile runs two worker
+          # processes, distributed per-file so tests within a file stay
+          # serial (preserves file-scoped fixture state + /dev/shm and
+          # /tmp write patterns). GitHub Actions ubuntu-latest has 4 cores;
+          # -n 2 leaves headroom for subprocess / system load.
+          #
+          # Timeout reduced 25m → 15m after socket-hang fix + xdist (real
+          # tests: ~6-8 min parallel; was 11-15 min serial).
           set +e
-          timeout -s KILL 1500 \
-            uv run pytest tests/ -q --tb=line \
+          timeout -s KILL 900 \
+            uv run pytest tests/ -q --tb=line -n 2 --dist loadfile \
               --ignore=tests/hapax_daimonion --ignore=tests/contract \
               --ignore=tests/test_frame_gate.py \
               --ignore=tests/test_hapax_daimonion_pipecat_tts.py \
@@ -193,6 +201,8 @@ jobs:
           fc-list | grep -i 'Px437.*IBM VGA 8x16' \
             || (echo "font install failed (fc-list)" >&2; exit 1)
       - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
       - run: uv sync --extra ci
       - name: Run HOMAGE visual-regression suite (informational; goldens are dev-env pinned)
         id: vr
