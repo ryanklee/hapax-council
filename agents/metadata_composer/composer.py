@@ -357,8 +357,14 @@ def _call_llm_balanced(
             max_tokens=512,
             temperature=0.5,
         )
-        choice = response["choices"][0]["message"]["content"]
-        return choice if isinstance(choice, str) else None
+        # litellm.ModelResponse supports both attribute and index access; pyright
+        # narrows on attribute paths so we use those.
+        choices = getattr(response, "choices", None)
+        if not choices:
+            return None
+        message = getattr(choices[0], "message", None)
+        content = getattr(message, "content", None) if message else None
+        return content if isinstance(content, str) else None
     except Exception as exc:
         log.info("litellm balanced polish failed: %s", exc)
         return None
