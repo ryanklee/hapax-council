@@ -136,6 +136,19 @@ class AestheticLibrary:
     def manifest_entries(self) -> list[ManifestEntry]:
         return list(self._manifest.assets) if self._manifest else []
 
+    def missing_provenance(self) -> list[str]:
+        """Sources that appear in the manifest but have no sibling
+        `provenance.yaml`. AUTH2 governance gate: without attribution
+        metadata, the asset cannot lawfully ship. Returns sorted source
+        names for deterministic CI output."""
+        if self._manifest is None:
+            return []
+        sources = {entry.source for entry in self._manifest.assets}
+        missing = [
+            source for source in sources if not (self.root / source / "provenance.yaml").is_file()
+        ]
+        return sorted(missing)
+
     def web_url(self, asset: Asset) -> str:
         return build_web_url(self.root, asset.path, asset.sha256)
 

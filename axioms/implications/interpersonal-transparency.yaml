@@ -92,3 +92,20 @@ implications:
   canon: purposivist
   mode: sufficiency
   level: component
+
+- id: it-attribution-001
+  tier: T1
+  text: Third-party content the system redistributes to any audience (stream
+    overlays, omg.lol surfaces, CDN-published assets) must carry attribution
+    per the upstream license terms. Attribution obligations include (a) the
+    upstream author(s), (b) an SPDX license identifier, (c) the source URL
+    or canonical reference, and must be rendered on at least one canonical
+    user-facing surface. The aesthetic-library NOTICES.md + credits page are
+    the canonical surfaces for visual assets. Attribution to non-operator
+    authors is the content-creator analogue of consent to non-operator
+    persons — both obligations flow from honoring the autonomy of external
+    parties whose work or identity the system relies on.
+  enforcement: review
+  canon: purposivist
+  mode: sufficiency
+  level: system

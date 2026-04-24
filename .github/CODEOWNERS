@@ -24,3 +24,12 @@ scripts/                     @ryanklee
 
 # CI/CD workflows themselves
 .github/                     @ryanklee
+
+# Aesthetic library attribution + provenance (AUTH2)
+# License compliance + attribution integrity — any change must walk the
+# license text, provenance, manifest, or NOTICES path, which all have
+# downstream obligations (CC-BY-SA-4.0 ShareAlike, BSD-3 attribution).
+assets/aesthetic-library/LICENSE.*              @ryanklee
+assets/aesthetic-library/_NOTICES.md            @ryanklee
+assets/aesthetic-library/_manifest.yaml         @ryanklee
+assets/aesthetic-library/**/provenance.yaml     @ryanklee
