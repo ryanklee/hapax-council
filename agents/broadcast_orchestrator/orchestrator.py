@@ -184,9 +184,8 @@ class Orchestrator:
         self._tracking.active_broadcast_id = chosen.get("id")
         snippet = chosen.get("snippet", {})
         actual_start = snippet.get("actualStartTime") or snippet.get("scheduledStartTime")
-        self._tracking.active_started_ts = (
-            _parse_iso8601(actual_start) if actual_start else self._time()
-        )
+        parsed = _parse_iso8601(actual_start) if actual_start else None
+        self._tracking.active_started_ts = parsed if parsed is not None else self._time()
         if not self._tracking.cached_stream_id:
             self._tracking.cached_stream_id = api.discover_stream_id(self._client)
         self._set_state(State.ACTIVE)
@@ -291,7 +290,7 @@ class Orchestrator:
             incoming_broadcast_url=api.vod_url(incoming_id) if incoming_id else None,
             elapsed_s=int(self._elapsed()),
             seed_title=seed.title if seed else None,
-            seed_description_digest=str(hash(seed.description)) if seed else None,
+            seed_description_digest=_digest(seed.description) if seed else None,
         )
         _record_rotation_duration(duration_s)
         _record_rotation("ok")
@@ -344,10 +343,28 @@ def _transition_to(client: Any, broadcast_id: str, status: str) -> bool:
     return actual == status or actual is None
 
 
-def _parse_iso8601(value: str) -> float:
-    """Parse an ISO-8601 timestamp into epoch seconds."""
+def _parse_iso8601(value: str) -> float | None:
+    """Parse an ISO-8601 timestamp into epoch seconds; ``None`` if malformed.
+
+    YouTube returns clean ISO-8601, but defensive parsing avoids a tick
+    crash if the API ever shifts a format detail.
+    """
     import datetime as dt
 
-    if value.endswith("Z"):
-        value = value[:-1] + "+00:00"
-    return dt.datetime.fromisoformat(value).timestamp()
+    try:
+        if value.endswith("Z"):
+            value = value[:-1] + "+00:00"
+        return dt.datetime.fromisoformat(value).timestamp()
+    except (ValueError, TypeError):
+        log.warning("failed to parse broadcast start timestamp %r", value)
+        return None
+
+
+def _digest(text: str) -> str:
+    """Stable short hex digest of `text`. blake2b is deterministic across
+    Python processes (unlike ``hash()``), so consumers can compare digests
+    across orchestrator restarts.
+    """
+    import hashlib
+
+    return hashlib.blake2b(text.encode("utf-8"), digest_size=8).hexdigest()
