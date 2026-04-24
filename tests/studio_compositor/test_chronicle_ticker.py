@@ -165,18 +165,78 @@ class TestCollectRows:
         assert len(rows) == 1
         assert "recent" in rows[0]
 
-    def test_missing_salience_excluded(self, _env_and_paths):
+    def test_non_allowlist_source_without_salience_excluded(self, _env_and_paths):
+        """A source outside ``_LORE_SOURCES`` and without salience is skipped."""
         now = time.time()
         _write_events(
             _env_and_paths,
             [
-                _ev(ts=now - 5, salience=None, event_type="anon"),
-                _ev(ts=now - 6, salience=0.9, event_type="marked"),
+                _ev(ts=now - 5, source="visual", salience=None, event_type="anon"),
+                _ev(ts=now - 6, source="visual", salience=0.9, event_type="marked"),
             ],
         )
         rows = _collect_rows(now)
+        # Only the salience-tagged event surfaces; the other source is filtered.
         assert len(rows) == 1
         assert "marked" in rows[0]
+
+    def test_allowlist_source_without_salience_included(self, _env_and_paths):
+        """Stimmung / programme / director surface without needing salience."""
+        now = time.time()
+        _write_events(
+            _env_and_paths,
+            [
+                _ev(ts=now - 5, source="stimmung", salience=None, event_type="stance_changed"),
+                _ev(ts=now - 10, source="programme", salience=None, event_type="shift_REPAIR"),
+                _ev(ts=now - 15, source="director", salience=None, event_type="observing"),
+            ],
+        )
+        rows = _collect_rows(now)
+        assert len(rows) == 3
+        assert any("stimmung.stance_changed" in r for r in rows)
+        assert any("programme.shift_REPAIR" in r for r in rows)
+        assert any("director.observing" in r for r in rows)
+
+    def test_visual_firehose_excluded(self, _env_and_paths):
+        """The high-frequency visual.* spam is never surfaced."""
+        now = time.time()
+        _write_events(
+            _env_and_paths,
+            [
+                _ev(ts=now - i, source="visual", salience=None, event_type="params.shifted")
+                for i in range(1, 11)
+            ],
+        )
+        assert _collect_rows(now) == []
+
+    def test_noise_event_types_excluded(self, _env_and_paths):
+        """Known high-frequency routine event types are skipped even from lore sources.
+
+        ``engine.rule.matched`` in ``_NOISE_EVENT_TYPES`` — build a fake
+        chronicle event with ``source="engine"`` and
+        ``event_type="rule.matched"`` and confirm the filter excludes it.
+        ``engine`` is not in ``_LORE_SOURCES`` so this also needs a
+        synthesised ``rule.matched`` coming from an allow-list source,
+        which is what the blocklist is designed to guard against.
+        """
+        now = time.time()
+        _write_events(
+            _env_and_paths,
+            [
+                _ev(ts=now - 5, source="engine", salience=None, event_type="rule.matched"),
+                # Synthesise the guardrail case: allow-list source + blocked event type.
+                _ev(
+                    ts=now - 6,
+                    source="stimmung",
+                    salience=0.9,
+                    event_type="noop",
+                ),
+            ],
+        )
+        rows = _collect_rows(now)
+        # Only the stimmung.noop event surfaces.
+        assert len(rows) == 1
+        assert "stimmung.noop" in rows[0]
 
 
 # ── ChronicleTickerCairoSource ────────────────────────────────────────────
@@ -292,9 +352,16 @@ class TestResilience:
         monkeypatch.setattr(ct, "query", _boom)
         assert _collect_rows(time.time()) == []
 
-    def test_event_with_non_numeric_salience_excluded(self, _env_and_paths):
+    def test_non_numeric_salience_on_non_allowlist_source_excluded(self, _env_and_paths):
+        """Bad salience on a non-lore source is skipped.
+
+        Covers the failure mode where a rogue emitter writes a
+        non-numeric value into ``payload.salience``: the event is
+        neither salience-qualified nor allow-list-qualified, so it
+        stays out of the ward.
+        """
         now = time.time()
-        weird = _ev(ts=now - 5, salience=None)  # will omit the key entirely
+        weird = _ev(ts=now - 5, source="visual", salience=None)
         raw = json.loads(weird.to_json())
         raw["payload"]["salience"] = "high"  # string, not numeric
         _env_and_paths.parent.mkdir(parents=True, exist_ok=True)

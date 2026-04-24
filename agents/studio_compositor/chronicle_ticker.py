@@ -55,10 +55,46 @@ _DEFAULT_NATURAL_W: int = 420
 _DEFAULT_NATURAL_H: int = 140
 
 # Salience threshold — chronicle events carry an optional ``salience``
-# float in their payload. Keep the bar high so the ward surfaces major
-# transitions (programme shift, stance change, high-signal perception)
-# not per-tick chatter.
+# float in their payload. Any event whose payload salience meets this
+# bar is accepted regardless of source. As of 2026-04-24 no in-tree
+# emitter sets salience (12 h scan of /dev/shm/hapax-chronicle/events.jsonl
+# found 0 of 40 K events tagged), so the source allow-list below does
+# the heavy lifting; keeping the threshold as forward-compatible
+# structure means emitters that start tagging salience are picked up
+# automatically without ward-code changes.
 _SALIENCE_THRESHOLD: float = 0.7
+
+# Source allow-list — events from these sources surface without a
+# salience tag. Picked from the same 12 h scan: the firehose is
+# ``visual.*`` (94%) plus ``*.snapshot`` / ``engine.rule.matched``
+# routine events; the remainder — ``stimmung``, ``programme``,
+# ``director``, ``consent``, ``research_marker``, ``axiom``,
+# ``capability``, ``impingement`` — is lore-worthy by source alone.
+# Kept generous for MVP so operator sees what the ward actually
+# surfaces on broadcast; tightening is a follow-up if the ward reads
+# noisy.
+_LORE_SOURCES: frozenset[str] = frozenset(
+    {
+        "stimmung",
+        "programme",
+        "director",
+        "consent",
+        "research_marker",
+        "axiom",
+        "capability",
+        "impingement",
+    }
+)
+
+# Event-type blocklist — specific ``source.event_type`` strings always
+# skipped even if the source is in ``_LORE_SOURCES``. Guards against
+# known high-frequency routine events leaking in if a source on the
+# allow-list later grows one.
+_NOISE_EVENT_TYPES: frozenset[str] = frozenset(
+    {
+        "engine.rule.matched",
+    }
+)
 
 # 10-minute window on the chronicle. Retention of the chronicle itself
 # is 12 h (``RETENTION_S``), but the ward only cares about what's
@@ -92,13 +128,35 @@ def _fmt_row(event: ChronicleEvent) -> str:
     return f"{when}  {event.source}.{event.event_type}"
 
 
+def _is_lore_worthy(event: ChronicleEvent) -> bool:
+    """Return True if ``event`` should surface in the chronicle-ticker ward.
+
+    An event surfaces when EITHER:
+      - its payload carries numeric ``salience`` >= ``_SALIENCE_THRESHOLD``
+        (forward-compatible path — any emitter that starts tagging
+        salience is picked up automatically), OR
+      - its ``source`` is in the lore-worthy allow-list
+        (current-state path — no emitter sets salience today).
+
+    The allow-list path is further gated by the event-type blocklist
+    so specific high-frequency routine events (``engine.rule.matched``)
+    stay out even if ``engine`` joins the allow-list.
+    """
+    if f"{event.source}.{event.event_type}" in _NOISE_EVENT_TYPES:
+        return False
+    salience = event.payload.get("salience")
+    if isinstance(salience, (int, float)) and salience >= _SALIENCE_THRESHOLD:
+        return True
+    return event.source in _LORE_SOURCES
+
+
 def _collect_rows(now: float) -> list[str]:
     """Read the chronicle and return up to ``_MAX_ROWS`` formatted lines."""
     try:
         events = query(
             since=now - _WINDOW_SECONDS,
             until=now,
-            limit=50,
+            limit=200,
             path=CHRONICLE_FILE,
         )
     except Exception:
@@ -107,8 +165,7 @@ def _collect_rows(now: float) -> list[str]:
 
     kept: list[str] = []
     for event in events:  # query returns newest-first
-        salience = event.payload.get("salience")
-        if not isinstance(salience, (int, float)) or salience < _SALIENCE_THRESHOLD:
+        if not _is_lore_worthy(event):
             continue
         kept.append(_fmt_row(event))
         if len(kept) >= _MAX_ROWS:
