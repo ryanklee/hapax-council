@@ -251,7 +251,13 @@ class ConversationPipeline:
                 f"You noticed something worth mentioning: {metric}. "
                 f"Urgency: {'high' if strength > 0.7 else 'moderate' if strength > 0.4 else 'low'}. "
                 f"If this warrants a brief, natural remark to the operator, say it in one sentence. "
-                f"If not worth mentioning, respond with exactly: [silence]"
+                f"If not worth mentioning, respond with exactly: [silence].\n"
+                "HARD GROUNDING FENCES (never confabulate): NEVER mention vinyl, platter, "
+                "turntable, spinning, RPM, album cover, or record playback unless the metric "
+                "above explicitly states vinyl is currently playing. NEVER mention CBIP, "
+                "chess-boxing, interpretive plane, album-ward enhancements, intensity router, "
+                "or Ring-2 gate — CBIP is internal compositor infrastructure and must not "
+                "surface in narration."
             )
 
         # HOMAGE Phase 7: prepend register directive when CPAL signals a
@@ -272,9 +278,18 @@ class ConversationPipeline:
                 {"role": "user", "content": prompt},
             ]
 
+            from shared.config import MODELS  # noqa: PLC0415
+
+            # Spontaneous speech shapes what Hapax communicates about its own
+            # state — a grounding act under the 2026-04-24 operative definition
+            # (T1 common-ground update + T2 validity-claim + T4 Jemeinigkeit pass).
+            # Routes to the local grounded substrate (Command-R via TabbyAPI
+            # ``local-fast``), not to cloud Gemini. Prior cloud routing was a
+            # T1-T7 violation the first-round grounding-act audit identified.
+            grounded_model = MODELS["local-fast"]
             metrics_ctx = (
                 llm_call_span(
-                    model="gemini-2.5-flash-preview-04-17",
+                    model=grounded_model,
                     route="spontaneous-speech",
                 )
                 if llm_call_span is not None
@@ -282,7 +297,7 @@ class ConversationPipeline:
             )
             with metrics_ctx:
                 response = await litellm.acompletion(
-                    model="gemini/gemini-2.5-flash-preview-04-17",  # spontaneous speech is short atmospheric — flash suffices
+                    model=grounded_model,
                     messages=messages,
                     max_tokens=80,
                     temperature=0.7,
