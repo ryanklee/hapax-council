@@ -87,7 +87,7 @@ def test_full_tick_emits_when_all_gates_pass(absent_daemon, monkeypatch, tmp_pat
         return "Vinyl side change recorded on AUX5."
 
     with patch(
-        "agents.hapax_daimonion.autonomous_narrative.compose._call_llm_balanced",
+        "agents.hapax_daimonion.autonomous_narrative.compose._call_llm_grounded",
         side_effect=fake_llm,
     ):
 
@@ -131,7 +131,7 @@ def test_loop_does_not_emit_when_operator_present(monkeypatch, tmp_path) -> None
     daemon.programme_manager.store.active_programme.return_value = None
 
     with patch(
-        "agents.hapax_daimonion.autonomous_narrative.compose._call_llm_balanced",
+        "agents.hapax_daimonion.autonomous_narrative.compose._call_llm_grounded",
         side_effect=lambda **_: "should not appear",
     ):
 
