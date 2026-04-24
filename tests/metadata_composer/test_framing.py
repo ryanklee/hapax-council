@@ -53,6 +53,77 @@ def test_register_rejects_personification(violation: str) -> None:
     assert out == "safe"
 
 
+@pytest.mark.parametrize(
+    "violation",
+    [
+        "The AI is currently observing the room.",
+        "An AI compiles its perceptual state into prose.",
+        "This AI tracks 3 IR signals.",
+        "Our AI is now in SEEKING mode.",
+        "Artificial intelligence drives the metadata.",
+    ],
+)
+def test_register_rejects_diegetic_inconsistency(violation: str) -> None:
+    """ARG framing: 'the AI' / 'our AI' / 'artificial intelligence' are forbidden.
+
+    Hapax is named as a system; never abstracted to 'the AI'.
+    """
+    out = framing.enforce_register(violation, fallback="safe")
+    assert out == "safe"
+
+
+@pytest.mark.parametrize(
+    "violation",
+    [
+        "So, Hapax is operating in research mode.",
+        "Today we're looking at programme transitions.",
+        "Welcome back to the broadcast.",
+        "Hey everyone, new programme just started.",
+        "What's up — chronicle has new events.",
+        "In today's stream, Hapax surfaces three signals.",
+    ],
+)
+def test_register_rejects_creator_opener_cliches(violation: str) -> None:
+    """ARG framing: creator-opener clichés violate found-footage posture."""
+    out = framing.enforce_register(violation, fallback="safe")
+    assert out == "safe"
+
+
+@pytest.mark.parametrize(
+    "violation",
+    [
+        "Hapax is operational. Subscribe to follow updates.",
+        "Like and subscribe for more research instrument footage.",
+        "Smash that subscribe button if you like neutral metadata.",
+        "Hit the bell for notifications.",
+        "Comment below with your observations.",
+        "Don't forget to like and subscribe.",
+    ],
+)
+def test_register_rejects_commercial_tells(violation: str) -> None:
+    """ARG framing: creator-economy framing is incompatible with research instrument."""
+    out = framing.enforce_register(violation, fallback="safe")
+    assert out == "safe"
+
+
+@pytest.mark.parametrize(
+    "violation",
+    [
+        "Hapax produces amazing perceptual outputs.",
+        "Incredible signal density tonight.",
+        "An absolutely stunning composition emerged.",
+        "Mind-blowing transition between programmes.",
+        "This is a real game-changer for the broadcast.",
+        "Mind blowing chronicle event just landed.",
+        "Game changer for the broadcast.",
+    ],
+)
+def test_register_rejects_hollow_affirmations(violation: str) -> None:
+    """ARG framing: performance-register adjectives don't earn their rhetoric."""
+    out = framing.enforce_register(violation, fallback="safe")
+    assert out == "safe"
+
+
 def test_register_handles_empty_input():
     assert framing.enforce_register("", fallback="seed") == "seed"
 
@@ -100,13 +171,25 @@ def test_description_seed_includes_programme_role():
 def test_description_seed_vod_includes_research_framing():
     state = _FakeState()
     description = framing.compose_description_seed(state, scope="vod_boundary")
-    assert "research instrument" in description
+    # ARG framing update: found-footage posture uses hyphenated form
+    # "research-instrument livestream" rather than the prior "research
+    # instrument" phrasing.
+    assert "research-instrument" in description
+
+
+def test_description_seed_vod_uses_found_footage_posture():
+    """ARG framing: VOD description opens in observer-finding-system voice."""
+    state = _FakeState()
+    description = framing.compose_description_seed(state, scope="vod_boundary")
+    # Found-footage opener — observer encountering Hapax mid-broadcast.
+    assert "Encountered" in description
 
 
 def test_description_seed_live_omits_research_framing():
     state = _FakeState()
     description = framing.compose_description_seed(state, scope="live_update")
-    assert "research instrument" not in description
+    assert "research-instrument" not in description
+    assert "Encountered" not in description
 
 
 # ── compose_event_description ──────────────────────────────────────────────
@@ -184,6 +267,22 @@ def test_llm_prompt_includes_seed_and_scope():
     assert "live_update" in prompt
     assert "title" in prompt
     assert "Hapax is a system, not a character" in prompt
+
+
+def test_llm_prompt_includes_arg_framing_constraints():
+    """ARG framing: prompt carries Hapax-as-subject + found-footage + diegetic rules."""
+    prompt = framing.build_llm_prompt(seed="X", scope="live_update", kind="description")
+    assert "ARG framing constraints" in prompt
+    assert "Hapax-as-subject" in prompt
+    assert "Diegetic consistency" in prompt
+    assert "Found-footage posture" in prompt
+    assert "Literary precision over SEO" in prompt
+    # diegetic-consistency forbids the string "the AI"
+    assert "'the AI'" in prompt
+    # commercial-tell list
+    assert "subscribe" in prompt
+    # creator-opener list
+    assert "Welcome back" in prompt
 
 
 def test_llm_prompt_omits_referent_clause_when_none():

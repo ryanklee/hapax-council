@@ -5,6 +5,20 @@ helpers (a) compose deterministic seed strings from snapshot state, (b)
 enforce the scientific-register check on any LLM-polished output, and
 (c) build the LLM prompt that asks the model to rewrite a seed in the
 target voice.
+
+ARG framing extension (per v5 ARG audience research, 2026-04-24):
+    1. **Hapax-as-subject** — Hapax is the protagonist of any prose;
+       constraints (latency, token limits, system prompts) are diegetic
+       features of the system, not technical limitations.
+    2. **Literary precision over SEO** — no keyword-stuffing in prose;
+       tags carry the SEO weight. Prose is for humans.
+    3. **Found-footage posture** — observer-finding-system voice, not
+       in-system voice or hyped-creator voice. Description prose reads
+       as if the audience encountered Hapax mid-broadcast.
+    4. **AI-slop shield** — post-generation regex blocks the generic
+       creator-opener / commercial-tell / hollow-affirmation patterns.
+    5. **Diegetic consistency** — refer to the system as ``Hapax``,
+       never ``the AI`` / ``this AI`` / ``our AI``.
 """
 
 from __future__ import annotations
@@ -13,8 +27,11 @@ import re
 from typing import Any
 
 # Forbidden patterns: emoji, performance-register verbs, character
-# personification. Matched against any prose before egress.
+# personification, AI-slop, diegetic-consistency violations. Matched
+# against any prose before egress; on match the seed wins via
+# ``enforce_register``'s fallback path.
 _FORBIDDEN_PATTERNS: tuple[re.Pattern, ...] = (
+    # Personification — Hapax is a system, not a character.
     re.compile(r"[\U0001F300-\U0001FAFF]"),  # broad emoji block
     re.compile(r"\bfeels?\b", re.IGNORECASE),
     re.compile(r"\bthinks?\b", re.IGNORECASE),
@@ -25,6 +42,32 @@ _FORBIDDEN_PATTERNS: tuple[re.Pattern, ...] = (
     re.compile(r"\binspired\b", re.IGNORECASE),
     re.compile(r"\bcreative\s+journey\b", re.IGNORECASE),
     re.compile(r"!{2,}"),  # multiple exclamation
+    # Diegetic consistency — the system is named Hapax, never "the AI".
+    re.compile(r"\bthe\s+ai\b", re.IGNORECASE),
+    re.compile(r"\b(an|this|our|my)\s+ai\b", re.IGNORECASE),
+    re.compile(r"\bartificial\s+intelligence\b", re.IGNORECASE),
+    # Creator-opener clichés — found-footage voice, not hyped host.
+    re.compile(r"^\s*so[\s,]", re.IGNORECASE),
+    re.compile(r"\btoday\s+we['']?re\b", re.IGNORECASE),
+    re.compile(r"\bwelcome\s+back\b", re.IGNORECASE),
+    re.compile(r"\bhey\s+(everyone|everybody|friends|folks|guys|y[''']?all)\b", re.IGNORECASE),
+    re.compile(r"\bwhat['']?s\s+up\b", re.IGNORECASE),
+    re.compile(r"\bin\s+today['']?s\s+(video|stream|episode|broadcast)\b", re.IGNORECASE),
+    # Commercial tells — no creator-economy framing on a research instrument.
+    re.compile(r"\bsubscribe\b", re.IGNORECASE),
+    re.compile(r"\blike\s+and\s+(follow|subscribe|share)\b", re.IGNORECASE),
+    re.compile(r"\bsmash\s+(that\s+)?(like|subscribe)\b", re.IGNORECASE),
+    re.compile(r"\bhit\s+the\s+bell\b", re.IGNORECASE),
+    re.compile(r"\bcomment\s+(below|down\s+below)\b", re.IGNORECASE),
+    re.compile(r"\bdon['']?t\s+forget\s+to\s+(like|subscribe|share)\b", re.IGNORECASE),
+    # Hollow affirmations — performance register that doesn't earn its rhetoric.
+    re.compile(r"\bamazing\b", re.IGNORECASE),
+    re.compile(r"\bincredible\b", re.IGNORECASE),
+    re.compile(
+        r"\babsolutely\s+(stunning|beautiful|amazing|incredible|phenomenal)\b", re.IGNORECASE
+    ),
+    re.compile(r"\bmind[\s-]?blowing\b", re.IGNORECASE),
+    re.compile(r"\bgame[\s-]?changer\b", re.IGNORECASE),
 )
 
 
@@ -70,10 +113,14 @@ def compose_description_seed(state, *, scope: str) -> str:
 
     if scope == "vod_boundary":
         lines.append("")
+        # Found-footage posture: observer-finding-system voice, not in-system
+        # narration. The audience encounters Hapax mid-broadcast; the prose
+        # describes what is found, not what the system claims about itself.
         lines.append(
-            "Hapax livestream is a research instrument. The broadcast surfaces "
-            "the system's perceptual + compositional state without staging. "
-            "Metadata is autonomously composed from current operational signals."
+            "Encountered: Hapax, a research-instrument livestream. The broadcast "
+            "surfaces the system's perceptual and compositional state without "
+            "staging. Metadata is autonomously composed from operational signals "
+            "available at the moment of capture."
         )
     return "\n".join(lines).strip()
 
@@ -185,7 +232,26 @@ def build_llm_prompt(*, seed: str, scope: str, kind: str, referent: str | None =
         "'thinks', 'wants', 'remembers', 'dreams', 'inspired', 'creative "
         "journey').\n"
         "- No emoji, no exclamation marks except ending sentences once.\n"
-        "- Describe operational state, not commercial performance."
+        "- Describe operational state, not commercial performance.\n"
+        "\n"
+        "ARG framing constraints:\n"
+        "- Hapax-as-subject: Hapax is the protagonist of the prose. "
+        "Constraints (latency, token limits, system prompts, broadcast "
+        "format) are diegetic features of the system, not technical "
+        "limitations to acknowledge or apologize for.\n"
+        "- Diegetic consistency: refer to the system as 'Hapax'. Never "
+        "write 'the AI', 'this AI', 'our AI', or 'artificial intelligence'.\n"
+        "- Found-footage posture: write as if the audience encountered "
+        "Hapax mid-broadcast — observer-finding-system voice, not in-system "
+        "voice and not hyped-creator voice. Avoid creator-opener clichés "
+        "('So,', 'Today we're', 'Welcome back', 'Hey everyone', 'In today's "
+        "video').\n"
+        "- No commercial tells: no 'subscribe', 'like and follow', 'smash "
+        "the like', 'hit the bell', 'comment below', 'don't forget to'.\n"
+        "- No hollow affirmations: no 'amazing', 'incredible', 'absolutely "
+        "stunning', 'mind-blowing', 'game-changer'.\n"
+        "- Literary precision over SEO: prose is for humans; tags carry "
+        "the SEO weight. Do not keyword-stuff."
         f"{referent_clause}\n"
         f"\nScope: {scope}\n"
         f"Output kind: {kind}\n\n"
