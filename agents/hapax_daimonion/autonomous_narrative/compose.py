@@ -22,8 +22,8 @@ from agents.metadata_composer.framing import enforce_register
 log = logging.getLogger(__name__)
 
 
-_BALANCED_MAX_TOKENS = 160  # ~2-3 sentences
-_BALANCED_TEMPERATURE = 0.7
+_GROUNDED_MAX_TOKENS = 160  # ~2-3 sentences
+_GROUNDED_TEMPERATURE = 0.7
 
 
 def compose_narrative(
@@ -34,7 +34,11 @@ def compose_narrative(
     """Compose 1-3 sentences of narrative grounded in ``context``.
 
     ``llm_call`` is a test injection hook; production callers leave
-    None and the function dispatches to ``_call_llm_balanced``.
+    None and the function dispatches to ``_call_llm_grounded`` which
+    routes to the local Command-R tier (TabbyAPI ``local-fast``) per
+    feedback_grounding_exhaustive + feedback_director_grounding — every
+    grounding act is performed by the local grounded model, not by a
+    cloud tier.
 
     Returns None when the chronicle window is empty (no concrete event
     to ground in), the LLM fails, or the output fails the register
@@ -48,7 +52,7 @@ def compose_narrative(
     prompt = _build_prompt(context, seed)
 
     if llm_call is None:
-        llm_call = _call_llm_balanced
+        llm_call = _call_llm_grounded
 
     try:
         polished = llm_call(prompt=prompt, seed=seed)
@@ -184,7 +188,18 @@ def _build_prompt(context: Any, seed: str) -> str:
         "naturally relevant; do NOT recite it, summarise it, or treat "
         "its presence as license to narrate goals or daily notes "
         "directly. The chronicle events remain the primary grounding "
-        "source.\n\n"
+        "source.\n"
+        "- HARD GROUNDING FENCES (never confabulate these):\n"
+        "  * Vinyl / platter / turntable / spinning / RPM / album cover "
+        "/ album art / record playback — NEVER mention unless the state "
+        "below explicitly contains a line stating vinyl is currently "
+        "playing (look for 'spinning vinyl' / 'vinyl_playing: true' / a "
+        "track title with a playback marker). Absent such a line, assume "
+        "no vinyl is playing and do not reference it.\n"
+        "  * CBIP / chess-boxing interpretive plane / album-ward "
+        "enhancements / intensity router / Ring-2 gate — NEVER mention. "
+        "CBIP is internal compositor infrastructure and must not surface "
+        "in narration under any circumstance.\n\n"
         "State (deterministic snapshot):\n"
         "---\n"
         f"{seed}\n"
@@ -194,8 +209,15 @@ def _build_prompt(context: Any, seed: str) -> str:
     )
 
 
-def _call_llm_balanced(*, prompt: str, seed: str) -> str | None:
-    """Production LLM call via the balanced tier (Claude Sonnet)."""
+def _call_llm_grounded(*, prompt: str, seed: str) -> str | None:
+    """Production LLM call via the local grounded tier (Command-R, TabbyAPI).
+
+    Grounding acts are performed by the local Command-R route (``local-fast``),
+    which is already what the director_loop uses (``HAPAX_DIRECTOR_MODEL``
+    default). Autonomous narrative is a grounding act over chronicle events
+    and operator focus context, so it must not route to a cloud tier — see
+    feedback_director_grounding + feedback_grounding_exhaustive.
+    """
     try:
         import litellm  # noqa: PLC0415
     except ImportError:
@@ -205,10 +227,10 @@ def _call_llm_balanced(*, prompt: str, seed: str) -> str | None:
 
     try:
         response = litellm.completion(
-            model=MODELS["balanced"],
+            model=MODELS["local-fast"],
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=_BALANCED_MAX_TOKENS,
-            temperature=_BALANCED_TEMPERATURE,
+            max_tokens=_GROUNDED_MAX_TOKENS,
+            temperature=_GROUNDED_TEMPERATURE,
         )
         choices = getattr(response, "choices", None)
         if not choices:
@@ -222,5 +244,5 @@ def _call_llm_balanced(*, prompt: str, seed: str) -> str | None:
             return None
         return text
     except Exception as exc:
-        log.info("balanced LLM call failed for autonomous narrative: %s", exc)
+        log.info("grounded LLM call failed for autonomous narrative: %s", exc)
         return None
