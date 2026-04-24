@@ -105,6 +105,15 @@ IntentFamily = Literal[
     # gap end-to-end.
     "gem.emphasis",
     "gem.composition",
+    # YouTube viewer-telemetry impingements (ytb-005). Emitted by
+    # ``agents.youtube_telemetry`` from Analytics + Reporting APIs at a
+    # 3-min cadence (under the 500-req/day soft cap). Salience is a
+    # function of deviation from a 24h rolling-median baseline; the
+    # AffordancePipeline cosine-matches the narrative against the
+    # affordances catalog and may or may not recruit. No dispatcher in
+    # ``compositional_consumer`` — telemetry is environmental stimulus,
+    # not a direct action.
+    "youtube.telemetry",
 ]
 
 # Imagination-fragment material taxonomy (matches
