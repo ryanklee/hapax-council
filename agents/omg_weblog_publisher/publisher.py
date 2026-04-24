@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from shared.governance.publication_allowlist import check as allowlist_check
 
 log = logging.getLogger(__name__)
@@ -40,11 +42,19 @@ _SLUG_CLEAN_RE = re.compile(r"[^a-z0-9-]+")
 
 @dataclass(frozen=True)
 class WeblogDraft:
-    """Parsed draft — slug + content ready for post."""
+    """Parsed draft — slug + content + approval state.
+
+    ``approved`` defaults to ``False`` for drafts from
+    ``agents.omg_weblog_composer`` (Phase A). Operator flips the
+    frontmatter ``approved: true`` after review; publish gate enforces
+    this in :meth:`WeblogPublisher.publish` (returns
+    ``"not-approved"`` when False).
+    """
 
     slug: str
     content: str
     title: str
+    approved: bool = False
 
 
 def derive_entry_slug(filename: str) -> str:
@@ -68,20 +78,51 @@ def derive_entry_slug(filename: str) -> str:
     return slug or "untitled"
 
 
-def parse_draft(path: Path) -> WeblogDraft:
-    """Read a draft file and return slug + content + best-effort title.
+def _split_frontmatter(text: str) -> tuple[dict[str, Any], str]:
+    """Return (frontmatter_dict, body_text). Empty dict if no frontmatter.
 
-    Title extraction: first ``# `` heading on a non-empty line, else
-    falls back to the filename-derived slug (cleaned)."""
-    content = path.read_text(encoding="utf-8")
+    Frontmatter is stripped from the body so it never reaches the
+    omg.lol weblog payload.
+    """
+    if not text.startswith("---\n"):
+        return {}, text
+    end = text.find("\n---\n", 4)
+    if end == -1:
+        return {}, text
+    try:
+        frontmatter = yaml.safe_load(text[4:end])
+    except yaml.YAMLError:
+        return {}, text
+    body = text[end + len("\n---\n") :]
+    return (frontmatter if isinstance(frontmatter, dict) else {}), body
+
+
+def parse_draft(path: Path) -> WeblogDraft:
+    """Read a draft file and return slug + content + title + approval flag.
+
+    Reads YAML frontmatter (if present), strips it from the published
+    body, and lifts the ``approved`` flag onto the returned draft.
+    Title extraction: frontmatter ``title`` if present; else first ``# ``
+    heading; else filename-derived slug.
+    """
+    raw = path.read_text(encoding="utf-8")
     slug = derive_entry_slug(path.name)
-    title = slug
-    for line in content.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("# "):
-            title = stripped.lstrip("# ").strip() or slug
-            break
-    return WeblogDraft(slug=slug, content=content, title=title)
+    frontmatter, body = _split_frontmatter(raw)
+
+    title = frontmatter.get("title", "") or slug
+    if isinstance(title, str):
+        title = title.strip() or slug
+
+    if not frontmatter.get("title"):
+        for line in body.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("# "):
+                title = stripped.lstrip("# ").strip() or slug
+                break
+
+    approved = bool(frontmatter.get("approved", False))
+
+    return WeblogDraft(slug=slug, content=body.lstrip("\n"), title=title, approved=approved)
 
 
 class WeblogPublisher:
@@ -99,8 +140,18 @@ class WeblogPublisher:
     def publish(self, draft: WeblogDraft, *, dry_run: bool = False) -> str:
         """Publish the draft. Returns one of:
         ``"published"`` | ``"dry-run"`` | ``"client-disabled"`` |
-        ``"allowlist-denied"`` | ``"failed"``.
+        ``"allowlist-denied"`` | ``"not-approved"`` | ``"failed"``.
+
+        Approval gate: drafts with ``approved=False`` short-circuit at
+        the start. The Phase A composer (``agents/omg_weblog_composer``)
+        emits ``approved: false`` by default; operator flips the
+        frontmatter flag to ``true`` after review.
         """
+        if not draft.approved:
+            log.info("omg-weblog: draft %s not approved; skipping publish", draft.slug)
+            _record("not-approved")
+            return "not-approved"
+
         allow = allowlist_check(
             SURFACE,
             "weblog.entry",
