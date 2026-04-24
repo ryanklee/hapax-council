@@ -67,7 +67,12 @@ class TestPublisher:
         return c
 
     def _draft(self) -> WeblogDraft:
-        return WeblogDraft(slug="2026-04-24-test", content="# Test\n\nBody.", title="Test")
+        return WeblogDraft(
+            slug="2026-04-24-test",
+            content="# Test\n\nBody.",
+            title="Test",
+            approved=True,
+        )
 
     def test_publish_calls_set_entry(self) -> None:
         client = self._client()
@@ -122,3 +127,85 @@ class TestPublisher:
         publisher.publish(self._draft())
         call = client.set_entry.call_args
         assert call.args[0] == "legomena"
+
+
+class TestApprovalGate:
+    """Phase A → Phase B handoff: drafts marked ``approved: false`` must
+    not publish, even if all other gates pass."""
+
+    def _client(self) -> MagicMock:
+        c = MagicMock()
+        c.enabled = True
+        c.set_entry.return_value = {"request": {"statusCode": 200}, "response": {"slug": "stub"}}
+        return c
+
+    def test_unapproved_short_circuits_before_allowlist(self) -> None:
+        unapproved = WeblogDraft(
+            slug="2026-04-24-test",
+            content="body",
+            title="Test",
+            approved=False,
+        )
+        client = self._client()
+        publisher = WeblogPublisher(client=client)
+        outcome = publisher.publish(unapproved)
+        assert outcome == "not-approved"
+        client.set_entry.assert_not_called()
+
+    def test_approved_passes_gate(self) -> None:
+        approved = WeblogDraft(
+            slug="2026-04-24-test",
+            content="body",
+            title="Test",
+            approved=True,
+        )
+        client = self._client()
+        publisher = WeblogPublisher(client=client)
+        outcome = publisher.publish(approved)
+        assert outcome == "published"
+
+    def test_default_is_unapproved(self) -> None:
+        """Drafts constructed without explicit ``approved`` carry False."""
+        d = WeblogDraft(slug="x", content="y", title="z")
+        assert d.approved is False
+
+
+class TestParseDraftApproval:
+    """parse_draft lifts the frontmatter ``approved`` flag; strips frontmatter
+    from the published body."""
+
+    def test_reads_approved_true(self, tmp_path: Path) -> None:
+        f = tmp_path / "2026-04-24-essay.md"
+        f.write_text(
+            '---\ntitle: "Essay"\napproved: true\n---\n\n# Essay heading\n\nBody content.\n'
+        )
+        draft = parse_draft(f)
+        assert draft.approved is True
+        # Frontmatter stripped from content.
+        assert draft.content.lstrip().startswith("#")
+        assert "approved: true" not in draft.content
+
+    def test_reads_approved_false(self, tmp_path: Path) -> None:
+        f = tmp_path / "2026-04-24-essay.md"
+        f.write_text('---\ntitle: "Essay"\napproved: false\n---\n\n# Essay\n\nBody.\n')
+        draft = parse_draft(f)
+        assert draft.approved is False
+
+    def test_missing_approved_defaults_false(self, tmp_path: Path) -> None:
+        f = tmp_path / "essay.md"
+        f.write_text('---\ntitle: "Essay"\n---\nBody.\n')
+        draft = parse_draft(f)
+        assert draft.approved is False
+
+    def test_no_frontmatter_defaults_false(self, tmp_path: Path) -> None:
+        f = tmp_path / "essay.md"
+        f.write_text("# Essay\n\nBody.\n")
+        draft = parse_draft(f)
+        assert draft.approved is False
+
+    def test_frontmatter_title_used(self, tmp_path: Path) -> None:
+        f = tmp_path / "essay.md"
+        f.write_text('---\ntitle: "Frontmatter Title"\napproved: true\n---\n# Body Heading\n')
+        draft = parse_draft(f)
+        # Frontmatter title takes precedence over body heading.
+        assert draft.title == "Frontmatter Title"
