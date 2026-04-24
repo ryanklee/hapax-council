@@ -111,7 +111,20 @@ def _redact(line: str) -> str:
 
 
 def _capture_pane(target: str) -> list[str]:
-    """tmux capture-pane -p -t <target>. Returns stripped lines. Empty on error."""
+    """Capture pane content. Two source kinds:
+
+    - tmux ``session:window.pane`` → ``tmux capture-pane -p -t <target>``
+    - ``file:<path>`` → tail of file (last 40 lines)
+
+    Returns stripped, redacted lines. Empty on error.
+    """
+    if target.startswith("file:"):
+        path = Path(os.path.expanduser(target[5:]))
+        try:
+            lines = path.read_text().splitlines()
+            return [_redact(line) for line in lines[-40:]]
+        except OSError:
+            return []
     try:
         result = subprocess.run(
             ["tmux", "capture-pane", "-p", "-t", target],
@@ -299,20 +312,23 @@ class DURFCairoSource(HomageTransitionalSource):
         cr.fill()
         cr.restore()
 
-        # Non-equal tiled geometry
-        roles = list(self._panes.keys())
-        if not roles:
-            return
-        foreground_role = roles[0]  # Phase 2 rotates by activity-score
-        background_roles = roles[1:4]
-
-        self._render_pane(cr, 780, 40, 1100, 620, foreground_role, alpha * 0.94, is_foreground=True)
-        y_offset = 40
-        for bg_role in background_roles:
-            self._render_pane(
-                cr, 20, y_offset, 760, 340, bg_role, alpha * 0.68, is_foreground=False
-            )
-            y_offset += 360
+        # 2x2 equal quadrant geometry per operator screenshot 2026-04-24T23:50Z:
+        #   delta TL (0,0) | beta  TR (960,0)
+        #   alpha BL (0,540) | epsilon BR (960,540)
+        # Each pane 960×540. Layout-by-position, fixed mapping.
+        layout_positions = {
+            "delta": (0, 0),
+            "beta": (960, 0),
+            "alpha": (0, 540),
+            "epsilon": (960, 540),
+        }
+        pane_w, pane_h = 960, 540
+        for role in self._panes:
+            pos = layout_positions.get(role)
+            if pos is None:
+                continue
+            x, y = pos
+            self._render_pane(cr, x, y, pane_w, pane_h, role, alpha * 0.94, is_foreground=True)
 
     def _render_pane(
         self,
