@@ -23,6 +23,7 @@ from pathlib import Path
 from agents.studio_compositor import metrics
 from agents.studio_compositor.audio_control import SlotAudioControl
 from agents.studio_compositor.tts_client import DaimonionTtsClient
+from shared.claim_prompt import SURFACE_FLOORS, render_envelope
 from shared.config import LITELLM_KEY
 from shared.director_intent import CompositionalImpingement, DirectorIntent
 from shared.persona_prompt_composer import compose_persona_prompt, role_scope_line
@@ -1960,6 +1961,13 @@ class DirectorLoop:
         referent = OperatorReferentPicker.pick_for_tick(self._referent_tick)
 
         parts: list[str] = ["<reactor_context>"]
+
+        # Bayesian Phase 4 — prompt envelope. Phase 6 wires the actual
+        # claim source; Phase 4 ships the call site with an empty list
+        # so the uncertainty contract reaches the LLM today and the
+        # claims block becomes populated as a non-breaking change.
+        parts.append(render_envelope([], floor=SURFACE_FLOORS["director"]))
+        parts.append("")
 
         # ─── Identity + situation ─────────────────────────────────
         # LRR Phase 7 §4.4: identity is the description-of-being document,

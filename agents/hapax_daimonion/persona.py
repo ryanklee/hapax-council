@@ -19,6 +19,7 @@ import os
 from typing import TYPE_CHECKING
 
 from logos.voice import greeting, operator_name
+from shared.claim_prompt import SURFACE_FLOORS, render_envelope
 from shared.persona_prompt_composer import compose_persona_prompt
 
 if TYPE_CHECKING:
@@ -284,11 +285,14 @@ def system_prompt(
         tool_recruitment_active: Tools are injected via schemas; don't
             duplicate them in the prompt.
     """
+    envelope = render_envelope([], floor=SURFACE_FLOORS["voice_persona"])
     if _legacy_mode():
-        return _legacy_system_prompt(
+        body = _legacy_system_prompt(
             guest_mode, policy_block, experiment_mode, tool_recruitment_active
         )
-    return _compose_prompt(guest_mode, experiment_mode, tool_recruitment_active, policy_block)
+    else:
+        body = _compose_prompt(guest_mode, experiment_mode, tool_recruitment_active, policy_block)
+    return f"{envelope}\n\n{body}"
 
 
 def voice_greeting() -> str:
