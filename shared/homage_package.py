@@ -330,6 +330,18 @@ class HomagePackage(BaseModel):
         description="Anti-patterns this package hard-refuses (spec §5.5).",
     )
 
+    asset_library_ref: str | None = Field(
+        default=None,
+        description=(
+            "If this package was constructed from ``shared.aesthetic_library`` "
+            "rather than inline Python constants, the library reference name "
+            "(e.g. ``'bitchx-authentic-v1'``). None for inline-defined "
+            "packages. Provenance hook: any package with this set must be "
+            "rebuildable via ``HomagePackage.from_aesthetic_library()`` "
+            "from the same library state."
+        ),
+    )
+
     # Video-container + mirror-emissive Phase 2 (2026-04-23).
     # ``palette_response`` binds this package to the palette family
     # (``shared.palette_family.ScrimPalette`` / ``PaletteChain``) for
@@ -404,6 +416,38 @@ class HomagePackage(BaseModel):
     def artefacts_by_form(self, form: SignatureArtefactForm) -> tuple[SignatureArtefact, ...]:
         """Return the subset of signature artefacts for a given form."""
         return tuple(a for a in self.signature_artefacts if a.form == form)
+
+    @classmethod
+    def from_aesthetic_library(cls, source: str, version: str) -> HomagePackage:
+        """Build a HomagePackage backed by ``shared.aesthetic_library`` assets.
+
+        Source-specific construction logic lives in the per-source homage
+        modules (e.g. ``agents/studio_compositor/homage/bitchx_authentic.py``)
+        because the mapping from raw assets (palette YAML, font path,
+        splash text) to ``HomagePackage`` fields is package-aesthetic-
+        specific. This classmethod dispatches via deferred import to
+        avoid layering cycles at module load (``shared`` does not
+        statically depend on ``agents`` — the import is resolved only
+        when the classmethod is called).
+
+        Returned packages carry ``asset_library_ref`` set to
+        ``"<source>-authentic-<version>"`` so consumers + audits can
+        trace provenance back to ``shared.aesthetic_library`` and the
+        per-asset SHA-256 + license metadata in the manifest.
+
+        Spec: ytb-AUTH-HOMAGE.
+        """
+        if source == "bitchx":
+            from agents.studio_compositor.homage.bitchx_authentic import (  # noqa: PLC0415
+                build_bitchx_authentic_package,
+            )
+
+            return build_bitchx_authentic_package(version)
+        if source == "enlightenment":
+            raise NotImplementedError(
+                "Enlightenment HOMAGE package — pending ytb-AUTH-ENLIGHTENMENT"
+            )
+        raise ValueError(f"Unknown aesthetic_library source: {source!r}")
 
 
 __all__ = [
