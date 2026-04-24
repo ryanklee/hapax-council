@@ -47,6 +47,7 @@ from shared.geal_curves import Envelope, SecondOrderLP
 from shared.geal_grounding_classifier import Apex as ClassifierApex
 from shared.geal_grounding_classifier import classify_source
 from shared.geal_palette_bridge import GealPaletteBridge
+from shared.tts_envelope_reader import TtsEnvelopeReader
 
 log = logging.getLogger(__name__)
 
@@ -171,6 +172,14 @@ class GealCairoSource(CairoSource):
     _last_depth_target: int = 3
     _last_stance: str = "NOMINAL"
     _stance_transition_env: Envelope | None = None
+    # Phase 2 — TTS envelope reader. Optional: if the file is missing
+    # (daimonion not running), GEAL falls back to the Phase 1 constant
+    # voice gate so the render path stays alive.
+    _tts_envelope_reader: TtsEnvelopeReader = field(default_factory=TtsEnvelopeReader)
+    # Smoothed voice envelope (RMS) for V2 halo drive.
+    _voice_rms_lp: SecondOrderLP = field(
+        default_factory=lambda: SecondOrderLP(omega=12.0, zeta=0.7)
+    )
 
     # -- Public control surface --------------------------------------------
 
@@ -340,10 +349,23 @@ class GealCairoSource(CairoSource):
         halo_omega = roles.lp_omega_override or _V2_OMEGA_DEFAULT
         halo_base_radius_px = min(geom.inscribed_rects[0][2], geom.inscribed_rects[0][3]) * 0.35
 
-        # Voice-activity gate (Phase 1: constant 0.6 when tts_active is
-        # reported in state, else 0.2 ambient presence).
-        voice_active = bool(state.get("tts_active", False))
-        signal = 0.75 if voice_active else 0.20
+        # Voice-activity gate. Phase 2 reads the TTS envelope ring (100 Hz
+        # RMS/centroid/ZCR/F0/voicing) and drives the halo scale off
+        # smoothed RMS. When the publisher isn't running (daimonion down
+        # / tests without SHM) the reader returns empty and we fall back
+        # to the Phase 1 constant gate based on state["tts_active"].
+        samples = self._tts_envelope_reader.latest(8)
+        if samples:
+            # Average RMS across the most-recent window of samples. RMS
+            # is already in [0, 1]-ish range for int16 PCM / 32768; we
+            # rescale to 0.2..0.9 so the V2 halo pulse maps cleanly onto
+            # the conversing register's baseline/peak span.
+            rms_avg = sum(s[0] for s in samples) / float(len(samples))
+            target = 0.20 + min(0.70, max(0.0, rms_avg * 8.0))
+        else:
+            voice_active = bool(state.get("tts_active", False))
+            target = 0.75 if voice_active else 0.20
+        signal = self._voice_rms_lp.tick(t, target)
 
         cr.save()
         self._clip_to_non_video(cr, geom)

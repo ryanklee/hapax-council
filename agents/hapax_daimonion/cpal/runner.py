@@ -144,6 +144,26 @@ class CpalRunner:
         self._pipeline = conversation_pipeline  # T3 delegate
         self._daemon = daemon
 
+        # GEAL Phase 2 Task 2.1 — TTS envelope publisher. Taps the TTS
+        # PCM stream so GEAL can drive V1 Chladni ignition / V2 halo
+        # radius / future voicing-gated primitives with ≤ 50 ms lag.
+        # Defaults ON; disable with ``HAPAX_TTS_ENVELOPE_PUBLISH=0``.
+        self._tts_envelope_publisher: object | None = None
+        try:
+            from agents.hapax_daimonion.tts_envelope_publisher import (
+                TtsEnvelopePublisher,
+                envelope_publish_enabled,
+            )
+
+            if envelope_publish_enabled() and audio_output is not None:
+                self._tts_envelope_publisher = TtsEnvelopePublisher()
+                self._wrap_audio_output_for_envelope_tap()
+                log.info("TTS envelope publisher enabled (SHM ring at 100 Hz)")
+        except Exception:
+            # Never block CpalRunner construction on the publisher —
+            # voice must always come up; envelope is a visual side-channel.
+            log.debug("TTS envelope publisher init failed", exc_info=True)
+
         # D-18 (proof-of-wiring): music policy evaluator. Default is
         # NullMusicDetector → always returns detected=False → no behavior
         # change. Operator swaps in a real detector when one exists; the
@@ -560,6 +580,31 @@ class CpalRunner:
             self._processing_utterance = False
             self._production.mark_t3_end()
             self._formulation.reset()
+
+    def _wrap_audio_output_for_envelope_tap(self) -> None:
+        """Decorate ``self._audio_output.write`` to tee PCM to the envelope publisher.
+
+        The underlying ``write`` method is preserved; the wrapper calls
+        it first (so latency-sensitive playback wins) and then feeds
+        PCM to the publisher. Analysis failures never propagate to the
+        playback path — they're logged at debug level and dropped so
+        a broken mmap never impacts voice.
+        """
+        if self._audio_output is None or self._tts_envelope_publisher is None:
+            return
+        original_write = self._audio_output.write
+        publisher = self._tts_envelope_publisher
+
+        def _wrapped_write(pcm, *args, **kwargs):
+            try:
+                original_write(pcm, *args, **kwargs)
+            finally:
+                try:
+                    publisher.feed(pcm)  # type: ignore[attr-defined]
+                except Exception:
+                    log.debug("TTS envelope feed failed", exc_info=True)
+
+        self._audio_output.write = _wrapped_write  # type: ignore[assignment]
 
     def _execute_backchannel(self, bc) -> None:
         """Execute a backchannel decision from the formulation stream."""
