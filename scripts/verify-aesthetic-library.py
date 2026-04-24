@@ -20,6 +20,7 @@ Usage:
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -58,7 +59,8 @@ def _run_integrity() -> int:
         sys.stderr.write(f"ERROR: shared.aesthetic_library not importable: {e}\n")
         return 2
 
-    lib_root = ASSETS_ROOT_DEFAULT / "aesthetic-library"
+    env_override = os.environ.get("HAPAX_AESTHETIC_LIBRARY_ROOT")
+    lib_root = Path(env_override) if env_override else ASSETS_ROOT_DEFAULT / "aesthetic-library"
     if not lib_root.is_dir():
         sys.stderr.write(f"ERROR: aesthetic-library root missing: {lib_root}\n")
         return 2
@@ -74,10 +76,40 @@ def _run_integrity() -> int:
     return 0
 
 
+def _run_provenance_gate() -> int:
+    """AUTH2 governance gate: every manifest source must carry a
+    provenance.yaml. Without attribution metadata, an asset cannot
+    lawfully ship to the public CDN."""
+    try:
+        from shared.aesthetic_library.loader import (
+            ASSETS_ROOT_DEFAULT,
+            AestheticLibrary,
+        )
+    except ImportError as e:
+        sys.stderr.write(f"ERROR: shared.aesthetic_library not importable: {e}\n")
+        return 2
+
+    env_override = os.environ.get("HAPAX_AESTHETIC_LIBRARY_ROOT")
+    lib_root = Path(env_override) if env_override else ASSETS_ROOT_DEFAULT / "aesthetic-library"
+    lib = AestheticLibrary(root=lib_root)
+    missing = lib.missing_provenance()
+    if missing:
+        sys.stderr.write(
+            "PROVENANCE GAP: manifest sources without provenance.yaml "
+            "(cannot ship without attribution):\n"
+        )
+        for source in missing:
+            sys.stderr.write(f"  - {source}/provenance.yaml\n")
+        return 1
+    print(f"OK: provenance present for {len(lib.all_licenses())} license group(s)")
+    return 0
+
+
 def main() -> int:
     checks = [
         ("generator --check", _run_generator_check),
         ("integrity", _run_integrity),
+        ("provenance gate", _run_provenance_gate),
     ]
     for name, fn in checks:
         rc = fn()
