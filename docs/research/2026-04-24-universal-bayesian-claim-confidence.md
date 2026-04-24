@@ -265,7 +265,64 @@ Current music signal: vinyl spinning at 33 RPM, BPM 92, side A track 3.
 
 ---
 
-## 9. Implementation phases
+## 9. Livestream surface as perceptual field (lever)
+
+Operator insight (2026-04-24T22:55Z): *"the livestream visual surface is as much of a world-state perceptual field as the studio itself."* The broadcast frame is conventionally treated as a one-way artifact — the system's expressive surface, downstream of all inference. Inverting this: the composed 1920×1080 frame is itself a structured perceptual field, and running independent classifiers against it extracts modalities non-redundant with their upstream sources (compositing introduces visible state not present anywhere else). The broadcast frame thus becomes the N-th input to its own `ClaimEngine` stack, closing a perception-action loop that lets the system _self-evidence_ in Friston's sense (2018, _Active Inference: A Process Theory_).
+
+### Classifier taxonomy
+
+**Audio-stream classifiers (livestream L-12 tap).**
+- **YAMNet** (MobileNetV1, 521 AudioSet classes, CPU-only, ~30 ms/sec, 0 VRAM). Direct music-vs-speech-vs-silence axis. XTRACK (SMC 2024) gives exact thresholds: music-onset when `P(music) > 0.2` for 20s; offset when `< 0.1` for 4s — tractable temporal smoothing that `MusicPlayingEngine` can adopt verbatim.
+- **OpenL3 / MusicNN** — 6144-d Look-Listen-Learn embeddings for genre-conditional signals. DOL3 distillation cuts compute ~5× while preserving accuracy.
+
+**Visual scene / activity classifiers (composed frame).**
+- **SigLIP2** (Zhai et al., arXiv 2502.14786). ~1.5 GB VRAM at fp16, sub-30 ms at 384px. Zero-shot prompts ("studio with operator at decks", "empty studio with shader running"); detects emergent properties of _composited_ state (sierpinski density, reverie palette mood, vitruvian token-pole activity) that raw cameras do not contain.
+- **VideoMAE / X-CLIP** (temporal classification). 0.5–1.5 GB VRAM, needs 16–32 frame buffer — 5–10 s polling, not 30 fps.
+- **MediaPipe BlazePose** — 7–13 ms/frame; operator-region pose density feeds `OperatorActiveEngine`.
+
+**OCR on the composed frame** (introspection, not attack surface).
+- **PaddleOCR PP-OCRv3** — ~12.7 fps on RTX 3080 at 1080p, ~1.2 GB VRAM. Polled every 2.5s gives the system its own readback of every text ward visible to viewers.
+
+**Self-evidencing consistency checks** (cheap symbolic).
+- Compare OCR text, compositor scene-graph state, and posterior beliefs. Produces a distinct LR class — consistency rather than observation.
+
+### MF DOOM retired by YAMNet
+
+Adding a YAMNet tap on the broadcast L-12 mix produces `P(music_audible | 1s window)` with calibrated sensitivity ~0.95 and specificity ~0.92 against an AudioSet-derived held-out set. `LR+ ≈ 12, LR- ≈ 0.05`. One second of silence drives the posterior toward 0.04 within three windows. The director's narration gate (`P(music) > 0.7`) suppresses every "now playing" template until audible music is independently confirmed. Crucially, this signal is _purely a function of the broadcast bus_, with zero coupling to turntable rotation, YouTube playback, or `album-state.json` — the three sources whose internal disagreement caused the original failure.
+
+### Self-evidencing / introspective grounding
+
+If the album ward currently renders `Track: Hoe Cakes — MF DOOM` and PaddleOCR on the broadcast frame returns the string `"Hoe Cakes"` with confidence 0.98, the system has direct evidence of _what its viewers will read_. A **consistency LR** fires when `MusicPlayingEngine.posterior < 0.3` yet text like "playing" or a current-track string remains visible — high-evidence signal of ward staleness, triggering ward-clear or catalog-mode-swap as a structural response. This is Friston's self-evidencing at the broadcast layer: the system actively confirms that the percept (its own output) matches its model (its posteriors), and acts when discrepancy persists. _"Hapax reads what Hapax emits"_ promotes posterior-surface inconsistency to a first-class observable rather than a downstream bug. This is autopoietic self-distinction operationalized (Thompson, _Mind in Life_).
+
+### Decoration-strip duality
+
+Classifiers run in both places, producing distinct signals:
+- **Broadcast frame (with wards)** → self-evidencing, ward-consistency, viewer-grounding (what observers actually see)
+- **LLM-bound frame (post-strip, per §8)** → clean grounding inputs, no OCR-dominance attack surface
+
+The two signal streams are registered separately in the `LRDerivation` registry and _never conflated_. They answer different Bayesian questions: "what do the viewers see?" versus "what does the model ground on?"
+
+### Resource / cadence budget
+
+GPU: PaddleOCR (~1.2 GB) + SigLIP2 (~1.5 GB at fp16) can co-reside on the 5060 Ti's idle capacity behind a small inference broker; TabbyAPI's 3090 residency untouched. CPU-only audio classifiers (YAMNet, OpenL3) add zero VRAM pressure. Cadence: YAMNet continuous (1 Hz window stride), SigLIP2 at 2 Hz, PaddleOCR at 0.4 Hz, VideoMAE at 0.1 Hz. 30 fps inference is neither necessary nor affordable and would be a category error — the _claim_ updates slower than the frame rate.
+
+### Integration with the ClaimEngine architecture
+
+Every classifier output wraps as a `Signal[T]` with declared `(sensitivity, specificity, calibration_window)` triple, registered in `LRDerivation` with provenance, and converts to a per-tick LR contribution to the relevant `ClaimEngine[T]`. The livestream surface becomes an Nth modality alongside cameras, IR Pi fleet, contact mic, MIDI, BT/watch — distinguished only by being _composed_ rather than raw. Calibration studies use the broadcast itself as the substrate, which gives ecological validity: confidence intervals derived from livestream-frame ground truth directly bound the claims observers see. This closes the loop: the system's emissions are simultaneously its outputs _and_ its sensors.
+
+### Implementation phase addition
+
+Insert between §10 Phase 2 and Phase 3:
+
+**Phase 2b — livestream classifiers (~600 LOC + model weights)**
+- `agents/livestream_perception/yamnet_tap.py` — YAMNet on L-12 tap, continuous, `P(music)`, `P(speech)`, `P(silence)` posteriors written to `perception-state.json`. Contributes `LR ≈ 12` to `MusicPlayingEngine`.
+- `agents/livestream_perception/siglip_scene.py` — SigLIP2 at 2 Hz on broadcast frame; prompt-ensemble for studio-state classification. Contributes to `OperatorPresentEngine`, `OperatorActiveEngine`.
+- `agents/livestream_perception/broadcast_ocr.py` — PaddleOCR at 0.4 Hz on broadcast frame; emits detected text + locations. Feeds self-evidencing consistency LRs.
+- `shared/claim_consistency.py` — consistency-LR primitives. `P(ward_visible_asserts_X | posterior(X) < 0.3)` → ward-staleness claim → automatic ward-clear action.
+
+---
+
+## 10. Implementation phases
 
 Migration is staged to avoid a big-bang rewrite and to let PresenceEngine stand as the working reference throughout.
 
@@ -312,7 +369,7 @@ Migration is staged to avoid a big-bang rewrite and to let PresenceEngine stand 
 
 ---
 
-## 10. Validation metrics
+## 11. Validation metrics
 
 - **Emissions without posterior**: currently ~59 of 60 claims. Target: 0.
 - **Grounding-act emissions with empty provenance** (FINDING-X baseline: 54%). Target: <5%.
@@ -323,7 +380,7 @@ Migration is staged to avoid a big-bang rewrite and to let PresenceEngine stand 
 
 ---
 
-## 11. Open questions
+## 12. Open questions
 
 1. **Continuous vs binary claims.** Mood/stimmung dimensions are currently scalars; fitting them into the `ClaimEngine[bool]` frame flattens them. `ClaimEngine[float]` with posterior over the continuous value (Gaussian with mean + variance?) may be the right generalization — at what cost to the existing log-odds simplicity?
 2. **LR elicitation for new claim types.** First iteration falls back to SHELF elicitation per signal. When is it cost-effective to invest in a calibration-study experiment? Proposed heuristic: any claim that ever reaches a narration surface crosses the calibration-study threshold.
@@ -334,7 +391,7 @@ Migration is staged to avoid a big-bang rewrite and to let PresenceEngine stand 
 
 ---
 
-## 12. Summary
+## 13. Summary
 
 Hapax asserts ~60 perceptual claims; only one is calibrated. The MF DOOM hallucination is a single pathology in a systemic absence of posteriors. Universal Bayesian claim-confidence is not an addition to Hapax's theoretical lineage; it is the formalization the lineage was already silently calling for. Six lineages (predictive processing, autopoiesis, Dreyfus, Clark-Brennan, Sperber-Wilson, Austin) converge on it. T1-T8 grounding-acts already presuppose it. Universal Bayesian inference is Hapax's next structural move, not its first.
 
@@ -344,9 +401,10 @@ The architecture reduces to four components with workable scope:
 3. **Temporal dynamics** — HMM + asymmetric-dwell + BOCD per claim (§6)
 4. **Composition calculus** — Bayesian network with noisy-OR/AND, junction tree (§7)
 
-And one propagation layer:
+And two propagation/leverage layers:
 
 5. **Prompt envelope + refusal gate + frame-for-llm split** (§8)
+6. **Livestream-as-perceptual-field** (§9) — YAMNet / SigLIP2 / PaddleOCR classifiers on the broadcast bus contribute independent LRs into `ClaimEngine`s. MF DOOM is retired _again_ here by pure-audio evidence: YAMNet silence detection drops `MusicPlayingEngine.posterior` to 0.04 within three windows regardless of any upstream source state. Self-evidencing consistency LRs (OCR on own output) promote posterior-surface inconsistency to a first-class observable — autopoietic self-distinction operationalized.
 
 Seven phases, staged so PresenceEngine stays authoritative throughout. The MF DOOM bug is retired structurally in Phase 2 (VinylSpinningEngine posterior replacing `_vinyl_is_playing` Boolean) and Phase 3 (frame-for-llm split removing the OCR-dominance attack surface). Every subsequent hallucination is either caught at the refusal gate or — increasingly — never forms, because the upstream posterior encoded the uncertainty that the fence had been retroactively trying to name.
 
