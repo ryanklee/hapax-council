@@ -50,6 +50,9 @@ dependencies = [
     "pytesseract>=0.3.13",
     "scikit-image>=0.26.0",
     "soundcloud-lib>=0.6.1",
+    "google-cloud-monitoring>=2.30.0",
+    "atproto>=0.0.65",
+    "mastodon-py>=2.2.1",
 ]
 
 [project.optional-dependencies]
