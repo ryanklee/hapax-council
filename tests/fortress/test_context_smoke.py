@@ -366,12 +366,17 @@ class TestBatchE:
 
 
 class TestBatchF:
-    def test_f1_model_ids_format(self):
-        """Model IDs follow provider/model format."""
+    def test_f1_model_daily_routes_to_grounded(self):
+        """Daily deliberation routes to local grounded model per grounding-act policy.
+
+        Fortress deliberation is Hapax's governance act over its own world
+        (T1 common-ground update, T4 Jemeinigkeit) — grounding-act per
+        docs/research/2026-04-24-grounding-acts-operative-definition.md.
+        Seasonal deliberation remains cloud-routed pending separate migration.
+        """
         config = DeliberationConfig()
-        assert "/" in config.model_daily
+        assert config.model_daily == "local-fast"
         assert "/" in config.model_seasonal
-        assert "claude" in config.model_daily.lower()
 
     def test_f2_severity_thresholds_match_chunks(self):
         """Config thresholds match chunk compressor logic."""
