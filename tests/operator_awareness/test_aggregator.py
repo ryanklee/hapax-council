@@ -327,3 +327,77 @@ class TestAggregatorCollect:
         )
         state = agg.collect()
         assert state.timestamp == fixed
+
+
+class TestSourceFailureMetric:
+    """Spec acceptance criterion: per-source failure counter increments
+    on the degraded-graceful path so operators can see source-level
+    health from Grafana without scraping the daemon log."""
+
+    def _label_value(self, source: str) -> float:
+        from agents.operator_awareness.aggregator import (
+            aggregator_source_failures_total,
+        )
+
+        return aggregator_source_failures_total.labels(source=source)._value.get()
+
+    def test_health_corrupt_snapshot_increments(self, tmp_path):
+        from agents.operator_awareness.aggregator import collect_health_block
+
+        before = self._label_value("health_system")
+        path = tmp_path / "infra.json"
+        path.write_text("not json {")  # malformed → graceful degraded
+        collect_health_block(path)
+        assert self._label_value("health_system") == before + 1
+
+    def test_health_non_dict_root_increments(self, tmp_path):
+        """Schema mismatch (list root vs dict root) is also a failure."""
+        import json as _j
+
+        from agents.operator_awareness.aggregator import collect_health_block
+
+        before = self._label_value("health_system")
+        path = tmp_path / "infra.json"
+        path.write_text(_j.dumps([{"x": 1}]))
+        collect_health_block(path)
+        assert self._label_value("health_system") == before + 1
+
+    def test_health_missing_file_does_not_increment(self, tmp_path):
+        """Pre-rollout (file absent) is not a failure — daemon hasn't started."""
+        from agents.operator_awareness.aggregator import collect_health_block
+
+        before = self._label_value("health_system")
+        collect_health_block(tmp_path / "missing.json")
+        assert self._label_value("health_system") == before
+
+    def test_refusals_oserror_increments(self, monkeypatch, tmp_path):
+        from agents.operator_awareness.aggregator import collect_refusals_recent
+
+        before = self._label_value("refusals_recent")
+        path = tmp_path / "log.jsonl"
+        path.write_text("ok\n")  # exists, so we proceed past the absent check
+
+        from pathlib import Path as _Path
+
+        def _boom(*_a, **_kw):
+            raise OSError("disk full")
+
+        monkeypatch.setattr(_Path, "open", _boom)
+        collect_refusals_recent(path)
+        assert self._label_value("refusals_recent") == before + 1
+
+    def test_stream_oserror_increments(self, monkeypatch, tmp_path):
+        from agents.operator_awareness.aggregator import collect_stream_block
+
+        before = self._label_value("stream")
+        path = tmp_path / "events.jsonl"
+        path.write_text("ok\n")
+
+        from pathlib import Path as _Path
+
+        def _boom(*_a, **_kw):
+            raise OSError("disk full")
+
+        monkeypatch.setattr(_Path, "open", _boom)
+        collect_stream_block(path)
+        assert self._label_value("stream") == before + 1
