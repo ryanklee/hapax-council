@@ -7,10 +7,16 @@ parallel.
 
 Per-artifact-per-surface result lands at
 ``~/hapax-state/publish/log/{slug}.{surface}.json`` with one of:
-``ok | denied | auth_error | rate_limited | deferred | error |
-surface_unwired``. Once ALL surfaces reach a non-``deferred`` terminal
-state, the artifact moves to ``~/hapax-state/publish/published/{slug}.json``.
-``deferred`` results re-queue the next tick.
+``ok | denied | auth_error | no_credentials | rate_limited | deferred |
+error | surface_unwired``. Once ALL surfaces reach a non-``deferred``
+non-``rate_limited`` terminal state, the artifact moves to
+``~/hapax-state/publish/published/{slug}.json``. ``deferred`` and
+``rate_limited`` results re-queue the next tick.
+
+``no_credentials`` is terminal: missing env vars are configuration
+state the publisher can't recover from itself; re-dispatching every
+tick would loop forever. Operator sets the env var and re-drops a
+fresh artifact if they want it published.
 
 ## Surface registry
 
@@ -60,8 +66,20 @@ DEFAULT_TICK_S = 30.0
 METRICS_PORT_DEFAULT = 9510
 
 # Terminal states (artifact moves to published/ once all surfaces reach one).
-_TERMINAL_RESULTS = frozenset({"ok", "denied", "auth_error", "error", "dropped", "surface_unwired"})
-"""``deferred`` and ``rate_limited`` are NOT terminal — those re-queue."""
+_TERMINAL_RESULTS = frozenset(
+    {
+        "ok",
+        "denied",
+        "auth_error",
+        "no_credentials",
+        "error",
+        "dropped",
+        "surface_unwired",
+    }
+)
+"""``deferred`` and ``rate_limited`` are NOT terminal — those re-queue.
+``no_credentials`` IS terminal — missing env vars are configuration state
+the publisher can't recover from; re-dispatching loops forever."""
 
 
 # ── Surface registry ────────────────────────────────────────────────

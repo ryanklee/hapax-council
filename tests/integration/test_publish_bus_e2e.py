@@ -1,0 +1,251 @@
+"""End-to-end integration test for the Phase 1 publish bus.
+
+Validates that an approved ``PreprintArtifact`` dropped at
+``$HAPAX_STATE/publish/inbox/{slug}.json`` fans out via the orchestrator's
+SURFACE_REGISTRY, hits each per-surface ``publish_artifact()``
+entry-point, and lands per-surface results at
+``$HAPAX_STATE/publish/log/{slug}.{surface}.json``.
+
+Distinct from ``tests/publish_orchestrator/test_orchestrator.py`` which
+unit-tests the orchestrator with mock surface registries. This test
+exercises the **real** SURFACE_REGISTRY (post-#1416 wiring) against
+mocked transport layers — verifying the import paths, entry-point
+signatures, and result-string vocabulary all line up.
+
+If a publisher's ``publish_artifact`` is renamed, removed, or its
+return-string vocabulary drifts, this test fails loudly.
+"""
+
+from __future__ import annotations
+
+import json
+from unittest import mock
+
+from prometheus_client import CollectorRegistry
+
+from agents.publish_orchestrator.orchestrator import SURFACE_REGISTRY, Orchestrator
+from shared.preprint_artifact import PreprintArtifact
+
+
+def _drop_approved_artifact(
+    state_root,
+    *,
+    slug: str,
+    surfaces: list[str],
+) -> None:
+    artifact = PreprintArtifact(
+        slug=slug,
+        title=f"E2E test artifact {slug}",
+        abstract="Validates publish-bus end-to-end fan-out.",
+        body_md="Body content; not consumed by Phase 1 text-only surfaces.",
+        attribution_block=(
+            "Hapax + Claude Code (substrate). Oudepode (operator, "
+            "unsettled contribution as feature)."
+        ),
+        surfaces_targeted=surfaces,
+    )
+    artifact.mark_approved(by_referent="Oudepode")
+    inbox_path = artifact.inbox_path(state_root=state_root)
+    inbox_path.parent.mkdir(parents=True, exist_ok=True)
+    inbox_path.write_text(artifact.model_dump_json(indent=2))
+
+
+def _read_log(state_root, slug: str, surface: str) -> dict:
+    log_path = state_root / "publish" / "log" / f"{slug}.{surface}.json"
+    assert log_path.exists(), f"missing log at {log_path}"
+    return json.loads(log_path.read_text())
+
+
+# ── Phase 1 publishers: real SURFACE_REGISTRY, mocked transports ────
+
+
+class TestPhase1PublishBusEndToEnd:
+    """Validates inbox → fanout → log lifecycle for all 4 cross-surface
+    publishers + osf-preprint, against the live SURFACE_REGISTRY."""
+
+    def test_all_phase_1_surfaces_registered(self):
+        """Pin: SURFACE_REGISTRY has every Phase 1+2 entry."""
+        for surface in (
+            "bluesky-post",
+            "mastodon-post",
+            "arena-post",
+            "discord-webhook",
+            "osf-preprint",
+        ):
+            assert surface in SURFACE_REGISTRY, f"{surface} missing from SURFACE_REGISTRY"
+
+    def test_e2e_no_credentials_path(self, tmp_path, monkeypatch):
+        """Without env credentials, every Phase 1 surface returns
+        ``no_credentials``. Artifact still moves to ``published/`` because
+        ``no_credentials`` is a terminal result.
+        """
+        for env_var in (
+            "HAPAX_BLUESKY_HANDLE",
+            "HAPAX_BLUESKY_APP_PASSWORD",
+            "HAPAX_MASTODON_INSTANCE_URL",
+            "HAPAX_MASTODON_ACCESS_TOKEN",
+            "HAPAX_ARENA_TOKEN",
+            "HAPAX_ARENA_CHANNEL_SLUG",
+            "HAPAX_DISCORD_WEBHOOK_URL",
+        ):
+            monkeypatch.delenv(env_var, raising=False)
+
+        _drop_approved_artifact(
+            tmp_path,
+            slug="e2e-no-creds",
+            surfaces=[
+                "bluesky-post",
+                "mastodon-post",
+                "arena-post",
+                "discord-webhook",
+            ],
+        )
+        orch = Orchestrator(state_root=tmp_path, registry=CollectorRegistry())
+
+        handled = orch.run_once()
+        assert handled == 1
+
+        # All 4 surfaces report no_credentials (terminal).
+        for surface in ("bluesky-post", "mastodon-post", "arena-post", "discord-webhook"):
+            record = _read_log(tmp_path, "e2e-no-creds", surface)
+            assert record["result"] == "no_credentials", f"surface={surface} got {record['result']}"
+
+        # Artifact moves to published/ because no_credentials is terminal.
+        assert (tmp_path / "publish" / "published" / "e2e-no-creds.json").exists()
+        assert not (tmp_path / "publish" / "inbox" / "e2e-no-creds.json").exists()
+
+    def test_e2e_bsky_ok_with_mocked_transport(self, tmp_path, monkeypatch):
+        """With creds + mocked atproto, bsky returns ``ok`` and
+        artifact moves to published/."""
+        monkeypatch.setenv("HAPAX_BLUESKY_HANDLE", "test.bsky.social")
+        monkeypatch.setenv("HAPAX_BLUESKY_APP_PASSWORD", "abcd-efgh-ijkl-mnop")
+
+        _drop_approved_artifact(tmp_path, slug="e2e-bsky-ok", surfaces=["bluesky-post"])
+
+        orch = Orchestrator(state_root=tmp_path, registry=CollectorRegistry())
+
+        from agents.cross_surface import bluesky_post
+
+        client_mock = mock.Mock()
+        client_mock.send_post = mock.Mock(return_value=None)
+        with mock.patch.object(bluesky_post, "_default_client_factory", return_value=client_mock):
+            handled = orch.run_once()
+
+        assert handled == 1
+        assert _read_log(tmp_path, "e2e-bsky-ok", "bluesky-post")["result"] == "ok"
+        assert (tmp_path / "publish" / "published" / "e2e-bsky-ok.json").exists()
+
+        # The publisher was called with the artifact's attribution_block as the
+        # body, since attribution_block takes precedence over title/abstract.
+        called_text = client_mock.send_post.call_args.kwargs["text"]
+        assert "Hapax + Claude Code" in called_text
+        assert "unsettled contribution as feature" in called_text
+
+    def test_e2e_discord_ok_with_mocked_transport(self, tmp_path, monkeypatch):
+        """With webhook URL set + mocked POST, discord returns ``ok``."""
+        monkeypatch.setenv(
+            "HAPAX_DISCORD_WEBHOOK_URL",
+            "https://discord.test/webhook/abc",
+        )
+
+        _drop_approved_artifact(tmp_path, slug="e2e-discord-ok", surfaces=["discord-webhook"])
+
+        orch = Orchestrator(state_root=tmp_path, registry=CollectorRegistry())
+
+        from agents.cross_surface import discord_webhook
+
+        with mock.patch.object(discord_webhook, "_default_post", return_value=True) as post_mock:
+            handled = orch.run_once()
+
+        assert handled == 1
+        assert _read_log(tmp_path, "e2e-discord-ok", "discord-webhook")["result"] == "ok"
+
+        # Embed payload shape preserved through the orchestrator path.
+        payload = post_mock.call_args.args[1]
+        assert "embeds" in payload
+        assert payload["embeds"][0]["title"].startswith("E2E test artifact")
+        assert payload["embeds"][0]["color"] == discord_webhook.DISCORD_EMBED_COLOR
+
+    def test_e2e_arena_ok_with_mocked_transport(self, tmp_path, monkeypatch):
+        """With token + slug set + mocked Arena adapter, arena returns ``ok``."""
+        monkeypatch.setenv("HAPAX_ARENA_TOKEN", "test-token")
+        monkeypatch.setenv("HAPAX_ARENA_CHANNEL_SLUG", "hapax-test-channel")
+
+        _drop_approved_artifact(tmp_path, slug="e2e-arena-ok", surfaces=["arena-post"])
+
+        orch = Orchestrator(state_root=tmp_path, registry=CollectorRegistry())
+
+        from agents.cross_surface import arena_post
+
+        adapter_mock = mock.Mock()
+        adapter_mock.add_block = mock.Mock(return_value=None)
+        with mock.patch.object(arena_post, "_default_client_factory", return_value=adapter_mock):
+            handled = orch.run_once()
+
+        assert handled == 1
+        assert _read_log(tmp_path, "e2e-arena-ok", "arena-post")["result"] == "ok"
+
+        # Arena receives the channel slug as positional + content as kwarg.
+        adapter_mock.add_block.assert_called_once()
+        args, kwargs = adapter_mock.add_block.call_args
+        assert args == ("hapax-test-channel",)
+        assert "Hapax + Claude Code" in kwargs["content"]
+
+    def test_e2e_multi_surface_partial_credentials(self, tmp_path, monkeypatch):
+        """One surface has creds (bsky), three don't. Each reports
+        independently; artifact moves to published/ because all 4 reach
+        a terminal state (ok / no_credentials)."""
+        monkeypatch.setenv("HAPAX_BLUESKY_HANDLE", "test.bsky.social")
+        monkeypatch.setenv("HAPAX_BLUESKY_APP_PASSWORD", "abcd-efgh-ijkl-mnop")
+        for env_var in (
+            "HAPAX_MASTODON_INSTANCE_URL",
+            "HAPAX_MASTODON_ACCESS_TOKEN",
+            "HAPAX_ARENA_TOKEN",
+            "HAPAX_ARENA_CHANNEL_SLUG",
+            "HAPAX_DISCORD_WEBHOOK_URL",
+        ):
+            monkeypatch.delenv(env_var, raising=False)
+
+        _drop_approved_artifact(
+            tmp_path,
+            slug="e2e-partial",
+            surfaces=[
+                "bluesky-post",
+                "mastodon-post",
+                "arena-post",
+                "discord-webhook",
+            ],
+        )
+
+        orch = Orchestrator(state_root=tmp_path, registry=CollectorRegistry())
+
+        from agents.cross_surface import bluesky_post
+
+        client_mock = mock.Mock()
+        client_mock.send_post = mock.Mock(return_value=None)
+        with mock.patch.object(bluesky_post, "_default_client_factory", return_value=client_mock):
+            handled = orch.run_once()
+
+        assert handled == 1
+        assert _read_log(tmp_path, "e2e-partial", "bluesky-post")["result"] == "ok"
+        assert _read_log(tmp_path, "e2e-partial", "mastodon-post")["result"] == "no_credentials"
+        assert _read_log(tmp_path, "e2e-partial", "arena-post")["result"] == "no_credentials"
+        assert _read_log(tmp_path, "e2e-partial", "discord-webhook")["result"] == "no_credentials"
+        assert (tmp_path / "publish" / "published" / "e2e-partial.json").exists()
+
+    def test_e2e_unwired_surface_logs_surface_unwired(self, tmp_path):
+        """A typo in surfaces_targeted (not in SURFACE_REGISTRY) lands as
+        ``surface_unwired`` in the log, doesn't crash the run."""
+        _drop_approved_artifact(
+            tmp_path,
+            slug="e2e-typo",
+            surfaces=["bluesky-pst"],  # typo: should be bluesky-post
+        )
+
+        orch = Orchestrator(state_root=tmp_path, registry=CollectorRegistry())
+        handled = orch.run_once()
+
+        assert handled == 1
+        record = _read_log(tmp_path, "e2e-typo", "bluesky-pst")
+        assert record["result"] == "surface_unwired"
+        assert (tmp_path / "publish" / "published" / "e2e-typo.json").exists()
