@@ -238,6 +238,50 @@ mood_arousal_high_signals:
     estimation_reference: "Pixel Watch heart rate vs. operator's session baseline; matches PresenceEngine watch_hr 120s BLE staleness cutoff"
     calibration_window_s: 120.0
 
+# Phase 6b-ii.A — mood_valence_negative (alpha, this PR)
+# Mood-claim posterior over operator's negative-valence state. Wired-in
+# signal sources land in Phase 6b-ii.B follow-up. Signal LR weights
+# calibrated 2026-04-25 against Pixel Watch biometric channels (HRV,
+# skin temp, sleep) and voice-pipeline pitch tracking. Quantize-into-
+# tiers approach (option 1 from beta dispatch 02:18Z); continuous-
+# posterior ClaimEngine[float] deferred if option 1 proves insufficient.
+mood_valence_negative_signals:
+  hrv_below_baseline:
+    claim_name: mood_valence_negative
+    source_category: physical_model
+    p_true_given_h1: 0.78
+    p_true_given_h0: 0.20
+    positive_only: false  # bidirectional — high HRV evidences positive parasympathetic state
+    estimation_reference: "Pixel Watch HRV vs operator's recent baseline; matches PresenceEngine watch_hr 120s BLE staleness cutoff"
+    calibration_window_s: 120.0
+
+  skin_temp_drop:
+    claim_name: mood_valence_negative
+    source_category: physical_model
+    p_true_given_h1: 0.70
+    p_true_given_h0: 0.15
+    positive_only: true  # absence ambiguous (neutral OR positive valence)
+    estimation_reference: "Pixel Watch skin temperature drop from baseline; vasoconstriction stress correlate"
+    calibration_window_s: null
+
+  sleep_debt_high:
+    claim_name: mood_valence_negative
+    source_category: physical_model
+    p_true_given_h1: 0.65
+    p_true_given_h0: 0.18
+    positive_only: true  # adequate sleep doesn't actively evidence positive valence
+    estimation_reference: "Accumulated sleep deficit > tolerance threshold (e.g. <6.5h average over recent nights)"
+    calibration_window_s: null
+
+  voice_pitch_elevated:
+    claim_name: mood_valence_negative
+    source_category: expert_elicitation_shelf
+    p_true_given_h1: 0.72
+    p_true_given_h0: 0.20
+    positive_only: true  # baseline pitch ambiguous (calm OR engaged-but-not-stressed)
+    estimation_reference: "Voice pitch elevated above operator's session baseline; stress correlate in speech"
+    calibration_window_s: null
+
 # Phase 2 + Phase 2b will add claim-specific signal blocks below once
 # the corresponding ClaimEngines ship:
 #   vinyl_spinning_signals: {turntable_rpm, ir_hand_turntable, audio_signal_present, ...}
