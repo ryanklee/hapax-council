@@ -1,10 +1,14 @@
-"""Unit tests for MusicProgrammer (content-source-registry Phase 4b).
+"""Unit tests for MusicProgrammer.
 
 Pins the rotation policy:
-  * weighted source distribution + oudepode 1-in-8 hard cap
-  * max-2 artist streak / max-3 source streak
-  * 4-hour track cooldown
-  * external-override observation (Hapax cue / chat play counts toward budget)
+  * Default rotation = oudepode-only (operator directive 2026-04-24);
+    multi-source mix (epidemic / streambeats / etc.) opt-in via explicit
+    weights config.
+  * Interstitial cadence (1 music : N interstitials, default N=2);
+    interstitial plays are excluded from rotation history.
+  * 4-hour track cooldown.
+  * Source-streak / artist-streak gates retained for opt-in multi-source mode.
+  * External-override observation (Hapax cue / chat play counts toward budget).
 """
 
 from __future__ import annotations
@@ -17,13 +21,17 @@ from typing import TYPE_CHECKING
 
 from agents.local_music_player.programmer import (
     DEFAULT_HISTORY_PATH,
+    DEFAULT_INTERSTITIALS_PER_MUSIC,
     DEFAULT_WEIGHTS,
+    INTERSTITIAL_SOURCES,
     MAX_ARTIST_STREAK,
     MAX_SOURCE_STREAK,
     OUDEPODE_WINDOW_SIZE,
     SOURCE_EPIDEMIC,
+    SOURCE_FOUND_SOUND,
     SOURCE_OUDEPODE,
     SOURCE_STREAMBEATS,
+    SOURCE_WWII_NEWSCLIP,
     MusicProgrammer,
     PlayEvent,
     ProgrammerConfig,
@@ -35,6 +43,15 @@ from agents.local_music_player.programmer import (
     weighted_choice,
 )
 from shared.music_repo import LocalMusicRepo, LocalMusicTrack
+
+# A multi-source weights dict for testing the legacy mix path. The
+# default is oudepode-only (operator directive 2026-04-24); tests that
+# exercise multi-source weighting must opt in explicitly.
+MULTI_SOURCE_WEIGHTS: dict[str, float] = {
+    SOURCE_EPIDEMIC: 50.0,
+    SOURCE_STREAMBEATS: 15.0,
+    SOURCE_OUDEPODE: 10.0,
+}
 
 if TYPE_CHECKING:
     import pytest
@@ -128,23 +145,27 @@ def test_track_recently_played_within_cooldown() -> None:
 def test_adjust_weights_zeros_oudepode_within_cap() -> None:
     # 2 trailing epidemic events stays under max_source_streak=3.
     win = deque([_evt(SOURCE_OUDEPODE)] + [_evt(SOURCE_EPIDEMIC) for _ in range(2)])
-    out = adjust_weights(DEFAULT_WEIGHTS, window=win, oudepode_window_size=8, max_source_streak=3)
+    out = adjust_weights(
+        MULTI_SOURCE_WEIGHTS, window=win, oudepode_window_size=8, max_source_streak=3
+    )
     assert out[SOURCE_OUDEPODE] == 0.0
-    assert out[SOURCE_EPIDEMIC] == DEFAULT_WEIGHTS[SOURCE_EPIDEMIC]
+    assert out[SOURCE_EPIDEMIC] == MULTI_SOURCE_WEIGHTS[SOURCE_EPIDEMIC]
 
 
 def test_adjust_weights_zeros_streaked_source() -> None:
     win = deque([_evt(SOURCE_STREAMBEATS) for _ in range(3)])
-    out = adjust_weights(DEFAULT_WEIGHTS, window=win, oudepode_window_size=8, max_source_streak=3)
+    out = adjust_weights(
+        MULTI_SOURCE_WEIGHTS, window=win, oudepode_window_size=8, max_source_streak=3
+    )
     assert out[SOURCE_STREAMBEATS] == 0.0
-    assert out[SOURCE_EPIDEMIC] == DEFAULT_WEIGHTS[SOURCE_EPIDEMIC]
+    assert out[SOURCE_EPIDEMIC] == MULTI_SOURCE_WEIGHTS[SOURCE_EPIDEMIC]
 
 
 def test_adjust_weights_does_not_mutate_base() -> None:
-    base = dict(DEFAULT_WEIGHTS)
+    base = dict(MULTI_SOURCE_WEIGHTS)
     win = deque([_evt(SOURCE_OUDEPODE) for _ in range(3)])
     adjust_weights(base, window=win, oudepode_window_size=8, max_source_streak=3)
-    assert base == DEFAULT_WEIGHTS  # untouched
+    assert base == MULTI_SOURCE_WEIGHTS  # untouched
 
 
 # ── weighted_choice ─────────────────────────────────────────────────────────
@@ -431,3 +452,193 @@ def test_select_next_falls_back_when_all_sources_drained(tmp_path: Path) -> None
     assert chosen.source == SOURCE_EPIDEMIC
     # Cooldown should still keep us off the recently-played 3
     assert chosen.path == "/epi/d.flac"
+
+
+# ── 2026-04-24 directive: oudepode-only defaults ────────────────────────────
+
+
+def test_default_weights_are_oudepode_only() -> None:
+    """Operator directive 2026-04-24: rotation cycles only through oudepode."""
+    assert DEFAULT_WEIGHTS == {SOURCE_OUDEPODE: 100.0}
+
+
+def test_default_oudepode_window_is_collapsed() -> None:
+    """Single-source rotation → cap window collapses to 1 (no cap)."""
+    assert OUDEPODE_WINDOW_SIZE == 1
+
+
+def test_default_artist_streak_effectively_disabled() -> None:
+    """Single-artist (Oudepode) catalog → artist-streak gate disabled."""
+    assert MAX_ARTIST_STREAK >= 1000
+
+
+def test_interstitial_sources_constants() -> None:
+    """Both admitted interstitial source labels exist and are pooled."""
+    assert SOURCE_FOUND_SOUND == "found-sound"
+    assert SOURCE_WWII_NEWSCLIP == "wwii-newsclip"
+    assert SOURCE_FOUND_SOUND in INTERSTITIAL_SOURCES
+    assert SOURCE_WWII_NEWSCLIP in INTERSTITIAL_SOURCES
+
+
+def test_default_interstitial_cadence_is_one_to_two() -> None:
+    """Operator directive 2026-04-24: '1 me per 2 inter'."""
+    assert DEFAULT_INTERSTITIALS_PER_MUSIC == 2
+    assert ProgrammerConfig().interstitials_per_music == 2
+
+
+# ── interstitial alternation ────────────────────────────────────────────────
+
+
+def _interstitial_track(path: str, *, source: str = SOURCE_FOUND_SOUND) -> LocalMusicTrack:
+    return LocalMusicTrack(
+        path=path,
+        title=Path(path).stem,
+        artist="(found sound)",
+        duration_s=8.0,
+        broadcast_safe=True,
+        source=source,
+    )
+
+
+def test_select_next_inserts_n_interstitials_per_music_track(tmp_path: Path) -> None:
+    """Default cadence: music → inter → inter → music → inter → inter → ..."""
+    cfg = _make_config(tmp_path)
+    cfg.interstitials_per_music = 2
+    cfg.interstitial_enabled = True
+    music_repo = LocalMusicRepo(path=tmp_path / "tracks.jsonl")
+    _populate(
+        music_repo,
+        [_track(f"/oude/{i}.flac", source=SOURCE_OUDEPODE, artist="op") for i in range(8)],
+    )
+    inter_repo = LocalMusicRepo(path=tmp_path / "interstitials.jsonl")
+    _populate(
+        inter_repo,
+        [
+            _interstitial_track("/sfx/a.wav", source=SOURCE_FOUND_SOUND),
+            _interstitial_track("/news/b.wav", source=SOURCE_WWII_NEWSCLIP),
+        ],
+    )
+    prog = MusicProgrammer(
+        cfg,
+        local_repo=music_repo,
+        interstitial_repo=inter_repo,
+        rng=random.Random(0),
+    )
+    sequence: list[str] = []
+    ts = 0.0
+    for _ in range(9):  # 3 music + 6 interstitials = 9
+        chosen = prog.select_next(now=ts)
+        assert chosen is not None
+        kind = "i" if chosen.source in INTERSTITIAL_SOURCES else "m"
+        sequence.append(kind)
+        prog.record_play(
+            path=chosen.path,
+            title=chosen.title,
+            artist=chosen.artist,
+            source=chosen.source,
+            when=ts,
+        )
+        ts += 60.0
+    # Pattern: m, i, i, m, i, i, m, i, i
+    assert sequence == ["m", "i", "i", "m", "i", "i", "m", "i", "i"]
+
+
+def test_select_next_falls_through_to_music_when_interstitial_pool_empty(tmp_path: Path) -> None:
+    """Empty interstitial pool must not silence rotation."""
+    cfg = _make_config(tmp_path)
+    cfg.interstitials_per_music = 2
+    music_repo = LocalMusicRepo(path=tmp_path / "tracks.jsonl")
+    _populate(
+        music_repo,
+        [
+            _track("/oude/a.flac", source=SOURCE_OUDEPODE, artist="op"),
+            _track("/oude/b.flac", source=SOURCE_OUDEPODE, artist="op"),
+        ],
+    )
+    empty_inter = LocalMusicRepo(path=tmp_path / "interstitials.jsonl")
+    # populate() is the test helper that opens the repo writer; calling
+    # populate with no rows leaves the repo empty — confirm.
+    assert empty_inter.all_tracks() == []
+    prog = MusicProgrammer(
+        cfg,
+        local_repo=music_repo,
+        interstitial_repo=empty_inter,
+        rng=random.Random(0),
+    )
+    # First call: music. Second call: interstitial would be due, but
+    # pool is empty → falls through to music. Should never be None.
+    a = prog.select_next(now=0.0)
+    assert a is not None
+    assert a.source == SOURCE_OUDEPODE
+    b = prog.select_next(now=10.0)
+    assert b is not None
+    assert b.source == SOURCE_OUDEPODE
+
+
+def test_select_next_disabled_interstitials(tmp_path: Path) -> None:
+    """interstitial_enabled=False reverts to music-only selection."""
+    cfg = _make_config(tmp_path)
+    cfg.interstitial_enabled = False
+    music_repo = LocalMusicRepo(path=tmp_path / "tracks.jsonl")
+    _populate(
+        music_repo,
+        [_track("/oude/a.flac", source=SOURCE_OUDEPODE, artist="op")],
+    )
+    inter_repo = LocalMusicRepo(path=tmp_path / "interstitials.jsonl")
+    _populate(inter_repo, [_interstitial_track("/sfx/a.wav")])
+    prog = MusicProgrammer(
+        cfg, local_repo=music_repo, interstitial_repo=inter_repo, rng=random.Random(0)
+    )
+    for _ in range(5):
+        chosen = prog.select_next(now=0.0)
+        assert chosen is not None
+        assert chosen.source == SOURCE_OUDEPODE
+
+
+def test_record_play_skips_interstitials_from_history(tmp_path: Path) -> None:
+    """Interstitial plays must not enter rotation history."""
+    cfg = _make_config(tmp_path)
+    prog = MusicProgrammer(cfg)
+    prog.record_play(
+        path="/sfx/a.wav",
+        title="a",
+        artist="(found sound)",
+        source=SOURCE_FOUND_SOUND,
+        when=10.0,
+    )
+    prog.record_play(
+        path="/news/b.wav",
+        title="b",
+        artist="(WWII radio)",
+        source=SOURCE_WWII_NEWSCLIP,
+        when=20.0,
+    )
+    prog.record_play(
+        path="/oude/m.flac",
+        title="m",
+        artist="op",
+        source=SOURCE_OUDEPODE,
+        when=30.0,
+    )
+    # Only the music play should be in history.
+    assert len(prog.history) == 1
+    assert prog.history[0].source == SOURCE_OUDEPODE
+    # And the on-disk persisted file should match.
+    on_disk = (tmp_path / "history.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(on_disk) == 1
+
+
+def test_select_next_without_interstitial_repo_only_returns_music(tmp_path: Path) -> None:
+    """When no interstitial repo is configured, cadence is degenerate-cleared."""
+    cfg = _make_config(tmp_path)
+    music_repo = LocalMusicRepo(path=tmp_path / "tracks.jsonl")
+    _populate(
+        music_repo,
+        [_track("/oude/a.flac", source=SOURCE_OUDEPODE, artist="op")],
+    )
+    prog = MusicProgrammer(cfg, local_repo=music_repo, rng=random.Random(0))
+    # No interstitial_repo configured; every selection is music.
+    for _ in range(4):
+        chosen = prog.select_next(now=0.0)
+        assert chosen is not None
+        assert chosen.source == SOURCE_OUDEPODE

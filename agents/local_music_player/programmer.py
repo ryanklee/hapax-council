@@ -5,27 +5,33 @@ override at any time by writing directly to ``music-selection.json``
 (or by calling :func:`hapax_request` for Hapax-driven cues).
 
 Per the 2026-04-23 directive: music must keep flowing UNLESS Hapax
-deliberately silences for spoken programming. Hapax can also USE music
-FOR programming by cueing a specific track (which counts toward
-rotation budgets).
+deliberately silences for spoken programming.
 
-Selection policy (per Gemini research synthesis 2026-04-23):
-- Weighted random across sources (50/15/15/10/10 default).
-- Oudepode cap: max 1-in-8 (operator directive 2026-04-23, tightened
-  from prior 1-in-30).
-- Track cooldown: 4 hours.
-- Artist streak: max 2 consecutive same-artist plays.
-- Source streak: max 3 consecutive same-source plays.
+Per the 2026-04-24 directive: rotation cycles only through the
+operator's own SoundCloud (oudepode). Brief interstitials are
+interspersed between music tracks at a 1:2 cadence (one music track
+followed by two interstitials). Two admitted interstitial categories
+share a single union pool: Epidemic Sound found-sounds
+(``found-sound``) and 1941–1945 American radio newsclips
+(``wwii-newsclip``). The legacy multi-source music taxonomy
+(epidemic / streambeats / pretzel / yt-audio-library) is retired but
+the constants remain importable for future re-enable.
+
+Selection policy:
+- Music selection: weighted random over enabled sources. Default
+  enables only ``SOURCE_OUDEPODE`` at weight 100.
+- Track cooldown: 4 hours (prevents same-track repetition).
 - Stop signal: a selection payload with ``{"stop": true}`` halts
-  rotation. Programmer remains idle until a non-stop selection
-  arrives — typically Hapax writing the next track when programming
-  completes.
+  rotation.
+- Interstitial cadence: every music track is followed by N brief
+  interstitials drawn uniformly from the union pool (default N=2).
+  Interstitial plays are excluded from rotation history.
 
 External-override observation: when *something else* writes to
 ``music-selection.json`` (chat ``play <n>`` / Hapax cue / direct
 operator command), the programmer treats that play as part of its
-rolling history — so a Hapax-cued oudepode track still counts toward
-the 1-in-8 cap on subsequent auto-recruits.
+rolling history — so a Hapax-cued track still counts toward
+selection budgets on subsequent auto-recruits.
 """
 
 from __future__ import annotations
@@ -53,25 +59,28 @@ SOURCE_PRETZEL = "pretzel"
 SOURCE_YT_AUDIO_LIBRARY = "youtube-audio-library"
 SOURCE_LOCAL = "local"  # legacy fallback
 
-# Default source weights — sum to 100. Per Gemini research synthesis
-# 2026-04-23 §1: Epidemic anchor, oudepode at 10% (under operator's
-# 12.5% / 1-in-8 cap), Streambeats + Pretzel as safe filler, YT-AL as
-# wildcard for occasional weirdness.
+# Interstitial sources — accents between music tracks, not bed music.
+SOURCE_FOUND_SOUND = "found-sound"
+SOURCE_WWII_NEWSCLIP = "wwii-newsclip"
+INTERSTITIAL_SOURCES: frozenset[str] = frozenset({SOURCE_FOUND_SOUND, SOURCE_WWII_NEWSCLIP})
+
+# Default source weights. Per operator directive 2026-04-24, rotation
+# cycles only through oudepode; the legacy multi-source mix is retired.
+# To re-enable mix, override via ProgrammerConfig.weights.
 DEFAULT_WEIGHTS: dict[str, float] = {
-    SOURCE_EPIDEMIC: 50.0,
-    SOURCE_STREAMBEATS: 15.0,
-    SOURCE_PRETZEL: 15.0,
-    SOURCE_YT_AUDIO_LIBRARY: 10.0,
-    SOURCE_OUDEPODE: 10.0,
+    SOURCE_OUDEPODE: 100.0,
 }
 
-# Operator hard cap (2026-04-23): max one oudepode play per N tracks.
-# 1-in-8 = 12.5% ceiling.
-OUDEPODE_WINDOW_SIZE = 8
+# Oudepode "cap" is degenerate when the rotation is oudepode-only —
+# collapse the window to 1 (no cap).
+OUDEPODE_WINDOW_SIZE = 1
 
-# Prevent same-artist or same-source streaks (Gemini §2 + lo-fi-stream
-# audience-retention research).
-MAX_ARTIST_STREAK = 2
+# Operator catalogue is single-artist (Oudepode); the artist-streak
+# gate would zero every candidate. Effectively disabled.
+MAX_ARTIST_STREAK = 10_000
+
+# Source-streak gate is degenerate (single source) but kept for
+# symmetry — irrelevant when only one source is weighted.
 MAX_SOURCE_STREAK = 3
 
 # Recency: 4-hour track cooldown — even a 2-hour viewer session never
@@ -83,6 +92,11 @@ TRACK_COOLDOWN_S = 4 * 3600.0
 HISTORY_WINDOW = 64
 
 DEFAULT_HISTORY_PATH = Path.home() / "hapax-state" / "music-repo" / "play-history.jsonl"
+DEFAULT_INTERSTITIAL_REPO_PATH = Path.home() / "hapax-state" / "music-repo" / "interstitials.jsonl"
+
+# Default 1-music : 2-interstitials cadence per operator directive
+# 2026-04-24 ("not flip 1 me per 2 inter").
+DEFAULT_INTERSTITIALS_PER_MUSIC = 2
 
 
 # ── State ───────────────────────────────────────────────────────────────────
@@ -142,6 +156,9 @@ class ProgrammerConfig:
     max_source_streak: int = MAX_SOURCE_STREAK
     track_cooldown_s: float = TRACK_COOLDOWN_S
     history_window: int = HISTORY_WINDOW
+    interstitial_repo_path: Path = DEFAULT_INTERSTITIAL_REPO_PATH
+    interstitial_enabled: bool = True
+    interstitials_per_music: int = DEFAULT_INTERSTITIALS_PER_MUSIC
 
     @classmethod
     def from_env(cls) -> ProgrammerConfig:
@@ -150,6 +167,12 @@ class ProgrammerConfig:
             cfg.history_path = Path(hp)
         if cap := os.environ.get("HAPAX_MUSIC_PROGRAMMER_OUDEPODE_WINDOW"):
             cfg.oudepode_window = max(1, int(cap))
+        if ip := os.environ.get("HAPAX_MUSIC_PROGRAMMER_INTERSTITIAL_REPO"):
+            cfg.interstitial_repo_path = Path(ip)
+        if (off := os.environ.get("HAPAX_MUSIC_PROGRAMMER_INTERSTITIALS_OFF")) and off.strip():
+            cfg.interstitial_enabled = False
+        if n := os.environ.get("HAPAX_MUSIC_PROGRAMMER_INTERSTITIALS_PER_MUSIC"):
+            cfg.interstitials_per_music = max(0, int(n))
         return cfg
 
 
@@ -250,13 +273,20 @@ class MusicProgrammer:
         *,
         local_repo: LocalMusicRepo | None = None,
         sc_repo: LocalMusicRepo | None = None,
+        interstitial_repo: LocalMusicRepo | None = None,
         rng: random.Random | None = None,
     ) -> None:
         self.config = config or ProgrammerConfig.from_env()
         self._local_repo = local_repo
         self._sc_repo = sc_repo
+        self._interstitial_repo = interstitial_repo
         self._rng = rng or random.Random()
         self._history: deque[PlayEvent] = deque(maxlen=self.config.history_window)
+        # Interstitial cadence counter — reset to ``interstitials_per_music``
+        # after each music selection, decremented on each interstitial. While
+        # > 0 the next call returns an interstitial; at 0 the next call
+        # returns music. In-memory only; cold-start leads with music.
+        self._pending_interstitials = 0
         self._load_history()
 
     # ── history persistence ─────────────────────────────────────────────
@@ -292,7 +322,16 @@ class MusicProgrammer:
         by: str = "programmer",
         when: float | None = None,
     ) -> None:
-        """Add a play to the rolling window + persist."""
+        """Add a play to the rolling window + persist.
+
+        Interstitial sources (found-sound / wwii-newsclip) are excluded
+        from rotation history. They are accents, not music; they don't
+        compete for the oudepode/source/artist gates and shouldn't
+        displace music events from the rolling window or count toward
+        track-cooldown calculations.
+        """
+        if source in INTERSTITIAL_SOURCES:
+            return
         event = PlayEvent(
             ts=when if when is not None else time.time(),
             path=path,
@@ -341,7 +380,50 @@ class MusicProgrammer:
     def select_next(self, *, now: float | None = None) -> LocalMusicTrack | None:
         """Pick the next track per policy. Returns None if no
         admissible track exists.
+
+        Cadence: when interstitials are enabled and the cadence counter
+        is positive, the next call returns a brief interstitial and
+        decrements. Music selections reset the counter to
+        ``interstitials_per_music``. If the interstitial pool is empty,
+        the cadence is short-circuited (counter cleared) so a missing
+        SFX library doesn't silence rotation.
         """
+        if self.config.interstitial_enabled and self._pending_interstitials > 0:
+            interstitial = self._select_interstitial()
+            if interstitial is not None:
+                self._pending_interstitials -= 1
+                return interstitial
+            # Empty pool — clear cadence and fall through to music; never silence.
+            self._pending_interstitials = 0
+        track = self._select_music(now=now)
+        if track is not None:
+            self._pending_interstitials = max(0, self.config.interstitials_per_music)
+        return track
+
+    def _select_interstitial(self) -> LocalMusicTrack | None:
+        """Pick a uniformly-random broadcast-safe interstitial.
+
+        Pulls from the configured interstitial repo; both ``found-sound``
+        and ``wwii-newsclip`` sources are pooled together (operator wants
+        brief accents, not category-segregated cycling). Returns None
+        when the repo is unavailable or empty.
+        """
+        repo = self._interstitial_repo
+        if repo is None:
+            return None
+        if repo.maybe_reload():
+            log.info(
+                "MusicProgrammer: reloaded interstitials %s (%d)",
+                repo.path,
+                len(repo.all_tracks()),
+            )
+        candidates = [t for t in repo.all_tracks() if t.broadcast_safe]
+        if not candidates:
+            return None
+        return self._rng.choice(candidates)
+
+    def _select_music(self, *, now: float | None = None) -> LocalMusicTrack | None:
+        """Music-only selection — the rotation policy proper."""
         ts = now if now is not None else time.time()
         pool = self._pool()
         if not pool:

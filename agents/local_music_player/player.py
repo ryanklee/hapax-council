@@ -44,6 +44,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from agents.local_music_player.programmer import INTERSTITIAL_SOURCES
 from shared.music_repo import DEFAULT_REPO_PATH, LocalMusicRepo
 
 log = logging.getLogger("local_music_player")
@@ -264,13 +265,18 @@ class LocalMusicPlayer:
             return
         title = selection.get("title")
         artist = selection.get("artist")
+        source = selection.get("source") or ""
+        is_interstitial = source in INTERSTITIAL_SOURCES
 
         # Splattribution write happens FIRST so the overlay updates even
-        # if pw-cat fails to start. Empty string is a valid (no-op) value.
-        try:
-            write_attribution(self.config.attribution_path, format_attribution(title, artist))
-        except OSError:
-            log.warning("attribution write failed", exc_info=True)
+        # if pw-cat fails to start. Skip during interstitials so the
+        # previous music track's attribution stays visible — found-sounds
+        # and newsclips are accents, not foregrounded content.
+        if not is_interstitial:
+            try:
+                write_attribution(self.config.attribution_path, format_attribution(title, artist))
+            except OSError:
+                log.warning("attribution write failed", exc_info=True)
 
         sink = self.config.sink
         try:
@@ -312,10 +318,13 @@ class LocalMusicPlayer:
             return
 
         # Mark-played in the repo (best-effort; doesn't block playback).
-        try:
-            self._mark_played(track_path)
-        except Exception:
-            log.debug("mark_played failed for %s", track_path, exc_info=True)
+        # Skip for interstitials — they have their own repo and don't
+        # need cooldown / play-count tracking on the music repos.
+        if not is_interstitial:
+            try:
+                self._mark_played(track_path)
+            except Exception:
+                log.debug("mark_played failed for %s", track_path, exc_info=True)
 
     def _mark_played(self, track_path: str) -> None:
         # Local repo for filesystem paths, SC repo for URLs.
