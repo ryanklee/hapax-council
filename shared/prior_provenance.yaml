@@ -57,6 +57,18 @@ system_degraded:
   symmetry: "time-translation invariant within a single boot window; resets at process restart (no persistence across boots — degradation belief is recomputed from current observations)"
   derivation_document_ref: "docs/research/2026-04-24-universal-bayesian-claim-confidence.md §4 + §6 (asymmetric profiles)"
 
+mood_valence_negative:
+  claim_name: mood_valence_negative
+  structural_commitments:
+    - "single_user axiom: valence is a property of the (sole) operator; no cross-operator fusion needed"
+    - "physical: negative-valence manifests through bounded biometric + behavioral channels (HRV depression, skin-temp drop, sleep debt, voice pitch elevation)"
+    - "stimmung-adjacent: this claim is the Bayesian-posterior counterpart to the existing stimmung biometric dimension operator_stress; Phase 6b-ii.B may wire stimmung as a posterior consumer"
+    - "quantize-tier discipline: the underlying continuous-valence-magnitude signal is quantized into a negative-tier boolean for ClaimEngine[bool]; continuous-posterior path lands later if option 1 proves insufficient"
+  reference_prior: "Beta(2,8); 0.20 starting probability — operator is in neutral or positive-valence state during most working windows. Negative-valence is meaningful but not the default; 0.20 reflects empirical observation that ~20% of working windows carry at least one negative-affect signal under nominal operating conditions (refined empirically in Phase 6b-ii.B from baseline observation)."
+  constraint_narrowing: "Bias toward POSITIVE/UNCERTAIN because (a) the cost of false-NEGATIVE (recruitment caution, narration softening, content steering away from operator's intent) is higher than false-POSITIVE in the hot path; (b) negative-valence claims affect downstream consumer behavior in ways that should require sustained evidence. The slow-enter / slow-exit TemporalProfile (k_enter=4, k_exit=6) further narrows toward conservative behavior under doubt — neither catastrophizing on a single low-HRV reading nor flipping to POSITIVE on a brief recovery."
+  symmetry: "time-translation invariant within a working window; baseline (used by hrv_below_baseline + voice_pitch_elevated + sleep history) recalibrates at session boundaries — claim semantics are conditioned on the current session's baseline, not absolute physiological values"
+  derivation_document_ref: "docs/research/2026-04-24-universal-bayesian-claim-confidence.md §4 (priors) + §6 (Phase 6b mood claims)"
+
 mood_arousal_high:
   claim_name: mood_arousal_high
   structural_commitments:
