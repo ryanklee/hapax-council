@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from agents.hapax_daimonion._perception_state_writer import write_perception_state
 from agents.hapax_daimonion.consent_filter import filter_behaviors
 from agents.hapax_daimonion.governance import VetoResult
+from agents.hapax_daimonion.speaker_is_operator_engine import SpeakerIsOperatorEngine
 from shared.control_signal import ControlSignal, publish_health
 
 if TYPE_CHECKING:
@@ -208,13 +209,49 @@ async def perception_loop(daemon: VoiceDaemon) -> None:
             log.exception("Error in perception loop")
 
 
+def _get_or_create_speaker_engine(daemon: VoiceDaemon) -> SpeakerIsOperatorEngine:
+    """Lazily attach a :class:`SpeakerIsOperatorEngine` to the daemon.
+
+    Per-daemon attribute (not module singleton) so tests that construct
+    a fresh ``VoiceDaemon`` get a fresh posterior — no cross-test
+    pollution. Mirrors the ``daemon._presence_engine`` lazy pattern.
+    """
+    eng = getattr(daemon, "_speaker_is_operator_engine", None)
+    if eng is None:
+        eng = SpeakerIsOperatorEngine()
+        daemon._speaker_is_operator_engine = eng
+    return eng
+
+
 def _tick_consent(daemon: VoiceDaemon, state) -> None:
-    """Process consent state tracking within perception tick."""
+    """Process consent state tracking within perception tick.
+
+    Phase 6c-i.B (#1355 follow-on): the raw bool ``speaker_is_op`` is
+    now derived from a calibrated :class:`SpeakerIsOperatorEngine`
+    posterior with asymmetric temporal profile (k_enter=2 / k_exit=10).
+    Brief speaker silences no longer flip ``speaker_is_operator`` to
+    False on the same tick — sustained silence retracts the assertion.
+
+    Kill-switch: ``HAPAX_BAYESIAN_BYPASS=1`` flows through the engine
+    via :class:`shared.claim.ClaimEngine` to restore raw-bool semantics
+    (Phase 0 FULL contract).
+    """
     try:
-        speaker_is_op = (
+        raw_signal = (
             not daemon.session.is_active
             or getattr(daemon.session, "speaker", "operator") == "operator"
         )
+        _speaker_engine = _get_or_create_speaker_engine(daemon)
+        _speaker_engine.tick(session_speaker_says_operator=raw_signal)
+        # Asymmetric semantics: ``state != "RETRACTED"`` means single_user
+        # axiom default-to-operator stays in effect during cold-start
+        # (UNCERTAIN) and during transient silences (ASSERTED holds across
+        # brief False ticks per k_exit=10). Posterior-threshold alone would
+        # snap-flip on a single False tick (posterior crashes by one
+        # log-LR shift), defeating the temporal-profile purpose. Retraction
+        # only occurs after sustained False evidence (k_exit ticks below
+        # exit_threshold=0.3).
+        speaker_is_op = _speaker_engine.state != "RETRACTED"
         _pe = daemon._presence_engine
         _suppress = _pe is not None and _pe.state == "PRESENT" and _pe.posterior >= 0.8
         _effective = 0 if _suppress else state.guest_count
