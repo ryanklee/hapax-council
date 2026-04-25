@@ -1,0 +1,126 @@
+precedent_id: sp-su-005-worktree-isolation
+axiom_id: single_user
+version: 1
+short_name: "subagent-worktree-isolation"
+situation: |
+  Multi-session relay protocol runs alpha / beta / delta / epsilon as
+  separate Claude Code sessions, each in its own permanent worktree
+  under ``hapax-council--<role>/`` plus one transient spontaneous slot.
+  Subagents dispatched by any session can be invoked WITH or WITHOUT
+  ``isolation: "worktree"``. Without isolation, subagent commits land
+  on the parent session's checked-out branch in the parent's worktree.
+  With isolation, the runtime allocates a temporary worktree, runs the
+  subagent there, and (if the subagent makes no changes) cleans the
+  worktree up afterwards.
+
+  In practice the isolation flag has been a recurring cause of LOST
+  WORK across 24h+ windows. Three incidents in the recent record:
+
+  1. Alpha #1347 Phase 4 prompt envelope recovery (2026-04-24) —
+     subagent dispatched with ``isolation: "worktree"`` shipped a
+     working implementation but the worktree was reaped before the
+     branch was pushed to origin; alpha re-implemented from
+     conversation context.
+  2. Beta Phase 1 PresenceEngine recovery (2026-04-24/25) — similar
+     reap loss; beta carried the implementation forward by direct
+     re-write in the parent worktree.
+  3. Foreign-DURF-commit worktree contention (2026-04-24/25) — a
+     subagent's stash collision in the ``main-red`` worktree forced a
+     ``stash apply`` recovery from a foreign-named ref.
+
+  The rule that emerged from all three: subagent code that must
+  persist MUST NOT live in an isolated worktree, no exceptions.
+decision: |
+  Subagent worktree-isolation discipline (operator-ratified across
+  three recovery incidents, codified in
+  ``feedback_worktree_persistence.md`` 2026-04-24):
+
+    1. **Prefer direct implementation in the parent session.**
+       Subagents are for research and review, NOT for code that must
+       persist on a branch.
+
+    2. **If a subagent must write code, dispatch WITHOUT
+       ``isolation: "worktree"``.** The subagent shares the parent
+       worktree and commits land on the parent's branch. The
+       dispatch prompt MUST include verbatim:
+
+         "You are working in a shared directory. Do NOT create
+          branches. Do NOT run ``git checkout`` or ``git switch``.
+          Commit directly to the current branch. Do NOT switch
+          branches under any circumstances."
+
+    3. **If isolation IS required**, the dispatch prompt MUST include
+       verbatim:
+
+         "Before completing, you MUST push: ``git push -u origin
+          HEAD``. Report the remote branch name and HEAD SHA in your
+          response."
+
+    4. **After EVERY subagent that writes code, the parent session
+       MUST verify**: ``ls {expected_files} && git log --oneline -3``.
+       If files are missing, rewrite directly from conversation
+       context. Do NOT re-dispatch.
+
+  The single_user axiom anchors this: there is exactly one operator,
+  one source-of-truth checkout per role, and no cross-operator code-
+  ownership scenarios that could justify the isolation flag's
+  default cleanup behavior. Lost subagent commits cannot be
+  recovered from a workmate's machine.
+reasoning: |
+  Subagent isolation was originally designed for parallel research
+  agents whose output is summary text returned via tool-call result.
+  Returning text is safe; the temporary worktree is a clean,
+  cancellable scratch. The hazard appears only when the subagent's
+  output is supposed to be FILES on a BRANCH — at which point the
+  scratch-worktree assumption ("no surviving artifacts") inverts
+  into "no surviving branch."
+
+  Three observations make the discipline non-negotiable:
+
+    a. **Reaping is automatic and silent.** When a subagent makes no
+       net changes (e.g., creates files then deletes them, or commits
+       are squashed during cleanup), the runtime cleans the
+       worktree without operator visibility. There is no audit log.
+
+    b. **Recovery cost is high but bounded.** Conversation context
+       carries the implementation; rewriting in the parent worktree
+       is faster than diagnosing where the lost branch went.
+
+    c. **The "push from worktree" mitigation is fragile.** Relying
+       on the subagent to remember to push before exit places the
+       persistence guarantee on the LLM's instruction-following,
+       which is not deterministic. Direct implementation eliminates
+       the failure mode entirely.
+
+  Two related governance touchpoints:
+
+    * ``feedback_branch_discipline`` mandates max-one-branch-per-
+      session and zero-stale-branches across all repos. Subagent
+      branches that survived in cleaned worktrees would silently
+      violate the stale-branch rule from the operator's view. The
+      no-isolation default keeps the subagent's commits visible in
+      the parent's branch enumeration.
+    * ``hooks/scripts/no-stale-branches.sh`` blocks new branch
+      creation when unmerged branches exist. Lost subagent branches
+      were one source of the "phantom unmerged branch" failure mode
+      this hook addresses.
+authority:
+  ratified_by: operator
+  ratified_at: "2026-04-24"
+  ratification_vehicle: "Operator directive 2026-04-24 (~late evening) after alpha #1347 + beta Phase 1 recovery incidents; codified in ``~/.claude/CLAUDE.md`` § Subagent Git Safety MANDATORY block; cross-referenced in ``feedback_worktree_persistence.md``."
+  canonical_text_source: "Global ~/.claude/CLAUDE.md § Subagent Git Safety — MANDATORY (immutable, three-rule block)."
+cross_references:
+  related_feedback_memories:
+    - feedback_worktree_persistence
+    - feedback_branch_discipline
+    - feedback_no_stale_branches
+  related_hooks:
+    - "hooks/scripts/no-stale-branches.sh"
+    - "hooks/scripts/work-resolution-gate.sh"
+  incident_record:
+    - "alpha #1347 Phase 4 prompt envelope recovery (2026-04-24)"
+    - "beta Phase 1 PresenceEngine recovery (2026-04-24/25)"
+    - "foreign-DURF-commit worktree contention in ``main-red`` worktree (2026-04-24/25)"
+  audit_trail:
+    - "v4 workstream realignment §3.4.2 AUDIT-27"
+    - "v4 workstream realignment §3.4.2 AUDIT-26 (claim-before-parallel hook)"
