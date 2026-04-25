@@ -1,0 +1,14 @@
+surface: arena-post
+state_kinds:
+  - broadcast.boundary
+  - chronicle.high_salience
+  - aesthetic.frame_capture
+redactions:
+  - operator_profile.*
+  - operator_identity.*
+  - operator_legal_name
+  - chronicle.private_moments
+rate_limit:
+  per_hour: 6
+  per_day: 30
+cadence_hint: "Daily livestream-frame stills with technique annotations to a Hapax-owned channel; AGR-scene research surface (citation density is the move)"
