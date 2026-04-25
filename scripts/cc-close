@@ -35,12 +35,19 @@ role="${CLAUDE_ROLE:-}"
 
 vault_root="$HOME/Documents/Personal/20-projects/hapax-cc-tasks"
 note_path=""
+# Match `<task_id>-<descriptor>.md` (most tasks).
 for candidate in "$vault_root/active/$task_id-"*.md; do
   if [[ -f "$candidate" ]]; then
     note_path="$candidate"
     break
   fi
 done
+# Fallback: exact-match `<task_id>.md` for tasks without a descriptor
+# suffix. Mirrors the cc-claim glob; same root-cause (the literal `-`
+# in the original glob misses descriptor-less filenames).
+if [[ -z "$note_path" ]] && [[ -f "$vault_root/active/$task_id.md" ]]; then
+  note_path="$vault_root/active/$task_id.md"
+fi
 if [[ -z "$note_path" ]]; then
   echo "cc-close: task '$task_id' not in $vault_root/active/ (already closed?)" >&2
   exit 2
