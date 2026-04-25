@@ -25,9 +25,12 @@ import pytest
 
 from agents.authoring.byline import Byline, BylineCoauthor, BylineVariant
 from shared.attribution_block import (
+    NON_ENGAGEMENT_CLAUSE_LONG,
+    NON_ENGAGEMENT_CLAUSE_SHORT,
     SURFACE_DEVIATION_MATRIX,
     UNSETTLED_CONTRIBUTION_VARIANTS,
     AttributionBlock,
+    NonEngagementForm,
     UnsettledContributionVariant,
     render_attribution_block,
 )
@@ -188,3 +191,129 @@ class TestSurfaceDeviationMatrix:
             assert entry["byline"] in {BylineVariant.V2, BylineVariant.V5}, (
                 f"{surface} should be V2 or V5; got {entry['byline']}"
             )
+
+
+# ── Refusal Brief: non_engagement_clause ──────────────────────────────
+#
+# Per beta inflection 20260425T171500Z (4-agent fold synthesis of
+# operator's full-automation-or-no-engagement directive). Every
+# AttributionBlock carries a non_engagement_clause linking back to the
+# Refusal Brief; per-surface character-budget gets short vs. long form.
+
+
+class TestNonEngagementClauseConstants:
+    """Module-level constants ship two phrasings (short / long) of the
+    Refusal Brief reference. Both must be non-empty strings; long must
+    contain more characters than short (the discrimination criterion)."""
+
+    def test_short_clause_present(self) -> None:
+        assert NON_ENGAGEMENT_CLAUSE_SHORT
+        assert isinstance(NON_ENGAGEMENT_CLAUSE_SHORT, str)
+
+    def test_long_clause_present(self) -> None:
+        assert NON_ENGAGEMENT_CLAUSE_LONG
+        assert isinstance(NON_ENGAGEMENT_CLAUSE_LONG, str)
+
+    def test_long_strictly_longer_than_short(self) -> None:
+        assert len(NON_ENGAGEMENT_CLAUSE_LONG) > len(NON_ENGAGEMENT_CLAUSE_SHORT)
+
+    def test_short_fits_bsky_300_char_budget(self) -> None:
+        """Bluesky post body cap is 300 chars. The short form must
+        leave headroom for the byline + content; ≤200 chars target."""
+        assert len(NON_ENGAGEMENT_CLAUSE_SHORT) <= 200
+
+    def test_both_reference_refusal_brief(self) -> None:
+        """Both forms must include a pointer to the Refusal Brief
+        URL or the literal phrase `Refusal Brief` so downstream
+        readers can discover the source."""
+        assert "refusal" in NON_ENGAGEMENT_CLAUSE_SHORT.lower()
+        assert "refusal" in NON_ENGAGEMENT_CLAUSE_LONG.lower()
+
+
+class TestNonEngagementForm:
+    def test_form_enum_two_values(self) -> None:
+        names = {f.name for f in NonEngagementForm}
+        assert names == {"SHORT", "LONG"}
+
+
+class TestRenderWithNonEngagement:
+    def test_default_no_clause_when_form_omitted(self, full_byline: Byline) -> None:
+        """Backward compat: render_attribution_block called without
+        non_engagement_form returns a block whose
+        non_engagement_clause is None."""
+        block = render_attribution_block(
+            full_byline,
+            byline_variant=BylineVariant.V2,
+            unsettled_variant=UnsettledContributionVariant.V1,
+        )
+        assert block.non_engagement_clause is None
+
+    def test_short_form_renders_short_clause(self, full_byline: Byline) -> None:
+        block = render_attribution_block(
+            full_byline,
+            byline_variant=BylineVariant.V2,
+            unsettled_variant=UnsettledContributionVariant.V1,
+            non_engagement_form=NonEngagementForm.SHORT,
+        )
+        assert block.non_engagement_clause == NON_ENGAGEMENT_CLAUSE_SHORT
+
+    def test_long_form_renders_long_clause(self, full_byline: Byline) -> None:
+        block = render_attribution_block(
+            full_byline,
+            byline_variant=BylineVariant.V2,
+            unsettled_variant=UnsettledContributionVariant.V1,
+            non_engagement_form=NonEngagementForm.LONG,
+        )
+        assert block.non_engagement_clause == NON_ENGAGEMENT_CLAUSE_LONG
+
+
+class TestSurfaceMatrixNonEngagementForm:
+    """Per-surface deviation matrix carries the non_engagement_form
+    choice so consumers can lookup-and-render in one shot. Per
+    beta synthesis: bsky/mastodon → SHORT (char-limited);
+    arena/discord/osf → LONG (capacity available)."""
+
+    def test_bsky_uses_short_form(self) -> None:
+        entry = SURFACE_DEVIATION_MATRIX.get("bsky")
+        assert entry is not None
+        assert entry["non_engagement_form"] == NonEngagementForm.SHORT
+
+    def test_mastodon_uses_short_form(self) -> None:
+        entry = SURFACE_DEVIATION_MATRIX.get("mastodon")
+        assert entry is not None
+        assert entry["non_engagement_form"] == NonEngagementForm.SHORT
+
+    def test_arena_uses_long_form(self) -> None:
+        entry = SURFACE_DEVIATION_MATRIX.get("arena")
+        assert entry is not None
+        assert entry["non_engagement_form"] == NonEngagementForm.LONG
+
+    def test_osf_preprint_uses_long_form(self) -> None:
+        entry = SURFACE_DEVIATION_MATRIX.get("osf_preprint")
+        assert entry is not None
+        assert entry["non_engagement_form"] == NonEngagementForm.LONG
+
+    def test_every_entry_has_non_engagement_form(self) -> None:
+        """Pin: every matrix entry carries the form choice. Required for
+        consumers to lookup unambiguously."""
+        for surface, entry in SURFACE_DEVIATION_MATRIX.items():
+            assert "non_engagement_form" in entry, (
+                f"{surface} matrix entry missing non_engagement_form"
+            )
+
+
+class TestExplicitOverride:
+    def test_explicit_override_takes_precedence(self, full_byline: Byline) -> None:
+        """A caller can pass an explicit ``non_engagement_clause``
+        string overriding the form-driven default. Operator-level
+        per-artifact override is the design point per beta synthesis
+        ('default-on, operator-overridable')."""
+        custom = "Custom override clause for this specific artifact."
+        block = render_attribution_block(
+            full_byline,
+            byline_variant=BylineVariant.V2,
+            unsettled_variant=UnsettledContributionVariant.V1,
+            non_engagement_form=NonEngagementForm.SHORT,
+            non_engagement_clause_override=custom,
+        )
+        assert block.non_engagement_clause == custom
