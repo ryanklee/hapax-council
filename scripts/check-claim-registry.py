@@ -8,6 +8,11 @@ Checks:
 
 * HPX003: every signal listed under a claim in `shared/lr_registry.yaml`
   validates against the `LRDerivation` Pydantic schema.
+* HPX003-AST (audit-incorporated v4 follow-up): every Python module under
+  `agents/` declaring a `DEFAULT_SIGNAL_WEIGHTS: dict[str, ...]`
+  module-level annotated assignment must have each of its keys present
+  in `shared/lr_registry.yaml`. Closes the bypass that let Phase 6c-i.A
+  and Phase 6d-i.A ship with inline LR weights bypassing the registry.
 * HPX004: every claim referenced in `lr_registry.yaml` has a matching
   entry in `shared/prior_provenance.yaml`, validated against the
   `PriorProvenance` schema.
@@ -24,6 +29,7 @@ Exit codes:
 
 from __future__ import annotations
 
+import ast
 import sys
 from pathlib import Path
 
@@ -32,10 +38,50 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parent.parent
 LR_REGISTRY = REPO_ROOT / "shared" / "lr_registry.yaml"
 PRIOR_PROVENANCE = REPO_ROOT / "shared" / "prior_provenance.yaml"
+AGENTS_DIR = REPO_ROOT / "agents"
 
 
 def fail(msg: str) -> None:
     print(f"VIOLATION: {msg}", file=sys.stderr)
+
+
+def _extract_default_signal_weights_keys(py_path: Path) -> list[str] | None:
+    """Return the keys of a module-level `DEFAULT_SIGNAL_WEIGHTS: dict[...]`
+    annotated assignment, or None if the module has no such symbol.
+
+    Handles only literal-key dicts (string constants). Computed keys are
+    skipped (returned as the literal string ``<computed>``) so a violation
+    surfaces at registry-lookup time rather than silently accepting.
+    """
+    try:
+        tree = ast.parse(py_path.read_text(), filename=str(py_path))
+    except (SyntaxError, UnicodeDecodeError):
+        return None
+    for node in tree.body:
+        if not isinstance(node, ast.AnnAssign):
+            continue
+        if not isinstance(node.target, ast.Name):
+            continue
+        if node.target.id != "DEFAULT_SIGNAL_WEIGHTS":
+            continue
+        if not isinstance(node.value, ast.Dict):
+            return []
+        keys: list[str] = []
+        for key_node in node.value.keys:
+            if isinstance(key_node, ast.Constant) and isinstance(key_node.value, str):
+                keys.append(key_node.value)
+            else:
+                keys.append("<computed>")
+        return keys
+    return None
+
+
+def _collect_registry_signal_names(lr_data: dict) -> set[str]:
+    names: set[str] = set()
+    for signals in lr_data.values():
+        if isinstance(signals, dict):
+            names.update(signals.keys())
+    return names
 
 
 def main() -> int:
@@ -66,6 +112,35 @@ def main() -> int:
             claim_names_in_lr.add(rec.claim_name)
             signal_count += 1
 
+    # HPX003-AST — every DEFAULT_SIGNAL_WEIGHTS literal in agents/**/*.py
+    # must have keys covered by the registry.
+    registry_signals = _collect_registry_signal_names(lr_data)
+    ast_modules_checked = 0
+    if AGENTS_DIR.exists():
+        for py_path in sorted(AGENTS_DIR.rglob("*.py")):
+            keys = _extract_default_signal_weights_keys(py_path)
+            if keys is None:
+                continue
+            ast_modules_checked += 1
+            rel_path = py_path.relative_to(REPO_ROOT)
+            for key in keys:
+                if key == "<computed>":
+                    fail(
+                        f"HPX003-AST: {rel_path} has DEFAULT_SIGNAL_WEIGHTS with a non-literal "
+                        f"key — registry coverage cannot be statically verified. Either inline "
+                        f"the signal name as a string literal or move the dict construction "
+                        f"into a place HPX003-AST can audit."
+                    )
+                    violations += 1
+                    continue
+                if key not in registry_signals:
+                    fail(
+                        f"HPX003-AST: {rel_path} declares DEFAULT_SIGNAL_WEIGHTS[{key!r}] "
+                        f"but {key!r} is absent from shared/lr_registry.yaml. Add it under "
+                        f"the appropriate claim's signal block (e.g. system_degraded_signals)."
+                    )
+                    violations += 1
+
     # HPX004 — every claim referenced in LR registry has prior_provenance entry
     if not PRIOR_PROVENANCE.exists():
         fail(f"HPX004: {PRIOR_PROVENANCE} missing")
@@ -93,7 +168,8 @@ def main() -> int:
     if violations == 0:
         print(
             f"check-claim-registry: HPX003 + HPX004 OK "
-            f"({len(claim_names_in_lr)} claim(s), {signal_count} signal(s) validated)"
+            f"({len(claim_names_in_lr)} claim(s), {signal_count} signal(s) validated, "
+            f"{ast_modules_checked} module(s) AST-walked)"
         )
         return 0
     return 1
