@@ -169,7 +169,17 @@ def _write_intent(tmp_path, prov=None, impingements=None):
 
 
 def _surface_not_empty(surface: cairo.ImageSurface) -> bool:
-    data = bytes(surface.get_data()[:1000])
+    """Return True if the surface contains any non-zero byte.
+
+    Samples the FULL surface, not a head slice — the previous version
+    sampled only the first 1000 bytes, which at typical ward dimensions
+    (800×60 / 600×24 ARGB32) covers under a row. After the 2026-04-23
+    "zero container opacity" directive retired ``_paint_bitchx_bg``,
+    the first row is legitimately empty for wards whose content
+    renders mid-canvas (y≈30); ward.render-text-at-y=30 lives ~96000
+    bytes in. ytb-LEGIBILITY-SMOKE-FOLLOWUP root cause.
+    """
+    data = bytes(surface.get_data())
     return any(b != 0 for b in data)
 
 
@@ -177,20 +187,10 @@ def _surface_not_empty(surface: cairo.ImageSurface) -> bool:
 
 
 class TestSmoke:
-    @pytest.mark.xfail(
-        strict=False,
-        reason="ytb-LEGIBILITY-SMOKE-FOLLOWUP: chronic _surface_not_empty regression; "
-        "renders ship zero non-background pixels under current state/intent reads. "
-        "See cc-task for root-cause investigation.",
-    )
     def test_activity_header_renders_without_state(self, tmp_path):
         surf, _spy = _render(ls.ActivityHeaderCairoSource, 800, 60)
         assert _surface_not_empty(surf)
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason="ytb-LEGIBILITY-SMOKE-FOLLOWUP: chronic _surface_not_empty regression.",
-    )
     def test_activity_header_reads_narrative_and_intent(self, tmp_path):
         _write_narrative_state(tmp_path, activity="vinyl")
         _write_intent(
@@ -206,10 +206,6 @@ class TestSmoke:
         surf, _spy = _render(ls.ActivityHeaderCairoSource, 800, 60)
         assert _surface_not_empty(surf)
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason="ytb-LEGIBILITY-SMOKE-FOLLOWUP: chronic _surface_not_empty regression.",
-    )
     def test_stance_indicator_renders(self, tmp_path):
         _write_narrative_state(tmp_path, stance="seeking")
         surf, _spy = _render(ls.StanceIndicatorCairoSource, 180, 32)
@@ -219,18 +215,10 @@ class TestSmoke:
         surf, _spy = _render(ls.ChatKeywordLegendCairoSource, 200, 200)
         assert _surface_not_empty(surf)
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason="ytb-LEGIBILITY-SMOKE-FOLLOWUP: chronic _surface_not_empty regression.",
-    )
     def test_grounding_ticker_renders_empty(self, tmp_path):
         surf, _spy = _render(ls.GroundingProvenanceTickerCairoSource, 600, 24)
         assert _surface_not_empty(surf)
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason="ytb-LEGIBILITY-SMOKE-FOLLOWUP: chronic _surface_not_empty regression.",
-    )
     def test_grounding_ticker_renders_with_signals(self, tmp_path):
         _write_intent(tmp_path, prov=["audio.midi.beat_position", "ir.ir_hand_zone.turntable"])
         surf, _spy = _render(ls.GroundingProvenanceTickerCairoSource, 600, 24)
