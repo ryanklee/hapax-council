@@ -22,3 +22,14 @@ operator_present:
   constraint_narrowing: "single_user reduces hypothesis space to {present, absent}; physical-presence requires at least one positive sensor"
   symmetry: "time-translation invariant during a single session window"
   derivation_document_ref: "docs/research/2026-04-24-universal-bayesian-claim-confidence.md §4"
+
+speaker_is_operator:
+  claim_name: speaker_is_operator
+  structural_commitments:
+    - "single_user axiom (the only enrolled identity is the operator; non-operator persons require active consent contracts per interpersonal_transparency)"
+    - "session-level self-report: daimonion's session manager carries a ``speaker`` attribute set during conversation enrollment"
+    - "voice modality only: this claim is about audio-conversation participants, not chat-author identity (that is chat_author_is_operator, Phase 6c-ii)"
+  reference_prior: "Beta(1,1) uniform; 0.5 starting probability — narrowed by single_user toward operator-default once a session window opens"
+  constraint_narrowing: "single_user collapses the hypothesis space to {operator, non-operator}; default-operator semantics under no-session reduces ambiguity (see wire-in: ``not session.is_active`` → operator by convention)"
+  symmetry: "time-translation invariant during a single session window; resets at session boundaries"
+  derivation_document_ref: "docs/research/2026-04-24-universal-bayesian-claim-confidence.md §4"
