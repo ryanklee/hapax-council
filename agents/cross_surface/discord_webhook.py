@@ -337,15 +337,35 @@ def _compose_artifact_payload(artifact) -> dict:  # type: ignore[no-untyped-def]
     Embed ``url`` is supplied when the artifact carries a ``doi``
     (renders as ``https://doi.org/{doi}``) so the embed becomes
     click-through.
+
+    The Refusal Brief's ``non_engagement_clause`` (LONG form, fits
+    Discord's 4096-char description cap) is appended when the artifact
+    isn't the Refusal Brief itself and doesn't already cite the brief.
+    Falls back to SHORT form if LONG doesn't fit; drops silently if
+    even SHORT exceeds capacity.
     """
+    from shared.attribution_block import (
+        NON_ENGAGEMENT_CLAUSE_LONG,
+        NON_ENGAGEMENT_CLAUSE_SHORT,
+    )
+
     title = getattr(artifact, "title", "") or "hapax — publication artifact"
     attribution = getattr(artifact, "attribution_block", "") or ""
     abstract = getattr(artifact, "abstract", "") or ""
     description = attribution or abstract or ""
 
+    description = description[:4096]
+    slug = getattr(artifact, "slug", "") or ""
+    if slug != "refusal-brief" and "refusal" not in description.lower():
+        for clause in (NON_ENGAGEMENT_CLAUSE_LONG, NON_ENGAGEMENT_CLAUSE_SHORT):
+            candidate = f"{description}\n\n{clause}"
+            if len(candidate) <= 4096:
+                description = candidate
+                break
+
     embed: dict = {
         "title": title[:256],  # Discord embed title limit
-        "description": description[:4096],  # Discord embed description limit
+        "description": description,
         "color": DISCORD_EMBED_COLOR,
     }
 
