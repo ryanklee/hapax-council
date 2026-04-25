@@ -179,36 +179,70 @@ def _build_create_payload(artifact: PreprintArtifact) -> dict:
 
 
 def _compose_description_with_attribution(artifact: PreprintArtifact) -> str:
-    """Prepend ``attribution_block`` (V5 byline) onto the description.
+    """Prepend ``attribution_block`` (V5 byline) + Refusal Brief clause to description.
 
     Per the co-publishing + unsettled-contribution constitutional
     directive, the V5 byline travels with the DOI metadata so future
     citations carry the framing. ``abstract`` follows the byline
     block.
+
+    Per the 2026-04-25 full-automation directive, the Refusal Brief
+    ``non_engagement_clause`` (LONG form) is appended to the DOI
+    metadata description unless the artifact IS the Refusal Brief or
+    already cites it. The DOI record then permanently archives the
+    citable-from-itself reference, so every citation chain back to the
+    Hapax DOI carries the constitutional grounding.
     """
+    from shared.attribution_block import NON_ENGAGEMENT_CLAUSE_LONG
+
     attribution = artifact.attribution_block or ""
     abstract = artifact.abstract or ""
 
     if attribution and abstract:
-        return f"{attribution}\n\n{abstract}"
-    return attribution or abstract
+        body = f"{attribution}\n\n{abstract}"
+    else:
+        body = attribution or abstract
+
+    if artifact.slug != "refusal-brief" and "refusal" not in body.lower():
+        body = f"{body}\n\n{NON_ENGAGEMENT_CLAUSE_LONG}" if body else NON_ENGAGEMENT_CLAUSE_LONG
+
+    return body
 
 
 def _render_creators(artifact: PreprintArtifact) -> list[dict]:
     """Map ``co_authors`` to Zenodo's ``creators`` array.
 
-    Each creator: ``{"name": str}`` minimum, with optional ``url`` field
-    when the CoAuthor carries one. Falls back to a single Hapax-named
-    creator when the artifact carries no co-authors (defensive — the
-    Pydantic default populates ALL_CO_AUTHORS).
+    Each creator: ``{"name": str}`` minimum. The operator's ORCID iD
+    (loaded from ``pass show orcid/orcid`` via ``shared.orcid``) is
+    attached to the operator's creator entry — recognized by the
+    ``Oudepode`` alias / ``operator`` role — so the DOI metadata
+    carries the formal-context citation identifier. Zenodo supports
+    ``orcid`` as an optional creator field that resolves on the public
+    record.
 
-    Note: the canonical ``CoAuthor`` model in ``shared.co_author_model``
-    does not yet carry ``affiliation`` or ``orcid`` fields; both are
-    Zenodo-optional. Add them here once the model gains those fields.
+    Falls back to a single Hapax-named creator when the artifact
+    carries no co-authors (defensive — the Pydantic default populates
+    ALL_CO_AUTHORS).
+
+    Per the operator-referent policy, ORCID iD use is formal-context
+    only; non-formal surfaces (omg.lol weblog, social cross-surface
+    posts) continue to use non-formal referents.
     """
+    from shared.orcid import operator_orcid
+
+    operator_iD = operator_orcid()
+
     creators: list[dict] = []
     for co in artifact.co_authors:
         entry: dict = {"name": co.name}
+        # Attach ORCID to the operator's creator entry only. The
+        # CoAuthor for Oudepode is identified by alias OR role.
+        if operator_iD and (
+            getattr(co, "alias", "").lower() == "oto"
+            or getattr(co, "role", "").lower() == "operator"
+            or co.name == "Oudepode"
+        ):
+            entry["orcid"] = operator_iD
         creators.append(entry)
 
     if not creators:

@@ -153,21 +153,42 @@ class TestComposeAbstractWithAttribution:
         assert "Body abstract." in composed
 
     def test_no_attribution_no_co_authors_returns_abstract(self):
+        from shared.attribution_block import NON_ENGAGEMENT_CLAUSE_LONG
+
         artifact = _make_artifact(
             attribution_block="",
             co_authors=[],
             abstract="Standalone abstract.",
         )
         composed = _compose_abstract_with_attribution(artifact)
-        assert composed == "Standalone abstract."
+        assert composed.startswith("Standalone abstract.")
+        assert NON_ENGAGEMENT_CLAUSE_LONG in composed
 
     def test_empty_abstract_returns_attribution_only(self):
+        from shared.attribution_block import NON_ENGAGEMENT_CLAUSE_LONG
+
         artifact = _make_artifact(
             attribution_block="Attribution alone.",
             abstract="",
         )
         composed = _compose_abstract_with_attribution(artifact)
-        assert composed == "Attribution alone."
+        assert composed.startswith("Attribution alone.")
+        assert NON_ENGAGEMENT_CLAUSE_LONG in composed
+
+    def test_refusal_brief_self_referential_skips_clause(self):
+        from shared.attribution_block import (
+            NON_ENGAGEMENT_CLAUSE_LONG,
+            NON_ENGAGEMENT_CLAUSE_SHORT,
+        )
+
+        artifact = _make_artifact(
+            slug="refusal-brief",
+            attribution_block="Hapax + CC.",
+            abstract="Self-referential.",
+        )
+        composed = _compose_abstract_with_attribution(artifact)
+        assert NON_ENGAGEMENT_CLAUSE_LONG not in composed
+        assert NON_ENGAGEMENT_CLAUSE_SHORT not in composed
 
 
 # ── Orchestrator integration smoke test ─────────────────────────────────

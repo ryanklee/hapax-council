@@ -325,6 +325,16 @@ def _compose_artifact_content(artifact) -> str:  # type: ignore[no-untyped-def]
     if not body:
         return ""
 
+    # Per the 2026-04-25 full-automation directive, append the Refusal
+    # Brief LONG clause unless the artifact IS the Refusal Brief or
+    # already cites it. omg.lol weblog has no enforced ceiling so the
+    # LONG form always fits.
+    slug = (getattr(artifact, "slug", "") or "").strip()
+    if slug != "refusal-brief" and "refusal" not in body.lower():
+        from shared.attribution_block import NON_ENGAGEMENT_CLAUSE_LONG
+
+        body = f"{body}\n\n{NON_ENGAGEMENT_CLAUSE_LONG}"
+
     # omg.lol weblog entry format: a single ``Date:`` line followed by
     # a blank line, then the markdown body. NOT YAML frontmatter (no
     # triple-dash delimiters). Spec example from api.omg.lol:

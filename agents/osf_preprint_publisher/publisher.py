@@ -139,13 +139,23 @@ def _build_create_payload(artifact: PreprintArtifact, *, provider: str) -> dict:
 
 
 def _compose_abstract_with_attribution(artifact: PreprintArtifact) -> str:
-    """Prepend attribution byline + co-authors to the abstract.
+    """Prepend attribution byline + co-authors + Refusal Brief clause to abstract.
 
     Until OSF's contributors API supports auto-create from string names
     (today requires existing OSF user IDs), the co-author cluster is
     surfaced in the abstract preamble. The ``attribution_block`` field
     of the artifact takes precedence when set.
+
+    Per the 2026-04-25 full-automation directive, the Refusal Brief
+    ``non_engagement_clause`` (LONG form, fits OSF body capacity) is
+    appended unless the artifact IS the Refusal Brief or already
+    cites it. OSF's preprint description has no enforced ceiling so
+    the LONG form always fits.
     """
+    from shared.attribution_block import (
+        NON_ENGAGEMENT_CLAUSE_LONG,
+    )
+
     if artifact.attribution_block:
         prefix = artifact.attribution_block
     else:
@@ -153,10 +163,16 @@ def _compose_abstract_with_attribution(artifact: PreprintArtifact) -> str:
         prefix = f"Authors: {names}." if names else ""
 
     if not prefix:
-        return artifact.abstract
-    if not artifact.abstract:
-        return prefix
-    return f"{prefix}\n\n{artifact.abstract}"
+        body = artifact.abstract
+    elif not artifact.abstract:
+        body = prefix
+    else:
+        body = f"{prefix}\n\n{artifact.abstract}"
+
+    if artifact.slug != "refusal-brief" and "refusal" not in body.lower():
+        body = f"{body}\n\n{NON_ENGAGEMENT_CLAUSE_LONG}" if body else NON_ENGAGEMENT_CLAUSE_LONG
+
+    return body
 
 
 def _interpret_response(response: httpx.Response, slug: str) -> str:
