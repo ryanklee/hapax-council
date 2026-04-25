@@ -193,3 +193,54 @@ class TestCounter:
 
         sample = orch.dispatches_total.labels(surface="nope", result="surface_unwired")._value.get()
         assert sample == 1.0
+
+
+# ── SURFACE_REGISTRY entries (regression pin) ───────────────────────
+
+
+class TestSurfaceRegistry:
+    """Pin module-level SURFACE_REGISTRY wiring per ticket.
+
+    Each entry must point at a real ``module:attr`` path. We pin the
+    string here rather than importing so a renamed symbol fails the
+    test loudly. Live import-resolution is exercised by
+    ``Orchestrator._import_publisher`` indirectly across the rest of
+    the suite.
+    """
+
+    def test_bluesky_post_wired(self):
+        from agents.publish_orchestrator.orchestrator import SURFACE_REGISTRY
+
+        assert "bluesky-post" in SURFACE_REGISTRY
+        assert SURFACE_REGISTRY["bluesky-post"] == (
+            "agents.cross_surface.bluesky_post:publish_artifact"
+        )
+
+    def test_mastodon_post_wired(self):
+        from agents.publish_orchestrator.orchestrator import SURFACE_REGISTRY
+
+        assert "mastodon-post" in SURFACE_REGISTRY
+        assert SURFACE_REGISTRY["mastodon-post"] == (
+            "agents.cross_surface.mastodon_post:publish_artifact"
+        )
+
+    def test_bluesky_entry_resolves(self):
+        """Importing the registered entry-point must not raise."""
+        import importlib
+
+        from agents.publish_orchestrator.orchestrator import SURFACE_REGISTRY
+
+        module_path, attr = SURFACE_REGISTRY["bluesky-post"].split(":")
+        mod = importlib.import_module(module_path)
+        fn = getattr(mod, attr)
+        assert callable(fn)
+
+    def test_mastodon_entry_resolves(self):
+        import importlib
+
+        from agents.publish_orchestrator.orchestrator import SURFACE_REGISTRY
+
+        module_path, attr = SURFACE_REGISTRY["mastodon-post"].split(":")
+        mod = importlib.import_module(module_path)
+        fn = getattr(mod, attr)
+        assert callable(fn)
