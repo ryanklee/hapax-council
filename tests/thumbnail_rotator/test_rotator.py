@@ -1,0 +1,198 @@
+"""Tests for ``agents.thumbnail_rotator``."""
+
+from __future__ import annotations
+
+import io
+from pathlib import Path
+from unittest import mock
+
+from PIL import Image
+from prometheus_client import CollectorRegistry
+
+from agents.thumbnail_rotator.rotator import (
+    THUMBNAIL_HEIGHT,
+    THUMBNAIL_WIDTH,
+    ThumbnailRotator,
+    prepare_thumbnail_jpeg,
+)
+
+
+def _write_test_jpeg(path: Path, *, size=(1920, 1080), color=(64, 96, 128)) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", size, color).save(path, format="JPEG", quality=90)
+
+
+def _make_rotator(
+    *,
+    video_id: str | None = "test-video-id",
+    upload_fn=None,
+    snapshot_path: Path,
+    tick_s: float = 60.0,
+    dry_run: bool = False,
+) -> tuple[ThumbnailRotator, mock.Mock]:
+    if upload_fn is None:
+        upload_fn = mock.Mock(return_value="ok")
+    rotator = ThumbnailRotator(
+        video_id=video_id,
+        upload_fn=upload_fn,
+        snapshot_path=snapshot_path,
+        tick_s=tick_s,
+        dry_run=dry_run,
+        registry=CollectorRegistry(),
+    )
+    return rotator, upload_fn
+
+
+# ── prepare_thumbnail_jpeg ──────────────────────────────────────────
+
+
+class TestPrepareThumbnailJpeg:
+    def test_resizes_1080p_to_720p(self, tmp_path):
+        src = tmp_path / "snapshot.jpg"
+        _write_test_jpeg(src, size=(1920, 1080))
+        out = prepare_thumbnail_jpeg(src)
+        assert out is not None
+        with Image.open(io.BytesIO(out)) as img:
+            assert img.size == (THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT)
+
+    def test_handles_non_16x9_aspect(self, tmp_path):
+        """4:3 input fits inside 1280x720 box, preserving aspect."""
+        src = tmp_path / "snapshot.jpg"
+        _write_test_jpeg(src, size=(1600, 1200))  # 4:3
+        out = prepare_thumbnail_jpeg(src)
+        assert out is not None
+        with Image.open(io.BytesIO(out)) as img:
+            assert img.size[0] <= THUMBNAIL_WIDTH
+            assert img.size[1] <= THUMBNAIL_HEIGHT
+
+    def test_missing_file_returns_none(self, tmp_path):
+        assert prepare_thumbnail_jpeg(tmp_path / "absent.jpg") is None
+
+    def test_non_image_returns_none(self, tmp_path):
+        bad = tmp_path / "snapshot.jpg"
+        bad.write_text("not an image")
+        assert prepare_thumbnail_jpeg(bad) is None
+
+    def test_output_under_500kb(self, tmp_path):
+        """Quality 85 keeps under ~500KB on synthetic content."""
+        src = tmp_path / "snapshot.jpg"
+        _write_test_jpeg(src, size=(1920, 1080))
+        out = prepare_thumbnail_jpeg(src)
+        assert out is not None
+        assert len(out) < 500_000
+
+    def test_palette_mode_converted_to_rgb(self, tmp_path):
+        """Pillow needs RGB for JPEG; the converter handles palette/grayscale inputs."""
+        src = tmp_path / "snapshot.png"
+        Image.new("P", (1280, 720), 42).save(src, format="PNG")
+        out = prepare_thumbnail_jpeg(src)
+        assert out is not None
+        with Image.open(io.BytesIO(out)) as img:
+            assert img.mode == "RGB"
+
+
+# ── Video ID gate ───────────────────────────────────────────────────
+
+
+class TestVideoIdGate:
+    def test_no_video_id_skips_upload(self, tmp_path):
+        src = tmp_path / "snapshot.jpg"
+        _write_test_jpeg(src)
+        rotator, upload = _make_rotator(video_id=None, snapshot_path=src)
+        assert rotator.run_once() == "no_video_id"
+        upload.assert_not_called()
+
+    def test_env_var_provides_video_id(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HAPAX_YOUTUBE_VIDEO_ID", "env-video-id")
+        src = tmp_path / "snapshot.jpg"
+        _write_test_jpeg(src)
+        upload = mock.Mock(return_value="ok")
+        rotator = ThumbnailRotator(
+            upload_fn=upload, snapshot_path=src, registry=CollectorRegistry()
+        )
+        assert rotator.run_once() == "ok"
+        assert upload.call_args.args[0] == "env-video-id"
+
+    def test_explicit_video_id_overrides_env(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HAPAX_YOUTUBE_VIDEO_ID", "env-video-id")
+        src = tmp_path / "snapshot.jpg"
+        _write_test_jpeg(src)
+        rotator, upload = _make_rotator(video_id="explicit-id", snapshot_path=src)
+        rotator.run_once()
+        assert upload.call_args.args[0] == "explicit-id"
+
+
+# ── Snapshot gate ───────────────────────────────────────────────────
+
+
+class TestSnapshotGate:
+    def test_missing_snapshot_skips_upload(self, tmp_path):
+        rotator, upload = _make_rotator(snapshot_path=tmp_path / "absent.jpg")
+        assert rotator.run_once() == "no_snapshot"
+        upload.assert_not_called()
+
+
+# ── Dry run ─────────────────────────────────────────────────────────
+
+
+class TestDryRun:
+    def test_dry_run_skips_upload_but_consumes_snapshot(self, tmp_path):
+        src = tmp_path / "snapshot.jpg"
+        _write_test_jpeg(src)
+        rotator, upload = _make_rotator(snapshot_path=src, dry_run=True)
+        assert rotator.run_once() == "dry_run"
+        upload.assert_not_called()
+
+    def test_dry_run_env_var(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HAPAX_THUMBNAIL_DRY_RUN", "1")
+        src = tmp_path / "snapshot.jpg"
+        _write_test_jpeg(src)
+        upload = mock.Mock(return_value="ok")
+        rotator = ThumbnailRotator(
+            video_id="vid",
+            upload_fn=upload,
+            snapshot_path=src,
+            registry=CollectorRegistry(),
+        )
+        assert rotator.run_once() == "dry_run"
+        upload.assert_not_called()
+
+
+# ── Upload outcomes ─────────────────────────────────────────────────
+
+
+class TestUploadOutcomes:
+    def test_ok_increments_counter(self, tmp_path):
+        src = tmp_path / "snapshot.jpg"
+        _write_test_jpeg(src)
+        rotator, upload = _make_rotator(snapshot_path=src)
+        rotator.run_once()
+        assert rotator.rotations_total.labels(result="ok")._value.get() == 1.0
+
+    def test_upload_exception_yields_error(self, tmp_path):
+        src = tmp_path / "snapshot.jpg"
+        _write_test_jpeg(src)
+        upload = mock.Mock(side_effect=RuntimeError("api down"))
+        rotator, _ = _make_rotator(snapshot_path=src, upload_fn=upload)
+        assert rotator.run_once() == "error"
+
+    def test_upload_returns_label_through(self, tmp_path):
+        """Whatever string the upload_fn returns becomes the result + label."""
+        src = tmp_path / "snapshot.jpg"
+        _write_test_jpeg(src)
+        upload = mock.Mock(return_value="auth_error")
+        rotator, _ = _make_rotator(snapshot_path=src, upload_fn=upload)
+        assert rotator.run_once() == "auth_error"
+        assert rotator.rotations_total.labels(result="auth_error")._value.get() == 1.0
+
+
+# ── Tick cadence floor ──────────────────────────────────────────────
+
+
+class TestTickFloor:
+    def test_tick_s_floor_at_60s(self, tmp_path):
+        """Don't permit aggressive cadences that would blow YouTube quota."""
+        src = tmp_path / "snapshot.jpg"
+        _write_test_jpeg(src)
+        rotator, _ = _make_rotator(snapshot_path=src, tick_s=10.0)
+        assert rotator._tick_s >= 60.0
