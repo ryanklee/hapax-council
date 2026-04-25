@@ -19,6 +19,8 @@ polysemic_audit_acknowledged_terms:
   - governance
   - compliance
   - safety
+  - transparency
+  - policy
 polysemic_audit_acknowledgement_rationale: |
   This brief's TOPIC is precisely the cross-register translation
   between legal-theoretic, AI-safety, corporate-governance, and
@@ -26,10 +28,21 @@ polysemic_audit_acknowledgement_rationale: |
   resolution preamble that the polysemic_audit gate's documented
   remediation contemplates. The audit's pattern-based heuristic
   cannot detect a register-resolution preamble; the operator
-  acknowledges all three flagged terms as multi-register-by-design
+  acknowledges the flagged terms as multi-register-by-design
   for this artifact specifically. New artifacts that introduce
   these terms without a register-resolution preamble must NOT
   inherit this acknowledgement — it is per-artifact, not per-corpus.
+
+  Acknowledged terms include the wk1-d2 seed (governance / compliance
+  / safety) and the wk1 follow-on registry expansion's two
+  brief-relevant terms (transparency, policy). The brief's
+  constitutive-versus-regulative argument explicitly names AI-safety
+  transparency, corporate transparency, and legal-disclosure
+  transparency as distinct registers that the brief translates
+  between; same for policy in the legal-policy / AI-policy /
+  corporate-policy registers. The third expansion term
+  (accountability) does not appear in the brief and is not in the
+  acknowledged set.
 ---
 
 # The Hapax Constitutional-Law Brief
