@@ -220,9 +220,74 @@ class TestAcknowledgedTermsOverride:
         assert {c.term for c in without.concerns} == {c.term for c in with_empty.concerns}
 
 
+class TestRegistryExpansion:
+    """Wk1 follow-on expansion: SEED_POLYSEMIC_TERMS gains three
+    high-leverage terms for the academic / AI-safety / governance
+    publication space (transparency / accountability / policy). These
+    pin the contract that the expanded set is in scope.
+    """
+
+    def test_transparency_in_seed(self) -> None:
+        from agents.authoring.polysemic_audit import SEED_POLYSEMIC_TERMS
+
+        assert "transparency" in SEED_POLYSEMIC_TERMS
+
+    def test_accountability_in_seed(self) -> None:
+        from agents.authoring.polysemic_audit import SEED_POLYSEMIC_TERMS
+
+        assert "accountability" in SEED_POLYSEMIC_TERMS
+
+    def test_policy_in_seed(self) -> None:
+        from agents.authoring.polysemic_audit import SEED_POLYSEMIC_TERMS
+
+        assert "policy" in SEED_POLYSEMIC_TERMS
+
+    def test_transparency_fires_on_cross_register_artifact(self) -> None:
+        """Transparency in legal+AI-safety registers triggers a concern."""
+        from agents.authoring.polysemic_audit import audit_artifact
+
+        text = (
+            "GDPR transparency requires regulatory disclosure. "
+            "Model transparency in the AI-safety sense — interpretability, "
+            "introspectability, axiom legibility — is a different "
+            "concern. Transparency under directives like the EU AI Act "
+            "regulates both."
+        )
+        result = audit_artifact(text)
+        assert any(c.term == "transparency" for c in result.concerns)
+
+    def test_policy_fires_on_cross_register_artifact(self) -> None:
+        """Policy in corporate+AI-safety+product registers triggers."""
+        from agents.authoring.polysemic_audit import audit_artifact
+
+        text = (
+            "Corporate executive policy on workplace operational risk "
+            "is one register. Model policy under axiom directives is "
+            "a different register. Product policy on operational device "
+            "behavior is a third."
+        )
+        result = audit_artifact(text)
+        assert any(c.term == "policy" for c in result.concerns)
+
+    def test_accountability_acknowledged_silences(self) -> None:
+        """Acknowledgement override applies to expansion terms uniformly."""
+        from agents.authoring.polysemic_audit import audit_artifact
+
+        text = (
+            "Legal accountability under regulation is corporate executive "
+            "responsibility. Model accountability under directives is "
+            "alignment-grounded. Both accountability concepts coexist."
+        )
+        flagged = audit_artifact(text)
+        assert any(c.term == "accountability" for c in flagged.concerns)
+
+        ack = audit_artifact(text, acknowledged_terms=frozenset({"accountability"}))
+        assert all(c.term != "accountability" for c in ack.concerns)
+
+
 @pytest.mark.parametrize(
     "term",
-    ["compliance", "governance", "safety"],
+    ["compliance", "governance", "safety", "transparency", "accountability", "policy"],
 )
 class TestSeedRegistryCoverage:
     """Seed registry covers the V5-spec'd "legal/governance/AI-safety

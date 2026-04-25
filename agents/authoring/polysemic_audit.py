@@ -115,12 +115,22 @@ _REGISTER_MARKERS: dict[str, frozenset[str]] = {
 
 
 # Seed polysemic-term registry: terms whose meaning diverges across
-# the registers above.
+# the registers above. Wk1 d2 shipped the seed three; wk1 follow-on
+# (this expansion) adds three high-leverage terms for the academic /
+# AI-safety / governance publication space the system increasingly
+# occupies. Each addition was selected by frequency-of-cross-register-
+# divergence in the publication corpus, not by hypothetical concern.
 SEED_POLYSEMIC_TERMS: frozenset[str] = frozenset(
     {
+        # Wk1 d2 seed (V5 weave §12 invariant 5 core)
         "compliance",
         "governance",
         "safety",
+        # Wk1 follow-on expansion (academic / AI-safety / corporate
+        # governance reads diverge for these terms in published work)
+        "transparency",  # legal disclosure / model interpretability / corporate reporting
+        "accountability",  # legal liability / model alignment / executive responsibility
+        "policy",  # legal-policy / AI-policy / corporate-policy / product-policy
     }
 )
 
