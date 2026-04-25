@@ -33,3 +33,14 @@ speaker_is_operator:
   constraint_narrowing: "single_user collapses the hypothesis space to {operator, non-operator}; default-operator semantics under no-session reduces ambiguity (see wire-in: ``not session.is_active`` → operator by convention)"
   symmetry: "time-translation invariant during a single session window; resets at session boundaries"
   derivation_document_ref: "docs/research/2026-04-24-universal-bayesian-claim-confidence.md §4"
+
+system_degraded:
+  claim_name: system_degraded
+  structural_commitments:
+    - "executive_function axiom: zero-config agents + automated routine work — degradation must be detectable from internal state without operator intervention"
+    - "single-process invariant: degradation belief is process-local (no cross-host fusion); the watcher, drift detector, GPU monitor, and director are all in one host"
+    - "operationally observable: each contributing signal is bounded (queue depth has a finite watermark; drift is a normalized float; GPU pressure has a hardware ceiling; cadence is tick-discrete)"
+  reference_prior: "Beta(1,9); 0.10 starting probability — the system is healthy by default. Empirical operator-away window observation: ~10% of ticks see at least one degradation signal asserted (3499-004 incident excluded as pre-fix outlier)."
+  constraint_narrowing: "Bias toward HEALTHY because (a) most ticks do not breach watermarks; (b) the cost of false-DEGRADED (recruitment slowdown, narration quieting) is higher than false-HEALTHY in the hot path. The asymmetric TemporalProfile (k_enter=2, k_exit=12) further narrows toward conservative behavior under doubt."
+  symmetry: "time-translation invariant within a single boot window; resets at process restart (no persistence across boots — degradation belief is recomputed from current observations)"
+  derivation_document_ref: "docs/research/2026-04-24-universal-bayesian-claim-confidence.md §4 + §6 (asymmetric profiles)"
