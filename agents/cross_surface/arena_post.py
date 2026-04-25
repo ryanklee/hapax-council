@@ -362,7 +362,19 @@ def _compose_artifact_content(artifact) -> str:  # type: ignore[no-untyped-def]
     Prefers ``attribution_block`` so per-artifact framing stays
     authoritative; otherwise builds ``"{title} — {abstract}"``.
     Truncated to ``ARENA_BLOCK_TEXT_LIMIT`` (4096).
+
+    The Refusal Brief's ``non_engagement_clause`` (LONG form, fits
+    Are.na's 4096-char block) is appended when the artifact isn't the
+    Refusal Brief itself and doesn't already cite the brief. Self-
+    referential artifacts skip the clause; if the LONG form would
+    exceed the block limit it falls back to the SHORT form, then drops
+    silently if even SHORT doesn't fit.
     """
+    from shared.attribution_block import (
+        NON_ENGAGEMENT_CLAUSE_LONG,
+        NON_ENGAGEMENT_CLAUSE_SHORT,
+    )
+
     title = getattr(artifact, "title", "") or ""
     abstract = getattr(artifact, "abstract", "") or ""
     attribution = getattr(artifact, "attribution_block", "") or ""
@@ -374,7 +386,17 @@ def _compose_artifact_content(artifact) -> str:  # type: ignore[no-untyped-def]
     else:
         body = title or "hapax — publication artifact"
 
-    return body[:ARENA_BLOCK_TEXT_LIMIT]
+    body = body[:ARENA_BLOCK_TEXT_LIMIT]
+
+    slug = getattr(artifact, "slug", "") or ""
+    if slug != "refusal-brief" and "refusal" not in body.lower():
+        for clause in (NON_ENGAGEMENT_CLAUSE_LONG, NON_ENGAGEMENT_CLAUSE_SHORT):
+            candidate = f"{body}\n\n{clause}"
+            if len(candidate) <= ARENA_BLOCK_TEXT_LIMIT:
+                body = candidate
+                break
+
+    return body
 
 
 def _artifact_source_url(artifact) -> str | None:  # type: ignore[no-untyped-def]

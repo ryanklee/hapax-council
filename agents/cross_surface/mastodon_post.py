@@ -319,7 +319,16 @@ def _compose_artifact_text(artifact) -> str:  # type: ignore[no-untyped-def]
     ``MASTODON_TEXT_LIMIT``. If the artifact carries a non-empty
     ``attribution_block``, prefer that as the body so per-artifact
     framing stays authoritative.
+
+    The Refusal Brief's ``non_engagement_clause`` (SHORT form, fits
+    Mastodon's 500-char body cap with room to spare) is appended when
+    the artifact isn't the Refusal Brief itself and doesn't already
+    cite the brief. Self-referential artifacts skip the clause; if
+    appending the clause would exceed MASTODON_TEXT_LIMIT it's
+    dropped silently (artifact framing wins).
     """
+    from shared.attribution_block import NON_ENGAGEMENT_CLAUSE_SHORT
+
     title = getattr(artifact, "title", "") or ""
     abstract = getattr(artifact, "abstract", "") or ""
     attribution = getattr(artifact, "attribution_block", "") or ""
@@ -331,7 +340,15 @@ def _compose_artifact_text(artifact) -> str:  # type: ignore[no-untyped-def]
     else:
         body = title or "hapax — publication artifact"
 
-    return body[:MASTODON_TEXT_LIMIT]
+    body = body[:MASTODON_TEXT_LIMIT]
+
+    slug = getattr(artifact, "slug", "") or ""
+    if slug != "refusal-brief" and "refusal" not in body.lower():
+        candidate = f"{body}\n\n{NON_ENGAGEMENT_CLAUSE_SHORT}"
+        if len(candidate) <= MASTODON_TEXT_LIMIT:
+            body = candidate
+
+    return body
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:

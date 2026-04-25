@@ -328,6 +328,7 @@ class TestPublishArtifact:
 
     def test_attribution_block_preferred_in_description(self, monkeypatch):
         from agents.cross_surface import discord_webhook
+        from shared.attribution_block import NON_ENGAGEMENT_CLAUSE_LONG
 
         monkeypatch.setenv("HAPAX_DISCORD_WEBHOOK_URL", "https://discord.test/webhook/abc")
         with mock.patch.object(discord_webhook, "_default_post", return_value=True) as post:
@@ -339,17 +340,41 @@ class TestPublishArtifact:
             assert discord_webhook.publish_artifact(artifact) == "ok"
         payload = post.call_args.args[1]
         assert payload["embeds"][0]["title"] == "Title"
-        assert payload["embeds"][0]["description"] == "Attribution Block"
+        # Description carries attribution + appended Refusal Brief LONG clause.
+        assert payload["embeds"][0]["description"].startswith("Attribution Block")
+        assert NON_ENGAGEMENT_CLAUSE_LONG in payload["embeds"][0]["description"]
         assert payload["embeds"][0]["color"] == discord_webhook.DISCORD_EMBED_COLOR
 
     def test_abstract_fallback_when_no_attribution(self, monkeypatch):
         from agents.cross_surface import discord_webhook
+        from shared.attribution_block import NON_ENGAGEMENT_CLAUSE_LONG
 
         monkeypatch.setenv("HAPAX_DISCORD_WEBHOOK_URL", "https://discord.test/webhook/abc")
         with mock.patch.object(discord_webhook, "_default_post", return_value=True) as post:
             artifact = _FakeArtifact(title="T", abstract="A")
             assert discord_webhook.publish_artifact(artifact) == "ok"
-        assert post.call_args.args[1]["embeds"][0]["description"] == "A"
+        description = post.call_args.args[1]["embeds"][0]["description"]
+        assert description.startswith("A")
+        assert NON_ENGAGEMENT_CLAUSE_LONG in description
+
+    def test_refusal_brief_self_referential_skips_clause(self, monkeypatch):
+        from agents.cross_surface import discord_webhook
+        from shared.attribution_block import (
+            NON_ENGAGEMENT_CLAUSE_LONG,
+            NON_ENGAGEMENT_CLAUSE_SHORT,
+        )
+
+        monkeypatch.setenv("HAPAX_DISCORD_WEBHOOK_URL", "https://discord.test/webhook/abc")
+        with mock.patch.object(discord_webhook, "_default_post", return_value=True) as post:
+            artifact = _FakeArtifact(
+                slug="refusal-brief",
+                title="Refusal Brief",
+                attribution_block="Hapax + Claude Code.",
+            )
+            assert discord_webhook.publish_artifact(artifact) == "ok"
+        description = post.call_args.args[1]["embeds"][0]["description"]
+        assert NON_ENGAGEMENT_CLAUSE_LONG not in description
+        assert NON_ENGAGEMENT_CLAUSE_SHORT not in description
 
     def test_doi_yields_embed_url(self, monkeypatch):
         from agents.cross_surface import discord_webhook

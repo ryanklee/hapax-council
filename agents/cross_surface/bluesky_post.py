@@ -321,7 +321,18 @@ def _compose_artifact_text(artifact) -> str:  # type: ignore[no-untyped-def]
     Default form: ``"{title} — {abstract}"``, truncated to 300 chars.
     If the artifact carries a non-empty ``attribution_block``, prefer
     that as the body so per-artifact framing stays authoritative.
+
+    The Refusal Brief's ``non_engagement_clause`` (SHORT form for bsky's
+    300-char body cap) is appended when (a) the artifact's
+    attribution_block doesn't already reference the brief, and (b) the
+    SHORT clause fits in remaining capacity. The append is best-effort:
+    if appending the clause would push the body over BLUESKY_TEXT_LIMIT,
+    the clause is dropped (artifact framing wins). Self-referential
+    artifacts (the Refusal Brief itself) are detected by checking
+    ``artifact.slug``.
     """
+    from shared.attribution_block import NON_ENGAGEMENT_CLAUSE_SHORT
+
     title = getattr(artifact, "title", "") or ""
     abstract = getattr(artifact, "abstract", "") or ""
     attribution = getattr(artifact, "attribution_block", "") or ""
@@ -333,7 +344,17 @@ def _compose_artifact_text(artifact) -> str:  # type: ignore[no-untyped-def]
     else:
         body = title or "hapax — publication artifact"
 
-    return body[:BLUESKY_TEXT_LIMIT]
+    body = body[:BLUESKY_TEXT_LIMIT]
+
+    # Append the Refusal Brief reference if it fits and isn't self-
+    # referential (the Refusal Brief itself doesn't cite itself).
+    slug = getattr(artifact, "slug", "") or ""
+    if slug != "refusal-brief" and "refusal" not in body.lower():
+        candidate = f"{body}\n\n{NON_ENGAGEMENT_CLAUSE_SHORT}"
+        if len(candidate) <= BLUESKY_TEXT_LIMIT:
+            body = candidate
+
+    return body
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:

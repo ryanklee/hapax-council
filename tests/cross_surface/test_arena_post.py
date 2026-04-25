@@ -254,6 +254,7 @@ class TestPublishArtifact:
 
     def test_attribution_block_preferred(self, monkeypatch):
         from agents.cross_surface import arena_post
+        from shared.attribution_block import NON_ENGAGEMENT_CLAUSE_LONG
 
         monkeypatch.setenv("HAPAX_ARENA_TOKEN", "tok")
         monkeypatch.setenv("HAPAX_ARENA_CHANNEL_SLUG", "ch")
@@ -269,11 +270,14 @@ class TestPublishArtifact:
         kwargs = client.add_block.call_args.kwargs
         args = client.add_block.call_args.args
         assert args == ("ch",)
-        assert kwargs["content"] == "Attribution Block"
+        # Attribution body present + Refusal Brief LONG clause appended.
+        assert kwargs["content"].startswith("Attribution Block")
+        assert NON_ENGAGEMENT_CLAUSE_LONG in kwargs["content"]
         assert kwargs["source"] is None
 
     def test_title_abstract_fallback(self, monkeypatch):
         from agents.cross_surface import arena_post
+        from shared.attribution_block import NON_ENGAGEMENT_CLAUSE_LONG
 
         monkeypatch.setenv("HAPAX_ARENA_TOKEN", "tok")
         monkeypatch.setenv("HAPAX_ARENA_CHANNEL_SLUG", "ch")
@@ -282,7 +286,9 @@ class TestPublishArtifact:
         with mock.patch.object(arena_post, "_default_client_factory", return_value=client):
             artifact = _FakeArtifact(title="Title", abstract="Abstract.")
             assert arena_post.publish_artifact(artifact) == "ok"
-        assert client.add_block.call_args.kwargs["content"] == "Title — Abstract."
+        content = client.add_block.call_args.kwargs["content"]
+        assert content.startswith("Title — Abstract.")
+        assert NON_ENGAGEMENT_CLAUSE_LONG in content
 
     def test_doi_yields_source_url(self, monkeypatch):
         from agents.cross_surface import arena_post
@@ -359,4 +365,28 @@ class TestPublishArtifact:
             # Bare artifact still gets a placeholder, so this is "ok".
             artifact = _FakeArtifact()
             assert arena_post.publish_artifact(artifact) == "ok"
-        assert client.add_block.call_args.kwargs["content"] == "hapax — publication artifact"
+        # Bare placeholder + appended Refusal Brief LONG clause.
+        content = client.add_block.call_args.kwargs["content"]
+        assert content.startswith("hapax — publication artifact")
+
+    def test_refusal_brief_self_referential_skips_clause(self, monkeypatch):
+        from agents.cross_surface import arena_post
+        from shared.attribution_block import (
+            NON_ENGAGEMENT_CLAUSE_LONG,
+            NON_ENGAGEMENT_CLAUSE_SHORT,
+        )
+
+        monkeypatch.setenv("HAPAX_ARENA_TOKEN", "tok")
+        monkeypatch.setenv("HAPAX_ARENA_CHANNEL_SLUG", "ch")
+        client = mock.Mock()
+        client.add_block.return_value = None
+        with mock.patch.object(arena_post, "_default_client_factory", return_value=client):
+            artifact = _FakeArtifact(
+                slug="refusal-brief",
+                title="Refusal Brief",
+                attribution_block="Hapax + Claude Code.",
+            )
+            assert arena_post.publish_artifact(artifact) == "ok"
+        content = client.add_block.call_args.kwargs["content"]
+        assert NON_ENGAGEMENT_CLAUSE_LONG not in content
+        assert NON_ENGAGEMENT_CLAUSE_SHORT not in content

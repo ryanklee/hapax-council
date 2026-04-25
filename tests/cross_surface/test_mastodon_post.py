@@ -293,6 +293,7 @@ class TestPublishArtifact:
 
     def test_compose_uses_attribution_when_present(self):
         from agents.cross_surface.mastodon_post import _compose_artifact_text
+        from shared.attribution_block import NON_ENGAGEMENT_CLAUSE_SHORT
         from shared.preprint_artifact import PreprintArtifact
 
         artifact = PreprintArtifact(
@@ -301,14 +302,33 @@ class TestPublishArtifact:
             abstract="Abstract.",
             attribution_block="Hapax + Claude Code + Oudepode (unsettled).",
         )
-        assert _compose_artifact_text(artifact) == "Hapax + Claude Code + Oudepode (unsettled)."
+        text = _compose_artifact_text(artifact)
+        assert text.startswith("Hapax + Claude Code + Oudepode (unsettled).")
+        assert NON_ENGAGEMENT_CLAUSE_SHORT in text
+
+    def test_compose_skips_clause_for_self_referential_refusal_brief(self):
+        from agents.cross_surface.mastodon_post import _compose_artifact_text
+        from shared.attribution_block import NON_ENGAGEMENT_CLAUSE_SHORT
+        from shared.preprint_artifact import PreprintArtifact
+
+        artifact = PreprintArtifact(
+            slug="refusal-brief",
+            title="Refusal Brief",
+            abstract="Self-referential.",
+            attribution_block="Hapax + Claude Code.",
+        )
+        text = _compose_artifact_text(artifact)
+        assert NON_ENGAGEMENT_CLAUSE_SHORT not in text
 
     def test_compose_falls_back_to_title_abstract(self):
         from agents.cross_surface.mastodon_post import _compose_artifact_text
+        from shared.attribution_block import NON_ENGAGEMENT_CLAUSE_SHORT
         from shared.preprint_artifact import PreprintArtifact
 
         artifact = PreprintArtifact(slug="x", title="Title", abstract="Abstract.")
-        assert _compose_artifact_text(artifact) == "Title — Abstract."
+        text = _compose_artifact_text(artifact)
+        assert text.startswith("Title — Abstract.")
+        assert NON_ENGAGEMENT_CLAUSE_SHORT in text
 
     def test_compose_truncates_to_limit(self):
         from agents.cross_surface.mastodon_post import (
