@@ -28,11 +28,15 @@ Mitigations:
   - Restricted to Claude-Code-titled foot windows (single-target, not desktop)
   - ``HAPAX_DURF_FORCE_ON`` env opt-in for inspection mode
   - Production gate (``desk_active`` + bytes + NOT consent-safe) suppresses
-  - ``consent-safe`` egress mode hard-suppresses
+  - ``consent-safe`` egress mode hard-suppresses (poll AND render)
+  - Per-capture OCR redaction (AUDIT-01) drops PNGs whose text matches
+    high-confidence risk patterns (API keys, tokens, operator-home
+    paths). Bypass via ``HAPAX_DURF_RAW=1`` for explicit inspection.
   - Operator manages on-screen content per existing terminal discipline
 
 Phase 3 follow-ups (deferred): reflection layer, foreground rotation,
-Bayesian-gate migration, per-window image-OCR redaction.
+Bayesian-gate migration, per-region pixel masking (currently the
+redaction primitive suppresses the whole pane on detect).
 """
 
 from __future__ import annotations
@@ -46,6 +50,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from .durf_redaction import RedactionAction, redact_terminal_capture
 from .homage.transitional_source import HomageTransitionalSource
 
 if TYPE_CHECKING:
@@ -155,6 +160,20 @@ def _grim_capture(geom: dict[str, Any], output_path: Path) -> bool:
         if result.returncode != 0 or not tmp_path.exists():
             tmp_path.unlink(missing_ok=True)
             return False
+        # AUDIT-01: redact-or-suppress before publishing PNG to render.
+        # Fail-closed: SUPPRESS *and* UNAVAILABLE both drop the capture.
+        # Stale published path is also removed so a previously-clean
+        # snapshot does not keep showing once content turns risky.
+        redaction = redact_terminal_capture(tmp_path)
+        if redaction.action != RedactionAction.CLEAN:
+            log.info(
+                "durf: capture suppressed by redaction (%s; %s)",
+                redaction.action.value,
+                redaction.detail,
+            )
+            tmp_path.unlink(missing_ok=True)
+            output_path.unlink(missing_ok=True)
+            return False
         os.replace(tmp_path, output_path)
         return True
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
@@ -241,19 +260,30 @@ class DURFCairoSource(HomageTransitionalSource):
         self._poll_thread.start()
 
     def _poll_loop(self) -> None:
-        """Background — Hyprland scan + grim capture per session."""
+        """Background — Hyprland scan + grim capture per session.
+
+        AUDIT-01: refuses to capture when ``consent-state.txt = safe``
+        (defense in depth — the render gate already suppresses, but
+        the poll-time refusal also prevents pixel bytes from ever
+        landing in ``/dev/shm/hapax-compositor/durf-captures``).
+        """
         while not self._stop_event.is_set():
             try:
-                discovered = _discover_session_windows()
-                paths: dict[str, Path] = {}
-                for win in discovered:
-                    role = win["role"]
-                    out = _CAPTURE_DIR / f"{role}.png"
-                    if _grim_capture(win, out):
-                        paths[role] = out
-                with self._discovered_lock:
-                    self._discovered = discovered
-                    self._capture_paths = paths
+                if _consent_safe_active():
+                    with self._discovered_lock:
+                        self._discovered = []
+                        self._capture_paths = {}
+                else:
+                    discovered = _discover_session_windows()
+                    paths: dict[str, Path] = {}
+                    for win in discovered:
+                        role = win["role"]
+                        out = _CAPTURE_DIR / f"{role}.png"
+                        if _grim_capture(win, out):
+                            paths[role] = out
+                    with self._discovered_lock:
+                        self._discovered = discovered
+                        self._capture_paths = paths
             except Exception as e:
                 log.warning("durf: poll cycle failed: %s", e, exc_info=True)
             self._stop_event.wait(_POLL_INTERVAL_S)
