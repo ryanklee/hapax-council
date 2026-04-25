@@ -126,6 +126,8 @@ class TestHappyPath:
         assert meta["publication_date"][4] == "-"
 
     def test_attribution_block_omitted_uses_abstract_only(self, monkeypatch):
+        from shared.attribution_block import NON_ENGAGEMENT_CLAUSE_LONG
+
         monkeypatch.setenv(ZENODO_TOKEN_ENV, "test-token")
         artifact = _make_artifact(
             title="t",
@@ -140,9 +142,13 @@ class TestHappyPath:
         ) as post_mock:
             publish_artifact(artifact)
         meta = post_mock.call_args_list[0].kwargs["json"]["metadata"]
-        assert meta["description"] == "just abstract."
+        # Description carries abstract + appended Refusal Brief LONG clause.
+        assert meta["description"].startswith("just abstract.")
+        assert NON_ENGAGEMENT_CLAUSE_LONG in meta["description"]
 
     def test_empty_artifact_falls_back_to_title(self, monkeypatch):
+        from shared.attribution_block import NON_ENGAGEMENT_CLAUSE_LONG
+
         monkeypatch.setenv(ZENODO_TOKEN_ENV, "test-token")
         artifact = _make_artifact(title="Only title", abstract="", attribution_block="")
         create_resp = _make_response(201, {"id": 1})
@@ -153,8 +159,32 @@ class TestHappyPath:
         ) as post_mock:
             publish_artifact(artifact)
         meta = post_mock.call_args_list[0].kwargs["json"]["metadata"]
-        # Empty description falls back to title (Zenodo requires non-empty).
-        assert meta["description"] == "Only title"
+        # Empty body → description starts as Refusal Brief LONG clause
+        # (compose returns clause-only); Zenodo accepts non-empty.
+        assert NON_ENGAGEMENT_CLAUSE_LONG in meta["description"]
+
+    def test_refusal_brief_self_referential_skips_clause(self, monkeypatch):
+        from shared.attribution_block import (
+            NON_ENGAGEMENT_CLAUSE_LONG,
+            NON_ENGAGEMENT_CLAUSE_SHORT,
+        )
+
+        monkeypatch.setenv(ZENODO_TOKEN_ENV, "test-token")
+        artifact = _make_artifact(
+            slug="refusal-brief",
+            title="Refusal Brief",
+            abstract="Self-referential.",
+        )
+        create_resp = _make_response(201, {"id": 1})
+        publish_resp = _make_response(202, {"id": 1})
+        with mock.patch(
+            "agents.zenodo_publisher.publisher.httpx.post",
+            side_effect=[create_resp, publish_resp],
+        ) as post_mock:
+            publish_artifact(artifact)
+        meta = post_mock.call_args_list[0].kwargs["json"]["metadata"]
+        assert NON_ENGAGEMENT_CLAUSE_LONG not in meta["description"]
+        assert NON_ENGAGEMENT_CLAUSE_SHORT not in meta["description"]
 
 
 # ── Error paths ──────────────────────────────────────────────────────
@@ -240,3 +270,67 @@ class TestApiBaseOverride:
         assert post_mock.call_args_list[0].args[0] == (
             "https://sandbox.zenodo.org/api/deposit/depositions"
         )
+
+
+# ── ORCID iD attachment to operator creator ──────────────────────────
+
+
+class TestOperatorOrcidAttachment:
+    def test_orcid_attached_when_pass_show_succeeds(self, monkeypatch):
+        """Operator's ORCID iD attaches to the Oudepode creator entry."""
+        from agents.zenodo_publisher.publisher import _render_creators
+        from shared.preprint_artifact import PreprintArtifact
+
+        monkeypatch.setattr(
+            "shared.orcid.operator_orcid",
+            lambda: "0009-0001-5146-4548",
+        )
+
+        artifact = PreprintArtifact(
+            slug="x",
+            title="t",
+            abstract="a",
+            body_md="b",
+        )
+        creators = _render_creators(artifact)
+        oudepode = next((c for c in creators if c["name"] == "Oudepode"), None)
+        assert oudepode is not None
+        assert oudepode.get("orcid") == "0009-0001-5146-4548"
+
+    def test_orcid_omitted_when_pass_show_fails(self, monkeypatch):
+        """No ORCID iD → operator entry has no ``orcid`` field."""
+        from agents.zenodo_publisher.publisher import _render_creators
+        from shared.preprint_artifact import PreprintArtifact
+
+        monkeypatch.setattr("shared.orcid.operator_orcid", lambda: None)
+
+        artifact = PreprintArtifact(
+            slug="x",
+            title="t",
+            abstract="a",
+            body_md="b",
+        )
+        creators = _render_creators(artifact)
+        for c in creators:
+            assert "orcid" not in c
+
+    def test_orcid_only_attaches_to_operator_not_hapax(self, monkeypatch):
+        """ORCID belongs to the operator-of-record, never to Hapax/Claude Code."""
+        from agents.zenodo_publisher.publisher import _render_creators
+        from shared.preprint_artifact import PreprintArtifact
+
+        monkeypatch.setattr(
+            "shared.orcid.operator_orcid",
+            lambda: "0009-0001-5146-4548",
+        )
+
+        artifact = PreprintArtifact(
+            slug="x",
+            title="t",
+            abstract="a",
+            body_md="b",
+        )
+        creators = _render_creators(artifact)
+        for c in creators:
+            if c["name"] in ("Hapax", "Claude Code"):
+                assert "orcid" not in c
