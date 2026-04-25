@@ -255,3 +255,67 @@ class TestLogosDriftBridge:
             for _ in range(8):
                 sde.contribute(drift_significant_observation(bridge))
             assert sde.state == "DEGRADED"
+
+
+# ── TestLogosGpuBridge ──────────────────────────────────────────────────
+
+
+class TestLogosGpuBridge:
+    """GPU pressure bridge: infra-snapshot.json → gpu_memory_used_total() Protocol."""
+
+    def test_missing_snapshot_yields_zero_zero(self, tmp_path):
+        from unittest.mock import patch
+
+        from logos.api.app import LogosGpuBridge
+
+        with patch("logos._config.PROFILES_DIR", tmp_path):
+            assert LogosGpuBridge().gpu_memory_used_total() == (0, 0)
+
+    def test_invalid_json_yields_zero_zero(self, tmp_path):
+        from unittest.mock import patch
+
+        from logos.api.app import LogosGpuBridge
+
+        (tmp_path / "infra-snapshot.json").write_text("not json")
+        with patch("logos._config.PROFILES_DIR", tmp_path):
+            assert LogosGpuBridge().gpu_memory_used_total() == (0, 0)
+
+    def test_missing_gpu_block_yields_zero_zero(self, tmp_path):
+        import json
+        from unittest.mock import patch
+
+        from logos.api.app import LogosGpuBridge
+
+        (tmp_path / "infra-snapshot.json").write_text(json.dumps({"other": "data"}))
+        with patch("logos._config.PROFILES_DIR", tmp_path):
+            assert LogosGpuBridge().gpu_memory_used_total() == (0, 0)
+
+    def test_gpu_block_with_used_total(self, tmp_path):
+        import json
+        from unittest.mock import patch
+
+        from logos.api.app import LogosGpuBridge
+
+        (tmp_path / "infra-snapshot.json").write_text(
+            json.dumps({"gpu": {"used_mb": 21500, "total_mb": 24576}})
+        )
+        with patch("logos._config.PROFILES_DIR", tmp_path):
+            assert LogosGpuBridge().gpu_memory_used_total() == (21500, 24576)
+
+    def test_gpu_bridge_drives_engine_to_degraded(self, tmp_path):
+        import json
+        from unittest.mock import patch
+
+        from agents.hapax_daimonion.backends.gpu_pressure import gpu_pressure_observation
+        from agents.hapax_daimonion.system_degraded_engine import SystemDegradedEngine
+        from logos.api.app import LogosGpuBridge
+
+        (tmp_path / "infra-snapshot.json").write_text(
+            json.dumps({"gpu": {"used_mb": 23000, "total_mb": 24576}})
+        )
+        with patch("logos._config.PROFILES_DIR", tmp_path):
+            bridge = LogosGpuBridge()
+            sde = SystemDegradedEngine(prior=0.1, enter_ticks=2)
+            for _ in range(8):
+                sde.contribute(gpu_pressure_observation(bridge))
+            assert sde.state == "DEGRADED"

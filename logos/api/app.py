@@ -41,6 +41,29 @@ class LogosDriftBridge:
         return min(1.0, high / 10.0)
 
 
+# Phase 6d-i.B GPU pressure bridge. Reads the same infra-snapshot.json
+# that logos/data/gpu.py:collect_vram() consumes, but synchronously so
+# the Protocol stays sync (gpu_pressure_observation is called inside
+# the SystemDegradedEngine tick loop without awaiting). The snapshot
+# is host-written by the health monitor; missing/stale file → (0, 0)
+# which the adapter treats as "pressure unknown" (False, instrument
+# fault tolerance).
+class LogosGpuBridge:
+    """Bridge infra-snapshot.json gpu block → gpu_memory_used_total() Protocol."""
+
+    def gpu_memory_used_total(self) -> tuple[int, int]:
+        import json
+
+        from logos._config import PROFILES_DIR
+
+        try:
+            data = json.loads((PROFILES_DIR / "infra-snapshot.json").read_text())
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            return (0, 0)
+        gpu = data.get("gpu") or {}
+        return (int(gpu.get("used_mb", 0)), int(gpu.get("total_mb", 0)))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await start_refresh_loop()
@@ -146,15 +169,19 @@ async def lifespan(app: FastAPI):
             await asyncio.sleep(60)
 
     async def _system_degraded_tick_loop():
-        """1s-cadence tick — observes queue depth + drift + contributes."""
+        """1s-cadence tick — observes queue depth + drift + gpu pressure + contributes."""
         from agents.hapax_daimonion.backends.drift_significant import (
             drift_significant_observation,
         )
         from agents.hapax_daimonion.backends.engine_queue_depth import (
             queue_depth_observation,
         )
+        from agents.hapax_daimonion.backends.gpu_pressure import (
+            gpu_pressure_observation,
+        )
 
         drift_bridge = LogosDriftBridge()
+        gpu_bridge = LogosGpuBridge()
 
         while True:
             try:
@@ -162,6 +189,7 @@ async def lifespan(app: FastAPI):
                     obs: dict[str, bool | None] = {}
                     obs.update(queue_depth_observation(engine.watcher))
                     obs.update(drift_significant_observation(drift_bridge))
+                    obs.update(gpu_pressure_observation(gpu_bridge))
                     sde.contribute(obs)
             except Exception:
                 _log.debug("SystemDegradedEngine tick failed", exc_info=True)
