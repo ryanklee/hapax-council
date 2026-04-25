@@ -18,6 +18,7 @@ import logging
 from typing import Any
 
 from agents.metadata_composer.framing import enforce_register
+from shared.claim_prompt import SURFACE_FLOORS, render_envelope
 
 log = logging.getLogger(__name__)
 
@@ -160,7 +161,9 @@ def _summarize_events(events: tuple[dict, ...]) -> str:
 
 def _build_prompt(context: Any, seed: str) -> str:
     """The full LLM prompt asked of the balanced tier."""
+    envelope = render_envelope([], floor=SURFACE_FLOORS["autonomous_narrative"])
     return (
+        f"{envelope}\n\n"
         "You are composing one short autonomous narration for the Hapax "
         "research-instrument livestream. The narration is spoken in "
         "first-system voice (Hapax as a system, never as a character).\n\n"

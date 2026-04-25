@@ -45,6 +45,7 @@ from agents.hapax_daimonion.conversation_helpers import (
     _stimmung_downgrade,  # noqa: F401 — re-exported for external consumers
     _strip_emoji,
 )
+from shared.claim_prompt import SURFACE_FLOORS, render_envelope
 from shared.persona_prompt_composer import compose_persona_prompt
 
 log = logging.getLogger(__name__)
@@ -273,8 +274,16 @@ class ConversationPipeline:
 
             import litellm
 
+            # Bayesian Phase 4 — surface-specific envelope. Spontaneous-speech
+            # uses 0.70 floor (vs voice_persona's 0.80 baked into
+            # ``self._system_context`` via persona.system_prompt). Phase 4
+            # ships call site; Phase 6 wires the actual claims source.
+            spontaneous_envelope = render_envelope([], floor=SURFACE_FLOORS["spontaneous_speech"])
             messages = [
-                {"role": "system", "content": self._system_context},
+                {
+                    "role": "system",
+                    "content": f"{spontaneous_envelope}\n\n{self._system_context}",
+                },
                 {"role": "user", "content": prompt},
             ]
 
