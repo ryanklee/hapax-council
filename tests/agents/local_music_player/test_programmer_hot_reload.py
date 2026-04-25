@@ -51,9 +51,12 @@ def test_pool_picks_up_newly_appended_tracks(tmp_path: Path) -> None:
 
     repo = LocalMusicRepo(path=repo_path)
     repo.load()
+    # Multi-source weights so both oudepode + epidemic tracks pass the
+    # pool's source filter — the test exercises the reload mechanism,
+    # not the source filter.
     cfg = ProgrammerConfig(
         history_path=tmp_path / "history.jsonl",
-        weights=dict(DEFAULT_WEIGHTS),
+        weights={SOURCE_OUDEPODE: 50.0, SOURCE_EPIDEMIC: 50.0},
     )
     prog = MusicProgrammer(cfg, local_repo=repo, rng=random.Random(0))
     assert {t.path for t in prog._pool()} == {"/a.mp3"}
@@ -93,14 +96,17 @@ def test_select_next_uses_freshly_ingested_track(tmp_path: Path) -> None:
     _write_jsonl(repo_path, [_track("/oude.mp3", source=SOURCE_OUDEPODE, artist="Oudepode")])
     repo = LocalMusicRepo(path=repo_path)
     repo.load()
+    # Both sources weighted so the pool filter admits the freshly-ingested
+    # epidemic track. Epidemic weighted higher to deterministically win.
     cfg = ProgrammerConfig(
         history_path=tmp_path / "history.jsonl",
-        weights={SOURCE_EPIDEMIC: 100.0},  # only epidemic weighted
+        weights={SOURCE_OUDEPODE: 1.0, SOURCE_EPIDEMIC: 100.0},
     )
     prog = MusicProgrammer(cfg, local_repo=repo, rng=random.Random(0))
 
-    # Before ingest: only oudepode track in pool, not in weighted sources →
-    # tier-1/tier-2 fallback returns the oudepode track.
+    # Before ingest: only oudepode track in pool. Epidemic has no candidates
+    # in the pool yet, so the source-loop drops to fallback which picks the
+    # oudepode track.
     chosen_before = prog.select_next()
     assert chosen_before is not None
     assert chosen_before.path == "/oude.mp3"
@@ -115,9 +121,8 @@ def test_select_next_uses_freshly_ingested_track(tmp_path: Path) -> None:
     )
     _bump_mtime(repo_path, repo)
 
-    # Next selection MUST see the epidemic track (it's the only weighted one).
-    # Burn enough cooldown ticks so /oude.mp3 is no longer favored, and pin
-    # via weights — epidemic should win on the very next call regardless.
+    # Next selection MUST see the epidemic track — high weight + cooldown on
+    # /oude.mp3 from the prior play.
     chosen_after = prog.select_next(now=10000.0)
     assert chosen_after is not None
     assert chosen_after.path == "/epi.mp3"

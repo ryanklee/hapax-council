@@ -15,7 +15,6 @@ from unittest.mock import MagicMock, patch
 
 from agents.local_music_player.player import LocalMusicPlayer, PlayerConfig, write_selection
 from agents.local_music_player.programmer import (
-    DEFAULT_WEIGHTS,
     SOURCE_EPIDEMIC,
     SOURCE_OUDEPODE,
     MusicProgrammer,
@@ -36,9 +35,21 @@ def _player_cfg(tmp_path: Path) -> PlayerConfig:
 
 
 def _prog_cfg(tmp_path: Path) -> ProgrammerConfig:
+    """Multi-source legacy mix for continuous-play tests that exercise
+    the player loop with Epidemic-flavoured fixture tracks. Tests of the
+    2026-04-24 oudepode-only default behavior live in test_programmer.py.
+    """
     return ProgrammerConfig(
         history_path=tmp_path / "history.jsonl",
-        weights=dict(DEFAULT_WEIGHTS),
+        # Includes Epidemic + Streambeats + Oudepode so the player-side
+        # auto-recruit tests can use Epidemic fixture tracks. Pool is
+        # filtered to sources with weight > 0 (programmer._pool); these
+        # legacy tests would otherwise see empty pools under the
+        # oudepode-only default (DEFAULT_WEIGHTS).
+        weights={
+            SOURCE_EPIDEMIC: 50.0,
+            SOURCE_OUDEPODE: 10.0,
+        },
         oudepode_window=8,
         max_artist_streak=2,
         max_source_streak=3,

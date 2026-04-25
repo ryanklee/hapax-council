@@ -237,9 +237,13 @@ def _track(
 
 
 def _make_config(tmp_path: Path) -> ProgrammerConfig:
+    """Multi-source legacy mix config — for tests of the legacy weighting
+    machinery. Tests of the 2026-04-24 oudepode-only default behavior
+    construct ProgrammerConfig with ``weights=dict(DEFAULT_WEIGHTS)`` directly.
+    """
     return ProgrammerConfig(
         history_path=tmp_path / "history.jsonl",
-        weights=dict(DEFAULT_WEIGHTS),
+        weights=dict(MULTI_SOURCE_WEIGHTS),
         oudepode_window=8,
         max_artist_streak=2,
         max_source_streak=3,
@@ -626,6 +630,50 @@ def test_record_play_skips_interstitials_from_history(tmp_path: Path) -> None:
     # And the on-disk persisted file should match.
     on_disk = (tmp_path / "history.jsonl").read_text(encoding="utf-8").splitlines()
     assert len(on_disk) == 1
+
+
+def test_pool_filters_legacy_sources_under_oudepode_only_defaults(tmp_path: Path) -> None:
+    """Regression pin (2026-04-24): the legacy local-music repo contains
+    Epidemic / Streambeats / etc. tracks that the directive retired. With
+    DEFAULT_WEIGHTS (oudepode-only), those legacy tracks must NOT bleed
+    into selection via fallback tiers when adjust_weights zeroes the sole
+    enabled source. Pool filtering is what enforces this.
+    """
+    cfg = ProgrammerConfig(
+        history_path=tmp_path / "history.jsonl",
+        weights=dict(DEFAULT_WEIGHTS),  # oudepode-only
+        oudepode_window=1,  # cap fires after every oudepode play
+        max_artist_streak=10_000,
+        track_cooldown_s=3600.0,
+    )
+    repo = LocalMusicRepo(path=tmp_path / "tracks.jsonl")
+    _populate(
+        repo,
+        [
+            _track("/oude/a.flac", source=SOURCE_OUDEPODE, artist="Oudepode"),
+            _track("/oude/b.flac", source=SOURCE_OUDEPODE, artist="Oudepode"),
+            # Legacy Epidemic tracks — must be filtered out of the pool.
+            _track("/epi/legacy1.flac", source=SOURCE_EPIDEMIC, artist="Legacy"),
+            _track("/epi/legacy2.flac", source=SOURCE_EPIDEMIC, artist="Legacy"),
+            _track("/sb/legacy3.flac", source=SOURCE_STREAMBEATS, artist="Legacy"),
+        ],
+    )
+    prog = MusicProgrammer(cfg, local_repo=repo, rng=random.Random(0))
+    # Force the oudepode cap to fire by recording an oudepode play.
+    prog.record_play(
+        path="/oude/a.flac",
+        title="a",
+        artist="Oudepode",
+        source=SOURCE_OUDEPODE,
+        when=0.0,
+    )
+    # Even with cap fired, fallback must not bleed in legacy sources.
+    for _ in range(20):
+        chosen = prog.select_next(now=10.0)
+        assert chosen is not None
+        assert chosen.source == SOURCE_OUDEPODE, (
+            f"Legacy source bled into selection: {chosen.path} (source={chosen.source})"
+        )
 
 
 def test_select_next_without_interstitial_repo_only_returns_music(tmp_path: Path) -> None:

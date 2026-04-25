@@ -350,10 +350,18 @@ class MusicProgrammer:
     # ── selection ───────────────────────────────────────────────────────
 
     def _pool(self) -> list[LocalMusicTrack]:
-        """All broadcast-safe tracks across local + SC repos.
+        """All broadcast-safe tracks across local + SC repos, filtered to
+        sources currently enabled in the weights config.
 
         Triggers ``maybe_reload`` on each repo so newly-ingested tracks
         on disk become eligible without restarting the daemon.
+
+        Source filter rationale: legacy ingest paths (Epidemic, Streambeats,
+        etc.) populate ``tracks.jsonl`` even though the operator's
+        2026-04-24 directive retired them from rotation. Pool-level
+        filtering keeps degenerate fallback tiers from bleeding legacy
+        tracks back into broadcast when ``adjust_weights`` zeroes the
+        sole enabled source.
         """
         repos: list[LocalMusicRepo] = []
         if self._local_repo is not None:
@@ -363,6 +371,7 @@ class MusicProgrammer:
         if not repos:
             log.debug("MusicProgrammer has no repos; pool empty")
             return []
+        enabled_sources = {s for s, w in self.config.weights.items() if w > 0}
         tracks: list[LocalMusicTrack] = []
         for repo in repos:
             if repo.maybe_reload():
@@ -373,6 +382,8 @@ class MusicProgrammer:
                 )
             for track in repo.all_tracks():
                 if not track.broadcast_safe:
+                    continue
+                if track.source not in enabled_sources:
                     continue
                 tracks.append(track)
         return tracks
