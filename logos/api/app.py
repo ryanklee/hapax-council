@@ -67,29 +67,47 @@ class LogosGpuBridge:
 # Phase 6a-i.B perception-state bridge. Reads the daimonion-side
 # perception-state.json (atomic write-then-rename by
 # ``agents.hapax_daimonion._perception_state_writer``) for the
-# OperatorActivityEngine signal stream. Only ``keyboard_active`` wires
-# in this PR — the remaining 4 activity signals (midi_clock_active,
-# desk_active, desktop_focus_changed_recent, watch_movement) wire in
-# follow-up PRs as their adapter contracts land. Missing/stale file →
-# ``None`` which the engine treats as "skip this signal" (no positive
-# nor negative evidence) per the ``ClaimEngine.tick`` contract — the
-# alternative (assume idle on missing file) would let a daimonion
-# crash spuriously decay the posterior to IDLE.
+# OperatorActivityEngine signal stream. Wires ``keyboard_active``
+# (#1389) + ``desk_active`` (this PR). Remaining 3 activity signals
+# (midi_clock_active, desktop_focus_changed_recent, watch_movement)
+# wire in follow-up PRs as their adapter contracts land.
+#
+# Missing/stale file → ``None`` from every accessor, which the engine
+# treats as "skip this signal" (no positive nor negative evidence) per
+# the ``ClaimEngine.tick`` contract — the alternative (assume idle on
+# missing file) would let a daimonion crash spuriously decay the
+# posterior to IDLE.
 class LogosPerceptionStateBridge:
-    """Bridge perception-state.json → keyboard_active() Protocol for OAE."""
+    """Bridge perception-state.json → activity-signal Protocol for OAE."""
 
-    def keyboard_active(self) -> bool | None:
+    # ``desk_activity`` is a string enum from the contact-mic DSP
+    # gesture classifier. Anything other than these idle states counts
+    # as engaged-with-the-desk activity. Centralised so the mapping is
+    # reviewable in one place when tuning later.
+    _DESK_IDLE_STATES: frozenset[str] = frozenset({"idle", "none"})
+
+    def _load(self) -> dict | None:
         import json
         from pathlib import Path
 
         path = Path.home() / ".cache" / "hapax-daimonion" / "perception-state.json"
         try:
-            data = json.loads(path.read_text())
+            return json.loads(path.read_text())
         except (FileNotFoundError, json.JSONDecodeError, OSError):
             return None
-        if "keyboard_active" not in data:
+
+    def keyboard_active(self) -> bool | None:
+        data = self._load()
+        if data is None or "keyboard_active" not in data:
             return None
         return bool(data["keyboard_active"])
+
+    def desk_active(self) -> bool | None:
+        data = self._load()
+        if data is None or "desk_activity" not in data:
+            return None
+        activity = str(data["desk_activity"]).lower()
+        return activity not in self._DESK_IDLE_STATES
 
 
 @asynccontextmanager
