@@ -10,7 +10,7 @@ from .layout import compute_tile_layout
 from .pipeline_manager import PipelineManager
 from .recording import add_hls_branch
 from .smooth_delay import add_smooth_delay_branch
-from .snapshots import add_fx_snapshot_branch, add_snapshot_branch
+from .snapshots import add_fx_snapshot_branch, add_llm_frame_snapshot_branch, add_snapshot_branch
 
 log = logging.getLogger(__name__)
 
@@ -140,6 +140,10 @@ def build_pipeline(compositor: Any) -> Any:
         prev = el
 
     add_snapshot_branch(compositor, pipeline, pre_fx_tee)
+    # Phase 3 (AUDIT-07 layer 4): camera-only frame for LLM prompts —
+    # cuts the ward-OCR-dominance hallucination class. Same upstream
+    # tap as snapshot.jpg, distinct file path so consumers don't mix.
+    add_llm_frame_snapshot_branch(compositor, pipeline, pre_fx_tee)
 
     output_tee = Gst.ElementFactory.make("tee", "output-tee")
     pipeline.add(output_tee)
