@@ -480,6 +480,61 @@ class TestDirectoryWatcher:
         doc_type, fm = _infer_doc_type(Path("/project/axioms/implications/single_user.yaml"))
         assert doc_type == "axiom-implication"
 
+    async def test_handler_prefilters_skip_eligible_events(self):
+        """AUDIT-31: _EventHandler.on_any_event filters at the handler
+        layer (before asyncio queue dispatch). gmail-sync bursts no
+        longer cross into Python; defense-in-depth on consumer side
+        remains for safety."""
+        from unittest.mock import MagicMock
+
+        from watchdog.events import FileCreatedEvent
+
+        from logos.engine.watcher import _EventHandler
+
+        loop = MagicMock()
+        loop.call_soon_threadsafe = MagicMock()
+        queue = MagicMock()
+        handler = _EventHandler(queue, loop)
+
+        # Filtered: rag-sources/gmail/* path
+        gmail_event = FileCreatedEvent("/data/rag-sources/gmail/inbox/x.md")
+        handler.on_any_event(gmail_event)
+        # Filtered: dotfile path
+        dot_event = FileCreatedEvent("/data/.hidden/y.md")
+        handler.on_any_event(dot_event)
+        # Filtered: processed/ path
+        proc_event = FileCreatedEvent("/data/processed/z.md")
+        handler.on_any_event(proc_event)
+
+        # All three filtered → no queue dispatches
+        assert loop.call_soon_threadsafe.call_count == 0
+
+        # Allowed: ordinary RAG path
+        allowed_event = FileCreatedEvent("/data/rag-sources/web/article.md")
+        handler.on_any_event(allowed_event)
+
+        # Exactly one dispatch
+        assert loop.call_soon_threadsafe.call_count == 1
+        args = loop.call_soon_threadsafe.call_args
+        assert args[0][0] == queue.put_nowait
+        assert args[0][1] == ("/data/rag-sources/web/article.md", "created")
+
+    async def test_handler_skips_directory_events(self):
+        """Directory-only events skip regardless of path."""
+        from unittest.mock import MagicMock
+
+        from watchdog.events import DirCreatedEvent
+
+        from logos.engine.watcher import _EventHandler
+
+        loop = MagicMock()
+        queue = MagicMock()
+        handler = _EventHandler(queue, loop)
+
+        dir_event = DirCreatedEvent("/data/rag-sources/web/newdir")
+        handler.on_any_event(dir_event)
+        assert loop.call_soon_threadsafe.call_count == 0
+
 
 # ── TestReactiveEngine ──────────────────────────────────────────────────────
 
