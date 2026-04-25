@@ -9,6 +9,10 @@ Verifies:
   - Empty / no-URL messages produce no entries
   - Writer failure is exception-safe (doesn't break the chat loop)
   - Source format ``chat:<hash>`` exactly
+  - Phase 6c-ii.B.1: engine wire-in tags AttributionEntry metadata
+    with ``operator_attributed`` when the chat-author engine asserts
+    operator identity (positive-only, additive — does not gate or
+    drop entries)
 """
 
 from __future__ import annotations
@@ -18,6 +22,9 @@ from pathlib import Path
 
 import pytest
 
+from agents.hapax_daimonion.chat_author_is_operator_engine import (
+    ChatAuthorIsOperatorEngine,
+)
 from shared.chat_url_pipeline import ChatUrlPipeline, hash_author_id
 
 
@@ -173,6 +180,145 @@ class TestDefensive:
 
 
 # ── End-to-end fixture (plan §3.2 exit criterion) ─────────────────────
+
+
+# ── Phase 6c-ii.B.1: ChatAuthorIsOperatorEngine wire-in ───────────────
+
+
+class TestOperatorAttributionWireIn:
+    """Engine wire-in is purely ADDITIVE — no existing entries are
+    dropped or modified except for an additional ``operator_attributed``
+    metadata key when the engine asserts operator identity.
+
+    The engine is optional. When ``None`` (default), pipeline behaves
+    exactly as before (backward compat). When wired, every URL-bearing
+    message ticks the engine with ``handle_match`` derived from the
+    operator-handles set + ``persona_match=None``."""
+
+    def test_no_engine_no_operator_attributed_metadata(
+        self, pipeline: ChatUrlPipeline, tmp_path: Path
+    ) -> None:
+        """Default construction: engine is None; entries have no
+        ``operator_attributed`` metadata."""
+        pipeline.process_message("https://github.com/foo/bar", author_id="alice")
+        path = tmp_path / "attribution" / "github.jsonl"
+        records = [json.loads(line) for line in path.read_text().strip().splitlines()]
+        assert all("operator_attributed" not in r["metadata"] for r in records)
+
+    def test_engine_asserted_tags_operator_attributed_true(self, tmp_path: Path) -> None:
+        """When the engine asserts (handle in operator_handles set
+        AND posterior ≥ narration floor), the metadata contains
+        ``operator_attributed: True``."""
+        # High prior ensures asserted() is True immediately (skips
+        # k_enter ticks for test ergonomics; production pipelines
+        # use the conservative default prior).
+        engine = ChatAuthorIsOperatorEngine(prior=0.95)
+        pipeline = ChatUrlPipeline(
+            root=tmp_path / "attribution",
+            chat_author_engine=engine,
+            operator_handles=frozenset({"oudepode"}),
+        )
+        pipeline.process_message("https://github.com/foo/bar", author_id="oudepode")
+        path = tmp_path / "attribution" / "github.jsonl"
+        records = [json.loads(line) for line in path.read_text().strip().splitlines()]
+        assert any(r["metadata"].get("operator_attributed") is True for r in records)
+
+    def test_engine_unasserted_no_operator_attributed_tag(self, tmp_path: Path) -> None:
+        """Author handle not in operator_handles + low prior → engine
+        does NOT assert → no metadata tag."""
+        engine = ChatAuthorIsOperatorEngine(prior=0.05)
+        pipeline = ChatUrlPipeline(
+            root=tmp_path / "attribution",
+            chat_author_engine=engine,
+            operator_handles=frozenset({"oudepode"}),
+        )
+        pipeline.process_message("https://github.com/foo/bar", author_id="random_viewer")
+        path = tmp_path / "attribution" / "github.jsonl"
+        records = [json.loads(line) for line in path.read_text().strip().splitlines()]
+        assert all(r["metadata"].get("operator_attributed") is not True for r in records)
+
+    def test_engine_ticks_with_handle_match_True_for_known_handle(self, tmp_path: Path) -> None:
+        """Wiring contract: process_message ticks the engine with
+        ``handle_match=True`` when author_id is in operator_handles
+        (the engine's posterior is what asserts; we just verify the
+        tick happened by observing posterior change with a sequence)."""
+        engine = ChatAuthorIsOperatorEngine(prior=0.05)
+        pipeline = ChatUrlPipeline(
+            root=tmp_path / "attribution",
+            chat_author_engine=engine,
+            operator_handles=frozenset({"oudepode"}),
+        )
+        prior_post = engine.posterior
+        pipeline.process_message("https://github.com/foo/bar", author_id="oudepode")
+        # Posterior must have moved up after a positive handle_match
+        # tick — even from prior 0.05, one tick of LR=950 lifts it.
+        assert engine.posterior > prior_post
+
+    def test_engine_does_not_tick_when_no_urls(self, tmp_path: Path) -> None:
+        """No-URL messages don't advance the engine — engine is
+        per-attribution-event, not per-incoming-message. Keeps the
+        engine's hysteresis aligned with the attribution surface
+        (consumer of the posterior)."""
+        engine = ChatAuthorIsOperatorEngine(prior=0.05)
+        pipeline = ChatUrlPipeline(
+            root=tmp_path / "attribution",
+            chat_author_engine=engine,
+            operator_handles=frozenset({"oudepode"}),
+        )
+        prior_post = engine.posterior
+        pipeline.process_message("just chatting, no urls", author_id="oudepode")
+        assert engine.posterior == prior_post
+
+    def test_engine_None_explicit_passthrough(self, tmp_path: Path) -> None:
+        """Explicitly passing ``chat_author_engine=None`` is the same
+        as not passing (default). Pipeline ignores the engine entirely."""
+        pipeline = ChatUrlPipeline(
+            root=tmp_path / "attribution",
+            chat_author_engine=None,
+        )
+        pipeline.process_message("https://github.com/foo/bar", author_id="oudepode")
+        path = tmp_path / "attribution" / "github.jsonl"
+        records = [json.loads(line) for line in path.read_text().strip().splitlines()]
+        assert all("operator_attributed" not in r["metadata"] for r in records)
+
+    def test_engine_does_not_tag_when_not_asserted_for_known_handle(self, tmp_path: Path) -> None:
+        """A known operator handle on a single-tick low-prior engine
+        does NOT assert — the engine's threshold check is what matters,
+        not the handle membership alone. Pin this so the wire-in
+        doesn't accidentally substitute handle membership for the
+        engine's calibrated decision."""
+        # Default prior (0.05) + default threshold (0.85). A single
+        # handle_match tick raises posterior to ~0.95+ (LR=950), so
+        # asserted() WILL be True. To produce a known-handle without
+        # assertion, use a much weaker handle LR via a custom engine
+        # — but that's out of scope here. Instead verify the behavior
+        # we care about: a non-asserting engine produces no tag.
+        from agents.hapax_daimonion.chat_author_is_operator_engine import (
+            AUTHENTICATED_HANDLE_SIGNAL,
+            CLAIM_NAME,
+        )
+        from shared.claim import LRDerivation
+
+        weak_handle_lr = LRDerivation(
+            signal_name=AUTHENTICATED_HANDLE_SIGNAL,
+            claim_name=CLAIM_NAME,
+            source_category="expert_elicitation_shelf",
+            p_true_given_h1=0.5,
+            p_true_given_h0=0.49,  # near-1 LR; barely moves posterior
+            positive_only=True,
+            estimation_reference="test calibration",
+        )
+        engine = ChatAuthorIsOperatorEngine(prior=0.05, handle_lr=weak_handle_lr)
+        pipeline = ChatUrlPipeline(
+            root=tmp_path / "attribution",
+            chat_author_engine=engine,
+            operator_handles=frozenset({"oudepode"}),
+        )
+        pipeline.process_message("https://github.com/foo/bar", author_id="oudepode")
+        path = tmp_path / "attribution" / "github.jsonl"
+        records = [json.loads(line) for line in path.read_text().strip().splitlines()]
+        # Posterior was 0.05 → ~0.052 (weak LR); below 0.85 threshold.
+        assert all(r["metadata"].get("operator_attributed") is not True for r in records)
 
 
 class TestEndToEnd:
