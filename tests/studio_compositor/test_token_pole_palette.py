@@ -142,23 +142,19 @@ class TestPaletteSwap:
         # Yellow → blue channel near zero.
         assert b <= 80, f"centre B {b} - expected near-zero blue for yellow"
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason="ytb-TOKEN-POLE-PALETTE-FOLLOWUP: corner pixel sampling picks up "
-        "non-background region (renders 'assert 59 < 40') on main since ~20:00Z. "
-        "Palette-routing contract itself is likely intact — this is a sample-site "
-        "or Vitruvian-extent regression. See cc-task.",
-    )
-    def test_background_uses_package_background(self) -> None:
-        """The flat card uses ``palette.background``. Stubbed to dark
-        blue with full alpha; sampled corner pixel must be close."""
-        surface = _render_surface(lambda: _distinctive_stub())
-        # Corner pixel is outside the Vitruvian/spiral region.
-        b, g, r, _ = _sample(surface, 2, 2)
-        # Stub background = (0, 0, 0.10, 1.0) -> tiny blue kick.
-        assert r < 40
-        assert g < 40
-        assert b >= 10
+    # ytb-TOKEN-POLE-PALETTE-FOLLOWUP: ``test_background_uses_package_background``
+    # was retired 2026-04-25 alongside this comment. The contract it pinned —
+    # ``palette.background`` flat-fills the surface so corner pixels reflect the
+    # active package's background role — was retired by the 2026-04-23 "zero
+    # container opacity" directive. ``paint_emissive_bg`` is now a no-op
+    # signature-preserving stub; corner pixels are dominated by the Vitruvian
+    # PNG plus the multiply-tint pass (gray ~59, alpha ~119), so any non-zero-
+    # rgba background role would fail the original ``r < 40`` assertion.
+    #
+    # The other two tests in this class (``test_glyph_centre_uses_accent_yellow_role``
+    # + ``test_bitchx_baseline_is_distinct_from_stub``) keep the live palette-
+    # routing contract pinned for the roles still wired through Cairo paint
+    # paths.
 
     def test_bitchx_baseline_is_distinct_from_stub(self) -> None:
         """Under the real BitchX package the sample colours differ from
