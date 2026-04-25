@@ -43,29 +43,24 @@ Spec: ``docs/operations/2026-04-24-workstream-realignment-v3.md`` §3.2 Phase 5.
 from __future__ import annotations
 
 import re
-from typing import Final, Literal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from shared.claim import Claim
+from shared.claim_prompt import SURFACE_FLOORS
 
+# NarrationSurface keys mirror those defined in ``shared.claim_prompt``
+# (Phase 4). Phase 5 imports the dict directly so the two modules cannot
+# drift; the literal here is a typing-discipline restatement that lets
+# ``RefusalGate(surface=...)`` reject typos at type-check time.
 NarrationSurface = Literal[
     "director",
-    "spontaneous",
-    "autonomous",
-    "persona",
-    "grounding-act",
+    "spontaneous_speech",
+    "autonomous_narrative",
+    "voice_persona",
+    "grounding_act",
 ]
-
-
-# Per-surface refusal floors — frozen by directive (see module docstring).
-SURFACE_FLOORS: Final[dict[NarrationSurface, float]] = {
-    "director": 0.60,
-    "spontaneous": 0.70,
-    "autonomous": 0.75,
-    "persona": 0.80,
-    "grounding-act": 0.90,
-}
 
 
 # Sentence-boundary split. Keeps it simple — Phase 5+ refinements can
@@ -179,7 +174,9 @@ class RefusalGate:
 
     def __init__(self, *, surface: NarrationSurface) -> None:
         if surface not in SURFACE_FLOORS:
-            raise ValueError(f"unknown surface {surface!r}")
+            raise ValueError(
+                f"unknown surface {surface!r}; valid surfaces: {sorted(SURFACE_FLOORS.keys())}"
+            )
         self.surface: NarrationSurface = surface
         self.floor: float = SURFACE_FLOORS[surface]
 
