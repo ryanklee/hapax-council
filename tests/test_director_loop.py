@@ -137,15 +137,15 @@ def test_gather_images_skips_zero_byte_frame(tmp_path, monkeypatch):
     monkeypatch.setattr(dl_module, "SHM_DIR", tmp_path)
     # stale 0-byte active slot frame
     (tmp_path / "yt-frame-0.jpg").write_bytes(b"")
-    # valid fx snapshot
-    fx = tmp_path / "fx-snapshot.jpg"
-    fx.write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 100)
-    monkeypatch.setattr(dl_module, "FX_SNAPSHOT", fx)
+    # valid camera-only LLM frame (Phase 3 — replaces fx-snapshot here)
+    llm_frame = tmp_path / "frame_for_llm.jpg"
+    llm_frame.write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 100)
+    monkeypatch.setattr(dl_module, "LLM_FRAME", llm_frame)
     director = _director([_FakeSlot(i) for i in range(3)])
 
     images = director._gather_images()
 
-    assert str(fx) in images
+    assert str(llm_frame) in images
     assert str(tmp_path / "yt-frame-0.jpg") not in images
 
 
@@ -154,14 +154,62 @@ def test_gather_images_includes_valid_frame(tmp_path, monkeypatch):
     monkeypatch.setattr(dl_module, "SHM_DIR", tmp_path)
     valid = tmp_path / "yt-frame-0.jpg"
     valid.write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 200)
-    fx = tmp_path / "fx-snapshot.jpg"
-    fx.write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 200)
-    monkeypatch.setattr(dl_module, "FX_SNAPSHOT", fx)
+    llm_frame = tmp_path / "frame_for_llm.jpg"
+    llm_frame.write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 200)
+    monkeypatch.setattr(dl_module, "LLM_FRAME", llm_frame)
     director = _director([_FakeSlot(i) for i in range(3)])
 
     images = director._gather_images()
 
-    assert images == [str(valid), str(fx)]
+    assert images == [str(valid), str(llm_frame)]
+
+
+def test_gather_images_uses_llm_frame_not_fx_snapshot(tmp_path, monkeypatch):
+    """Phase 3 (AUDIT-07 layer 4): the LLM-bound image set is sourced from
+    the camera-only ``frame_for_llm.jpg``, never the post-cairo
+    ``fx-snapshot.jpg``. If both files exist, only the camera-only one
+    must reach the LLM — otherwise the model OCR's the wards it
+    previously authored and recycles them as ground truth.
+    """
+    monkeypatch.setattr(dl_module, "SHM_DIR", tmp_path)
+    fx = tmp_path / "fx-snapshot.jpg"
+    fx.write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 200)
+    llm_frame = tmp_path / "frame_for_llm.jpg"
+    llm_frame.write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 200)
+    monkeypatch.setattr(dl_module, "FX_SNAPSHOT", fx)
+    monkeypatch.setattr(dl_module, "LLM_FRAME", llm_frame)
+    director = _director([_FakeSlot(i) for i in range(3)])
+
+    images = director._gather_images()
+
+    assert str(llm_frame) in images
+    assert str(fx) not in images
+
+
+def test_llm_frame_constant_path_semantics():
+    """Pin the canonical path for the LLM-bound frame.
+
+    The compositor's ``add_llm_frame_snapshot_branch`` writes here; the
+    director reads here. The shared SHM_DIR + filename are the wire
+    contract.
+    """
+    assert dl_module.LLM_FRAME == dl_module.SHM_DIR / "frame_for_llm.jpg"
+
+
+def test_capture_snapshot_b64_reads_llm_frame(tmp_path, monkeypatch):
+    """``_capture_snapshot_b64`` reads the camera-only LLM frame, not FX."""
+    import base64
+
+    fx = tmp_path / "fx-snapshot.jpg"
+    fx.write_bytes(b"FX-WARD-CONTAMINATED")
+    llm_frame = tmp_path / "frame_for_llm.jpg"
+    llm_frame.write_bytes(b"CAMERA-ONLY-CLEAN")
+    monkeypatch.setattr(dl_module, "FX_SNAPSHOT", fx)
+    monkeypatch.setattr(dl_module, "LLM_FRAME", llm_frame)
+
+    encoded = dl_module._capture_snapshot_b64()
+
+    assert encoded == base64.b64encode(b"CAMERA-ONLY-CLEAN").decode()
 
 
 # ---------------------------------------------------------------------------

@@ -79,6 +79,96 @@ def add_snapshot_branch(compositor: Any, pipeline: Any, tee: Any) -> None:
     tee_pad.link(queue_sink)
 
 
+def add_llm_frame_snapshot_branch(compositor: Any, pipeline: Any, tee: Any) -> None:
+    """Add LLM-bound frame snapshot branch — camera-only, NO Cairo wards.
+
+    Phase 3 of the AUDIT-07 hallucination structural fix (companion to
+    Phase 2 VinylSpinningEngine and Phase 2b MusicPlayingEngine). The
+    director loop's prior LLM-bound capture used the post-FX, post-Cairo
+    ``fx-snapshot.jpg``, which produced an OCR-dominance failure mode:
+    the LLM read the cairo overlays it had previously authored and
+    cycled them back into its next prompt as observed ground truth.
+
+    This branch taps the SAME ``pre_fx_tee`` as ``add_snapshot_branch``
+    (camera-only, post-cudacompositor, pre-FX-pre-Cairo) but writes to a
+    distinct file ``frame_for_llm.jpg`` so the semantic boundary stays
+    crisp: ``snapshot.jpg`` for arbitrary downstream consumers,
+    ``frame_for_llm.jpg`` exclusively for LLM prompt context.
+
+    Wards REMAIN visible to viewers — the broadcast frame is unchanged.
+    Only the LLM's input switches to the camera-only buffer. Per-ward
+    posterior badges (next phase, generalization of the splattribution
+    fix) re-add wards with confidence-quantified visual contracts back
+    into the LLM input where appropriate.
+    """
+    Gst = compositor._Gst
+
+    queue = Gst.ElementFactory.make("queue", "queue-llm-frame")
+    queue.set_property("leaky", 2)
+    queue.set_property("max-size-buffers", 1)
+    convert = Gst.ElementFactory.make("videoconvert", "llm-frame-convert")
+    convert.set_property("dither", 0)  # none — Bayer default creates sawtooth columns
+    scale = Gst.ElementFactory.make("videoscale", "llm-frame-scale")
+    scale_caps = Gst.ElementFactory.make("capsfilter", "llm-frame-scale-caps")
+    scale_caps.set_property("caps", Gst.Caps.from_string("video/x-raw,width=1280,height=720"))
+    rate = Gst.ElementFactory.make("videorate", "llm-frame-rate")
+    rate_caps = Gst.ElementFactory.make("capsfilter", "llm-frame-rate-caps")
+    # Director loop ticks at ~3-5s; 3fps cadence is more than enough and
+    # cuts the JPEG-encode + atomic-write cost vs. snapshot.jpg's 10fps.
+    rate_caps.set_property("caps", Gst.Caps.from_string("video/x-raw,framerate=3/1"))
+    encoder = Gst.ElementFactory.make("jpegenc", "llm-frame-jpeg")
+    encoder.set_property("quality", 85)
+    appsink = Gst.ElementFactory.make("appsink", "llm-frame-sink")
+    appsink.set_property("sync", False)
+    appsink.set_property("async", False)
+    appsink.set_property("drop", True)
+    appsink.set_property("max-buffers", 1)
+
+    SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
+
+    def _on_new_sample(sink: Any) -> int:
+        sample = sink.emit("pull-sample")
+        if sample is None:
+            return 1
+        buf = sample.get_buffer()
+        ok, mapinfo = buf.map(compositor._Gst.MapFlags.READ)
+        if ok:
+            try:
+                tmp = SNAPSHOT_DIR / "frame_for_llm.jpg.tmp"
+                final = SNAPSHOT_DIR / "frame_for_llm.jpg"
+                data = bytes(mapinfo.data)
+                fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
+                try:
+                    written = os.write(fd, data)
+                finally:
+                    os.close(fd)
+                if written == len(data):
+                    tmp.rename(final)
+            finally:
+                buf.unmap(mapinfo)
+        return 0
+
+    appsink.set_property("emit-signals", True)
+    appsink.connect("new-sample", _on_new_sample)
+
+    elements = [queue, convert, scale, scale_caps, rate, rate_caps, encoder, appsink]
+    for el in elements:
+        pipeline.add(el)
+
+    queue.link(convert)
+    convert.link(scale)
+    scale.link(scale_caps)
+    scale_caps.link(rate)
+    rate.link(rate_caps)
+    rate_caps.link(encoder)
+    encoder.link(appsink)
+
+    tee_pad = tee.request_pad(tee.get_pad_template("src_%u"), None, None)
+    queue_sink = queue.get_static_pad("sink")
+    tee_pad.link(queue_sink)
+    log.info("LLM-bound frame snapshot branch: pre_fx_tee → frame_for_llm.jpg @ 3fps")
+
+
 def add_fx_snapshot_branch(compositor: Any, pipeline: Any, tee: Any) -> None:
     """Add effected frame snapshot: tee -> queue -> nvjpegenc -> appsink -> fx-snapshot.jpg.
 

@@ -23,6 +23,7 @@ from pathlib import Path
 from agents.studio_compositor import metrics
 from agents.studio_compositor.audio_control import SlotAudioControl
 from agents.studio_compositor.tts_client import DaimonionTtsClient
+from shared.claim import Claim
 from shared.claim_prompt import SURFACE_FLOORS, render_envelope
 from shared.config import LITELLM_KEY
 from shared.director_intent import CompositionalImpingement, DirectorIntent
@@ -615,6 +616,11 @@ SHM_DIR = Path("/dev/shm/hapax-compositor")
 LEGOMENA_DIR = Path(os.path.expanduser("~/Documents/Personal/30-areas/legomena-live"))
 ALBUM_STATE_FILE = SHM_DIR / "album-state.json"
 FX_SNAPSHOT = SHM_DIR / "fx-snapshot.jpg"
+# Phase 3 (AUDIT-07 layer 4): camera-only frame produced by
+# ``add_llm_frame_snapshot_branch`` upstream of the cairo overlays.
+# Director-bound LLM prompts use this exclusively so the model never
+# ingests ward text it previously authored (OCR-dominance hallucination).
+LLM_FRAME = SHM_DIR / "frame_for_llm.jpg"
 MEMORY_SNAPSHOT = SHM_DIR / "memory-snapshot.json"
 PLAYLIST_FILE = SHM_DIR / "playlist.json"
 # OPERATOR MUSIC TASTE — single source of truth.
@@ -1031,6 +1037,38 @@ def _reset_engines_for_testing() -> None:
     _MUSIC_ENGINE = None
 
 
+def _gather_director_claims() -> list[Claim]:
+    """Collect ``Claim`` envelopes from every engine the director surface reads.
+
+    Phase 6 wire-up (UBCC §10): the director's prompt envelope was
+    shipped on Phase 4 with an empty list (placeholder). This populates
+    it with live posteriors from the engines that already feed the
+    music-framing branch — vinyl + broadcast-music. Below-floor claims
+    render as ``[UNKNOWN]``; above-floor claims render with their
+    numeric posterior so the LLM can apply the uncertainty contract.
+
+    Returns an empty list on engine-init failure — the renderer
+    tolerates empty input and emits the contract-only envelope.
+    """
+    claims: list[Claim] = []
+    floor = SURFACE_FLOORS["director"]
+    vinyl = _vinyl_engine()
+    if vinyl is not None:
+        try:
+            vinyl.tick()
+            claims.append(vinyl.to_claim(narration_floor=floor))
+        except Exception:
+            log.debug("vinyl engine to_claim failed", exc_info=True)
+    music = _music_engine()
+    if music is not None:
+        try:
+            music.tick()
+            claims.append(music.to_claim(narration_floor=floor))
+        except Exception:
+            log.debug("music engine to_claim failed", exc_info=True)
+    return claims
+
+
 def _music_engine():  # type: ignore[no-untyped-def]
     """Lazy singleton MusicPlayingEngine (Phase 2b, AUDIT-07 layer 2)."""
     global _MUSIC_ENGINE
@@ -1158,14 +1196,19 @@ def _curated_music_framing(slot_title: str, slot_channel: str, referent: str) ->
 
 
 def _capture_snapshot_b64() -> str | None:
-    """Read compositor fx-snapshot and return base64."""
+    """Read camera-only LLM-bound frame and return base64.
+
+    Phase 3 (AUDIT-07 layer 4): switched from FX_SNAPSHOT (post-cairo)
+    to LLM_FRAME (camera-only) so the model never reads ward text it
+    previously authored. See ``add_llm_frame_snapshot_branch``.
+    """
     import base64
 
     try:
-        if FX_SNAPSHOT.exists():
-            return base64.b64encode(FX_SNAPSHOT.read_bytes()).decode()
+        if LLM_FRAME.exists():
+            return base64.b64encode(LLM_FRAME.read_bytes()).decode()
     except Exception:
-        log.warning("fx-snapshot b64 capture failed", exc_info=True)
+        log.warning("LLM-frame b64 capture failed", exc_info=True)
     return None
 
 
@@ -2112,11 +2155,12 @@ class DirectorLoop:
 
         parts: list[str] = ["<reactor_context>"]
 
-        # Bayesian Phase 4 — prompt envelope. Phase 6 wires the actual
-        # claim source; Phase 4 ships the call site with an empty list
-        # so the uncertainty contract reaches the LLM today and the
-        # claims block becomes populated as a non-breaking change.
-        parts.append(render_envelope([], floor=SURFACE_FLOORS["director"]))
+        # Bayesian Phase 6 — prompt envelope populated. The vinyl +
+        # music engines feed live posteriors into the uncertainty
+        # contract block. Below-floor claims render as ``[UNKNOWN]`` so
+        # the LLM cannot assert them as fact; above-floor claims carry
+        # the numeric posterior for the model's calibration discipline.
+        parts.append(render_envelope(_gather_director_claims(), floor=SURFACE_FLOORS["director"]))
         parts.append("")
 
         # ─── Identity + situation ─────────────────────────────────
@@ -2788,7 +2832,9 @@ class DirectorLoop:
         2026-04-12 post-A12 deploy), so the filter is load-bearing.
         """
         images: list[str] = []
-        for path in (SHM_DIR / f"yt-frame-{self._active_slot}.jpg", FX_SNAPSHOT):
+        # Phase 3: LLM_FRAME (camera-only) replaces FX_SNAPSHOT here too —
+        # _gather_images is the chat-reaction LLM's perceptual surface.
+        for path in (SHM_DIR / f"yt-frame-{self._active_slot}.jpg", LLM_FRAME):
             try:
                 if path.exists() and path.stat().st_size > 0:
                     images.append(str(path))
