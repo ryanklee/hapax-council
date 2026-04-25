@@ -37,6 +37,22 @@ async def system_degraded_status(request: Request):
     return {"posterior": sde.posterior, "state": sde.state}
 
 
+@router.get("/operator_activity")
+async def operator_activity_status(request: Request):
+    """Phase 6a-i.B OperatorActivityEngine posterior + state.
+
+    Returns the Bayesian activity-claim posterior and discrete state
+    derived from the live perception-state observation stream
+    (currently keyboard_active; midi_clock_active / desk_active /
+    desktop_focus_changed_recent / watch_movement wire in subsequent
+    PRs). State is one of ACTIVE / UNCERTAIN / IDLE.
+    """
+    oae = getattr(request.app.state, "operator_activity_engine", None)
+    if oae is None:
+        return JSONResponse({"error": "OperatorActivityEngine not initialized"}, status_code=503)
+    return {"posterior": oae.posterior, "state": oae.state}
+
+
 @router.get("/rules")
 async def engine_rules(request: Request):
     """List registered rules with metadata."""
