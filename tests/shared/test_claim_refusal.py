@@ -62,27 +62,45 @@ def _claim(
 
 
 class TestSurfaceFloors:
+    """Re-pin the SURFACE_FLOORS dict imported from ``shared.claim_prompt``
+    (Phase 4 canonical). Drift between the two modules is now impossible
+    by construction (single import); these tests guard the values."""
+
     def test_director_floor_is_060(self) -> None:
         assert SURFACE_FLOORS["director"] == 0.60
 
-    def test_spontaneous_floor_is_070(self) -> None:
-        assert SURFACE_FLOORS["spontaneous"] == 0.70
+    def test_spontaneous_speech_floor_is_070(self) -> None:
+        assert SURFACE_FLOORS["spontaneous_speech"] == 0.70
 
-    def test_autonomous_floor_is_075(self) -> None:
-        assert SURFACE_FLOORS["autonomous"] == 0.75
+    def test_autonomous_narrative_floor_is_075(self) -> None:
+        assert SURFACE_FLOORS["autonomous_narrative"] == 0.75
 
-    def test_persona_floor_is_080(self) -> None:
-        assert SURFACE_FLOORS["persona"] == 0.80
+    def test_voice_persona_floor_is_080(self) -> None:
+        assert SURFACE_FLOORS["voice_persona"] == 0.80
 
     def test_grounding_act_floor_is_090(self) -> None:
-        assert SURFACE_FLOORS["grounding-act"] == 0.90
+        assert SURFACE_FLOORS["grounding_act"] == 0.90
 
     def test_floors_are_strictly_increasing(self) -> None:
         from itertools import pairwise
 
-        ordered = ["director", "spontaneous", "autonomous", "persona", "grounding-act"]
+        ordered = [
+            "director",
+            "spontaneous_speech",
+            "autonomous_narrative",
+            "voice_persona",
+            "grounding_act",
+        ]
         for a, b in pairwise(ordered):
             assert SURFACE_FLOORS[a] < SURFACE_FLOORS[b]
+
+    def test_phase_4_and_phase_5_share_dict(self) -> None:
+        """Single source of truth — ``shared.claim_refusal.SURFACE_FLOORS``
+        IS ``shared.claim_prompt.SURFACE_FLOORS`` (same object)."""
+        from shared.claim_prompt import SURFACE_FLOORS as PROMPT_FLOORS
+        from shared.claim_refusal import SURFACE_FLOORS as REFUSAL_FLOORS
+
+        assert PROMPT_FLOORS is REFUSAL_FLOORS
 
 
 class TestParseEmittedPropositions:
@@ -152,7 +170,7 @@ class TestRefusalGateReject:
         director_result = RefusalGate(surface="director").check(
             "Vinyl is currently playing.", available_claims=[claim]
         )
-        persona_result = RefusalGate(surface="persona").check(
+        persona_result = RefusalGate(surface="voice_persona").check(
             "Vinyl is currently playing.", available_claims=[claim]
         )
         assert director_result.accepted is True
@@ -193,13 +211,14 @@ class TestClaimDisciplineScore:
 
 class TestNarrationSurfaceLiteral:
     def test_known_surface_strings(self) -> None:
-        # Compile-time + runtime check that Literal type lists the 5 surfaces.
+        # Compile-time + runtime check that Literal type lists the 5 surfaces
+        # (matching Phase 4's canonical naming).
         surfaces: list[NarrationSurface] = [
             "director",
-            "spontaneous",
-            "autonomous",
-            "persona",
-            "grounding-act",
+            "spontaneous_speech",
+            "autonomous_narrative",
+            "voice_persona",
+            "grounding_act",
         ]
         for s in surfaces:
             assert s in SURFACE_FLOORS
