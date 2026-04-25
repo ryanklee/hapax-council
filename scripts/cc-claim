@@ -31,12 +31,20 @@ fi
 
 vault_root="$HOME/Documents/Personal/20-projects/hapax-cc-tasks"
 note_path=""
+# Match `<task_id>-<descriptor>.md` (most tasks).
 for candidate in "$vault_root/active/$task_id-"*.md; do
   if [[ -f "$candidate" ]]; then
     note_path="$candidate"
     break
   fi
 done
+# Fallback: exact-match `<task_id>.md` for tasks without a descriptor
+# suffix (eg. ytb-LEGIBILITY-SMOKE-FOLLOWUP.md, ytb-OBJECTIVES-OVERLAY-
+# RENDER-FOLLOWUP.md). The glob above doesn't match these because it
+# requires a literal `-` after the task_id.
+if [[ -z "$note_path" ]] && [[ -f "$vault_root/active/$task_id.md" ]]; then
+  note_path="$vault_root/active/$task_id.md"
+fi
 if [[ -z "$note_path" ]]; then
   echo "cc-claim: task '$task_id' not found in $vault_root/active/" >&2
   echo "browse offered tasks: $vault_root/_dashboard/cc-offered.md" >&2
