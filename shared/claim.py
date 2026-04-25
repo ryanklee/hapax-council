@@ -1,25 +1,35 @@
-"""Universal Bayesian Claim-Confidence — API surface stub (Phase 0 STUB).
+"""Universal Bayesian Claim-Confidence — Phase 0 FULL.
 
-Ships the frozen signatures so peer Phase 1 drafts (alpha prompt-envelope wrap,
-delta vinyl/music cluster, epsilon refusal gate) can import against a stable
-contract while the implementation lands in Phase 0 FULL.
+Phase 0 STUB shipped the frozen signatures (#1341); this lands the
+implementation. ``ClaimEngine[bool]`` mirrors PresenceEngine's log-odds
+posterior + hysteresis state machine, generalized over an arbitrary
+binary perceptual claim. Phase 1 refactors PresenceEngine itself onto
+this engine with a bit-identical regression pin.
 
 Research foundation: ``docs/research/2026-04-24-universal-bayesian-claim-confidence.md``.
-Every field docstring here is operative; no ad-hoc priors, no ungrounded claims.
 
-Phase 0 FULL will implement the bodies + ship the CI rules HPX003 (Claim needs
-LRDerivation) + HPX004 (Claim needs reconstructible prior_provenance). Both
-are gate-listed in workstream-realignment-v3 §7 (Phase-gated, not in-force).
-
-Kill-switch for rollback: ``HAPAX_BAYESIAN_BYPASS=1`` — restores pre-Phase-0
-routing. Implementation lands alongside CI rules in Phase 0 FULL.
+Kill-switch: ``HAPAX_BAYESIAN_BYPASS=1`` makes ``ClaimEngine.update`` a
+no-op and ``posterior`` returns the configured prior. Restores
+pre-Phase-0 routing for emergency rollback while the deployment is
+inflight.
 """
 
 from __future__ import annotations
 
+import math
+import os
 from typing import Literal
 
 from pydantic import BaseModel, Field
+
+# Fail-closed env name; "1" enables, anything else disables.
+_BYPASS_ENV = "HAPAX_BAYESIAN_BYPASS"
+
+
+def _bypass_active() -> bool:
+    """True if the kill-switch env var is set to a truthy value (case-insensitive)."""
+    return os.environ.get(_BYPASS_ENV, "").strip().lower() in {"1", "true", "yes", "on"}
+
 
 Domain = Literal["audio", "visual", "activity", "identity", "mood", "environment", "meta"]
 
@@ -122,8 +132,29 @@ class Signal[T](BaseModel):
     timestamp: float
 
 
+ClaimState = Literal["ASSERTED", "UNCERTAIN", "RETRACTED"]
+
+
 class ClaimEngine[T]:
-    """PresenceEngine generalized. STUB — Phase 0 FULL implements bodies."""
+    """Generic Bayesian claim posterior + hysteresis state machine.
+
+    Mirrors PresenceEngine's math (log-odds prior + per-signal LR fusion,
+    drift-toward-prior decay, sigmoid back to probability) with two
+    generalizations:
+
+    1. Per-claim asymmetric ``TemporalProfile`` (presence: fast-enter,
+       slow-exit; music: slow-enter, fast-exit — research §6).
+    2. ``LRDerivation``-driven likelihood ratios (provenance, not bare
+       tuples — research §5).
+
+    Bypass: when ``HAPAX_BAYESIAN_BYPASS=1`` is set, ``update`` is a
+    no-op and ``posterior`` returns the configured prior. State stays
+    ``UNCERTAIN``. Designed as the single rollback knob for the entire
+    Bayesian layer.
+
+    Phase 1 refactors PresenceEngine onto this engine with a bit-identical
+    regression pin against shipped output for 100 ticks of replay data.
+    """
 
     def __init__(
         self,
@@ -131,19 +162,135 @@ class ClaimEngine[T]:
         prior: float,
         temporal_profile: TemporalProfile,
         signal_weights: dict[str, LRDerivation],
+        *,
+        decay_rate: float = 0.02,
     ) -> None:
-        raise NotImplementedError("Phase 0 FULL")
+        if not 0.0 < prior < 1.0:
+            raise ValueError(f"prior must be in (0, 1); got {prior}")
+        self._name = name
+        self._prior = prior
+        self._profile = temporal_profile
+        self._signal_weights = dict(signal_weights)
+        self._decay_rate = decay_rate
+
+        # Mutable state
+        self._posterior: float = prior
+        self._observations: dict[str, T | None] = {}
+        self._state: ClaimState = "UNCERTAIN"
+        self._candidate_state: ClaimState | None = None
+        self._ticks_in_candidate_state: int = 0
+
+    # ── Mutation ─────────────────────────────────────────────────────
 
     def update(self, signal_name: str, value: T) -> None:
-        raise NotImplementedError("Phase 0 FULL")
+        """Record an observation and recompute posterior + state.
+
+        ``value`` is whatever the signal produces for this claim. For
+        ``ClaimEngine[bool]`` it's True/False/None (None means "no
+        evidence this tick"; the signal is skipped by the log-odds
+        update — positive-only signals use this for absence).
+        """
+        if _bypass_active():
+            return
+        self._observations[signal_name] = value
+        self._posterior = self._compute_posterior()
+        self._update_state_machine(self._posterior)
+
+    def reset(self) -> None:
+        """Discard accumulated observations, return to prior."""
+        self._observations.clear()
+        self._posterior = self._prior
+        self._state = "UNCERTAIN"
+        self._candidate_state = None
+        self._ticks_in_candidate_state = 0
+
+    # ── Computation ──────────────────────────────────────────────────
+
+    def _compute_posterior(self) -> float:
+        """Bayesian log-odds fusion. Mirrors PresenceEngine._compute_posterior."""
+        # Drift toward prior so stale evidence decays
+        prior = self._posterior + (self._prior - self._posterior) * self._decay_rate
+        prior = max(0.001, min(0.999, prior))
+        log_odds = math.log(prior / (1.0 - prior))
+
+        for signal_name, lr_record in self._signal_weights.items():
+            observed = self._observations.get(signal_name)
+            if observed is None:
+                continue
+            p_present = lr_record.p_true_given_h1
+            p_absent = lr_record.p_true_given_h0
+            if observed:
+                lr = p_present / max(p_absent, 1e-12)
+            else:
+                if lr_record.positive_only:
+                    # Positive-only signals don't contribute on False
+                    continue
+                lr = (1.0 - p_present) / max(1.0 - p_absent, 1e-12)
+            log_odds += math.log(max(lr, 1e-12))
+
+        try:
+            posterior = 1.0 / (1.0 + math.exp(-log_odds))
+        except OverflowError:
+            posterior = 0.0 if log_odds < 0 else 1.0
+        return max(0.0, min(1.0, posterior))
+
+    def _update_state_machine(self, posterior: float) -> None:
+        """Hysteresis: posterior threshold + sustained-tick dwell."""
+        target: ClaimState
+        if posterior >= self._profile.enter_threshold:
+            target = "ASSERTED"
+        elif posterior < self._profile.exit_threshold:
+            target = "RETRACTED"
+        else:
+            target = "UNCERTAIN"
+
+        if target == self._state:
+            self._candidate_state = None
+            self._ticks_in_candidate_state = 0
+            return
+
+        if target == self._candidate_state:
+            self._ticks_in_candidate_state += 1
+        else:
+            self._candidate_state = target
+            self._ticks_in_candidate_state = 1
+
+        required = self._required_ticks_for_transition(self._state, target)
+        if self._ticks_in_candidate_state >= required:
+            self._state = target
+            self._candidate_state = None
+            self._ticks_in_candidate_state = 0
+
+    def _required_ticks_for_transition(self, frm: ClaimState, to: ClaimState) -> int:
+        """Asymmetric per-claim dwell from TemporalProfile."""
+        if to == "ASSERTED":
+            return self._profile.k_enter
+        if frm == "ASSERTED" and to in ("UNCERTAIN", "RETRACTED"):
+            return self._profile.k_exit
+        # UNCERTAIN ↔ RETRACTED transitions split the difference
+        return max(1, (self._profile.k_enter + self._profile.k_exit) // 2)
+
+    # ── Read accessors ───────────────────────────────────────────────
+
+    @property
+    def name(self) -> str:
+        return self._name
 
     @property
     def posterior(self) -> float:
-        raise NotImplementedError("Phase 0 FULL")
+        if _bypass_active():
+            return self._prior
+        return self._posterior
 
     @property
-    def state(self) -> Literal["ASSERTED", "UNCERTAIN", "RETRACTED"]:
-        raise NotImplementedError("Phase 0 FULL")
+    def state(self) -> ClaimState:
+        if _bypass_active():
+            return "UNCERTAIN"
+        return self._state
+
+    @property
+    def temporal_profile(self) -> TemporalProfile:
+        return self._profile
 
 
 class InferenceBroker:
@@ -161,6 +308,7 @@ __all__ = [
     "Claim",
     "ClaimComposition",
     "ClaimEngine",
+    "ClaimState",
     "CompositionOp",
     "Domain",
     "EvidenceRef",
