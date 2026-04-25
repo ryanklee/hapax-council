@@ -6,6 +6,14 @@ oscillation between PRESENT/AWAY states.
 
 Registered as a PerceptionBackend; provides `presence_probability` (float)
 and `presence_state` (str: PRESENT/UNCERTAIN/AWAY).
+
+Phase 1 (2026-04-25) — internals refactored to delegate posterior fusion +
+hysteresis to the generic ``shared.claim.ClaimEngine[bool]`` shipped in
+Phase 0 FULL (#1350). The public PerceptionBackend API + state-name
+vocabulary (PRESENT/UNCERTAIN/AWAY) is preserved bit-identically; the
+delegation maps to ClaimEngine's ASSERTED/UNCERTAIN/RETRACTED at the
+state-translation boundary. ``DEFAULT_SIGNAL_WEIGHTS`` tuples are
+auto-converted to ``LRDerivation`` records on construction.
 """
 
 from __future__ import annotations
@@ -17,6 +25,7 @@ from typing import Any
 
 from agents.hapax_daimonion.perception import PerceptionTier
 from agents.hapax_daimonion.primitives import Behavior
+from shared.claim import ClaimEngine, ClaimState, LRDerivation, TemporalProfile
 
 log = logging.getLogger(__name__)
 
@@ -24,6 +33,15 @@ log = logging.getLogger(__name__)
 # - operator_face P(no_face|present) was 0.05, far too low — operator frequently
 #   not visible (turned away, under desk, out of frame). Raised to 0.10.
 # - vad_speech P(speech|present) lowered — silent work is common, mic often off.
+# Phase 1 — translate ClaimEngine's generic state vocabulary to the
+# PresenceEngine-canonical names that the rest of the system reads.
+_ENGINE_STATE_TO_PRESENCE_STATE: dict[ClaimState, str] = {
+    "ASSERTED": "PRESENT",
+    "UNCERTAIN": "UNCERTAIN",
+    "RETRACTED": "AWAY",
+}
+
+
 DEFAULT_SIGNAL_WEIGHTS: dict[str, tuple[float, float]] = {
     "operator_face": (0.90, 0.10),
     "keyboard_active": (0.85, 0.05),
@@ -76,13 +94,48 @@ class PresenceEngine:
         self._exit_ticks = exit_ticks
         self._signal_weights = signal_weights or DEFAULT_SIGNAL_WEIGHTS
 
-        # State
+        # Phase 1: delegate posterior + state to generic ClaimEngine[bool].
+        # PresenceEngine's _read_signals already converts positive-only
+        # signals to None, so the engine sees bidirectional True/False/None
+        # observations — ClaimEngine processes False values via the
+        # full LR formula (positive_only=False on every record).
+        lr_records: dict[str, LRDerivation] = {
+            name: LRDerivation(
+                signal_name=name,
+                claim_name="operator_present",
+                source_category="expert_elicitation_shelf",
+                p_true_given_h1=p_present,
+                p_true_given_h0=p_absent,
+                positive_only=False,
+                estimation_reference="DEFAULT_SIGNAL_WEIGHTS calibrated 2026-03-17 first live run",
+            )
+            for name, (p_present, p_absent) in self._signal_weights.items()
+        }
+        self._engine: ClaimEngine[bool] = ClaimEngine(
+            name="operator_present",
+            prior=prior,
+            temporal_profile=TemporalProfile(
+                enter_threshold=enter_threshold,
+                exit_threshold=exit_threshold,
+                k_enter=enter_ticks,
+                k_exit=exit_ticks,
+                k_uncertain=4,  # Pre-Phase-1 PresenceEngine constant
+            ),
+            signal_weights=lr_records,
+        )
+
+        # Compatibility shadow state — preserved for diagnostics access.
+        # The authoritative state lives in self._engine; these mirror the
+        # last-seen values for any caller still reading them directly.
         self._last_posterior: float = prior
         self._state: str = "UNCERTAIN"
+
+        # Retained for backward-compatible field access in tests.
         self._ticks_in_candidate_state: int = 0
         self._candidate_state: str | None = None
 
-        # Decay: posterior drifts toward prior when no signals update
+        # Decay rate is now owned by ClaimEngine; preserved for caller
+        # introspection if any test reads it.
         self._decay_rate: float = 0.02  # per tick
 
         # Behaviors we provide
@@ -333,61 +386,36 @@ class PresenceEngine:
         return obs
 
     def _compute_posterior(self, observations: dict[str, bool | None]) -> float:
-        """Compute Bayesian posterior from likelihood ratios (log-domain)."""
-        import math
+        """Compute posterior + advance state via ClaimEngine.tick.
 
-        prior = self._last_posterior
-        prior = prior + (self._prior - prior) * self._decay_rate
-        prior = max(0.001, min(0.999, prior))
-        log_odds = math.log(prior / (1.0 - prior))
-
-        for signal_name, (p_present, p_absent) in self._signal_weights.items():
-            observed = observations.get(signal_name)
-            if observed is None:
-                continue
-            if observed:
-                lr = p_present / max(p_absent, 1e-12)
-            else:
-                lr = (1.0 - p_present) / max(1.0 - p_absent, 1e-12)
-            log_odds += math.log(max(lr, 1e-12))
-
-        try:
-            posterior = 1.0 / (1.0 + math.exp(-log_odds))
-        except OverflowError:
-            posterior = 0.0 if log_odds < 0 else 1.0
-        return max(0.0, min(1.0, posterior))
+        Phase 1 delegation: ClaimEngine performs the same log-odds fusion
+        + drift-toward-prior decay + sigmoid this method used to do
+        inline. Returns the engine's resulting posterior. Side-effect:
+        the engine's hysteresis state machine ticks once.
+        """
+        self._engine.tick(observations)
+        return self._engine.posterior
 
     def _update_state_machine(self, posterior: float) -> None:
-        """Update hysteresis state machine based on posterior."""
-        # Determine what state the posterior is pointing toward
-        if posterior >= self._enter_threshold:
-            target = "PRESENT"
-        elif posterior < self._exit_threshold:
-            target = "AWAY"
-        else:
-            target = "UNCERTAIN"
+        """Synchronize the legacy state-name shadow from the engine.
 
-        # Count ticks toward transition
-        if target != self._state:
-            if target == self._candidate_state:
-                self._ticks_in_candidate_state += 1
-            else:
-                self._candidate_state = target
-                self._ticks_in_candidate_state = 1
-
-            # Check if sustained long enough to transition
-            required_ticks = self._required_ticks_for_transition(self._state, target)
-            if self._ticks_in_candidate_state >= required_ticks:
-                self._state = target
-                self._candidate_state = None
-                self._ticks_in_candidate_state = 0
-        else:
-            # Already in target state — reset candidate tracking
-            self._candidate_state = None
-            self._ticks_in_candidate_state = 0
+        Phase 1 delegation: ClaimEngine.tick() (called from
+        ``_compute_posterior``) already advanced its hysteresis state
+        machine using the same dwell-counter logic this method used to
+        own. Translate the engine's ASSERTED/UNCERTAIN/RETRACTED
+        vocabulary back to PresenceEngine's PRESENT/UNCERTAIN/AWAY for
+        public-API compatibility.
+        """
+        self._state = _ENGINE_STATE_TO_PRESENCE_STATE[self._engine.state]
 
     def _required_ticks_for_transition(self, from_state: str, to_state: str) -> int:
-        """How many sustained ticks needed to transition between states."""
+        """How many sustained ticks needed to transition between states.
+
+        Retained as a helper for backward-compatible introspection in tests
+        that import this method directly. The runtime hysteresis logic is
+        now in ``shared.claim.ClaimEngine._required_ticks_for_transition``;
+        the two implementations stay in lock-step (Phase 1 regression pin).
+        """
         if from_state == "PRESENT" and to_state in ("UNCERTAIN", "AWAY"):
             return self._exit_ticks  # 60s to leave PRESENT
         if to_state == "PRESENT":
