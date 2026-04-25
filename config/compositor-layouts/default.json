@@ -675,7 +675,7 @@
       "opacity": 1.0,
       "per_assignment_effects": [],
       "non_destructive": false,
-      "render_stage": "post_fx"
+      "render_stage": "pre_fx"
     },
     {
       "source": "album",
@@ -693,7 +693,7 @@
       "opacity": 1.0,
       "per_assignment_effects": [],
       "non_destructive": false,
-      "render_stage": "post_fx"
+      "render_stage": "pre_fx"
     },
     {
       "source": "activity_header",
@@ -702,7 +702,7 @@
       "opacity": 1.0,
       "per_assignment_effects": [],
       "non_destructive": true,
-      "render_stage": "post_fx"
+      "render_stage": "pre_fx"
     },
     {
       "source": "stance_indicator",
@@ -711,7 +711,7 @@
       "opacity": 1.0,
       "per_assignment_effects": [],
       "non_destructive": true,
-      "render_stage": "post_fx"
+      "render_stage": "pre_fx"
     },
     {
       "source": "gem",
@@ -720,7 +720,7 @@
       "opacity": 1.0,
       "per_assignment_effects": [],
       "non_destructive": false,
-      "render_stage": "post_fx"
+      "render_stage": "pre_fx"
     },
     {
       "source": "grounding_provenance_ticker",
@@ -729,7 +729,7 @@
       "opacity": 1.0,
       "per_assignment_effects": [],
       "non_destructive": false,
-      "render_stage": "post_fx"
+      "render_stage": "pre_fx"
     },
     {
       "source": "impingement_cascade",
@@ -738,7 +738,7 @@
       "opacity": 0.92,
       "per_assignment_effects": [],
       "non_destructive": false,
-      "render_stage": "post_fx"
+      "render_stage": "pre_fx"
     },
     {
       "source": "recruitment_candidate_panel",
@@ -747,7 +747,7 @@
       "opacity": 0.92,
       "per_assignment_effects": [],
       "non_destructive": false,
-      "render_stage": "post_fx"
+      "render_stage": "pre_fx"
     },
     {
       "source": "thinking_indicator",
@@ -756,7 +756,7 @@
       "opacity": 0.92,
       "per_assignment_effects": [],
       "non_destructive": false,
-      "render_stage": "post_fx"
+      "render_stage": "pre_fx"
     },
     {
       "source": "pressure_gauge",
@@ -765,7 +765,7 @@
       "opacity": 0.92,
       "per_assignment_effects": [],
       "non_destructive": false,
-      "render_stage": "post_fx"
+      "render_stage": "pre_fx"
     },
     {
       "source": "activity_variety_log",
@@ -774,7 +774,7 @@
       "opacity": 0.9,
       "per_assignment_effects": [],
       "non_destructive": false,
-      "render_stage": "post_fx"
+      "render_stage": "pre_fx"
     },
     {
       "source": "whos_here",
@@ -783,7 +783,7 @@
       "opacity": 0.92,
       "per_assignment_effects": [],
       "non_destructive": false,
-      "render_stage": "post_fx"
+      "render_stage": "pre_fx"
     },
     {
       "source": "durf",
@@ -792,7 +792,7 @@
       "opacity": 0.92,
       "per_assignment_effects": [],
       "non_destructive": false,
-      "render_stage": "post_fx"
+      "render_stage": "pre_fx"
     }
   ]
 }
