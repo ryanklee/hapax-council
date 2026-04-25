@@ -120,6 +120,18 @@ class ConsentGatedQdrant:
     collections. Points with unconsented person IDs are removed from the
     batch before upserting. Points in exempt collections pass through.
 
+    Phase 6c-ii.B.3: optional ``_operator_handles`` set wires the
+    :class:`ChatAuthorIsOperatorEngine` as an ADDITIVE permit. When
+    populated, person IDs that are members of the set are treated as
+    operator-permitted (skip consent check) — same effective semantics
+    as ``_operator_ids`` literal-match. The OR shape:
+
+        literal-match permits OR engine permits OR consent permits
+        → write allowed; otherwise curtailed.
+
+    Empty default (frozenset()) makes the engine path inert; existing
+    fail-closed behavior preserved byte-for-byte.
+
     Usage:
         from shared.governance.qdrant_gate import ConsentGatedQdrant
         gated = ConsentGatedQdrant(inner_client)
@@ -129,6 +141,7 @@ class ConsentGatedQdrant:
 
     inner: Any  # QdrantClient — typed as Any to avoid import dependency
     _operator_ids: frozenset[str] = field(default_factory=lambda: DEFAULT_OPERATOR_IDS)
+    _operator_handles: frozenset[str] = field(default_factory=frozenset)
     _audit_path: Path | None = None
     _decisions: list[QdrantGateDecision] = field(default_factory=list)
     _contract_check: Any = None  # Callable[[str, str], bool] — lazy loaded
@@ -147,6 +160,37 @@ class ConsentGatedQdrant:
             log.warning("Could not load consent registry for Qdrant gate", exc_info=True)
             # Fail-closed: deny all person-adjacent writes if registry unavailable
             return lambda person_id, category: False
+
+    def _engine_permits_handle(self, pid: str) -> bool:
+        """Phase 6c-ii.B.3 — ADDITIVE engine permit.
+
+        Returns True iff:
+          * ``_operator_handles`` is non-empty, AND
+          * ``pid`` is a non-empty string, AND
+          * the :class:`ChatAuthorIsOperatorEngine` asserts on
+            ``handle_match=(pid in _operator_handles)``.
+
+        Returns False otherwise — never DENIES (the consent check is
+        the authoritative deny path; this method is permit-only).
+
+        Engine instantiated ephemerally per call (matches engine's
+        per-author scope; multiple chat-author IDs in one upsert get
+        independent engine evaluations). LR=950 on a single
+        handle_match=True tick lifts posterior past the 0.85
+        narration floor immediately, so a single tick is sufficient
+        — no hysteresis warm-up needed at this surface.
+        """
+        if not self._operator_handles or not pid:
+            return False
+        # Lazy import — engine module not on the import-cold-path of
+        # qdrant_gate consumers.
+        from agents.hapax_daimonion.chat_author_is_operator_engine import (
+            ChatAuthorIsOperatorEngine,
+        )
+
+        engine = ChatAuthorIsOperatorEngine()
+        engine.tick(handle_match=pid in self._operator_handles, persona_match=None)
+        return engine.asserted()
 
     def upsert(
         self,
@@ -176,6 +220,11 @@ class ConsentGatedQdrant:
             unconsented = set()
             for pid in person_ids:
                 if pid in self._operator_ids:
+                    continue
+                # Phase 6c-ii.B.3 ADDITIVE engine permit (operator-handle
+                # set membership). Inert when ``_operator_handles`` is
+                # empty; never replaces the consent path.
+                if self._engine_permits_handle(pid):
                     continue
                 if not check(pid, category):
                     unconsented.add(pid)
@@ -257,6 +306,10 @@ class ConsentGatedQdrant:
         unconsented = set()
         for pid in person_ids:
             if pid in self._operator_ids:
+                continue
+            # Phase 6c-ii.B.3 ADDITIVE engine permit (symmetric with
+            # upsert). Inert when ``_operator_handles`` empty.
+            if self._engine_permits_handle(pid):
                 continue
             if not check(pid, category):
                 unconsented.add(pid)
