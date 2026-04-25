@@ -54,6 +54,14 @@ jobs:
       # asset bypassed the manifest refresh.
       - name: Aesthetic library verify
         run: uv run python scripts/verify-aesthetic-library.py
+      # Bayesian Phase 0 FULL — HPX003 + HPX004 claim/LR registry gates.
+      # HPX003: every signal in shared/lr_registry.yaml validates against
+      # LRDerivation. HPX004: every claim has a PriorProvenance entry in
+      # shared/prior_provenance.yaml. Operator directive 2026-04-24T22:40Z
+      # (verbatim): "Lack of priors is itself a prior; priors must be
+      # derivations of invariants, not ad-hoc."
+      - name: HPX003+HPX004 claim/LR registry validators
+        run: uv run python scripts/check-claim-registry.py
 
 
   typecheck:
