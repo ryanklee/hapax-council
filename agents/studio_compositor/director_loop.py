@@ -60,6 +60,50 @@ def _silence_hold_impingement(reason: str = "silence_hold") -> CompositionalImpi
     )
 
 
+def _is_chat_author_operator(
+    author: str,
+    *,
+    operator_handles: frozenset[str] = frozenset(),
+) -> bool:
+    """ADDITIVE permit: the chat-author identity decision for narration.
+
+    Returns True when EITHER:
+
+    * the existing literal substring match holds (``"oudepode" in
+      author.lower()`` — backward compat, unchanged), OR
+    * the :class:`ChatAuthorIsOperatorEngine` asserts on handle
+      membership in ``operator_handles`` (Phase 6c-ii.B.2 wire-in).
+
+    Per handoff guidance for the engine's consumer wire-ins: the
+    engine posterior is ADDITIVE — never replaces the existing
+    fail-closed-on-substring path. Both gates can permit independently.
+
+    Empty author returns False (no signal to evaluate). The engine is
+    instantiated ephemerally per call (not held on the loop instance) —
+    chat is multi-author by design, and a per-call engine cleanly
+    matches the engine's documented per-author scope without imposing
+    multi-author state management on the director loop.
+
+    ``operator_handles=frozenset()`` (the default) makes the engine
+    path operationally inert — handle_match=False always — but keeps
+    the wire-in plumbing in place for the future env-driven population
+    of the set (HAPAX_OPERATOR_CHAT_HANDLES, future PR).
+    """
+    if not author:
+        return False
+    if "oudepode" in author.lower():
+        return True
+    # Lazy import — keeps the engine module out of the cold-start path
+    # for tests that don't exercise this branch.
+    from agents.hapax_daimonion.chat_author_is_operator_engine import (
+        ChatAuthorIsOperatorEngine,
+    )
+
+    engine = ChatAuthorIsOperatorEngine()
+    engine.tick(handle_match=author in operator_handles, persona_match=None)
+    return engine.asserted()
+
+
 def _director_degraded_active() -> bool:
     """Task #122 DEGRADED check for the director tick.
 
@@ -2067,7 +2111,7 @@ class DirectorLoop:
                     author = m.get("author", "")
                     text = m.get("text", "")
                     if text:
-                        if "oudepode" in author.lower():
+                        if _is_chat_author_operator(author):
                             parts.append(f'{referent}: "{text}"')
                         else:
                             parts.append(f'Someone in chat: "{text}"')
