@@ -220,13 +220,34 @@ def apply_named_transform(name: str, content: str) -> str:
 
 
 def _apply_redactions(payload: dict | str, redactions: tuple[str, ...]) -> tuple[dict | str, bool]:
-    """Drop any payload key matching a redaction pattern.
+    """Apply contract redactions to ``payload``.
 
-    String payloads pass through unchanged — string-content redaction would
-    require a regex engine and is deferred (callers needing string redaction
-    should structure payloads as dicts).
+    Two payload shapes:
+
+    * **dict**: drop any key whose name matches a redaction pattern
+      (existing behavior; wildcard matching via :func:`_pattern_matches`).
+      Redaction entries that name a registered transform (eg.
+      ``legal_name``) are skipped on dict payloads — the transform
+      operates on string content, not on dict keys.
+    * **string** (AUDIT-22 Phase B): for each redaction entry that
+      names a :data:`REDACTION_TRANSFORMS` entry, apply the transform
+      to the string content. Entries that aren't registered transforms
+      are no-ops on string content (they're dict-key patterns, which
+      don't apply to strings).
     """
-    if not redactions or not isinstance(payload, dict):
+    if not redactions:
+        return payload, False
+    if isinstance(payload, str):
+        result = payload
+        changed = False
+        for r in redactions:
+            if r in REDACTION_TRANSFORMS:
+                new_result = apply_named_transform(r, result)
+                if new_result != result:
+                    changed = True
+                    result = new_result
+        return result, changed
+    if not isinstance(payload, dict):
         return payload, False
     out = dict(payload)
     changed = False
