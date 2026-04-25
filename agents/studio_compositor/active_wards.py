@@ -50,17 +50,23 @@ ACTIVE_WARDS_FILE: Path = Path("/dev/shm/hapax-compositor/active_wards.json")
 ACTIVE_WARDS_STALE_S: float = 5.0
 
 
-def publish(ward_ids: Iterable[str], *, path: Path = ACTIVE_WARDS_FILE) -> None:
+def publish(ward_ids: Iterable[str], *, path: Path | None = None) -> None:
     """Atomically write the live set of active ward IDs.
 
     ``ward_ids`` is converted to a deduplicated sorted list before
     serialization; producers don't need to dedupe upstream. ``path``
-    parent is ``mkdir -p``'ed on first write.
+    parent is ``mkdir -p``'ed on first write. ``path=None`` resolves
+    to ``ACTIVE_WARDS_FILE`` at call time so test fixtures that
+    monkeypatch the module-level constant take effect (Python binds
+    default-arg expressions at def-time, which would otherwise capture
+    the original value).
 
     Failures (disk full, permission, parent-dir absent on a host
     without /dev/shm) log a warning and return without raising —
     publishing is best-effort observability, not a correctness gate.
     """
+    if path is None:
+        path = ACTIVE_WARDS_FILE
     deduped = sorted(set(ward_ids))
     payload = json.dumps({"ward_ids": deduped, "published_t": time.time()})
     try:
@@ -76,14 +82,18 @@ def publish(ward_ids: Iterable[str], *, path: Path = ACTIVE_WARDS_FILE) -> None:
         log.debug("active_wards publish failed", exc_info=True)
 
 
-def read(*, path: Path = ACTIVE_WARDS_FILE, stale_s: float = ACTIVE_WARDS_STALE_S) -> list[str]:
+def read(*, path: Path | None = None, stale_s: float = ACTIVE_WARDS_STALE_S) -> list[str]:
     """Return the current active-ward list.
 
     Returns an empty list when the file is missing, malformed, or
     older than ``stale_s`` seconds. Stale-as-empty matches the
     producer-died failure mode: better to render no badges than badges
-    for wards that may have been removed minutes ago.
+    for wards that may have been removed minutes ago. ``path=None``
+    resolves to ``ACTIVE_WARDS_FILE`` at call time (see ``publish``
+    for the rationale).
     """
+    if path is None:
+        path = ACTIVE_WARDS_FILE
     try:
         if not path.exists():
             return []

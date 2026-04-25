@@ -1069,7 +1069,19 @@ def _gather_director_claims() -> list[Claim]:
     the prompt assembly. Engine-init or tick failure degrades to an
     empty list — the renderer tolerates that and emits the contract
     without populated claims.
+
+    Phase 3.5 Layer C (PR #1440 follow-up): in addition to the
+    audio-only engines above, iterate the currently-rendering ward set
+    (``active_wards.read()``) crossed with ``ward_claim_bindings`` to
+    surface a posterior badge for every ward that exposes a claim
+    provider. Generalizes the splat-attribution fix: any ward that
+    declares a Claim it represents gets an envelope entry while it's
+    on screen, and disappears from the envelope when it stops
+    rendering. No active_wards publisher wired yet → empty extension
+    → zero behavioral change vs. the Phase 6 wire-up baseline.
     """
+    from agents.studio_compositor import active_wards, ward_claim_bindings
+
     claims: list[Claim] = []
     floor = SURFACE_FLOORS["director"]
     vinyl = _vinyl_engine()
@@ -1086,6 +1098,18 @@ def _gather_director_claims() -> list[Claim]:
             claims.append(music.to_claim(narration_floor=floor))
         except Exception:
             log.debug("music engine to_claim failed", exc_info=True)
+
+    for ward_id in active_wards.read():
+        provider = ward_claim_bindings.get(ward_id)
+        if provider is None:
+            continue
+        try:
+            ward_claim = provider()
+        except Exception:
+            log.debug("ward claim provider raised for %s", ward_id, exc_info=True)
+            continue
+        if ward_claim is not None:
+            claims.append(ward_claim)
     return claims
 
 

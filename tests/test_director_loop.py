@@ -213,6 +213,127 @@ def test_capture_snapshot_b64_reads_llm_frame(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# _gather_director_claims — Phase 3.5 Layer C ward iteration
+# ---------------------------------------------------------------------------
+
+
+def _make_test_claim(name: str, posterior: float = 0.85):
+    """Construct a minimal Claim for ward-binding tests."""
+    from shared.claim import Claim, TemporalProfile
+
+    return Claim(
+        name=name,
+        domain="activity",
+        proposition=f"{name} is happening.",
+        posterior=posterior,
+        prior_source="empirical",
+        prior_provenance_ref=name,
+        evidence_sources=[],
+        last_update_t=time.time(),
+        temporal_profile=TemporalProfile(
+            enter_threshold=0.7, exit_threshold=0.3, k_enter=3, k_exit=3
+        ),
+        composition=None,
+        narration_floor=0.6,
+        staleness_cutoff_s=60.0,
+    )
+
+
+def test_gather_director_claims_includes_ward_bound_claims(tmp_path, monkeypatch):
+    """Phase 3.5 Layer C: active wards with bound providers contribute claims."""
+    from agents.studio_compositor import active_wards, ward_claim_bindings
+
+    monkeypatch.setattr(dl_module, "_vinyl_engine", lambda: None)
+    monkeypatch.setattr(dl_module, "_music_engine", lambda: None)
+
+    ward_claim_bindings.clear_bindings()
+    monkeypatch.setattr(active_wards, "ACTIVE_WARDS_FILE", tmp_path / "active_wards.json")
+
+    bound_claim = _make_test_claim("splat_attribution")
+    ward_claim_bindings.register("splat-attribution-v1", lambda: bound_claim)
+    active_wards.publish(["splat-attribution-v1"])
+
+    claims = dl_module._gather_director_claims()
+
+    ward_claim_bindings.clear_bindings()
+    assert [c.name for c in claims] == ["splat_attribution"]
+
+
+def test_gather_director_claims_skips_wards_without_bindings(tmp_path, monkeypatch):
+    """Active wards with no claim provider are silently skipped."""
+    from agents.studio_compositor import active_wards, ward_claim_bindings
+
+    monkeypatch.setattr(dl_module, "_vinyl_engine", lambda: None)
+    monkeypatch.setattr(dl_module, "_music_engine", lambda: None)
+
+    ward_claim_bindings.clear_bindings()
+    monkeypatch.setattr(active_wards, "ACTIVE_WARDS_FILE", tmp_path / "active_wards.json")
+    active_wards.publish(["sierpinski", "homage-chrome"])
+
+    claims = dl_module._gather_director_claims()
+
+    assert claims == []
+
+
+def test_gather_director_claims_skips_provider_returning_none(tmp_path, monkeypatch):
+    """A provider returning None means the engine declined this tick."""
+    from agents.studio_compositor import active_wards, ward_claim_bindings
+
+    monkeypatch.setattr(dl_module, "_vinyl_engine", lambda: None)
+    monkeypatch.setattr(dl_module, "_music_engine", lambda: None)
+
+    ward_claim_bindings.clear_bindings()
+    monkeypatch.setattr(active_wards, "ACTIVE_WARDS_FILE", tmp_path / "active_wards.json")
+    ward_claim_bindings.register("album-cover", lambda: None)
+    active_wards.publish(["album-cover"])
+
+    claims = dl_module._gather_director_claims()
+
+    ward_claim_bindings.clear_bindings()
+    assert claims == []
+
+
+def test_gather_director_claims_swallows_provider_exceptions(tmp_path, monkeypatch):
+    """A raising provider must not break envelope assembly — Layer C is the safety net."""
+    from agents.studio_compositor import active_wards, ward_claim_bindings
+
+    monkeypatch.setattr(dl_module, "_vinyl_engine", lambda: None)
+    monkeypatch.setattr(dl_module, "_music_engine", lambda: None)
+
+    ward_claim_bindings.clear_bindings()
+    monkeypatch.setattr(active_wards, "ACTIVE_WARDS_FILE", tmp_path / "active_wards.json")
+
+    def _raising_provider():
+        raise RuntimeError("provider buggy")
+
+    good_claim = _make_test_claim("good_claim")
+    ward_claim_bindings.register("buggy-ward", _raising_provider)
+    ward_claim_bindings.register("good-ward", lambda: good_claim)
+    active_wards.publish(["buggy-ward", "good-ward"])
+
+    claims = dl_module._gather_director_claims()
+
+    ward_claim_bindings.clear_bindings()
+    assert [c.name for c in claims] == ["good_claim"]
+
+
+def test_gather_director_claims_empty_active_wards_keeps_engine_path(tmp_path, monkeypatch):
+    """No active_wards.json → ward iteration contributes nothing → engine path
+    behaves identically to pre-Phase-3.5-Layer-C baseline (zero regression)."""
+    from agents.studio_compositor import active_wards, ward_claim_bindings
+
+    monkeypatch.setattr(dl_module, "_vinyl_engine", lambda: None)
+    monkeypatch.setattr(dl_module, "_music_engine", lambda: None)
+
+    ward_claim_bindings.clear_bindings()
+    monkeypatch.setattr(active_wards, "ACTIVE_WARDS_FILE", tmp_path / "absent.json")
+
+    claims = dl_module._gather_director_claims()
+
+    assert claims == []
+
+
+# ---------------------------------------------------------------------------
 # _load_playlist — restored after spirograph_reactor deletion (PR #644)
 # ---------------------------------------------------------------------------
 
