@@ -521,6 +521,102 @@ class TestMoodArousalObservation:
         assert engine.state == "UNCERTAIN"
 
 
+# ── TestLogosMoodValenceBridge (Phase 6b-ii.B wire-in) ──────────────────
+
+
+class TestLogosMoodValenceBridge:
+    """Mood-valence bridge: all 4 health/voice signal accessors.
+
+    Part 1 ships the protocol-matching surface with all accessors
+    returning ``None``. Per-signal threshold wiring lands in subsequent
+    PRs (Part 2-5) — same additive pattern alpha used in #1392.
+    """
+
+    def test_hrv_below_baseline_returns_none(self):
+        from logos.api.app import LogosMoodValenceBridge
+
+        assert LogosMoodValenceBridge().hrv_below_baseline() is None
+
+    def test_skin_temp_drop_returns_none(self):
+        from logos.api.app import LogosMoodValenceBridge
+
+        assert LogosMoodValenceBridge().skin_temp_drop() is None
+
+    def test_sleep_debt_high_returns_none(self):
+        from logos.api.app import LogosMoodValenceBridge
+
+        assert LogosMoodValenceBridge().sleep_debt_high() is None
+
+    def test_voice_pitch_elevated_returns_none(self):
+        from logos.api.app import LogosMoodValenceBridge
+
+        assert LogosMoodValenceBridge().voice_pitch_elevated() is None
+
+
+# ── TestMoodValenceObservation (Phase 6b-ii.B adapter) ──────────────────
+
+
+class TestMoodValenceObservation:
+    def test_returns_four_signal_dict_with_none_values(self):
+        """Default scaffolding bridge returns all-None observation dict."""
+        from agents.hapax_daimonion.backends.mood_valence_observation import (
+            mood_valence_observation,
+        )
+        from logos.api.app import LogosMoodValenceBridge
+
+        obs = mood_valence_observation(LogosMoodValenceBridge())
+        assert obs == {
+            "hrv_below_baseline": None,
+            "skin_temp_drop": None,
+            "sleep_debt_high": None,
+            "voice_pitch_elevated": None,
+        }
+
+    def test_propagates_signal_values_when_source_provides_them(self):
+        """Non-None values from the source flow through to the engine."""
+        from agents.hapax_daimonion.backends.mood_valence_observation import (
+            mood_valence_observation,
+        )
+
+        class _StubMixed:
+            def hrv_below_baseline(self) -> bool:
+                return True
+
+            def skin_temp_drop(self) -> None:
+                return None
+
+            def sleep_debt_high(self) -> bool:
+                return False
+
+            def voice_pitch_elevated(self) -> bool:
+                return True
+
+        obs = mood_valence_observation(_StubMixed())
+        assert obs == {
+            "hrv_below_baseline": True,
+            "skin_temp_drop": None,
+            "sleep_debt_high": False,
+            "voice_pitch_elevated": True,
+        }
+
+    def test_engine_consumes_observation_without_error(self):
+        """Adapter output is a valid argument to MoodValenceEngine.contribute()."""
+        from agents.hapax_daimonion.backends.mood_valence_observation import (
+            mood_valence_observation,
+        )
+        from agents.hapax_daimonion.mood_valence_engine import MoodValenceEngine
+        from logos.api.app import LogosMoodValenceBridge
+
+        engine = MoodValenceEngine()
+        for _ in range(5):
+            engine.contribute(mood_valence_observation(LogosMoodValenceBridge()))
+        # All-None observations leave posterior at prior. Prior 0.20 is
+        # below exit_threshold 0.30, so the engine starts in RETRACTED
+        # state — translates to POSITIVE in the valence vocabulary.
+        assert engine.posterior == pytest.approx(0.20)
+        assert engine.state == "POSITIVE"
+
+
 # ── TestLogosDriftBridge ────────────────────────────────────────────────
 
 

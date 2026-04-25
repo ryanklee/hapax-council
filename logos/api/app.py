@@ -139,6 +139,33 @@ class LogosStimmungBridge:
         return None
 
 
+# Phase 6b-ii.B partial wire-in. Bridge contract for the four
+# mood-valence signals (``hrv_below_baseline``, ``skin_temp_drop``,
+# ``sleep_debt_high``, ``voice_pitch_elevated``) defined in
+# ``mood_valence_engine.DEFAULT_SIGNAL_WEIGHTS``. Per-signal sources
+# live in heterogeneous backends — health.py (Pixel Watch HRV /
+# skin temp / sleep) + voice-side speech analysis (pitch baseline).
+# Part 1 (this PR) ships the protocol-matching bridge with all
+# accessors returning ``None`` so the engine math runs cleanly with
+# no live signal contribution. Subsequent PRs wire each threshold
+# reference as the per-backend baseline references stabilise — same
+# additive pattern delta used in #1389 and alpha used in #1392.
+class LogosMoodValenceBridge:
+    """Bridge health/voice signals → MoodValenceEngine signal Protocol."""
+
+    def hrv_below_baseline(self) -> bool | None:
+        return None
+
+    def skin_temp_drop(self) -> bool | None:
+        return None
+
+    def sleep_debt_high(self) -> bool | None:
+        return None
+
+    def voice_pitch_elevated(self) -> bool | None:
+        return None
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await start_refresh_loop()
@@ -265,6 +292,23 @@ async def lifespan(app: FastAPI):
     except Exception:
         _log.exception("MoodArousalEngine wire-in failed (continuing without it)")
 
+    # Phase 6b-ii.B partial wire-in: MoodValenceEngine observes the four
+    # health/voice valence signals (HRV vs baseline, skin temp drop,
+    # sleep debt, voice pitch elevated). Engine math + signal contract
+    # shipped in #1371; this PR activates the live consumer + adapter
+    # contract. All four signal accessors return ``None`` from
+    # LogosMoodValenceBridge until per-backend baseline references
+    # stabilise — same additive pattern alpha used for MAE in #1392 and
+    # delta used for OAE in #1389.
+    mve = None
+    try:
+        from agents.hapax_daimonion.mood_valence_engine import MoodValenceEngine
+
+        mve = MoodValenceEngine()
+        app.state.mood_valence_engine = mve
+    except Exception:
+        _log.exception("MoodValenceEngine wire-in failed (continuing without it)")
+
     # Start chronicle sampler and periodic trim
     import asyncio
 
@@ -338,11 +382,28 @@ async def lifespan(app: FastAPI):
                 _log.debug("MoodArousalEngine tick failed", exc_info=True)
             await asyncio.sleep(1.0)
 
+    async def _mood_valence_tick_loop():
+        """1s-cadence tick — observes 4 mood-valence signals + contributes to MVE."""
+        from agents.hapax_daimonion.backends.mood_valence_observation import (
+            mood_valence_observation,
+        )
+
+        valence_bridge = LogosMoodValenceBridge()
+
+        while True:
+            try:
+                if mve is not None:
+                    mve.contribute(mood_valence_observation(valence_bridge))
+            except Exception:
+                _log.debug("MoodValenceEngine tick failed", exc_info=True)
+            await asyncio.sleep(1.0)
+
     _sampler_task = asyncio.create_task(run_sampler())
     _trim_task = asyncio.create_task(_chronicle_trim_loop())
     _sde_task = asyncio.create_task(_system_degraded_tick_loop()) if sde is not None else None
     _oae_task = asyncio.create_task(_operator_activity_tick_loop()) if oae is not None else None
     _mae_task = asyncio.create_task(_mood_arousal_tick_loop()) if mae is not None else None
+    _mve_task = asyncio.create_task(_mood_valence_tick_loop()) if mve is not None else None
 
     yield
 
@@ -354,6 +415,8 @@ async def lifespan(app: FastAPI):
         _oae_task.cancel()
     if _mae_task is not None:
         _mae_task.cancel()
+    if _mve_task is not None:
+        _mve_task.cancel()
     if engine is not None:
         await engine.stop()
     await agent_run_manager.shutdown()
