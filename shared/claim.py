@@ -58,12 +58,21 @@ class EvidenceRef(BaseModel):
 
 
 class TemporalProfile(BaseModel):
-    """Per-claim temporal dynamics. Presence: fast-enter/slow-exit. Music: inverted."""
+    """Per-claim temporal dynamics. Presence: fast-enter/slow-exit. Music: inverted.
+
+    `k_uncertain` is the tick-dwell count for transitions involving the
+    intermediate UNCERTAIN state (UNCERTAIN→ASSERTED uses k_enter,
+    ASSERTED→{UNCERTAIN,RETRACTED} uses k_exit, but UNCERTAIN→RETRACTED
+    and RETRACTED→UNCERTAIN use this third value). Defaults to 4 so
+    PresenceEngine's existing behavior carries through bit-identical
+    when refactored onto this engine in Phase 1.
+    """
 
     enter_threshold: float = Field(ge=0.0, le=1.0)
     exit_threshold: float = Field(ge=0.0, le=1.0)
     k_enter: int = Field(ge=1)
     k_exit: int = Field(ge=1)
+    k_uncertain: int = Field(default=4, ge=1)
     bocd_hazard: float | None = None
 
 
@@ -196,6 +205,20 @@ class ClaimEngine[T]:
         self._posterior = self._compute_posterior()
         self._update_state_machine(self._posterior)
 
+    def tick(self, observations: dict[str, T | None]) -> None:
+        """Atomic batch tick: set all observations at once + single state update.
+
+        Mirrors PresenceEngine's per-tick semantics where multiple signals
+        are observed together and the state machine ticks once per tick.
+        Use this in preference to repeated ``update()`` calls when the
+        observations represent a single perceptual moment.
+        """
+        if _bypass_active():
+            return
+        self._observations.update(observations)
+        self._posterior = self._compute_posterior()
+        self._update_state_machine(self._posterior)
+
     def reset(self) -> None:
         """Discard accumulated observations, return to prior."""
         self._observations.clear()
@@ -262,13 +285,18 @@ class ClaimEngine[T]:
             self._ticks_in_candidate_state = 0
 
     def _required_ticks_for_transition(self, frm: ClaimState, to: ClaimState) -> int:
-        """Asymmetric per-claim dwell from TemporalProfile."""
+        """Asymmetric per-claim dwell from TemporalProfile.
+
+        Mirrors PresenceEngine._required_ticks_for_transition exactly so
+        the Phase 1 PresenceEngine refactor onto this engine is
+        bit-identical. UNCERTAIN-state transitions use k_uncertain.
+        """
         if to == "ASSERTED":
             return self._profile.k_enter
         if frm == "ASSERTED" and to in ("UNCERTAIN", "RETRACTED"):
             return self._profile.k_exit
-        # UNCERTAIN ↔ RETRACTED transitions split the difference
-        return max(1, (self._profile.k_enter + self._profile.k_exit) // 2)
+        # UNCERTAIN ↔ RETRACTED transitions use the dedicated dwell
+        return self._profile.k_uncertain
 
     # ── Read accessors ───────────────────────────────────────────────
 
