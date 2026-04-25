@@ -64,6 +64,34 @@ class LogosGpuBridge:
         return (int(gpu.get("used_mb", 0)), int(gpu.get("total_mb", 0)))
 
 
+# Phase 6a-i.B perception-state bridge. Reads the daimonion-side
+# perception-state.json (atomic write-then-rename by
+# ``agents.hapax_daimonion._perception_state_writer``) for the
+# OperatorActivityEngine signal stream. Only ``keyboard_active`` wires
+# in this PR — the remaining 4 activity signals (midi_clock_active,
+# desk_active, desktop_focus_changed_recent, watch_movement) wire in
+# follow-up PRs as their adapter contracts land. Missing/stale file →
+# ``None`` which the engine treats as "skip this signal" (no positive
+# nor negative evidence) per the ``ClaimEngine.tick`` contract — the
+# alternative (assume idle on missing file) would let a daimonion
+# crash spuriously decay the posterior to IDLE.
+class LogosPerceptionStateBridge:
+    """Bridge perception-state.json → keyboard_active() Protocol for OAE."""
+
+    def keyboard_active(self) -> bool | None:
+        import json
+        from pathlib import Path
+
+        path = Path.home() / ".cache" / "hapax-daimonion" / "perception-state.json"
+        try:
+            data = json.loads(path.read_text())
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            return None
+        if "keyboard_active" not in data:
+            return None
+        return bool(data["keyboard_active"])
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await start_refresh_loop()
@@ -154,6 +182,23 @@ async def lifespan(app: FastAPI):
         except Exception:
             _log.exception("SystemDegradedEngine wire-in failed (continuing without it)")
 
+    # Phase 6a-i.B partial wire-in: OperatorActivityEngine observes the
+    # daimonion-side perception-state.json (currently keyboard_active
+    # only; midi_clock_active / desk_active / focus_changed /
+    # watch_movement wire in follow-up PRs as their adapters land).
+    # The engine math + signal contract shipped in #1375; this PR
+    # activates the live consumer. Posterior + state are exposed at
+    # GET /api/engine/operator_activity for the DMN governor + future
+    # narration-cadence consumers.
+    oae = None
+    try:
+        from agents.hapax_daimonion.operator_activity_engine import OperatorActivityEngine
+
+        oae = OperatorActivityEngine()
+        app.state.operator_activity_engine = oae
+    except Exception:
+        _log.exception("OperatorActivityEngine wire-in failed (continuing without it)")
+
     # Start chronicle sampler and periodic trim
     import asyncio
 
@@ -195,9 +240,26 @@ async def lifespan(app: FastAPI):
                 _log.debug("SystemDegradedEngine tick failed", exc_info=True)
             await asyncio.sleep(1.0)
 
+    async def _operator_activity_tick_loop():
+        """1s-cadence tick — observes keyboard_active + contributes to OAE."""
+        from agents.hapax_daimonion.backends.operator_activity_observation import (
+            operator_activity_observation,
+        )
+
+        perception_bridge = LogosPerceptionStateBridge()
+
+        while True:
+            try:
+                if oae is not None:
+                    oae.contribute(operator_activity_observation(perception_bridge))
+            except Exception:
+                _log.debug("OperatorActivityEngine tick failed", exc_info=True)
+            await asyncio.sleep(1.0)
+
     _sampler_task = asyncio.create_task(run_sampler())
     _trim_task = asyncio.create_task(_chronicle_trim_loop())
     _sde_task = asyncio.create_task(_system_degraded_tick_loop()) if sde is not None else None
+    _oae_task = asyncio.create_task(_operator_activity_tick_loop()) if oae is not None else None
 
     yield
 
@@ -205,6 +267,8 @@ async def lifespan(app: FastAPI):
     _trim_task.cancel()
     if _sde_task is not None:
         _sde_task.cancel()
+    if _oae_task is not None:
+        _oae_task.cancel()
     if engine is not None:
         await engine.stop()
     await agent_run_manager.shutdown()

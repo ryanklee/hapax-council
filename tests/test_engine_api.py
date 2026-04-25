@@ -176,6 +176,151 @@ class TestSystemDegradedStatus:
         assert resp.status_code == 503
 
 
+# ── TestOperatorActivityStatus (Phase 6a-i.B wire-in) ───────────────────
+
+
+class TestOperatorActivityStatus:
+    def test_returns_posterior_and_state(self):
+        from agents.hapax_daimonion.operator_activity_engine import OperatorActivityEngine
+
+        oae = OperatorActivityEngine()
+        app = _make_app(_mock_engine())
+        app.state.operator_activity_engine = oae
+        client = TestClient(app)
+        resp = client.get("/api/engine/operator_activity")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "posterior" in data
+        assert "state" in data
+        assert 0.0 <= data["posterior"] <= 1.0
+        assert data["state"] in {"ACTIVE", "UNCERTAIN", "IDLE"}
+
+    def test_state_responds_to_observations(self):
+        """Sustained keyboard_active=True drives ACTIVE within enter_ticks=1."""
+        from agents.hapax_daimonion.backends.operator_activity_observation import (
+            operator_activity_observation,
+        )
+        from agents.hapax_daimonion.operator_activity_engine import OperatorActivityEngine
+
+        class _StubKeyboardActive:
+            def keyboard_active(self) -> bool:
+                return True
+
+        oae = OperatorActivityEngine()
+        for _ in range(3):
+            oae.contribute(operator_activity_observation(_StubKeyboardActive()))
+        app = _make_app(_mock_engine())
+        app.state.operator_activity_engine = oae
+        client = TestClient(app)
+        resp = client.get("/api/engine/operator_activity")
+        assert resp.status_code == 200
+        assert resp.json()["state"] == "ACTIVE"
+
+    def test_503_when_no_oae(self):
+        client = TestClient(_make_app())
+        resp = client.get("/api/engine/operator_activity")
+        assert resp.status_code == 503
+
+
+# ── TestLogosPerceptionStateBridge ──────────────────────────────────────
+
+
+class TestLogosPerceptionStateBridge:
+    def test_missing_file_returns_none(self, tmp_path, monkeypatch):
+        """Bridge must return None when perception-state.json is absent."""
+        from logos.api.app import LogosPerceptionStateBridge
+
+        monkeypatch.setenv("HOME", str(tmp_path))
+        bridge = LogosPerceptionStateBridge()
+        assert bridge.keyboard_active() is None
+
+    def test_reads_keyboard_active_true(self, tmp_path, monkeypatch):
+        """Bridge surfaces keyboard_active=True from a live state file."""
+        import json
+
+        from logos.api.app import LogosPerceptionStateBridge
+
+        monkeypatch.setenv("HOME", str(tmp_path))
+        state_dir = tmp_path / ".cache" / "hapax-daimonion"
+        state_dir.mkdir(parents=True)
+        (state_dir / "perception-state.json").write_text(
+            json.dumps({"keyboard_active": True}), encoding="utf-8"
+        )
+        bridge = LogosPerceptionStateBridge()
+        assert bridge.keyboard_active() is True
+
+    def test_reads_keyboard_active_false(self, tmp_path, monkeypatch):
+        """Bridge surfaces keyboard_active=False (real negative evidence)."""
+        import json
+
+        from logos.api.app import LogosPerceptionStateBridge
+
+        monkeypatch.setenv("HOME", str(tmp_path))
+        state_dir = tmp_path / ".cache" / "hapax-daimonion"
+        state_dir.mkdir(parents=True)
+        (state_dir / "perception-state.json").write_text(
+            json.dumps({"keyboard_active": False}), encoding="utf-8"
+        )
+        bridge = LogosPerceptionStateBridge()
+        assert bridge.keyboard_active() is False
+
+    def test_missing_field_returns_none(self, tmp_path, monkeypatch):
+        """Bridge returns None when the field is absent (not False)."""
+        import json
+
+        from logos.api.app import LogosPerceptionStateBridge
+
+        monkeypatch.setenv("HOME", str(tmp_path))
+        state_dir = tmp_path / ".cache" / "hapax-daimonion"
+        state_dir.mkdir(parents=True)
+        (state_dir / "perception-state.json").write_text(
+            json.dumps({"other_field": "value"}), encoding="utf-8"
+        )
+        bridge = LogosPerceptionStateBridge()
+        assert bridge.keyboard_active() is None
+
+    def test_corrupt_json_returns_none(self, tmp_path, monkeypatch):
+        """Bridge fails-soft on corrupt state file."""
+        from logos.api.app import LogosPerceptionStateBridge
+
+        monkeypatch.setenv("HOME", str(tmp_path))
+        state_dir = tmp_path / ".cache" / "hapax-daimonion"
+        state_dir.mkdir(parents=True)
+        (state_dir / "perception-state.json").write_text("not json", encoding="utf-8")
+        bridge = LogosPerceptionStateBridge()
+        assert bridge.keyboard_active() is None
+
+
+# ── TestOperatorActivityObservation (adapter-level) ─────────────────────
+
+
+class TestOperatorActivityObservation:
+    def test_returns_dict_with_keyboard_active(self):
+        from agents.hapax_daimonion.backends.operator_activity_observation import (
+            operator_activity_observation,
+        )
+
+        class _StubTrue:
+            def keyboard_active(self) -> bool:
+                return True
+
+        obs = operator_activity_observation(_StubTrue())
+        assert obs == {"keyboard_active": True}
+
+    def test_returns_none_when_source_returns_none(self):
+        """None propagates so engine.tick skips this signal for the cycle."""
+        from agents.hapax_daimonion.backends.operator_activity_observation import (
+            operator_activity_observation,
+        )
+
+        class _StubNone:
+            def keyboard_active(self) -> None:
+                return None
+
+        obs = operator_activity_observation(_StubNone())
+        assert obs == {"keyboard_active": None}
+
+
 # ── TestLogosDriftBridge ────────────────────────────────────────────────
 
 
