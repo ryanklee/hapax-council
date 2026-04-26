@@ -121,6 +121,14 @@ ci = [
     "playwright>=1.49.0",
     "watchdog>=6.0.0",
     "pytest-xdist>=3.6.0",
+    # PR2 of CI/CD speedup cascade (docs/research/2026-04-26-cicd-speedup.md
+    # §2 #1) — pyrefly replaces pyright in the typecheck job. ~15–18×
+    # faster than pyright on Django/numpy benchmarks; council's
+    # pyrightconfig.json already disables 12 reports so the 90% vs 99%
+    # typing-spec conformance gap is mostly moot. pyright kept in
+    # [dependency-groups] dev for local IDE use + low-frequency cron
+    # safety net.
+    "pyrefly>=0.62",
 ]
 studio = [
     "ultralytics>=8.3.0",

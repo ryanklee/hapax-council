@@ -93,15 +93,20 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
-      - name: Cache pyright analysis
+      # PR2 of CI/CD speedup cascade (docs/research/2026-04-26-cicd-speedup.md
+      # §2 #1): pyrefly replaces pyright. Pyrefly is ~15-18x faster on
+      # benchmark codebases. Cache directory + key updated to pyrefly-*;
+      # pyrightconfig.json kept in the hash key so a coordinated migration
+      # is still keyed off both configs (pyrefly.toml is the active one).
+      - name: Cache pyrefly analysis
         uses: actions/cache@v4
         with:
-          path: ~/.cache/pyright
-          key: pyright-${{ runner.os }}-${{ hashFiles('pyrightconfig.json', 'uv.lock', 'pyproject.toml') }}
+          path: ~/.cache/pyrefly
+          key: pyrefly-${{ runner.os }}-${{ hashFiles('pyrefly.toml', 'pyrightconfig.json', 'uv.lock', 'pyproject.toml') }}
           restore-keys: |
-            pyright-${{ runner.os }}-
+            pyrefly-${{ runner.os }}-
       - run: uv sync --extra ci
-      - run: uv run pyright
+      - run: uv run pyrefly check
 
   test:
     runs-on: ubuntu-latest
