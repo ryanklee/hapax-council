@@ -42,13 +42,14 @@ PUBLISHER_WIRE_REGISTRY: dict[str, WireEntry] = {
     "agents.publication_bus.bluesky_publisher": WireEntry(
         module="agents.publication_bus.bluesky_publisher",
         surface_slug="bluesky-atproto-multi-identity",
-        status="CRED_BLOCKED",
-        pass_key_required="bluesky/operator-app-password, bluesky/operator-did",
+        status="WIRED",
+        pass_key_required=None,
         rationale=(
-            "AT Protocol XRPC publisher; multi-identity (operator + oudepode). "
-            "Substrate complete + tested. Awaiting operator app-password "
-            "bootstrap. When creds arrive, add a `bluesky-atproto` entry to "
-            "publish_orchestrator._DISPATCH_MAP via adapter."
+            "Wired via agents/bluesky_atproto_adapter into "
+            "publish_orchestrator.SURFACE_REGISTRY entry "
+            "`bluesky-atproto-multi-identity`. Identifier from env "
+            "HAPAX_BLUESKY_HANDLE (preferred) or HAPAX_BLUESKY_DID; "
+            "app-password from HAPAX_BLUESKY_APP_PASSWORD."
         ),
     ),
     "agents.publication_bus.bridgy_publisher": WireEntry(
