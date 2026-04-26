@@ -269,19 +269,29 @@ SERVICE_BOOTSTRAPPERS = {
 # ── Orchestrator ───────────────────────────────────────────────────
 
 
-async def run(only: list[str] | None, dry_run: bool, force: bool) -> int:
+async def run(only: list[str] | None, dry_run: bool, force: bool, cdp_url: str | None) -> int:
     from playwright.async_api import async_playwright
 
     services = only or list(SERVICE_BOOTSTRAPPERS)
-    PROFILE_DIR.mkdir(parents=True, exist_ok=True)
     results: list[ServiceResult] = []
 
     async with async_playwright() as p:
-        ctx = await p.chromium.launch_persistent_context(
-            user_data_dir=str(PROFILE_DIR),
-            headless=False,
-            viewport={"width": 1280, "height": 900},
-        )
+        if cdp_url:
+            # Attach to operator's already-running Chrome (with their real
+            # logged-in profile). Chrome must be running with
+            # --remote-debugging-port=<n> matching this URL's port.
+            print(f"→ connecting to operator Chrome via CDP at {cdp_url}", file=sys.stderr)
+            browser = await p.chromium.connect_over_cdp(cdp_url)
+            ctx = browser.contexts[0] if browser.contexts else await browser.new_context()
+            close_ctx = False  # don't close operator's browser
+        else:
+            PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+            ctx = await p.chromium.launch_persistent_context(
+                user_data_dir=str(PROFILE_DIR),
+                headless=False,
+                viewport={"width": 1280, "height": 900},
+            )
+            close_ctx = True
         page = await ctx.new_page()
 
         for service in services:
@@ -293,7 +303,9 @@ async def run(only: list[str] | None, dry_run: bool, force: bool) -> int:
             results.append(result)
             print(f"  {result.status}: {result.note}", file=sys.stderr)
 
-        await ctx.close()
+        await page.close()
+        if close_ctx:
+            await ctx.close()
 
     # Summary
     print("\n=== Bootstrap summary ===", file=sys.stderr)
@@ -328,6 +340,16 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Overwrite existing pass-store entries",
     )
+    parser.add_argument(
+        "--cdp-url",
+        default=None,
+        help=(
+            "Attach to a running Chrome via CDP (e.g. http://localhost:9222) "
+            "instead of launching a Playwright-managed Chromium. Use this to "
+            "leverage operator's already-logged-in Chrome profile. Chrome "
+            "must be started with --remote-debugging-port=<port>."
+        ),
+    )
     args = parser.parse_args(argv)
 
     logging.basicConfig(
@@ -335,7 +357,14 @@ def main(argv: list[str] | None = None) -> int:
         format="%(asctime)s %(levelname)s %(message)s",
     )
 
-    return asyncio.run(run(only=args.only, dry_run=args.dry_run, force=args.force))
+    return asyncio.run(
+        run(
+            only=args.only,
+            dry_run=args.dry_run,
+            force=args.force,
+            cdp_url=args.cdp_url,
+        )
+    )
 
 
 if __name__ == "__main__":
