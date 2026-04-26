@@ -16,6 +16,7 @@ from agents.operator_awareness.aggregator import (
     collect_refusals_recent,
     collect_sprint_block,
     collect_stream_block,
+    collect_v5_publications_block,
 )
 from agents.operator_awareness.state import HealthBlock
 
@@ -570,6 +571,69 @@ class TestCollectPublishingBlock:
         assert block.inbox_count == 1
         assert block.published_24h == 0
         assert block.last_publish_at is None
+
+
+# ── collect_v5_publications_block (R-9 fix) ─────────────────────────
+
+
+class TestCollectV5PublicationsBlock:
+    """V5 publication-bus deposit-artefact counters.
+
+    Distinct from publishing_pipeline: this block surfaces ``publications/``
+    tree (refusal annexes, DOI cache, deposit manifests). Without it, V5
+    publisher output was invisible to the awareness state spine.
+    """
+
+    def test_missing_dir_returns_default(self, tmp_path):
+        block = collect_v5_publications_block(tmp_path / "absent")
+        assert block.annexes_count == 0
+        assert block.last_annex_at is None
+        assert block.concept_dois_tracked == 0
+        assert block.deposit_manifests_count == 0
+
+    def test_counts_annex_markdowns(self, tmp_path):
+        (tmp_path / "refusal-annex-bandcamp.md").write_text("x", encoding="utf-8")
+        (tmp_path / "refusal-annex-discogs.md").write_text("x", encoding="utf-8")
+        # Non-md file should not be counted.
+        (tmp_path / "ignore.txt").write_text("x", encoding="utf-8")
+        block = collect_v5_publications_block(tmp_path)
+        assert block.annexes_count == 2
+        assert block.last_annex_at is not None
+
+    def test_counts_concept_dois(self, tmp_path):
+        (tmp_path / "recent-concept-dois.txt").write_text(
+            "10.5281/zenodo.1\n10.5281/zenodo.2\n\n10.5281/zenodo.3\n",
+            encoding="utf-8",
+        )
+        block = collect_v5_publications_block(tmp_path)
+        # Empty lines filtered out
+        assert block.concept_dois_tracked == 3
+
+    def test_counts_deposit_manifests(self, tmp_path):
+        queue = tmp_path / "queue"
+        queue.mkdir()
+        for slug in ("artefact-1", "artefact-2", "artefact-3"):
+            sub = queue / slug
+            sub.mkdir()
+            (sub / "manifest.yaml").write_text("k: v\n", encoding="utf-8")
+        # Subdir without manifest.yaml is not counted
+        (queue / "no-manifest").mkdir()
+        block = collect_v5_publications_block(tmp_path)
+        assert block.deposit_manifests_count == 3
+
+    def test_full_tree(self, tmp_path):
+        # Realistic shape: annexes + DOI cache + queue manifests
+        (tmp_path / "refusal-annex-stripe.md").write_text("x", encoding="utf-8")
+        (tmp_path / "recent-concept-dois.txt").write_text("10.5281/zenodo.x\n", encoding="utf-8")
+        queue = tmp_path / "queue"
+        queue.mkdir()
+        (queue / "a").mkdir()
+        (queue / "a" / "manifest.yaml").write_text("k: v\n", encoding="utf-8")
+        block = collect_v5_publications_block(tmp_path)
+        assert block.annexes_count == 1
+        assert block.concept_dois_tracked == 1
+        assert block.deposit_manifests_count == 1
+        assert block.last_annex_at is not None
 
 
 # ── Aggregator with new sources wired ──────────────────────────────
