@@ -1,0 +1,238 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 0,
+  "id": null,
+  "uid": "hapax-constellation",
+  "title": "Hapax Constellation — operator-awareness substrate (TV-mode)",
+  "tags": ["hapax", "awareness", "constellation", "tv-mode", "drop-6"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Awareness state writes (per-tick outcome)",
+      "description": "Rate of hapax-operator-awareness ticks (30s cadence). 'ok' should match ~2/min; 'error' or 'aggregator_error' rising indicates substrate degradation.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum by (result) (rate(hapax_awareness_state_writes_total[5m]))",
+          "legendFormat": "{{result}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "decimals": 3,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "text", "value": null }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "ok" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "error" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "aggregator_error" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }]
+          }
+        ]
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "SSE subscribers — Logos sidebar + Tauri webview",
+      "description": "Currently-connected SSE subscribers on /api/awareness/stream. Steady-state: 0–3 (Logos sidebar + occasional dashboard tabs).",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 0 },
+      "targets": [
+        {
+          "expr": "hapax_awareness_sse_subscribers",
+          "legendFormat": "subscribers",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "text", "value": null }
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Refusal events — last 1h (the count is the only aggregation permitted)",
+      "description": "Refusals_recent block tail length (constitutional: count is the ONLY aggregation refusals permit; individuals stay raw in /dev/shm/hapax-refusals/log.jsonl). Spike-without-context is a substrate health signal, not a verdict.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 0 },
+      "targets": [
+        {
+          "expr": "increase(hapax_awareness_aggregator_source_failures_total{source=\"refusals_recent\"}[1h])",
+          "legendFormat": "refusals tail-read failures (1h)",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "text", "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "orange", "value": 10 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Aggregator source failures — per-source (graceful-degradation events)",
+      "description": "Per-source increment counter on the degraded-graceful path (file missing / malformed / OSError). One time-series per wired source; flat = healthy, sloped = recurring source corruption.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 6 },
+      "targets": [
+        {
+          "expr": "sum by (source) (rate(hapax_awareness_aggregator_source_failures_total[5m]))",
+          "legendFormat": "{{source}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "decimals": 4,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "pointSize": 4,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": { "mode": "none" }
+          }
+        }
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Cross-account fanout — omg.lol public-safe statuses (per outcome)",
+      "description": "Hourly omg.lol fanout outcomes. 'ok' = posted; 'skipped' = unchanged-payload gate fired (working-as-designed during steady-state); 'no_creds' / 'no_state' = pre-rollout safe-skip; 'http_error' / 'network_error' = transient — investigate if persistent.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 6 },
+      "targets": [
+        {
+          "expr": "sum by (result) (increase(hapax_awareness_omg_lol_posts_total[24h]))",
+          "legendFormat": "{{result}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "lineWidth": 1,
+            "pointSize": 4,
+            "showPoints": "never",
+            "stacking": { "mode": "normal" }
+          }
+        }
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "REST / SSE endpoint traffic (per-endpoint x status)",
+      "description": "Awareness API request counters. Spike on /awareness 503 indicates state.json stale (>TTL); spike on /refusals indicates downstream consumer pulling tail.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "sum by (endpoint, status) (rate(hapax_awareness_api_requests_total[5m]))",
+          "legendFormat": "{{endpoint}} → {{status}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (type) (rate(hapax_awareness_sse_events_total[5m]))",
+          "legendFormat": "sse-event:{{type}}",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "decimals": 3,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 5,
+            "pointSize": 4,
+            "showPoints": "never",
+            "spanNulls": false
+          }
+        }
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    }
+  ],
+  "templating": { "list": [] }
+}
