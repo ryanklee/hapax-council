@@ -27,6 +27,11 @@ pub struct StreamRegistry {
     /// HTTP connection to /api/events/stream, accumulating into hundreds of
     /// orphan tasks and gigabytes of retained buffers.
     flow_events_subscribed: AtomicBool,
+    /// Idempotency flag for `subscribe_awareness` — same rationale as
+    /// `flow_events_subscribed`. The awareness stream relays
+    /// `awareness:state` / `awareness:stale` / `awareness:heartbeat`
+    /// to the webview.
+    awareness_subscribed: AtomicBool,
 }
 
 impl StreamRegistry {
@@ -34,6 +39,7 @@ impl StreamRegistry {
         Self {
             senders: Mutex::new(HashMap::new()),
             flow_events_subscribed: AtomicBool::new(false),
+            awareness_subscribed: AtomicBool::new(false),
         }
     }
 }
@@ -170,6 +176,115 @@ pub async fn subscribe_flow_events(app: AppHandle) -> Result<(), String> {
                     }
                 }
             }
+        }
+    });
+
+    Ok(())
+}
+
+/// Subscribe to the operator-awareness state stream (/api/awareness/stream).
+///
+/// Relays three named SSE event types as Tauri events:
+///   * `awareness:state` — full AwarenessState JSON payload (string)
+///   * `awareness:stale` — emitted once when the state file age crosses TTL
+///   * `awareness:heartbeat` — periodic liveness ping
+///
+/// Reconnection: exponential backoff with cap at 30s. Survives FastAPI
+/// restarts so the webview can subscribe at boot and stay live for the
+/// session lifetime.
+///
+/// Read-only by design: there is NO bidirectional command — the webview
+/// cannot push state back through this path. Per the awareness substrate
+/// constitutional invariant (refusal-as-data, full-automation-or-no-engagement),
+/// awareness is a Hapax-emitted signal, never operator-edited.
+///
+/// Idempotent: only the first call spawns the background task; subsequent
+/// calls are no-ops.
+#[tauri::command]
+pub async fn subscribe_awareness(app: AppHandle) -> Result<(), String> {
+    let registry = app.state::<StreamRegistry>();
+    if registry.awareness_subscribed.swap(true, Ordering::AcqRel) {
+        return Ok(());
+    }
+
+    let app_handle = app.clone();
+
+    tokio::spawn(async move {
+        let url = format!("{}/awareness/stream", LOGOS_BASE);
+        let client = app_handle.state::<super::proxy::HttpClient>().0.clone();
+
+        // Exponential backoff: 1s → 2s → 4s → … capped at 30s.
+        let mut backoff_ms = 1000u64;
+        const BACKOFF_CAP_MS: u64 = 30_000;
+
+        loop {
+            let resp = match client.get(&url).send().await {
+                Ok(r) if r.status().is_success() => {
+                    backoff_ms = 1000;
+                    r
+                }
+                Ok(r) => {
+                    log::warn!("awareness SSE: HTTP {}", r.status());
+                    tokio::time::sleep(std::time::Duration::from_millis(backoff_ms)).await;
+                    backoff_ms = (backoff_ms * 2).min(BACKOFF_CAP_MS);
+                    continue;
+                }
+                Err(e) => {
+                    log::warn!("awareness SSE connect: {}", e);
+                    tokio::time::sleep(std::time::Duration::from_millis(backoff_ms)).await;
+                    backoff_ms = (backoff_ms * 2).min(BACKOFF_CAP_MS);
+                    continue;
+                }
+            };
+
+            let mut byte_stream = resp.bytes_stream();
+            let mut buffer = String::new();
+            let mut current_event = String::from("message");
+            let mut data_lines: Vec<String> = Vec::new();
+
+            while let Some(chunk) = byte_stream.next().await {
+                match chunk {
+                    Err(e) => {
+                        log::warn!("awareness SSE read: {}", e);
+                        break;
+                    }
+                    Ok(bytes) => {
+                        let text = String::from_utf8_lossy(&bytes);
+                        buffer.push_str(&text);
+
+                        while let Some(newline_pos) = buffer.find('\n') {
+                            let line = buffer[..newline_pos].to_string();
+                            buffer = buffer[newline_pos + 1..].to_string();
+                            let line = line.trim_end_matches('\r');
+
+                            if line.is_empty() {
+                                if !data_lines.is_empty() {
+                                    let data = data_lines.join("\n");
+                                    let event_name = format!("awareness:{}", current_event);
+                                    let _ = app_handle.emit(&event_name, data);
+                                    data_lines.clear();
+                                    current_event = String::from("message");
+                                }
+                            } else if let Some(rest) = line.strip_prefix("event: ") {
+                                current_event = rest.trim().to_string();
+                            } else if let Some(rest) = line.strip_prefix("data: ") {
+                                data_lines.push(rest.to_string());
+                            } else if let Some(rest) = line.strip_prefix("data:") {
+                                data_lines.push(rest.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Connection ended (server disconnect or read error). Reconnect
+            // after backoff. The acceptance criterion calls for "auto-
+            // reconnect on network/server disconnect with exponential
+            // backoff" — `backoff_ms` resets to 1s on next successful
+            // connect.
+            log::info!("awareness SSE disconnected; reconnecting in {}ms", backoff_ms);
+            tokio::time::sleep(std::time::Duration::from_millis(backoff_ms)).await;
+            backoff_ms = (backoff_ms * 2).min(BACKOFF_CAP_MS);
         }
     });
 
