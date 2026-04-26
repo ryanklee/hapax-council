@@ -238,16 +238,52 @@ jobs:
     # goldens in a follow-on. The pytest step itself runs with
     # continue-on-error so the check surfaces "success" in the PR status
     # list while diff artifacts remain available for local review.
+    #
+    # PR3 of CI/CD speedup cascade (docs/research/2026-04-26-cicd-speedup.md
+    # §2 #5 + §6 + 2026-04-26-cicd-speedup-pr3-5-priorities.md):
+    # PATH-GATED. The heavy work (apt deps + uv sync + Px437 font install +
+    # pytest) only runs when the PR (or push) actually touches files that
+    # could change visual-regression output:
+    #   - tests/studio_compositor/test_visual_regression_homage.py
+    #   - assets/aesthetic-library/**
+    # On all other PRs, the job spins up, evaluates the path filter, and
+    # exits in ~5s — the GitHub status check still reports "success" so
+    # branch-protection rules aren't disrupted, but the parallel-job slot
+    # frees up immediately and ~80s of duplicated apt+uv+font setup is
+    # avoided across ~95% of PRs.
+    #
+    # Cadence concession: skipping homage-vr on most PRs means goldens
+    # drift caused by indirect changes (new ward → new rendering path
+    # touched by an unrelated module) won't surface until either (a) the
+    # operator runs the suite locally during ward iteration, or (b) the
+    # nightly cron in `.github/workflows/homage-vr-nightly.yml` runs it
+    # on main. The nightly cron preserves the regression cadence at
+    # ~24h granularity, well inside the operator's ward-iteration cycle.
     continue-on-error: true
     steps:
       - uses: actions/checkout@v6
+      # Path filter: detect whether this PR/push touches files that
+      # plausibly affect visual-regression output. Outputs `homage_inputs`
+      # (string "true"|"false") consumed by every downstream step's `if:`
+      # clause. `dorny/paths-filter@v3` handles both pull_request (diff
+      # vs base) and push (diff vs before-SHA) automatically.
+      - name: Detect homage-vr input changes
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            homage_inputs:
+              - 'tests/studio_compositor/test_visual_regression_homage.py'
+              - 'assets/aesthetic-library/**'
       - name: Install system deps (cairo, gobject, fonts)
+        if: steps.filter.outputs.homage_inputs == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             libcairo2-dev libgirepository-2.0-dev gobject-introspection \
             gir1.2-pango-1.0 fonts-dejavu-core
       - name: Install Px437 IBM VGA 8x16 font (HARDM aesthetic dependency)
+        if: steps.filter.outputs.homage_inputs == 'true'
         run: |
           sudo mkdir -p /usr/share/fonts/TTF
           sudo cp assets/aesthetic-library/fonts/Px437_IBM_VGA_8x16.ttf /usr/share/fonts/TTF/
@@ -256,11 +292,15 @@ jobs:
           fc-list | grep -i 'Px437.*IBM VGA 8x16' \
             || (echo "font install failed (fc-list)" >&2; exit 1)
       - uses: astral-sh/setup-uv@v7
+        if: steps.filter.outputs.homage_inputs == 'true'
         with:
           enable-cache: true
-      - run: uv sync --extra ci
+      - name: Sync uv ci extras
+        if: steps.filter.outputs.homage_inputs == 'true'
+        run: uv sync --extra ci
       - name: Run HOMAGE visual-regression suite (informational; goldens are dev-env pinned)
         id: vr
+        if: steps.filter.outputs.homage_inputs == 'true'
         continue-on-error: true
         env:
           LITELLM_BASE_URL: "http://0.0.0.0:1"
@@ -272,7 +312,7 @@ jobs:
           uv run pytest tests/studio_compositor/test_visual_regression_homage.py \
             -q --tb=short
       - name: Upload diff PNGs on failure
-        if: steps.vr.outcome == 'failure'
+        if: steps.filter.outputs.homage_inputs == 'true' && steps.vr.outcome == 'failure'
         uses: actions/upload-artifact@v7
         with:
           name: homage-visual-regression-diffs
@@ -280,8 +320,22 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
       - name: Report visual-regression outcome
+        env:
+          # GHA-internal step outputs only (boolean-shaped strings); not
+          # user-controlled. Bound to env vars per workflow-injection
+          # hardening guidelines anyway, so future edits don't silently
+          # regress.
+          HOMAGE_INPUTS: ${{ steps.filter.outputs.homage_inputs }}
+          VR_OUTCOME: ${{ steps.vr.outcome }}
         run: |
-          echo "visual-regression outcome: ${{ steps.vr.outcome }}"
+          if [ "$HOMAGE_INPUTS" != "true" ]; then
+            echo "Skipped — this change does not touch homage-vr inputs."
+            echo "  - tests/studio_compositor/test_visual_regression_homage.py"
+            echo "  - assets/aesthetic-library/**"
+            echo "Nightly cron on main covers golden drift; operator can run locally."
+            exit 0
+          fi
+          echo "visual-regression outcome: $VR_OUTCOME"
           echo "Informational — dev-env goldens diverge from CI fonts/AA/hinting."
           echo "Diff artifacts (if any) are attached to this run for review."
 
