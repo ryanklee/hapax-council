@@ -225,10 +225,71 @@ def _title_for_slug(slug: str) -> str:
     return f"Refusal Annex: {pretty}"
 
 
+DEFAULT_PUBLISH_STATE_ROOT: Path = Path.home() / "hapax-state" / "publish"
+"""Where ``shared.preprint_artifact.PreprintArtifact`` lives.
+
+The ``publish_orchestrator`` (legacy + V5 wired) globs ``inbox/`` for
+approved artefacts, dispatches each via ``SURFACE_REGISTRY``, and moves
+to ``published/`` when every targeted surface reaches a terminal state.
+"""
+
+DEFAULT_FANOUT_SURFACES: tuple[str, ...] = (
+    "zenodo-refusal-deposit",
+    "omg-weblog",
+    "bridgy-webmention-publish",
+)
+"""Where each refusal annex fans out via the orchestrator.
+
+- ``zenodo-refusal-deposit`` — V5 RefusalBriefPublisher (#1676 wired); mints DOI
+- ``omg-weblog`` — operator-owned hapax.weblog.lol (legacy adapter, WIRED)
+- ``bridgy-webmention-publish`` — POSSE fan-out via brid.gy (CRED_BLOCKED on
+  weblog source URL; orchestrator records ``auth_error`` + retries on next tick)
+"""
+
+
+def enqueue_annex_for_fanout(
+    *,
+    slug: str,
+    title: str,
+    body: str,
+    surfaces: list[str] | None = None,
+    state_root: Path = DEFAULT_PUBLISH_STATE_ROOT,
+) -> Path:
+    """Persist a ``PreprintArtifact`` for orchestrator dispatch.
+
+    The renderer-side already wrote the canonical ``.md`` artefact to
+    ``~/hapax-state/publications/`` via the V5 RefusalAnnexPublisher.
+    This function drops the orchestrator-side companion: an approved
+    PreprintArtifact JSON in ``~/hapax-state/publish/inbox/`` whose
+    ``surfaces_targeted`` instructs the orchestrator to fan out to
+    Zenodo (DOI mint) + omg.lol weblog + Bridgy POSSE.
+
+    Returns the inbox path for caller observability.
+    """
+    from shared.preprint_artifact import PreprintArtifact
+
+    artefact_slug = f"refusal-annex-{slug}"
+    artefact = PreprintArtifact(
+        slug=artefact_slug,
+        title=title,
+        abstract=body[:4096],
+        body_md=body,
+        surfaces_targeted=list(surfaces or DEFAULT_FANOUT_SURFACES),
+    )
+    artefact.mark_approved(by_referent="Oudepode")
+    inbox_path = artefact.inbox_path(state_root=state_root)
+    inbox_path.parent.mkdir(parents=True, exist_ok=True)
+    inbox_path.write_text(artefact.model_dump_json(), encoding="utf-8")
+    return inbox_path
+
+
 def publish_all_annexes(
     *,
     log_path: Path = DEFAULT_LOG_PATH,
     output_dir: Path = DEFAULT_ANNEX_OUTPUT_DIR,
+    enqueue_for_fanout: bool = False,
+    fanout_state_root: Path | None = None,
+    fanout_surfaces: list[str] | None = None,
 ) -> dict[str, Path]:
     """Render every annex with at least one log entry + the series index.
 
@@ -238,6 +299,11 @@ def publish_all_annexes(
     guard, canonical Counter) apply to every write. The legacy
     ``hapax_leverage_refusal_annexes_published_total`` counter
     continues to record per-slug outcomes for backward compatibility.
+
+    Phase 3 (``enqueue_for_fanout=True``): per published annex, drop a
+    ``PreprintArtifact`` in the orchestrator inbox so each annex fans out
+    to Zenodo (DOI mint) + omg.lol weblog + Bridgy POSSE without operator
+    action.
 
     Returns ``{slug: output_path}`` for the per-annex files. The index
     file is always written (even when empty) so downstream tooling
@@ -261,6 +327,23 @@ def publish_all_annexes(
         if result.ok:
             refusal_annexes_published_total.labels(slug=slug, outcome="ok").inc()
             written[slug] = output_dir / f"{PER_ANNEX_FILENAME_PREFIX}{slug}.md"
+            if enqueue_for_fanout:
+                try:
+                    enqueue_annex_for_fanout(
+                        slug=slug,
+                        title=annex["title"],
+                        body=body,
+                        surfaces=fanout_surfaces,
+                        state_root=fanout_state_root or DEFAULT_PUBLISH_STATE_ROOT,
+                    )
+                    refusal_annexes_published_total.labels(
+                        slug=slug, outcome="enqueued-fanout"
+                    ).inc()
+                except Exception:
+                    log.warning("annex fanout-enqueue failed for %s", slug, exc_info=True)
+                    refusal_annexes_published_total.labels(
+                        slug=slug, outcome="fanout-enqueue-failed"
+                    ).inc()
         elif result.refused:
             refusal_annexes_published_total.labels(slug=slug, outcome="refused").inc()
             log.info("annex publish refused for %s: %s", slug, result.detail)
@@ -276,21 +359,34 @@ def publish_all_annexes(
 
 def main() -> int:
     """Entry for ``python -m agents.marketing.refusal_annex_renderer``."""
+    import argparse
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--no-fanout",
+        action="store_true",
+        help="Render local files only; skip enqueuing for orchestrator dispatch",
+    )
+    args = parser.parse_args()
+
     logging.basicConfig(level=logging.INFO)
-    written = publish_all_annexes()
+    written = publish_all_annexes(enqueue_for_fanout=not args.no_fanout)
     log.info("rendered %d refusal annexes", len(written))
     return 0
 
 
 __all__ = [
     "DEFAULT_ANNEX_OUTPUT_DIR",
+    "DEFAULT_FANOUT_SURFACES",
     "DEFAULT_LOG_PATH",
+    "DEFAULT_PUBLISH_STATE_ROOT",
     "INDEX_FILENAME",
     "NON_ENGAGEMENT_CLAUSE",
     "PER_ANNEX_FILENAME_PREFIX",
     "REFUSAL_ANNEX_SLUGS",
     "RefusalAnnexEntry",
     "discover_annex_entries",
+    "enqueue_annex_for_fanout",
     "main",
     "publish_all_annexes",
     "refusal_annexes_published_total",
