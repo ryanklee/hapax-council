@@ -204,7 +204,7 @@ References:
 
 ## Axiom Governance
 
-5 axioms (3 constitutional, 2 domain) enforced via `shared/axiom_*.py`, `shared/consent.py`, and commit hooks:
+5 axioms (3 constitutional, 2 domain) enforced via `shared/axiom_*.py`, `shared/governance/consent.py`, and commit hooks:
 
 | Axiom | Weight | Constraint |
 |-------|--------|------------|
@@ -356,7 +356,7 @@ Per V5 weave §2.1 PUB-P0-B keystone (`agents/publication_bus/publisher_kit/`). 
 - **`shared/notify.py`** — `send_notification()` for ntfy + desktop
 - **`shared/frontmatter.py`** — Canonical frontmatter parser (never duplicate this)
 - **`shared/dimensions.py`** — 11 profile dimensions. Sync agents produce behavioral facts only.
-- **`shared/consent.py`** — `ConsentContract`, `ConsentRegistry`, `contract_check()`
+- **`shared/governance/consent.py`** — `ConsentContract`, `ConsentRegistry`, `contract_check()`. Companion modules: `shared/governance/consent_context.py` (contextvar registry), `consent_gate.py` (capability filtering), `revocation.py` (contract purge).
 - **`shared/agent_registry.py`** — `AgentManifest` (4-layer schema), query by category/capability/RACI
 - **`shared/telemetry.py`** — `hapax_span` / `hapax_event` / `hapax_score` for Langfuse instrumentation. `hapax_span` uses an `ExitStack` so setup failures yield a no-op span and caller exceptions propagate cleanly; do not refactor it to a single try/except wrapping the yield. Metadata values must be strings; non-string values are dropped by langfuse's `propagate_attributes`.
 
