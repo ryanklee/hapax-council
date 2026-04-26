@@ -100,7 +100,7 @@ PUBLISHER_WIRE_REGISTRY: dict[str, WireEntry] = {
         module="agents.publication_bus.philarchive_publisher",
         surface_slug="philarchive-deposit",
         status="CRED_BLOCKED",
-        pass_key_required="philarchive/session-cookie",
+        pass_key_required="philarchive/session-cookie, philarchive/author-id",
         rationale=(
             "PhilArchive form-POST via session cookie; CONDITIONAL_ENGAGE per "
             "drop-5 §2 (one-time Playwright login produces the cookie). "
