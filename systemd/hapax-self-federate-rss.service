@@ -1,0 +1,13 @@
+[Unit]
+Description=Hapax weblog RSS validator — weekly self-federate feed health check
+After=hapax-secrets.service
+
+[Service]
+Type=oneshot
+ExecStart=%h/projects/hapax-council/.venv/bin/python -m agents.self_federate.rss_validator
+WorkingDirectory=%h/projects/hapax-council
+Environment=HOME=%h
+Environment=PYTHONPATH=%h/projects/hapax-council
+
+[Install]
+WantedBy=default.target

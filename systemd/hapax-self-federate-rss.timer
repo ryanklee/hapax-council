@@ -1,0 +1,10 @@
+[Unit]
+Description=Hapax weblog RSS validator Timer (weekly Sunday 03:00 UTC)
+
+[Timer]
+OnCalendar=Sun *-*-* 03:00:00 UTC
+Persistent=true
+AccuracySec=5min
+
+[Install]
+WantedBy=timers.target
