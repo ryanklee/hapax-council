@@ -42,6 +42,7 @@ from agents.operator_awareness.state import (
     RefusalEvent,
     SprintBlock,
     StreamBlock,
+    V5PublicationsBlock,
 )
 from agents.payment_processors.event_log import DEFAULT_PAYMENT_LOG_PATH
 
@@ -98,6 +99,15 @@ DEFAULT_PUBLISH_DIR = Path(
     os.environ.get(
         "HAPAX_PUBLISH_DIR",
         str(Path.home() / "hapax-state/publish"),
+    )
+)
+# V5 publication-bus deposit-artefact root. Distinct from PUBLISH_DIR
+# (preprint pipeline). R-9 fix: aggregator now reads BOTH so V5 output
+# (refusal annexes, DOI cache, deposit manifests) is visible.
+DEFAULT_PUBLICATIONS_DIR = Path(
+    os.environ.get(
+        "HAPAX_PUBLICATIONS_DIR",
+        str(Path.home() / "hapax-state/publications"),
     )
 )
 
@@ -430,6 +440,71 @@ def collect_publishing_block(
     )
 
 
+def collect_v5_publications_block(
+    publications_dir: Path = DEFAULT_PUBLICATIONS_DIR,
+) -> V5PublicationsBlock:
+    """Compose V5 publication-bus deposit-artefact counters.
+
+    Reads ``publications_dir`` for refusal-annex markdowns at root, the
+    ``recent-concept-dois.txt`` line cache, and per-deposit manifests
+    under ``queue/*/manifest.yaml``. Missing tree is pre-rollout — bus
+    configured but no V5 output yet.
+
+    R-9 fix: this block surfaces V5 output that previously fell through
+    aggregator gaps because the aggregator only read ``publish/`` (the
+    preprint pipeline tree). Both trees coexist; the V5 surface gets a
+    dedicated block rather than a path-tree merge.
+    """
+    if not publications_dir.exists() or not publications_dir.is_dir():
+        return V5PublicationsBlock()
+
+    annexes_count = 0
+    last_mtime = 0.0
+    try:
+        for entry in publications_dir.iterdir():
+            if not entry.is_file() or entry.suffix != ".md":
+                continue
+            annexes_count += 1
+            mtime = _safe_mtime(entry)
+            if mtime > last_mtime:
+                last_mtime = mtime
+    except OSError:
+        log.debug("publications dir unreadable at %s", publications_dir)
+        aggregator_source_failures_total.labels(source="v5_publications").inc()
+        return V5PublicationsBlock()
+
+    last_annex_at: datetime | None = None
+    if last_mtime > 0:
+        last_annex_at = datetime.fromtimestamp(last_mtime, tz=UTC)
+
+    concept_dois_tracked = 0
+    dois_path = publications_dir / "recent-concept-dois.txt"
+    if dois_path.exists() and dois_path.is_file():
+        try:
+            concept_dois_tracked = sum(
+                1 for line in dois_path.read_text(encoding="utf-8").splitlines() if line.strip()
+            )
+        except OSError:
+            pass
+
+    deposit_manifests_count = 0
+    queue_dir = publications_dir / "queue"
+    if queue_dir.exists() and queue_dir.is_dir():
+        try:
+            for sub in queue_dir.iterdir():
+                if sub.is_dir() and (sub / "manifest.yaml").is_file():
+                    deposit_manifests_count += 1
+        except OSError:
+            pass
+
+    return V5PublicationsBlock(
+        annexes_count=annexes_count,
+        last_annex_at=last_annex_at,
+        concept_dois_tracked=concept_dois_tracked,
+        deposit_manifests_count=deposit_manifests_count,
+    )
+
+
 def _count_dir_files(directory: Path) -> int:
     """Count regular files in ``directory``; missing dir → 0."""
     if not directory.exists() or not directory.is_dir():
@@ -484,6 +559,7 @@ class Aggregator:
         sprint_state_path: Path = DEFAULT_SPRINT_PATH,
         pi_noir_dir: Path = DEFAULT_FLEET_DIR,
         publish_dir: Path = DEFAULT_PUBLISH_DIR,
+        publications_dir: Path = DEFAULT_PUBLICATIONS_DIR,
         clock=None,
     ) -> None:
         self._refusals_log_path = refusals_log_path
@@ -494,6 +570,7 @@ class Aggregator:
         self._sprint_state_path = sprint_state_path
         self._pi_noir_dir = pi_noir_dir
         self._publish_dir = publish_dir
+        self._publications_dir = publications_dir
         self._clock = clock or (lambda: datetime.now(UTC))
 
     def collect(self) -> AwarenessState:
@@ -518,6 +595,7 @@ class Aggregator:
             time_sprint=collect_sprint_block(self._sprint_state_path),
             hardware_fleet=collect_fleet_block(self._pi_noir_dir),
             publishing_pipeline=collect_publishing_block(self._publish_dir),
+            v5_publications=collect_v5_publications_block(self._publications_dir),
         )
 
 
@@ -525,6 +603,7 @@ __all__ = [
     "DEFAULT_CHRONICLE_EVENTS",
     "DEFAULT_FLEET_DIR",
     "DEFAULT_INFRA_SNAPSHOT",
+    "DEFAULT_PUBLICATIONS_DIR",
     "DEFAULT_PUBLISH_DIR",
     "DEFAULT_REFUSALS_LOG",
     "DEFAULT_SPRINT_PATH",
@@ -539,6 +618,7 @@ __all__ = [
     "collect_fleet_block",
     "collect_health_block",
     "collect_publishing_block",
+    "collect_v5_publications_block",
     "collect_refusals_recent",
     "collect_sprint_block",
     "collect_stream_block",

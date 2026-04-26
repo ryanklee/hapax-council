@@ -91,6 +91,29 @@ class PublishingBlock(_Block):
     last_publish_at: datetime | None = None
 
 
+class V5PublicationsBlock(_Block):
+    """V5 publication-bus deposit-artefact counts.
+
+    Distinct from ``PublishingBlock`` (preprint pipeline:
+    ``publish/inbox/`` queued, ``publish/draft/`` in-flight,
+    ``publish/published/`` terminal). This block surfaces the V5 deposit
+    artefacts under ``~/hapax-state/publications/`` — refusal-annex
+    markdowns, the recent-concept-dois cache, and per-deposit manifest
+    queues. Without this block, V5 publisher output is invisible to the
+    awareness state spine and to omg.lol fanout / waybar / sidebar.
+
+    Spec: R-9 ``publish-vs-publications-tree-rationalize`` from the
+    2026-04-26 absence-bugs corpus. Choice: additive read of the
+    publications/ tree alongside the existing publish/ pipeline metric,
+    rather than a tree merge that would force an operator-data migration.
+    """
+
+    annexes_count: int = 0  # *.md files at publications/ root
+    last_annex_at: datetime | None = None  # max mtime in publications/ root
+    concept_dois_tracked: int = 0  # lines in recent-concept-dois.txt (V5 ORCID)
+    deposit_manifests_count: int = 0  # publications/queue/*/manifest.yaml count
+
+
 class HealthBlock(_Block):
     """Whole-system health golden-signal block."""
 
@@ -260,6 +283,7 @@ class AwarenessState(BaseModel):
     research_dispatches: ResearchDispatchBlock = Field(default_factory=ResearchDispatchBlock)
     music_soundcloud: MusicBlock = Field(default_factory=MusicBlock)
     publishing_pipeline: PublishingBlock = Field(default_factory=PublishingBlock)
+    v5_publications: V5PublicationsBlock = Field(default_factory=V5PublicationsBlock)
     health_system: HealthBlock = Field(default_factory=HealthBlock)
     daimonion_voice: DaimonionBlock = Field(default_factory=DaimonionBlock)
     stream: StreamBlock = Field(default_factory=StreamBlock)
@@ -316,6 +340,7 @@ __all__ = [
     "ProgrammeBlock",
     "PublishingBlock",
     "RefusalEvent",
+    "V5PublicationsBlock",
     "ResearchDispatchBlock",
     "SprintBlock",
     "StreamBlock",
