@@ -189,3 +189,159 @@ class TestPublishAllAnnexesDispatchesThroughPublisher:
         if counter is not None:
             after = counter.labels(surface="marketing-refusal-annex", result="ok")._value.get()
             assert after == before + 1
+
+
+class TestEnqueueAnnexForFanout:
+    """Phase 3: orchestrator fanout — enqueue PreprintArtifact for cross-surface dispatch.
+
+    The orchestrator globs ``~/hapax-state/publish/inbox/`` for approved artifacts and
+    dispatches each via ``SURFACE_REGISTRY``. A successful annex publish must drop a
+    matching ``PreprintArtifact.json`` so Zenodo (DOI mint), omg.lol weblog, and Bridgy
+    (POSSE) all receive the annex without operator action.
+    """
+
+    def test_writes_approved_preprint_artifact_to_inbox(self, tmp_path: Path) -> None:
+        from agents.marketing.refusal_annex_renderer import enqueue_annex_for_fanout
+        from shared.preprint_artifact import ApprovalState, PreprintArtifact
+
+        path = enqueue_annex_for_fanout(
+            slug="declined-bandcamp",
+            title="Refusal: Bandcamp",
+            body="# Refusal Annex\n\nBody content.",
+            state_root=tmp_path,
+        )
+        assert path.exists()
+        assert path.parent == tmp_path / "publish" / "inbox"
+        # Artifact is approved (orchestrator only globs approved-state inbox)
+        artifact = PreprintArtifact.model_validate_json(path.read_text())
+        assert artifact.approval == ApprovalState.APPROVED
+        assert artifact.approved_at is not None
+        assert artifact.approved_by_referent == "Oudepode"
+
+    def test_default_surfaces_target_zenodo_omg_bridgy(self, tmp_path: Path) -> None:
+        from agents.marketing.refusal_annex_renderer import (
+            DEFAULT_FANOUT_SURFACES,
+            enqueue_annex_for_fanout,
+        )
+        from shared.preprint_artifact import PreprintArtifact
+
+        path = enqueue_annex_for_fanout(
+            slug="declined-bandcamp", title="x", body="x", state_root=tmp_path
+        )
+        artifact = PreprintArtifact.model_validate_json(path.read_text())
+        assert "zenodo-refusal-deposit" in artifact.surfaces_targeted
+        assert "omg-weblog" in artifact.surfaces_targeted
+        assert "bridgy-webmention-publish" in artifact.surfaces_targeted
+        assert set(artifact.surfaces_targeted) == set(DEFAULT_FANOUT_SURFACES)
+
+    def test_explicit_surfaces_override_default(self, tmp_path: Path) -> None:
+        from agents.marketing.refusal_annex_renderer import enqueue_annex_for_fanout
+        from shared.preprint_artifact import PreprintArtifact
+
+        path = enqueue_annex_for_fanout(
+            slug="declined-x",
+            title="x",
+            body="x",
+            surfaces=["zenodo-refusal-deposit"],
+            state_root=tmp_path,
+        )
+        artifact = PreprintArtifact.model_validate_json(path.read_text())
+        assert artifact.surfaces_targeted == ["zenodo-refusal-deposit"]
+
+    def test_artifact_slug_prefixed_to_avoid_collision(self, tmp_path: Path) -> None:
+        from agents.marketing.refusal_annex_renderer import enqueue_annex_for_fanout
+        from shared.preprint_artifact import PreprintArtifact
+
+        path = enqueue_annex_for_fanout(
+            slug="declined-bandcamp", title="x", body="x", state_root=tmp_path
+        )
+        # Inbox filename includes refusal-annex- prefix so a future preprint
+        # named "declined-bandcamp" can't overwrite the annex artifact.
+        assert path.name == "refusal-annex-declined-bandcamp.json"
+        artifact = PreprintArtifact.model_validate_json(path.read_text())
+        assert artifact.slug == "refusal-annex-declined-bandcamp"
+
+    def test_body_becomes_body_md_and_truncated_abstract(self, tmp_path: Path) -> None:
+        from agents.marketing.refusal_annex_renderer import enqueue_annex_for_fanout
+        from shared.preprint_artifact import PreprintArtifact
+
+        body = "# Big Annex\n\n" + ("x" * 8192)  # > 4096 abstract limit
+        path = enqueue_annex_for_fanout(
+            slug="declined-x", title="x", body=body, state_root=tmp_path
+        )
+        artifact = PreprintArtifact.model_validate_json(path.read_text())
+        # Full body preserved in body_md
+        assert artifact.body_md == body
+        # Abstract truncated to model's max_length (4096)
+        assert len(artifact.abstract) <= 4096
+
+
+class TestPublishAllAnnexesEnqueueFanout:
+    """``publish_all_annexes(enqueue_for_fanout=True)`` enqueues each annex
+    for orchestrator dispatch in addition to writing local files."""
+
+    def test_enqueue_for_fanout_drops_inbox_artifact_per_published_annex(
+        self, tmp_path: Path
+    ) -> None:
+        from agents.marketing.refusal_annex_renderer import publish_all_annexes
+
+        log_path = tmp_path / "log.jsonl"
+        _write_log(
+            log_path,
+            [
+                {
+                    "timestamp": "2026-04-25T10:00:00+00:00",
+                    "axiom": "single_user",
+                    "surface": "publication-bus:bandcamp-upload",
+                    "reason": "manual upload only",
+                    "public": False,
+                    "refusal_brief_link": None,
+                },
+            ],
+        )
+        output_dir = tmp_path / "publications"
+        state_root = tmp_path / "state"
+
+        publish_all_annexes(
+            log_path=log_path,
+            output_dir=output_dir,
+            enqueue_for_fanout=True,
+            fanout_state_root=state_root,
+        )
+
+        inbox = state_root / "publish" / "inbox"
+        assert inbox.exists()
+        # Exactly one artifact per published annex
+        artifact_files = sorted(inbox.glob("*.json"))
+        assert len(artifact_files) == 1
+        assert artifact_files[0].name == "refusal-annex-declined-bandcamp.json"
+
+    def test_default_does_not_enqueue_for_fanout(self, tmp_path: Path) -> None:
+        """Backward-compat: existing callers without enqueue_for_fanout=True
+        get no inbox artifact (Phase 1+2 behavior preserved)."""
+        from agents.marketing.refusal_annex_renderer import publish_all_annexes
+
+        log_path = tmp_path / "log.jsonl"
+        _write_log(
+            log_path,
+            [
+                {
+                    "timestamp": "2026-04-25T10:00:00+00:00",
+                    "axiom": "single_user",
+                    "surface": "publication-bus:bandcamp-upload",
+                    "reason": "manual upload only",
+                    "public": False,
+                    "refusal_brief_link": None,
+                },
+            ],
+        )
+        output_dir = tmp_path / "publications"
+        state_root = tmp_path / "state"
+
+        publish_all_annexes(
+            log_path=log_path,
+            output_dir=output_dir,
+            fanout_state_root=state_root,
+        )
+        inbox = state_root / "publish" / "inbox"
+        assert not inbox.exists() or list(inbox.glob("*.json")) == []
