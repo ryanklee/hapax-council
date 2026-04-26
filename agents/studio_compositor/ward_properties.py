@@ -72,6 +72,40 @@ _TMP_SUFFIX_COUNTER = count()
 _WRITE_LOCK = threading.Lock()
 
 
+# Orphan ward IDs — entries that no current layout declares but that
+# legacy producer code may still try to write. Per cc-task lssh-010
+# (orphan-ward-cleanup), these clutter ``/dev/shm/.../ward-properties.json``
+# without affecting broadcast — the compositor render path resolves
+# property merges per layout-declared ward only, so orphan entries are
+# inert noise that complicates debugging. We drop them at write time
+# rather than at read time so the file on disk stays clean (a stale
+# entry from a prior unfiltered process won't outlive the next write).
+#
+# Provenance:
+# - vinyl_platter         — agents/studio_compositor/vinyl_platter.py
+#                           writes property updates; layout omits it
+#                           since the vinyl-image-as-HOMAGE rework.
+# - objectives_overlay    — agents/studio_compositor/objective_hero_switcher.py
+#                           writes; layout uses overlay-zones for
+#                           objective surfacing.
+# - music_candidate_surfacer — agents/studio_compositor/
+#                           music_candidate_surfacer.py writes; surface
+#                           was retired in favor of music_block writes.
+# - scene_director        — metadata-only writer (not a CairoSource);
+#                           no compositor render path consumes it.
+# - structural_director   — metadata-only writer; SHM entry stale >1h
+#                           in 2026-04-21 livestream-surface audit.
+ORPHAN_WARD_IDS: frozenset[str] = frozenset(
+    {
+        "vinyl_platter",
+        "objectives_overlay",
+        "music_candidate_surfacer",
+        "scene_director",
+        "structural_director",
+    }
+)
+
+
 @dataclass
 class WardProperties:
     """Per-ward modulation envelope.
@@ -250,6 +284,14 @@ def set_ward_properties(
     """
     if ttl_s <= 0:
         log.warning("set_ward_properties: ttl_s must be > 0, got %.3f", ttl_s)
+        return
+    if ward_id in ORPHAN_WARD_IDS:
+        # Silent skip — legacy producers (vinyl_platter,
+        # objective_hero_switcher, music_candidate_surfacer,
+        # scene_director, structural_director) still call this with
+        # orphan IDs but no layout consumes them. Filtering here keeps
+        # ward-properties.json free of dead entries; see ORPHAN_WARD_IDS
+        # docstring above for provenance.
         return
     with _WRITE_LOCK:
         try:
@@ -534,6 +576,7 @@ def _dict_to_properties(entry: dict) -> WardProperties:
 
 
 __all__ = [
+    "ORPHAN_WARD_IDS",
     "WARD_PROPERTIES_PATH",
     "WardProperties",
     "all_resolved_properties",

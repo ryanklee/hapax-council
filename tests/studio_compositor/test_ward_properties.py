@@ -262,3 +262,79 @@ class TestConcurrentWriteSafety:
         wp.set_ward_properties("album", wp.WardProperties(alpha=0.5), ttl_s=10.0)
         leftovers = list(tmp_path.glob("ward-properties.json.tmp*"))
         assert leftovers == []
+
+
+# ── lssh-010: orphan ward filter ──────────────────────────────────────
+
+
+class TestOrphanWardFilter:
+    """Pin: lssh-010 — orphan ward IDs are dropped at write time.
+
+    Provenance: 2026-04-21 livestream-surface inventory audit §3.H
+    found 5 ward entries in ``/dev/shm/.../ward-properties.json`` not
+    declared in any layout. The producer code is left intact (legacy
+    callers can still call set_ward_properties without checking) but
+    writes are silently dropped at the bus boundary.
+    """
+
+    ORPHANS = (
+        "vinyl_platter",
+        "objectives_overlay",
+        "music_candidate_surfacer",
+        "scene_director",
+        "structural_director",
+    )
+
+    def test_orphan_ids_are_constant(self) -> None:
+        from agents.studio_compositor.ward_properties import ORPHAN_WARD_IDS
+
+        for orphan in self.ORPHANS:
+            assert orphan in ORPHAN_WARD_IDS
+
+    def test_set_ward_properties_drops_orphan_writes(self, tmp_path, monkeypatch) -> None:
+        from agents.studio_compositor import ward_properties as wp
+
+        # Redirect the SHM path to a tmp file so the test stays
+        # hermetic and doesn't pollute /dev/shm during CI.
+        path = tmp_path / "ward-properties.json"
+        monkeypatch.setattr(wp, "WARD_PROPERTIES_PATH", path)
+        wp.clear_ward_properties_cache()
+
+        for orphan in self.ORPHANS:
+            wp.set_ward_properties(orphan, wp.WardProperties(), ttl_s=60.0)
+
+        # No file should exist because every write was dropped.
+        # (set_ward_properties is the only thing that creates the file.)
+        assert not path.exists()
+
+    def test_legitimate_ward_still_writes(self, tmp_path, monkeypatch) -> None:
+        from agents.studio_compositor import ward_properties as wp
+
+        path = tmp_path / "ward-properties.json"
+        monkeypatch.setattr(wp, "WARD_PROPERTIES_PATH", path)
+        wp.clear_ward_properties_cache()
+
+        wp.set_ward_properties("sierpinski", wp.WardProperties(), ttl_s=60.0)
+
+        assert path.exists()
+        import json
+
+        data = json.loads(path.read_text())
+        assert "sierpinski" in data["wards"]
+
+    def test_orphan_does_not_clobber_existing_legitimate_wards(self, tmp_path, monkeypatch) -> None:
+        from agents.studio_compositor import ward_properties as wp
+
+        path = tmp_path / "ward-properties.json"
+        monkeypatch.setattr(wp, "WARD_PROPERTIES_PATH", path)
+        wp.clear_ward_properties_cache()
+
+        wp.set_ward_properties("sierpinski", wp.WardProperties(), ttl_s=60.0)
+        wp.set_ward_properties("vinyl_platter", wp.WardProperties(), ttl_s=60.0)
+
+        import json
+
+        data = json.loads(path.read_text())
+        # Sierpinski survives; orphan never lands.
+        assert "sierpinski" in data["wards"]
+        assert "vinyl_platter" not in data["wards"]
