@@ -90,19 +90,35 @@ DEFAULT_REFUSAL_LOG_PATH = Path("/dev/shm/hapax-refusals/log.jsonl")
 # Killswitch: mirrors the cc-hygiene pattern.
 KILLSWITCH_ENV = "HAPAX_FEEDBACK_LOOP_DETECTOR_OFF"
 
-BROADCAST_PATH_CHANNELS: tuple[int, ...] = (0, 2, 3, 4, 5)
-"""Per L-12 narrowing PR #1471, only AUX1/3/4/5_L/5_R reach broadcast.
+BROADCAST_PATH_CHANNELS: tuple[int, ...] = (2, 3, 4, 5)
+"""Per L-12 narrowing PR #1471, AUX1/3/4/5_L/5_R reach broadcast — but
+the contact mic on AUX1 (idx 0) is structurally non-feedback-capable
+and is excluded.
 
 Channel indices in the raw 14-channel parec stream (0-based):
-  0 = strip 1 (AUX1, contact mic)
-  2 = strip 3 (AUX3, sampler)
-  3 = strip 4 (AUX4, rode vocal)
-  4 = strip 5 (AUX5_L, Evil Pet wet L)
-  5 = strip 6 (AUX5_R, Evil Pet wet R)
+  2 = strip 3 (AUX3, sampler) — could feedback through sampler chain
+  3 = strip 4 (AUX4, rode vocal) — true acoustic-feedback risk
+  4 = strip 5 (AUX5_L, Evil Pet wet L) — pedal self-oscillation risk
+  5 = strip 6 (AUX5_R, Evil Pet wet R) — pedal self-oscillation risk
 
-Strips 2 + 7-12 (indices 1, 6-11) and the MASTER bus (12-13) are NOT in
-the broadcast path — feedback there is irrelevant to broadcast_no_loopback
-and was the dominant false-positive source on initial deploy."""
+Excluded:
+
+* Index 0 (AUX1, contact mic): a piezo vibration sensor. Cannot
+  participate in an acoustic OR digital feedback loop — it captures
+  desk-surface mechanical contact (typing, mug placement, foot taps,
+  HVAC vibration), all of which routinely produce sustained narrow-
+  band content in the 200-1000 Hz range that trips the 6 dB / 12 dB
+  thresholds. Field deploy of #1532 still saw 10 false triggers in
+  5 min on this channel (typing percussion, mug rings).
+* Index 1 (strip 2, spare) + 6-11 (strips 7-12) + 12-13 (MASTER) are
+  not in the broadcast path post-#1471 narrowing.
+
+Trade-off: dropping AUX1 from the watch set means a hypothetical
+feedback path through the contact mic would not be detected. Counter-
+argument: contact-mic feedback would require the broadcast playback to
+mechanically vibrate the desk loudly enough to dominate the contact
+mic's pickup, which would already be audible to the operator and
+manually correctable."""
 
 
 # ── parec subprocess wrapper ──────────────────────────────────────────────
