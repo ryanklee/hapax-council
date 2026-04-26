@@ -456,7 +456,7 @@ def main() -> None:
         try:
             from shared.notify import send_notification
 
-            send_notification(message, priority=priority, title="LUFS panic-cap")
+            send_notification("LUFS panic-cap", message, priority=priority)
         except Exception:
             log.debug("notify dispatch failed", exc_info=True)
 
