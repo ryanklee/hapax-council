@@ -23,6 +23,8 @@ from collections import deque
 from datetime import UTC, datetime
 from pathlib import Path
 
+from prometheus_client import Counter
+
 from agents.operator_awareness.state import (
     AwarenessState,
     HealthBlock,
@@ -31,6 +33,17 @@ from agents.operator_awareness.state import (
 )
 
 log = logging.getLogger(__name__)
+
+# Spec acceptance criterion: per-source failure counter so operators
+# (Grafana, alerting) can see "the awareness daemon's stream source
+# has been failing for the last 5 minutes" without scraping the
+# daemon log. Each source helper increments under its own label on
+# the degraded-graceful path (file missing / malformed / OSError).
+aggregator_source_failures_total = Counter(
+    "hapax_awareness_aggregator_source_failures_total",
+    "Awareness aggregator per-source helper failures (graceful degradation events).",
+    ["source"],
+)
 
 DEFAULT_REFUSALS_LOG = Path(
     os.environ.get(
@@ -73,6 +86,7 @@ def collect_refusals_recent(
     written yet, or refusal-as-data is in pre-rollout state).
     """
     if not log_path.exists():
+        # Pre-rollout state — not a failure; do not increment metric.
         return []
     tail: deque[RefusalEvent] = deque(maxlen=limit)
     try:
@@ -91,6 +105,7 @@ def collect_refusals_recent(
                     tail.append(event)
     except OSError:
         log.warning("refusals log read failed at %s", log_path, exc_info=True)
+        aggregator_source_failures_total.labels(source="refusals_recent").inc()
         return []
     return list(tail)
 
@@ -139,13 +154,16 @@ def collect_health_block(
     "unknown" — surfaces dim until the snapshot becomes available.
     """
     if not snapshot_path.exists():
+        # Pre-rollout — health collector not yet active; not a failure.
         return HealthBlock()
     try:
         data = json.loads(snapshot_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         log.debug("infra snapshot unreadable at %s", snapshot_path)
+        aggregator_source_failures_total.labels(source="health_system").inc()
         return HealthBlock()
     if not isinstance(data, dict):
+        aggregator_source_failures_total.labels(source="health_system").inc()
         return HealthBlock()
     failed_units = _safe_int(data.get("systemd", {}).get("failed_count"))
     docker_failed = _safe_int(data.get("docker", {}).get("failed_count"))
@@ -217,6 +235,7 @@ def collect_stream_block(
                     count += 1
     except OSError:
         log.debug("chronicle read failed at %s", chronicle_path)
+        aggregator_source_failures_total.labels(source="stream").inc()
         return StreamBlock()
     return StreamBlock(live=count > 0, chronicle_events_5min=count)
 
@@ -284,6 +303,7 @@ __all__ = [
     "REFUSALS_TAIL_LIMIT",
     "STREAM_EVENT_WINDOW_S",
     "Aggregator",
+    "aggregator_source_failures_total",
     "collect_health_block",
     "collect_refusals_recent",
     "collect_stream_block",
