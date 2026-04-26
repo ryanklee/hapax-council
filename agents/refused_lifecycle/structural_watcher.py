@@ -25,10 +25,10 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx
-from prometheus_client import Counter
 
 from agents.refused_lifecycle import runner
 from agents.refused_lifecycle.evaluator import decide_transition
+from agents.refused_lifecycle.metrics import probe_failures_total, probes_total
 from agents.refused_lifecycle.state import ProbeResult, RefusalTask
 
 log = logging.getLogger(__name__)
@@ -41,19 +41,6 @@ STABLE_THRESHOLD = 12  # re-affirmations before cadence-degrade
 PROBE_TIMEOUT_SECONDS = 15.0
 SNIPPET_MAX_CHARS = 500
 SNIPPET_HALF_WINDOW = 200  # chars on each side of the keyword match
-
-
-probes_total = Counter(
-    "hapax_refused_lifecycle_probes_total",
-    "Refused-lifecycle probes executed (any outcome).",
-    ["trigger", "slug"],
-)
-
-probe_failures_total = Counter(
-    "hapax_refused_lifecycle_probe_failures_total",
-    "Refused-lifecycle probe failures by reason.",
-    ["trigger", "slug", "reason"],
-)
 
 
 def extract_snippet_around_keyword(text: str, keywords: list[str]) -> str:
