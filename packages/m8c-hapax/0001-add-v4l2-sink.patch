@@ -1,0 +1,70 @@
+From: hapax beta <noreply@anthropic.com>
+Subject: [PATCH] add V4L2 output-loopback bridge for re-splay ward
+
+Adds three optional integration points wrapped in `#ifdef USE_V4L2_SINK`
+that publish every rendered frame to a V4L2 loopback device. The new
+v4l2_sink.{c,h} files (shipped alongside this patch) carry the logic;
+this patch wires render.c and the Makefile to call them.
+
+When USE_V4L2_SINK is not defined the patch compiles into stubs and the
+binary behaves identically to upstream — keeping the carry-fork surface
+small + trivially rebasable.
+
+cc-task: re-splay-homage-ward-m8 (hapax-council)
+---
+ Makefile     |  4 ++++
+ src/render.c | 12 ++++++++++++
+ 2 files changed, 16 insertions(+)
+
+diff --git a/Makefile b/Makefile
+index 0000000..0000000 100644
+--- a/Makefile
++++ b/Makefile
+@@ -34,6 +34,10 @@ libusb: INCLUDES = $(shell pkg-config --libs sdl3 libusb-1.0)
+ libusb: local_CFLAGS = $(CFLAGS) $(shell pkg-config --cflags sdl3 libusb-1.0) -Wall -Wextra -O2 -pipe -I. -DUSE_LIBUSB=1 -DNDEBUG
+ libusb: m8c
+
++v4l2: INCLUDES = $(shell pkg-config --libs sdl3 libserialport | sed 's/-mwindows//')
++v4l2: local_CFLAGS = $(CFLAGS) $(shell pkg-config --cflags sdl3 libserialport) -DUSE_LIBSERIALPORT -DUSE_V4L2_SINK -Wall -Wextra -O2 -pipe -I. -DNDEBUG
++v4l2: m8c
++
+ rtmidi: INCLUDES = $(shell pkg-config --libs sdl3 rtmidi)
+ rtmidi: local_CFLAGS = $(CFLAGS) $(shell pkg-config --cflags sdl3 rtmidi) -Wall -Wextra -O2 -pipe -I. -DUSE_RTMIDI -DNDEBUG
+ rtmidi: m8c
+diff --git a/src/render.c b/src/render.c
+index 0000000..0000000 100644
+--- a/src/render.c
++++ b/src/render.c
+@@ -13,6 +13,7 @@
+ #include "settings.h"
+
+ #include "fonts/fonts.h"
++#include "v4l2_sink.h"
+
+ #include <stdlib.h>
+
+@@ -474,6 +475,8 @@ int renderer_initialize(config_params_s *conf) {
+   renderer_fix_texture_scaling_after_window_resize(
+       conf); // iOS needs this, doesn't hurt on others either
+
++  v4l2_sink_init();
++
+   dirty = 1;
+
+   SDL_PumpEvents();
+@@ -244,6 +247,7 @@ void renderer_close(void) {
+   if (hd_texture != NULL) {
+     SDL_DestroyTexture(hd_texture);
+   }
++  v4l2_sink_shutdown();
+   log_overlay_destroy();
+   SDL_DestroyRenderer(rend);
+   SDL_DestroyWindow(win);
+@@ -568,6 +572,7 @@ void render_screen(config_params_s *conf) {
+   if (!SDL_RenderPresent(rend)) {
+     SDL_LogCritical(SDL_LOG_CATEGORY_RENDER, "Couldn't present renderer: %s", SDL_GetError());
+   }
++  v4l2_sink_publish(rend, main_texture);
+
+   if (!SDL_SetRenderTarget(rend, main_texture)) {
+     SDL_LogCritical(SDL_LOG_CATEGORY_RENDER, "Couldn't set renderer target to texture: %s",

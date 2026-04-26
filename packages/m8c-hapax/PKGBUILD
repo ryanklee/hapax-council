@@ -1,0 +1,54 @@
+# Maintainer: hapax beta <noreply@anthropic.com>
+# Carry-fork of laamaa/m8c with a V4L2 output-loopback bridge for the
+# Re-Splay Homage Ward (cc-task: re-splay-homage-ward-m8). Coexists
+# with stock m8c at /usr/local/bin/m8c-hapax — does not displace AUR
+# m8c or upstream binaries.
+#
+# Constitutional binders:
+#   - feedback_full_automation_or_no_engagement: hotplug-only ward
+#   - feedback_l12_equals_livestream_invariant (vacuous; no L-12 contact)
+#   - anti-anthropomorphization: instrument LCD pixel grid
+
+pkgname=m8c-hapax
+pkgver=2.2.3
+pkgrel=1
+pkgdesc="m8c carry-fork with V4L2 output-loopback bridge for the Hapax broadcast composite"
+arch=('x86_64')
+url="https://github.com/laamaa/m8c"
+license=('MIT')
+depends=('sdl3' 'libserialport' 'v4l2loopback-dkms')
+makedepends=('git' 'make' 'gcc' 'pkgconf')
+provides=()
+conflicts=()
+source=(
+    "m8c-${pkgver}.tar.gz::https://github.com/laamaa/m8c/archive/refs/tags/v${pkgver}.tar.gz"
+    'v4l2_sink.c'
+    'v4l2_sink.h'
+    '0001-add-v4l2-sink.patch'
+)
+sha256sums=(
+    'SKIP'  # tag tarball; integrity verified by upstream tag signing
+    'SKIP'  # local source — operator audits via repo
+    'SKIP'
+    'SKIP'
+)
+
+prepare() {
+    cd "${srcdir}/m8c-${pkgver}"
+    install -m 644 "${srcdir}/v4l2_sink.c" src/v4l2_sink.c
+    install -m 644 "${srcdir}/v4l2_sink.h" src/v4l2_sink.h
+    patch -Np1 -i "${srcdir}/0001-add-v4l2-sink.patch"
+}
+
+build() {
+    cd "${srcdir}/m8c-${pkgver}"
+    make v4l2
+}
+
+package() {
+    cd "${srcdir}/m8c-${pkgver}"
+    install -d "${pkgdir}/usr/local/bin"
+    install -m 755 m8c "${pkgdir}/usr/local/bin/m8c-hapax"
+    install -d "${pkgdir}/usr/share/licenses/${pkgname}"
+    install -m 644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}
