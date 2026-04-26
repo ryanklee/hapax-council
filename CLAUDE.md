@@ -311,7 +311,7 @@ Destructive command detection strips quoted strings before matching to prevent f
 
 Per V5 weave §2.1 PUB-P0-B keystone (`agents/publication_bus/publisher_kit/`). Three load-bearing invariants every publisher enforces in the superclass `publish()` method: AllowlistGate, legal-name-leak guard (skipped for `requires_legal_name=True` surfaces like Zenodo creators), Prometheus Counter `hapax_publication_bus_publishes_total`. Subclass shape ~80 LOC: surface metadata as ClassVar + `_emit()` override.
 
-**Surface registry** (`agents/publication_bus/surface_registry.py`): canonical 14-surface dict. Three tiers — `FULL_AUTO` (daemon-side end-to-end after one-time credential bootstrap), `CONDITIONAL_ENGAGE` (one-time human action, e.g. Playwright login), `REFUSED` (subclass exists to record refusal, never to attempt publication). Helpers `is_engageable()`, `refused_surfaces()`, `auto_surfaces()`.
+**Surface registry** (`agents/publication_bus/surface_registry.py`): 17-surface dict (V5 canonical 14 + `osf-prereg` + `zenodo-refusal-deposit` extensions). Three tiers — `FULL_AUTO` (daemon-side end-to-end after one-time credential bootstrap), `CONDITIONAL_ENGAGE` (one-time human action, e.g. Playwright login or session-cookie extraction), `REFUSED` (subclass exists to record refusal, never to attempt publication). Helpers `is_engageable()`, `refused_surfaces()`, `auto_surfaces()`.
 
 **Concrete publishers shipped:**
 - `BridgyPublisher` (`bridgy-webmention-publish`) — POSSE webmention to brid.gy/publish/webmention
@@ -319,6 +319,9 @@ Per V5 weave §2.1 PUB-P0-B keystone (`agents/publication_bus/publisher_kit/`). 
 - `OmgLolWeblogPublisher` (`omg-lol-weblog-bearer-fanout`) — wraps `OmgLolClient.set_entry`
 - `InternetArchiveS3Publisher` (`internet-archive-ias3`) — bare-`requests` PUT against `https://s3.us.archive.org/{item}/{filename}` with `LOW {access}:{secret}` header
 - `BlueskyPublisher` (`bluesky-atproto-multi-identity`) — 2-step XRPC auth (`createSession` → `createRecord`)
+- `OSFPreregPublisher` (`osf-prereg`) — bare-`requests` POST against `https://api.osf.io/v2/registrations/` with Bearer PAT; JSON:API envelope. Distinct from the legacy `agents/osf_preprint_publisher/` (preprints `/v2/preprints/`) — preregistration is a different OSF deposit type
+- `PhilArchivePublisher` (`philarchive-deposit`) — bare-`requests` form-POST to `philarchive.org/deposit` with session cookie; `requires_legal_name=True` because PhilArchive author field uses formal name per ORCID linkage. Constitutional Brief + Manifesto class artefacts route here per V5 weave §2.2
+- `RefusalBriefPublisher` (`zenodo-refusal-deposit`) — Zenodo deposit specialized for the refusal-brief deposit type per drop-5 fresh-pattern §2; carries refusal-shaped `RelatedIdentifier` edges (`IsRequiredBy` to target surface, `IsObsoletedBy` to sibling refusals) so refusal nodes participate in the DataCite citation graph
 - `BandcampRefusedPublisher` / `DiscogsRefusedPublisher` / `RymRefusedPublisher` / `CrossrefEventDataRefusedPublisher` — REFUSED tier; `__init_subclass__` auto-wires empty AllowlistGate so any `publish()` call records refusal-as-data via the canonical refusal_brief log
 
 **Helper modules:**
@@ -326,6 +329,7 @@ Per V5 weave §2.1 PUB-P0-B keystone (`agents/publication_bus/publisher_kit/`). 
 - `RefusalFooterInjector` (`agents/publication_bus/refusal_footer_injector.py`) — auto-injects `NON_ENGAGEMENT_CLAUSE_LONG` into deposit descriptions; reads recent refusals from the canonical log
 - `omg_rss_fanout` (`agents/publication_bus/omg_rss_fanout.py`) — cross-weblog fanout helper composes multiple `OmgLolWeblogPublisher` instances
 - `orcid_verifier` (`agents/publication_bus/orcid_verifier.py`) — daily verification of operator's ORCID record vs minted concept-DOIs (no auth; ORCID public API)
+- `compose_refusal_related_identifiers()` + `scan_refused_cc_tasks()` (in `agents/publication_bus/refusal_brief_publisher.py`) — refusal-as-data graph composition + vault scanner (regex frontmatter parser, no PyYAML dep) for the daemon path that mints refusal-deposit DOIs
 
 **Marketing surfaces** (`agents/marketing/`):
 - `RefusalAnnex` series (renderer + cross-linker) writes per-annex markdown to `~/hapax-state/publications/`. 8 seed annex slugs (`declined-bandcamp`, `declined-alphaxiv`, etc.). Cross-linker resolves slug ↔ cc-task ID for the operator dashboard.
