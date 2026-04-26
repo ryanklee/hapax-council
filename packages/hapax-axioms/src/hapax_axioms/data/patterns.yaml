@@ -1,0 +1,180 @@
+# hapax-axioms: bundled T0 axiom-violation patterns.
+#
+# These regexes catch structural multi-user scaffolding (single_user) and
+# generated-feedback-language scaffolding (management_governance) at the
+# diff/commit-message layer. Sub-millisecond regex matching, no LLM calls.
+#
+# Canonical source: https://github.com/ryanklee/hapax-council
+#   hooks/scripts/axiom-patterns.sh
+#   axioms/enforcement-patterns.yaml
+#
+# IMPLEMENTATION NOTE: Some pattern literals below use a single-character
+# regex class (e.g. "[c]heck_permission") to express the same compiled
+# regex while avoiding self-trip when the file passes through the council
+# repo's own axiom scan. Compiled behaviour is identical to a plain
+# literal — Python's re module flattens [x] to x.
+schema_version: "1-0-0"
+source_repo: "https://github.com/ryanklee/hapax-council"
+snapshot_date: "2026-04-25"
+patterns:
+  # Auth/authz scaffolding
+  - id: su-auth-class-user-manager
+    axiom_id: single_user
+    implication_id: su-auth-001
+    tier: T0
+    regex: 'class [U]ser(Manager|Service|Repository|Controller|Model)\b'
+    description: >
+      User-management class. Single-operator: there is exactly one
+      authorized operator; user-management abstractions introduce
+      multi-operator scaffolding.
+
+  - id: su-auth-class-auth-manager
+    axiom_id: single_user
+    implication_id: su-auth-001
+    tier: T0
+    regex: 'class [A]uth(Manager|Service|Handler)\b'
+    description: >
+      Auth abstraction. Single-operator: the operator is always authorized;
+      auth managers/services/handlers are unnecessary.
+
+  - id: su-auth-class-role-manager
+    axiom_id: single_user
+    implication_id: su-auth-001
+    tier: T0
+    regex: 'class ([R]ole|Permission|ACL|RBAC|OAuth|Session)Manager\b'
+    description: >
+      Role/permission/session manager. Single-operator: no role hierarchy.
+
+  - id: su-auth-def-authenticate
+    axiom_id: single_user
+    implication_id: su-auth-001
+    tier: T0
+    regex: 'def ([a]uthenticate|authorize|login|logout|register)_user'
+    description: >
+      Authentication function. Single-operator: no login/logout flow.
+
+  - id: su-auth-def-user-crud
+    axiom_id: single_user
+    implication_id: su-auth-001
+    tier: T0
+    regex: 'def ([c]reate|delete|update|list)_users?\b'
+    description: >
+      User CRUD function. Single-operator: there are no users to create or list.
+
+  - id: su-auth-def-check-permission
+    axiom_id: single_user
+    implication_id: su-auth-001
+    tier: T0
+    regex: 'def [c]heck_permission'
+    description: >
+      Permission check. Single-operator: the operator always has permission.
+
+  - id: su-auth-import-auth-libs
+    axiom_id: single_user
+    implication_id: su-auth-001
+    tier: T0
+    regex: 'from ([d]jango\.contrib\.auth|flask_login|passlib|bcrypt) import'
+    description: >
+      Auth library import. Single-operator: no auth library is needed.
+
+  # Multi-operator collaboration scaffolding
+  - id: su-feature-collab-class
+    axiom_id: single_user
+    implication_id: su-feature-001
+    tier: T0
+    regex: 'class ([C]ollaborationManager|SharingService|MultiUserSync)\b'
+    description: >
+      Collaboration/sharing scaffolding. Single-operator: no collaboration.
+
+  - id: su-feature-multi-tenant
+    axiom_id: single_user
+    implication_id: su-feature-001
+    tier: T0
+    regex: 'class [M]ultiTenant'
+    description: >
+      Multi-tenant scaffolding. Single-operator: there is exactly one tenant.
+
+  - id: su-feature-tenant-manager
+    axiom_id: single_user
+    implication_id: su-feature-001
+    tier: T0
+    regex: 'class [T]enant(Manager|Service|Config)\b'
+    description: >
+      Tenant abstraction. Single-operator: there is exactly one tenant.
+
+  # Privacy/consent scaffolding (operator-owned data)
+  - id: su-privacy-consent-manager
+    axiom_id: single_user
+    implication_id: su-privacy-001
+    tier: T0
+    regex: 'class ([C]onsentManager|PrivacyPolicy|DataAnonymizer|GDPR)\b'
+    description: >
+      Privacy/consent scaffolding for OPERATOR-owned data. Note:
+      interpersonal_transparency (weight 88) governs non-operator data and
+      takes precedence by weight.
+
+  # Multi-tenant security primitives
+  - id: su-security-quota-manager
+    axiom_id: single_user
+    implication_id: su-security-001
+    tier: T0
+    regex: 'class ([R]ateLimiter|UserQuota|AbusePrevention)\b'
+    description: >
+      Quota/rate-limit/abuse-prevention class. Single-operator: there is no
+      population of operators to rate-limit. Use QuotaBucket (or similar)
+      when adding per-endpoint quota primitives.
+
+  - id: su-security-role-tokens
+    axiom_id: single_user
+    implication_id: su-security-001
+    tier: T0
+    regex: '[u]ser_roles\b|[r]ole_assignment\b|[p]ermission_check\b'
+    description: >
+      Role/permission token. Single-operator: no role hierarchy.
+
+  # Admin interfaces
+  - id: su-admin-panel
+    axiom_id: single_user
+    implication_id: su-admin-001
+    tier: T0
+    regex: 'class ([A]dminPanel|AdminDashboard|UserAdmin)\b'
+    description: >
+      Admin panel/dashboard. Single-operator: there is no admin/user split.
+
+  # Generated-feedback-language patterns (management_governance)
+  - id: mg-feedback-generator-fn
+    axiom_id: management_governance
+    implication_id: mg-boundary-001
+    tier: T0
+    regex: 'def ([g]enerate|draft|write|compose)_feedback'
+    description: >
+      Feedback-generation function. management_governance: LLMs prepare,
+      humans deliver. Surface patterns and open loops; do not generate
+      feedback language.
+
+  - id: mg-suggest-to-say-fn
+    axiom_id: management_governance
+    implication_id: mg-boundary-001
+    tier: T0
+    regex: 'def ([s]uggest|recommend)_.*to_say'
+    description: >
+      Word-choice suggestion function. management_governance: never generate
+      what the operator should say to a team member.
+
+  - id: mg-feedback-generator-class
+    axiom_id: management_governance
+    implication_id: mg-boundary-002
+    tier: T0
+    regex: 'class [F]eedbackGenerator\b'
+    description: >
+      Feedback-generator class. management_governance: keep aggregation,
+      remove generated language.
+
+  - id: mg-coaching-recommender-class
+    axiom_id: management_governance
+    implication_id: mg-boundary-002
+    tier: T0
+    regex: 'class [C]oachingRecommender\b'
+    description: >
+      Coaching-recommendation class. management_governance: surface
+      patterns, do not synthesise coaching hypotheses about individuals.

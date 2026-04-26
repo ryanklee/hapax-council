@@ -1,0 +1,85 @@
+# hapax-axioms: bundled snapshot of the five constitution-published axioms.
+#
+# Canonical source: https://github.com/ryanklee/hapax-constitution
+#   axioms/registry.yaml
+#
+# This bundle is a frozen point-in-time copy. It MUST NOT be hand-edited;
+# regenerate by re-syncing from the constitution repo. Drift detection is
+# the responsibility of the consuming project.
+schema_version: "1-0-0"
+source_repo: "https://github.com/ryanklee/hapax-constitution"
+source_path: "axioms/registry.yaml"
+snapshot_date: "2026-04-25"
+axioms:
+  - id: single_user
+    text: >
+      This system is developed for a single user and by that single user,
+      the operator (Hapax). This will always be the case. All decisions
+      must be made respecting and leveraging that fact.
+    weight: 100
+    type: hardcoded
+    created: "2026-03-03"
+    status: active
+    supersedes: null
+    scope: constitutional
+    domain: null
+
+  - id: executive_function
+    text: >
+      This system serves as externalized executive function infrastructure.
+      The operator has ADHD and autism — task initiation, sustained attention,
+      and routine maintenance are genuine cognitive challenges. The system
+      must compensate for these, not add to cognitive load.
+    weight: 95
+    type: hardcoded
+    created: "2026-03-03"
+    status: active
+    supersedes: null
+    scope: constitutional
+    domain: null
+
+  - id: management_governance
+    text: >
+      Management tooling aggregates signals and prepares context for the
+      operator's relational work. It never substitutes for human judgment
+      in people decisions. LLMs prepare, humans deliver — the system
+      surfaces patterns and open loops, never generates feedback language,
+      coaching hypotheses, or recommendations about individual team members.
+    weight: 85
+    type: softcoded
+    created: "2026-03-03"
+    status: active
+    supersedes: null
+    scope: domain
+    domain: management
+
+  - id: corporate_boundary
+    text: >
+      The Obsidian plugin operates across a corporate network boundary via
+      Obsidian Sync. When running on employer-managed devices, all external
+      API calls must use employer-sanctioned providers (currently: OpenAI,
+      Anthropic). No localhost service dependencies may be assumed. The
+      system must degrade gracefully when home-only services are unreachable.
+    weight: 90
+    type: softcoded
+    created: "2026-03-04"
+    status: active
+    supersedes: null
+    scope: domain
+    domain: infrastructure
+
+  - id: interpersonal_transparency
+    text: >
+      The system must not maintain persistent state about any non-operator
+      person without an active consent contract. A consent contract requires
+      explicit opt-in by the subject, grants the subject inspection access
+      to all data the system holds about them, and is revocable by either
+      party at any time. Upon revocation, the system purges all
+      subject-specific persistent state.
+    weight: 88
+    type: hardcoded
+    created: "2026-03-13"
+    status: active
+    supersedes: null
+    scope: constitutional
+    domain: null
