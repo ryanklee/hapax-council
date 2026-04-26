@@ -1,5 +1,5 @@
 # Maintainer: hapax beta <noreply@anthropic.com>
-# Carry-fork of laamaa/m8c with a V4L2 output-loopback bridge for the
+# Carry-fork of laamaa/m8c with a /dev/shm RGBA bridge for the
 # Re-Splay Homage Ward (cc-task: re-splay-homage-ward-m8). Coexists
 # with stock m8c at /usr/local/bin/m8c-hapax — does not displace AUR
 # m8c or upstream binaries.
@@ -12,19 +12,19 @@
 pkgname=m8c-hapax
 pkgver=2.2.3
 pkgrel=1
-pkgdesc="m8c carry-fork with V4L2 output-loopback bridge for the Hapax broadcast composite"
+pkgdesc="m8c carry-fork with /dev/shm RGBA bridge for the Hapax broadcast composite"
 arch=('x86_64')
 url="https://github.com/laamaa/m8c"
 license=('MIT')
-depends=('sdl3' 'libserialport' 'v4l2loopback-dkms')
+depends=('sdl3' 'libserialport')
 makedepends=('git' 'make' 'gcc' 'pkgconf')
 provides=()
 conflicts=()
 source=(
     "m8c-${pkgver}.tar.gz::https://github.com/laamaa/m8c/archive/refs/tags/v${pkgver}.tar.gz"
-    'v4l2_sink.c'
-    'v4l2_sink.h'
-    '0001-add-v4l2-sink.patch'
+    'shm_sink.c'
+    'shm_sink.h'
+    '0001-add-shm-sink.patch'
 )
 sha256sums=(
     'SKIP'  # tag tarball; integrity verified by upstream tag signing
@@ -35,14 +35,14 @@ sha256sums=(
 
 prepare() {
     cd "${srcdir}/m8c-${pkgver}"
-    install -m 644 "${srcdir}/v4l2_sink.c" src/v4l2_sink.c
-    install -m 644 "${srcdir}/v4l2_sink.h" src/v4l2_sink.h
-    patch -Np1 -i "${srcdir}/0001-add-v4l2-sink.patch"
+    install -m 644 "${srcdir}/shm_sink.c" src/shm_sink.c
+    install -m 644 "${srcdir}/shm_sink.h" src/shm_sink.h
+    patch -Np1 -i "${srcdir}/0001-add-shm-sink.patch"
 }
 
 build() {
     cd "${srcdir}/m8c-${pkgver}"
-    make v4l2
+    make shm
 }
 
 package() {
