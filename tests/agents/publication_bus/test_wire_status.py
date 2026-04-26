@@ -1,0 +1,92 @@
+"""Tests for ``agents.publication_bus.wire_status``.
+
+R-5 audit follow-up: every V5 publisher class must have an explicit
+wire-or-delete decision recorded in ``PUBLISHER_WIRE_REGISTRY``. The
+audit pin here scans the filesystem for ``*_publisher.py`` modules and
+asserts each is catalogued.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from agents.publication_bus.wire_status import (
+    PUBLISHER_WIRE_REGISTRY,
+    WireEntry,
+    cred_blocked_pass_keys,
+    status_summary,
+)
+
+_PUBLICATION_BUS_DIR = Path(__file__).resolve().parents[3] / "agents/publication_bus"
+_ATTRIBUTION_DIR = Path(__file__).resolve().parents[3] / "agents/attribution"
+
+
+def test_all_v5_publishers_catalogued():
+    """Audit pin: every `*_publisher.py` module under publication_bus/ must
+    appear in PUBLISHER_WIRE_REGISTRY. Catches drift when a new publisher
+    is added without a wire-or-delete decision.
+    """
+    discovered = {f.stem for f in _PUBLICATION_BUS_DIR.glob("*_publisher.py")}
+    catalogued = {
+        m.split(".")[-1] for m in PUBLISHER_WIRE_REGISTRY if m.startswith("agents.publication_bus.")
+    }
+    missing = discovered - catalogued
+    assert not missing, f"Publishers without wire-decision: {missing}"
+
+
+def test_crossref_depositor_catalogued():
+    # Lives under agents/attribution but routed via R-5 alongside V5
+    assert (_ATTRIBUTION_DIR / "crossref_depositor.py").exists()
+    assert "agents.attribution.crossref_depositor" in PUBLISHER_WIRE_REGISTRY
+
+
+def test_status_summary_returns_int_counts():
+    summary = status_summary()
+    assert set(summary.keys()) == {"WIRED", "CRED_BLOCKED", "DELETE"}
+    assert all(isinstance(v, int) for v in summary.values())
+    assert sum(summary.values()) == len(PUBLISHER_WIRE_REGISTRY)
+
+
+def test_at_least_one_wired():
+    # omg_weblog_publisher must be WIRED — it's the only one with prod callers
+    summary = status_summary()
+    assert summary["WIRED"] >= 1
+
+
+def test_omg_weblog_is_wired():
+    entry = PUBLISHER_WIRE_REGISTRY["agents.publication_bus.omg_weblog_publisher"]
+    assert entry.status == "WIRED"
+
+
+def test_cred_blocked_majority():
+    # Per beta's R-5 inflection: "mostly delete given the cred-arrival gates"
+    # — but our decision is to keep them as CRED_BLOCKED rather than delete.
+    # Confirm the registry reflects that majority status.
+    summary = status_summary()
+    assert summary["CRED_BLOCKED"] >= summary["DELETE"]
+
+
+def test_cred_blocked_pass_keys_returns_sorted_unique():
+    keys = cred_blocked_pass_keys()
+    assert keys == sorted(set(keys))
+    assert len(keys) > 0  # at least some surfaces have explicit pass keys
+
+
+def test_no_delete_status_yet():
+    # If a publisher is later determined to be DELETE-status, this test
+    # surfaces the change explicitly. Initial registry: all live entries
+    # are either WIRED or CRED_BLOCKED.
+    summary = status_summary()
+    assert summary["DELETE"] == 0
+
+
+def test_each_entry_has_surface_slug():
+    for module, entry in PUBLISHER_WIRE_REGISTRY.items():
+        assert entry.surface_slug, f"{module} missing surface_slug"
+        assert isinstance(entry, WireEntry)
+
+
+def test_each_cred_blocked_entry_has_rationale():
+    for module, entry in PUBLISHER_WIRE_REGISTRY.items():
+        if entry.status == "CRED_BLOCKED":
+            assert entry.rationale, f"{module} CRED_BLOCKED but no rationale"
