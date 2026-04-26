@@ -69,8 +69,15 @@ def env_interval_s() -> float:
 
 
 def env_enabled() -> bool:
-    """Default OFF. Operator enables via ``HAPAX_AUTONOMOUS_NARRATIVE_ENABLED=1``."""
-    return os.environ.get("HAPAX_AUTONOMOUS_NARRATIVE_ENABLED", "0") == "1"
+    """Default ON per directive feedback_features_on_by_default 2026-04-25T20:55Z.
+
+    Operator opts out via ``HAPAX_AUTONOMOUS_NARRATIVE_ENABLED=0`` (or any of
+    ``false`` / ``no`` / ``off``, case-insensitive). Five downstream gates
+    (rate-limit, operator presence, programme role, stimmung ceiling, cadence)
+    remain authoritative — flipping the default does not bypass suppression.
+    """
+    raw = os.environ.get("HAPAX_AUTONOMOUS_NARRATIVE_ENABLED", "1").strip().lower()
+    return raw not in ("0", "false", "no", "off")
 
 
 def evaluate(

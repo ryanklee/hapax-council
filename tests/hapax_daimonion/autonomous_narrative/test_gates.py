@@ -39,14 +39,20 @@ def _absent_daemon(*, presence_score: float = 0.0) -> MagicMock:
 # ── env helpers ────────────────────────────────────────────────────────────
 
 
-def test_env_enabled_default_off(monkeypatch) -> None:
+def test_env_enabled_default_on(monkeypatch) -> None:
     monkeypatch.delenv("HAPAX_AUTONOMOUS_NARRATIVE_ENABLED", raising=False)
-    assert gates.env_enabled() is False
+    assert gates.env_enabled() is True
 
 
 def test_env_enabled_when_set_to_1(monkeypatch) -> None:
     monkeypatch.setenv("HAPAX_AUTONOMOUS_NARRATIVE_ENABLED", "1")
     assert gates.env_enabled() is True
+
+
+def test_env_enabled_opt_out_falsy_values(monkeypatch) -> None:
+    for val in ("0", "false", "no", "off", "FALSE", "Off"):
+        monkeypatch.setenv("HAPAX_AUTONOMOUS_NARRATIVE_ENABLED", val)
+        assert gates.env_enabled() is False, f"opt-out value {val!r} should disable"
 
 
 def test_env_interval_default(monkeypatch) -> None:

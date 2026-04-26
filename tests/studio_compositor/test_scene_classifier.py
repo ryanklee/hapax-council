@@ -234,23 +234,22 @@ class TestClassifyOnce:
 
 
 class TestFeatureFlag:
-    def test_flag_off_by_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_flag_on_by_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("HAPAX_SCENE_CLASSIFIER_ACTIVE", raising=False)
-        assert sc.classifier_active() is False
+        assert sc.classifier_active() is True
 
-    @pytest.mark.parametrize("val", ["0", "false", "no", "off", "", "random"])
-    def test_flag_falsy_values_off(self, monkeypatch: pytest.MonkeyPatch, val: str) -> None:
+    @pytest.mark.parametrize("val", ["0", "false", "no", "off", "FALSE", "Off"])
+    def test_flag_explicit_opt_out_off(self, monkeypatch: pytest.MonkeyPatch, val: str) -> None:
         monkeypatch.setenv("HAPAX_SCENE_CLASSIFIER_ACTIVE", val)
         assert sc.classifier_active() is False
 
-    @pytest.mark.parametrize("val", ["1", "true", "yes", "on", "True", "YES"])
-    def test_flag_truthy_values_on(self, monkeypatch: pytest.MonkeyPatch, val: str) -> None:
+    @pytest.mark.parametrize("val", ["1", "true", "yes", "on", "True", "YES", "", "random"])
+    def test_flag_other_values_on(self, monkeypatch: pytest.MonkeyPatch, val: str) -> None:
         monkeypatch.setenv("HAPAX_SCENE_CLASSIFIER_ACTIVE", val)
         assert sc.classifier_active() is True
 
-    def test_maybe_start_returns_none_when_inactive(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("HAPAX_SCENE_CLASSIFIER_ACTIVE", raising=False)
-        # Should not start a thread.
+    def test_maybe_start_returns_none_when_opted_out(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("HAPAX_SCENE_CLASSIFIER_ACTIVE", "0")
         result = sc.maybe_start_scene_classifier()
         assert result is None
 

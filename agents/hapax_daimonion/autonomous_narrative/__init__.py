@@ -13,8 +13,9 @@ no new tier, no new intent_family, no new TTS plumbing — just emit an
 existing pipeline carry it through. Audio architecture (PRs #1269
 master limiter, #1273 sidechain ducking) applies automatically.
 
-Default OFF behind ``HAPAX_AUTONOMOUS_NARRATIVE_ENABLED=0``. The
-operator opts in when ready.
+Default ON per directive feedback_features_on_by_default
+2026-04-25T20:55Z; operator opts out via
+``HAPAX_AUTONOMOUS_NARRATIVE_ENABLED=0``.
 
 Spec: ``ytb-SS1`` cc-task; design draft cited above.
 """

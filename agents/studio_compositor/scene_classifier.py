@@ -16,8 +16,9 @@ Budget:
     TTL reuse the last classification without re-calling the LLM
 
 Feature flag:
-  * ``HAPAX_SCENE_CLASSIFIER_ACTIVE`` — default OFF. The classifier does
-    not run unless this is ``1`` / ``true`` / ``yes`` / ``on``.
+  * ``HAPAX_SCENE_CLASSIFIER_ACTIVE`` — default ON per directive
+    feedback_features_on_by_default 2026-04-25T20:55Z. Operator opts out by
+    setting the env var to a falsy value (``0`` / ``false`` / ``no`` / ``off``).
 
 Prometheus:
   * ``hapax_scene_classifications_total{scene=...}`` — Counter
@@ -91,14 +92,14 @@ _PROMPT = (
 
 
 def classifier_active() -> bool:
-    """True when ``HAPAX_SCENE_CLASSIFIER_ACTIVE`` is truthy.
-
-    Default is OFF. Truthy values: ``1``, ``true``, ``yes``, ``on``
-    (case-insensitive). Anything else, including a missing env var,
-    disables the classifier.
+    """True by default per directive feedback_features_on_by_default
+    2026-04-25T20:55Z. Operator opts out by setting
+    ``HAPAX_SCENE_CLASSIFIER_ACTIVE`` to a falsy value (``0``,
+    ``false``, ``off``, ``no`` — case-insensitive). Anything else,
+    including unset / empty / unrecognized, leaves the classifier ON.
     """
-    val = os.environ.get("HAPAX_SCENE_CLASSIFIER_ACTIVE", "").strip().lower()
-    return val in {"1", "true", "yes", "on"}
+    val = os.environ.get("HAPAX_SCENE_CLASSIFIER_ACTIVE", "1").strip().lower()
+    return val not in {"0", "false", "off", "no"}
 
 
 # ── Prometheus counter ────────────────────────────────────────────────────

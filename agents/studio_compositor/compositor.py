@@ -1081,9 +1081,10 @@ class StudioCompositor:
         # compositor-embedded variant has been removed.
         self._recent_pub = None
 
-        # Task #150 Phase 1 — start the scene classifier thread when
-        # HAPAX_SCENE_CLASSIFIER_ACTIVE is set. Flag-gated; returns None
-        # (and logs) when inactive, so this is safe by default.
+        # Task #150 Phase 1 — start the scene classifier thread by default
+        # per directive feedback_features_on_by_default 2026-04-25T20:55Z.
+        # Operator opts out via HAPAX_SCENE_CLASSIFIER_ACTIVE=0. Flag-gated;
+        # returns None (and logs) when inactive.
         try:
             from agents.studio_compositor.scene_classifier import (
                 maybe_start_scene_classifier,

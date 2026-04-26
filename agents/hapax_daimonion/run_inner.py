@@ -447,11 +447,12 @@ async def run_inner(daemon: VoiceDaemon) -> None:
         "sidechat_consumer_loop",
         lambda: sidechat_consumer_loop(daemon),
     )
-    # ytb-SS1: autonomous narrative director. Default OFF behind
-    # HAPAX_AUTONOMOUS_NARRATIVE_ENABLED=1; when on, emits one
-    # substantive narration every ~2-3 min during operator-absent
-    # stretches via the existing impingement → CPAL → spontaneous-
-    # speech path. See agents/hapax_daimonion/autonomous_narrative/.
+    # ytb-SS1: autonomous narrative director. Default ON per directive
+    # feedback_features_on_by_default 2026-04-25T20:55Z; opt-out via
+    # HAPAX_AUTONOMOUS_NARRATIVE_ENABLED=0. Emits one substantive
+    # narration every ~2-3 min during operator-absent stretches via
+    # the existing impingement → CPAL → spontaneous-speech path.
+    # See agents/hapax_daimonion/autonomous_narrative/.
     _make_task(
         daemon,
         "autonomous_narrative_loop",

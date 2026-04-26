@@ -6,10 +6,11 @@ proactive_delivery / impingement_consumer / sidechat loops. Per-tick
 sleep is short (10 s) so SIGTERM is responsive; the cadence + rate-
 limit gates handle when to actually emit.
 
-Default OFF: when ``HAPAX_AUTONOMOUS_NARRATIVE_ENABLED`` is not "1",
-the loop spins as a no-op and only logs once at startup that it's
-disabled. The operator opts in by setting the env var and restarting
-the daemon.
+Default ON per directive feedback_features_on_by_default
+2026-04-25T20:55Z. The loop spins as a no-op only when the operator
+opts out via ``HAPAX_AUTONOMOUS_NARRATIVE_ENABLED=0``; downstream
+suppression gates (rate-limit, operator presence, programme role,
+stimmung ceiling, cadence) remain authoritative.
 """
 
 from __future__ import annotations
