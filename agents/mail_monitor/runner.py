@@ -28,6 +28,7 @@ from agents.mail_monitor.audit import audit_call
 from agents.mail_monitor.classifier import Category, classify
 from agents.mail_monitor.processors.discard import process_discard
 from agents.mail_monitor.processors.refusal_feedback import emit_refusal_feedback
+from agents.mail_monitor.processors.suppress import process_suppress
 
 log = logging.getLogger(__name__)
 
@@ -48,7 +49,6 @@ for _category in Category:
 _DEFERRED_CATEGORIES: set[Category] = {
     Category.A_ACCEPT,  # mail-monitor-010 auto-clicker
     Category.B_VERIFY,  # mail-monitor-009 verify processor
-    Category.C_SUPPRESS,  # mail-monitor-008 suppress processor
     Category.D_OPERATIONAL,  # mail-monitor-011 operational awareness
 }
 
@@ -90,6 +90,14 @@ def dispatch_message(service: Any, message: dict[str, Any]) -> Category:
     if category is Category.E_REFUSAL_FEEDBACK:
         emit_refusal_feedback(message, kind="feedback")
         DISPATCH_COUNTER.labels(category=category.value, result="processed").inc()
+        return category
+
+    if category is Category.C_SUPPRESS:
+        ok = process_suppress(service, message)
+        DISPATCH_COUNTER.labels(
+            category=category.value,
+            result="processed" if ok else "error",
+        ).inc()
         return category
 
     # Categories A / B / C / D land in mail-monitor-008/009/010/011.
