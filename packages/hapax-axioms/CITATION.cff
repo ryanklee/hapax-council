@@ -1,0 +1,67 @@
+cff-version: 1.2.0
+message: If you use this software, please cite it as below.
+type: software
+title: hapax-axioms
+abstract: >
+  Single-operator axiom enforcement library. Pre-commit and CI primitives
+  extracted from the Hapax constitutional substrate (single_user,
+  executive_function, management_governance, interpersonal_transparency,
+  corporate_boundary). Pydantic models for axiom + implication definitions,
+  axiom-check helpers for source files and commit messages, and a
+  commit-scan helper that gates structural multi-user scaffolding before it
+  reaches the working tree. Bundles the constitution-published canonical
+  five axioms; the original spec at github.com/ryanklee/hapax-constitution
+  remains the canonical source.
+authors:
+- given-names: Ryan
+  family-names: Kleeberger
+  alias: Hapax (Oudepode)
+- name: Claude Code
+  alias: Anthropic Claude Code
+repository-code: https://github.com/ryanklee/hapax-council
+url: https://github.com/ryanklee/hapax-council
+license: LicenseRef-PolyForm-Strict-1.0.0
+keywords:
+- axioms
+- governance
+- single-operator
+- pre-commit
+- research-software
+- infrastructure-as-argument
+version: 0.1.0
+date-released: "2026-04-25"
+identifiers:
+- type: doi
+  value: "10.0000/zenodo.PLACEHOLDER"
+  description: Zenodo DOI placeholder — replaced on first GitHub release tag.
+- type: swh
+  value: "swh:1:rev:0000000000000000000000000000000000000000"
+  description: Software Heritage revision SWHID placeholder — replaced on first archived snapshot.
+preferred-citation:
+  type: software
+  title: hapax-axioms
+  authors:
+  - given-names: Ryan
+    family-names: Kleeberger
+    alias: Hapax (Oudepode)
+  - name: Claude Code
+    alias: Anthropic Claude Code
+  year: 2026
+  url: https://github.com/ryanklee/hapax-council
+  version: 0.1.0
+  license: LicenseRef-PolyForm-Strict-1.0.0
+references:
+- type: software
+  title: hapax-constitution
+  authors:
+  - given-names: Ryan
+    family-names: Kleeberger
+    alias: Hapax (Oudepode)
+  url: https://github.com/ryanklee/hapax-constitution
+  abstract: >
+    Canonical source of the Hapax constitutional axioms, derived implications,
+    interpretive canon, sufficiency probes, and precedent store. The
+    hapax-axioms package bundles a frozen snapshot of the five published
+    axioms (single_user, executive_function, management_governance,
+    interpersonal_transparency, corporate_boundary); the constitution repo
+    remains the canonical, evolving source of truth.
