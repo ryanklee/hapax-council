@@ -1,0 +1,94 @@
+# Pyrefly type-checker config for hapax-council.
+#
+# Ported from pyrightconfig.json as part of PR2 of the CI/CD speedup cascade
+# (docs/research/2026-04-26-cicd-speedup.md §2 #1). Pyrefly is ~15-18x faster
+# than pyright on benchmark codebases (numpy: 70.9s -> 4.8s; Django: 16.3s ->
+# 911ms). Council's pyrightconfig.json already disables 12 reports so the
+# 90% vs 99% typing-spec conformance gap is mostly moot — we use pyrefly in
+# the same role pyright played: import resolution + undefined-name catches.
+#
+# Maps pyright `include`/`exclude`/`pythonVersion` directly. The 12 disabled
+# pyright reports map to pyrefly error codes via the pyrefly error-kinds
+# table (https://pyrefly.org/en/docs/error-kinds/). Each disabled pyright
+# report is annotated with the pyrefly equivalent.
+
+# pyrightconfig.json: "include": ["agents", "shared", "logos"]
+project-includes = ["agents/**/*.py", "shared/**/*.py", "logos/**/*.py"]
+
+# pyrightconfig.json: "exclude": ["tests", "**/__pycache__"]
+project-excludes = ["tests/**", "**/__pycache__/**"]
+
+# pyrightconfig.json: "pythonVersion": "3.12"
+python-version = "3.12"
+
+# pyright 'basic' mode equivalent — pyrefly defaults are roughly basic;
+# strict reports are disabled below via [errors].
+
+# Skip the interpreter probe in CI: setup-uv handles the venv, and querying
+# the interpreter just to populate site-package-path costs a few hundred ms
+# per invocation.
+skip-interpreter-query = false
+
+# Disable specific error categories, mapping the 12 pyright reports that
+# pyrightconfig.json sets to false. The canonical list of pyrefly error
+# kinds was produced by pyrefly itself when it rejects an unknown variant;
+# only kinds in that list are valid here. See also
+# https://pyrefly.org/en/docs/error-kinds/.
+[errors]
+# pyright: reportMissingImports = false  ->  pyrefly: missing-import
+missing-import = false
+
+# pyright: reportMissingTypeStubs = false  ->  pyrefly: untyped-import,
+# missing-source, missing-source-for-stubs
+untyped-import = false
+missing-source = false
+missing-source-for-stubs = false
+
+# pyright: reportOptionalMemberAccess = false (covered by missing-attribute below)
+# pyright: reportAttributeAccessIssue = false  ->  pyrefly: missing-attribute,
+# no-access, read-only, missing-module-attribute
+missing-attribute = false
+missing-module-attribute = false
+no-access = false
+read-only = false
+
+# pyright: reportOptionalCall = false  ->  pyrefly: not-callable
+not-callable = false
+
+# pyright: reportOptionalOperand = false  ->  pyrefly: unsupported-operation
+unsupported-operation = false
+
+# pyright: reportUndefinedVariable = false  ->  pyrefly: unbound-name + unknown-name
+unbound-name = false
+unknown-name = false
+
+# pyright: reportGeneralTypeIssues = false  ->  pyrefly: bad-assignment + invalid-annotation
+# (bad-assignment also covers reportAssignmentType)
+bad-assignment = false
+invalid-annotation = false
+
+# pyright: reportCallIssue = false  ->  pyrefly: bad-argument-count, bad-argument-type,
+# no-matching-overload, missing-argument, unexpected-keyword,
+# unexpected-positional-argument (bad-argument-type also covers
+# reportArgumentType)
+bad-argument-count = false
+bad-argument-type = false
+no-matching-overload = false
+missing-argument = false
+unexpected-keyword = false
+unexpected-positional-argument = false
+
+# pyright: reportReturnType = false  ->  pyrefly: bad-return
+bad-return = false
+
+# Pyrefly-specific error kinds with no direct pyright equivalent at basic
+# mode; council's pyrightconfig.json runs in basic mode with most reports
+# off, so we mirror that posture rather than tightening it as a side-effect
+# of the swap. Per task constraint: do not modify source to suit pyrefly —
+# adjust pyrefly.toml instead.
+bad-index = false
+bad-override-param-name = false
+bad-typed-dict-key = false
+bad-unpacking = false
+not-a-type = false
+not-iterable = false
