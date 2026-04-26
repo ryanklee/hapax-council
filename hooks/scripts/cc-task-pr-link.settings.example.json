@@ -1,0 +1,16 @@
+{
+  "_comment": "Snippet for ~/.claude/settings.json — merge into the existing hooks.PostToolUse array. Registers the cc-task PR-link hook (PR3 / H8 of cc-hygiene). Killswitch: HAPAX_CC_HYGIENE_OFF=1.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/hapax/projects/hapax-council/hooks/scripts/cc-task-pr-link.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
