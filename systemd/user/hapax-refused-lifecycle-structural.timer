@@ -1,0 +1,14 @@
+[Unit]
+Description=Fire hapax-refused-lifecycle-structural.service weekly (Mondays 03:00 UTC)
+
+[Timer]
+# Weekly Mon 03:00 UTC per spec §2.A — light load on external infrastructure
+# while still catching policy-page changes within a week. Persistent=true
+# so a missed firing (machine off / suspended at the calendar mark) runs
+# on next boot rather than skipping the week.
+OnCalendar=Mon *-*-* 03:00:00 UTC
+Persistent=true
+Unit=hapax-refused-lifecycle-structural.service
+
+[Install]
+WantedBy=timers.target
