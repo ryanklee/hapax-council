@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-OVERRIDES_DIR = Path(__file__).parent.parent / "systemd" / "overrides" / "dev"
+OVERRIDES_DIR = Path(__file__).parent.parent / "systemd" / "overrides" / "rnd"
 
 EXPECTED_TIMERS = [
     # Sync-pipeline timers (claude-code-sync, obsidian-sync, chrome-sync,
