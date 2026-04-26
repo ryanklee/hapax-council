@@ -1,22 +1,27 @@
 """Forbidden-import CI guard for social-media client libraries.
 
-Per cc-task ``leverage-REFUSED-twitter-linkedin-substack-accounts``
-(``feedback_full_automation_or_no_engagement``, 2026-04-25): Twitter/X,
-LinkedIn, and Substack are operator-mediated relationship-management
-surfaces — not daemon-tractable. The constitutional refusal is
-enforced via this CI guard: any import of ``tweepy``, ``linkedin-api``,
-or ``substackapi`` (and a few related packages) fails the build.
+Per cc-tasks:
+  - ``leverage-REFUSED-twitter-linkedin-substack-accounts``: Twitter/X,
+    LinkedIn, Substack are operator-mediated relationship-management
+    surfaces, not daemon-tractable.
+  - ``leverage-REFUSED-discord-community``: Discord is multi-user;
+    single-operator axiom precludes community moderation. Per
+    ``awareness-refused-slack-discord-dm-bots`` precedent, slack and
+    discord webhook clients are also refused.
+
+All refusals trace to ``feedback_full_automation_or_no_engagement``
+(operator constitutional directive 2026-04-25). The guard is a
+grep-based test (no AST parsing required) that walks the agents/,
+shared/, scripts/, and logos/ trees.
 
 Bridgy POSSE fan-out from omg.lol weblog reaches Mastodon + Bluesky;
 that is the only authorized social fan-out path. Any direct social-
 media client adoption must go through a constitutional review that
 removes the underlying refusal.
 
-The guard is a grep-based test (no AST parsing required) that walks
-the agents/, shared/, scripts/, and logos/ trees. Editing the
-forbidden list directly is governance-protected — these strings come
-out of the operator's constitutional posture and removing them
-without an axiom precedent change is a non-starter.
+Editing the forbidden list directly is governance-protected — these
+strings come out of the operator's constitutional posture and
+removing them without an axiom-precedent change is a non-starter.
 """
 
 from __future__ import annotations
@@ -28,14 +33,26 @@ from typing import Final
 REPO_ROOT: Final[Path] = Path(__file__).resolve().parent.parent
 
 FORBIDDEN_IMPORTS: Final[tuple[str, ...]] = (
+    # Per cc-task leverage-REFUSED-twitter-linkedin-substack-accounts
     "tweepy",
     "linkedin_api",
     "linkedin-api",
     "substackapi",
     "substack-api",
+    # Per cc-task leverage-REFUSED-discord-community + awareness-refused-slack-discord-dm-bots
+    "discord",
+    "discord_py",
+    "discord.py",
+    "slack_sdk",
+    "slack-sdk",
 )
-"""Python clients for refused social-media surfaces. Per cc-task
-``leverage-REFUSED-twitter-linkedin-substack-accounts``."""
+"""Python clients for refused social-media + chat-platform surfaces.
+
+The discord/slack additions are per
+``leverage-REFUSED-discord-community`` and the
+``awareness-refused-slack-discord-dm-bots`` precedent. Multi-user
+chat-platform community moderation violates the single-operator axiom;
+direct DM bots also violate the consent gate."""
 
 SCAN_ROOTS: Final[tuple[str, ...]] = (
     "agents",
@@ -95,7 +112,12 @@ def _scan_for_forbidden_imports(
 
 class TestForbiddenSocialMediaImportGuard:
     def test_codebase_has_no_forbidden_imports(self) -> None:
-        """Codebase must not import tweepy, linkedin-api, substackapi."""
+        """Codebase must not import any refused social-media client.
+
+        Refused libs span Twitter/X, LinkedIn, Substack, Discord, and
+        Slack — all relationship-management surfaces that violate
+        ``feedback_full_automation_or_no_engagement``.
+        """
         findings = _scan_for_forbidden_imports()
         assert findings == [], (
             "Forbidden social-media library imports detected:\n"
@@ -104,9 +126,9 @@ class TestForbiddenSocialMediaImportGuard:
                 for path, lib, line_no, line in findings
             )
             + "\n\n"
-            "Per leverage-REFUSED-twitter-linkedin-substack-accounts, these "
-            "surfaces are constitutionally refused. Use Bridgy POSSE fan-out "
-            "from omg.lol weblog instead (reaches Mastodon + Bluesky)."
+            "Per leverage-REFUSED-* cc-tasks, these surfaces are "
+            "constitutionally refused. Use Bridgy POSSE fan-out from "
+            "omg.lol weblog instead (reaches Mastodon + Bluesky)."
         )
 
     def test_scanner_detects_forbidden_import(self, tmp_path: Path) -> None:
