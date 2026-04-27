@@ -377,6 +377,7 @@ def write_perception_state(
             "presence_state": str(_bval("presence_state", "")),
             "presence_probability": _safe_float(_bval("presence_probability", 0.0)),
             "guest_count": _safe_int(_bval("guest_count", 0)),
+            "identified_guests": list(_bval("identified_guests", [])),
             # Biometrics (Batch E)
             "heart_rate_bpm": heart_rate,
             "stress_elevated": stress_elevated,

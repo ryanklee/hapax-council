@@ -196,15 +196,24 @@ def add_fx_snapshot_branch(compositor: Any, pipeline: Any, tee: Any) -> None:
     # via Image() preload. Rate-limit the FX snapshot branch to 3fps so
     # the jpegenc, TCP push, and atomic file write all drop 90% of
     # their per-second work.
+    fps = int(os.environ.get("HAPAX_FX_SNAPSHOT_FPS", "30"))
+    quality = int(os.environ.get("HAPAX_FX_SNAPSHOT_QUALITY", "95"))
+
     rate = Gst.ElementFactory.make("videorate", "fx-snap-rate")
     if rate is not None:
         rate.set_property("drop-only", True)
-        rate.set_property("max-rate", 3)
+        rate.set_property("max-rate", fps)
     rate_caps = Gst.ElementFactory.make("capsfilter", "fx-snap-rate-caps")
-    rate_caps.set_property("caps", Gst.Caps.from_string("video/x-raw,framerate=3/1"))
-    jpeg = Gst.ElementFactory.make("jpegenc", "fx-snap-jpeg")
-    jpeg.set_property("quality", 85)
-    log.info("FX snapshot: CPU jpegenc at 1280x720, rate-limited to 3fps")
+    rate_caps.set_property("caps", Gst.Caps.from_string(f"video/x-raw,framerate={fps}/1"))
+
+    jpeg = Gst.ElementFactory.make("nvjpegenc", "fx-snap-jpeg")
+    if jpeg is not None:
+        jpeg.set_property("quality", quality)
+        log.info(f"FX snapshot: HW nvjpegenc at 1280x720, rate-limited to {fps}fps")
+    else:
+        jpeg = Gst.ElementFactory.make("jpegenc", "fx-snap-jpeg")
+        jpeg.set_property("quality", quality)
+        log.info(f"FX snapshot: CPU jpegenc at 1280x720, rate-limited to {fps}fps")
 
     appsink = Gst.ElementFactory.make("appsink", "fx-snapshot-sink")
     appsink.set_property("sync", False)

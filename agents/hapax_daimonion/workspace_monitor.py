@@ -510,6 +510,7 @@ class WorkspaceMonitor:
                         count=total_count,
                         operator_visible=fused.operator_visible,
                         guest_count=fused.guest_count,
+                        identified_guests=fused.identified_guests,
                     )
                     self._emit_face_event(
                         detected=any_detected,

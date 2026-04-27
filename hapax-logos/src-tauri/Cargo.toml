@@ -37,3 +37,4 @@ axum = { version = "0.8", features = ["ws"] }
 # Command relay (WebSocket server for external clients)
 tokio-tungstenite = "0.26"
 regex = "1"
+tokio-stream = { version = "0.1.18", features = ["sync"] }

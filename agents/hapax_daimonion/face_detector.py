@@ -43,6 +43,7 @@ class FaceResult:
     boxes: list[list[float]] = field(default_factory=list)
     embeddings: list[np.ndarray] = field(default_factory=list)
     operator_flags: list[bool] = field(default_factory=list)
+    identities: list[str | None] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -53,6 +54,7 @@ class FusedFaceResult:
     guest_count: int
     operator_confidence: float
     per_camera_results: dict[str, FaceResult] = field(default_factory=dict)
+    identified_guests: set[str] = field(default_factory=set)
 
 
 def _normalize_color(image: np.ndarray) -> np.ndarray:
@@ -76,6 +78,8 @@ class FaceDetector:
         self._init_failed = False
         self._operator_embedding: np.ndarray | None = None
         self._operator_embedding_loaded = False
+        self._guest_embeddings: dict[str, np.ndarray] = {}
+        self._guest_embeddings_loaded = False
 
     def _get_app(self):
         """Lazily initialize InsightFace FaceAnalysis."""
@@ -116,6 +120,24 @@ class FaceDetector:
             except Exception as exc:
                 log.warning("Failed to load operator embedding: %s", exc)
 
+    def _load_guest_embeddings(self) -> None:
+        """Load all guest embeddings from disk."""
+        if self._guest_embeddings_loaded:
+            return
+        self._guest_embeddings_loaded = True
+        guest_dir = Path.home() / "hapax-state" / "face-enrollments"
+        if not guest_dir.exists():
+            return
+        for npz_path in guest_dir.glob("*.npz"):
+            try:
+                data = np.load(npz_path)
+                if str(data.get("method", "")) == "arcface" and "embedding" in data:
+                    guest_id = npz_path.stem
+                    self._guest_embeddings[guest_id] = data["embedding"]
+                    log.info("Loaded guest face embedding for %s from %s", guest_id, npz_path)
+            except Exception as exc:
+                log.warning("Failed to load guest embedding from %s: %s", npz_path, exc)
+
     def enroll_operator(self, frame: np.ndarray) -> bool:
         """Capture and save operator face embedding for ReID.
 
@@ -155,6 +177,33 @@ class FaceDetector:
             return False
         similarity = float(np.dot(embedding, self._operator_embedding) / (norm_a * norm_b))
         return similarity > _OPERATOR_SIMILARITY_THRESHOLD
+
+    def identify_face(self, embedding: np.ndarray) -> str | None:
+        """Identify face from embedding.
+
+        Returns "operator", a guest_id, or None if unidentified.
+        """
+        if self.is_operator(embedding):
+            return "operator"
+
+        self._load_guest_embeddings()
+        norm_a = np.linalg.norm(embedding)
+        if norm_a < 1e-6:
+            return None
+
+        best_sim = _OPERATOR_SIMILARITY_THRESHOLD
+        best_match = None
+
+        for guest_id, guest_emb in self._guest_embeddings.items():
+            norm_b = np.linalg.norm(guest_emb)
+            if norm_b < 1e-6:
+                continue
+            sim = float(np.dot(embedding, guest_emb) / (norm_a * norm_b))
+            if sim > best_sim:
+                best_sim = sim
+                best_match = guest_id
+
+        return best_match
 
     def _maybe_auto_enroll(self, face, is_brio: bool) -> None:
         """Auto-enroll operator if no embedding exists and this is a high-confidence BRIO face."""
@@ -218,14 +267,18 @@ class FaceDetector:
             boxes = []
             embeddings = []
             operator_flags = []
+            identities = []
             for face in good_faces:
                 # bbox is [x1, y1, x2, y2]
                 bbox = face.bbox.tolist()
                 boxes.append(tuple(int(v) for v in bbox))
                 if face.embedding is not None:
                     embeddings.append(face.embedding)
-                    operator_flags.append(self.is_operator(face.embedding))
+                    ident = self.identify_face(face.embedding)
+                    identities.append(ident)
+                    operator_flags.append(ident == "operator")
                 else:
+                    identities.append("operator")
                     operator_flags.append(True)  # no embedding → assume operator
 
             return FaceResult(
@@ -234,6 +287,7 @@ class FaceDetector:
                 boxes=boxes,
                 embeddings=embeddings,
                 operator_flags=operator_flags,
+                identities=identities,
             )
         except Exception as exc:
             log.debug("Face detection failed: %s", exc)
@@ -268,13 +322,17 @@ class FaceDetector:
         per_camera: dict[str, FaceResult] = {}
         all_embeddings: list[np.ndarray] = []
         all_operator_flags: list[bool] = []
+        all_identities: list[str | None] = []
 
         for role, frame_b64 in frames_b64.items():
             result = self.detect_from_base64(frame_b64, camera_role=role)
             per_camera[role] = result
-            for emb, is_op in zip(result.embeddings, result.operator_flags, strict=True):
+            for emb, is_op, ident in zip(
+                result.embeddings, result.operator_flags, result.identities, strict=True
+            ):
                 all_embeddings.append(emb)
                 all_operator_flags.append(is_op)
+                all_identities.append(ident)
 
         if not all_embeddings:
             return FusedFaceResult(
@@ -300,16 +358,27 @@ class FaceDetector:
 
         # Build unique clusters and determine operator/guest status per cluster
         clusters: dict[int, bool] = {}  # root → is_operator
+        cluster_identities: dict[int, set[str]] = {}
         for idx in range(n):
             root = self._find_root(cluster_ids, idx)
             if root not in clusters:
                 clusters[root] = all_operator_flags[idx]
+                cluster_identities[root] = set()
             else:
                 # Any face in cluster flagged as operator → cluster is operator
                 clusters[root] = clusters[root] or all_operator_flags[idx]
 
+            ident = all_identities[idx]
+            if ident is not None and ident != "operator":
+                cluster_identities[root].add(ident)
+
         operator_visible = any(is_op for is_op in clusters.values())
         guest_count = sum(1 for is_op in clusters.values() if not is_op)
+
+        identified_guests = set()
+        for root, is_op in clusters.items():
+            if not is_op:
+                identified_guests.update(cluster_identities[root])
 
         # Best operator confidence: highest det_score among operator-flagged faces
         operator_confidence = 0.0
@@ -323,6 +392,7 @@ class FaceDetector:
             guest_count=guest_count,
             operator_confidence=operator_confidence,
             per_camera_results=per_camera,
+            identified_guests=identified_guests,
         )
 
     @staticmethod

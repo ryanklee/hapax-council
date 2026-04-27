@@ -62,6 +62,7 @@ class PresenceDetector:
         self._face_count: int = 0
         self._operator_visible: bool = False
         self._guest_count: int = 0
+        self._identified_guests: set[str] = set()
         self._last_face_time: float = 0.0
         self._face_decay_s: float = 20.0
         self._event_log: Any | None = None
@@ -132,6 +133,7 @@ class PresenceDetector:
         *,
         operator_visible: bool | None = None,
         guest_count: int | None = None,
+        identified_guests: set[str] | None = None,
     ) -> None:
         """Record a face detection result from the webcam.
 
@@ -140,6 +142,7 @@ class PresenceDetector:
             count: Total face count (legacy, kept for compatibility).
             operator_visible: Whether the operator was identified (fused detection).
             guest_count: Deduplicated non-operator face count (fused detection).
+            identified_guests: Set of identified guest IDs.
         """
         self._face_detected = detected
         self._face_count = count if detected else 0
@@ -147,6 +150,8 @@ class PresenceDetector:
             self._operator_visible = operator_visible
         if guest_count is not None:
             self._guest_count = guest_count
+        if identified_guests is not None:
+            self._identified_guests = identified_guests
         if detected:
             self._last_face_time = time.monotonic()
 
@@ -228,6 +233,13 @@ class PresenceDetector:
         if not self.face_detected:
             return 0
         return self._guest_count
+
+    @property
+    def identified_guests(self) -> set[str]:
+        """Deduplicated non-operator face identities (within decay window)."""
+        if not self.face_detected:
+            return set()
+        return self._identified_guests
 
     def _prune_old_events(self) -> None:
         """Remove events older than the sliding window."""

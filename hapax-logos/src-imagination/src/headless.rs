@@ -173,6 +173,12 @@ impl Renderer {
             Some(&self.content_source_mgr),
         );
 
+        // HOMAGE Phase 6 - emit shader energy
+        let pass_count = self.pipeline.active_pass_count() as f64;
+        let energy = (pass_count / 10.0).clamp(0.0, 1.0);
+        let drift = 0.0;
+        crate::homage_feedback::emit_shader_feedback(energy, drift, true);
+
         self.frame_count = self.frame_count.wrapping_add(1);
         if self.frame_count % 600 == 0 {
             log::info!(
