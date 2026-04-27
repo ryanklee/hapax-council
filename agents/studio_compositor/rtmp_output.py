@@ -130,6 +130,25 @@ class RtmpOutputBin:
             video_encoder_queue.set_property("max-size-time", 500 * Gst.MSECOND)
             video_encoder_queue.set_property("leaky", 2)  # downstream
 
+            cccombiner = Gst.ElementFactory.make("cccombiner", "rtmp_cccombiner")
+            if cccombiner is None:
+                log.error("rtmp bin: cccombiner factory failed")
+                return False
+            cccombiner.set_property("schedule", True)
+
+            appsrc_captions = Gst.ElementFactory.make("appsrc", "rtmp_appsrc_captions")
+            if appsrc_captions is None:
+                log.error("rtmp bin: appsrc_captions factory failed")
+                return False
+            appsrc_captions.set_property("format", 3)  # Gst.Format.TIME
+            appsrc_captions.set_property("is-live", True)
+
+            # Create and start caption injector
+            from agents.live_captions.gst_injector import CaptionInjector
+
+            self._caption_injector = CaptionInjector(appsrc_captions, Gst)
+            self._caption_injector.start()
+
             encoder = Gst.ElementFactory.make("nvh264enc", "rtmp_nvh264enc")
             if encoder is None:
                 log.error("rtmp bin: nvh264enc factory failed")
@@ -262,6 +281,8 @@ class RtmpOutputBin:
                 video_queue,
                 video_convert,
                 video_encoder_queue,
+                cccombiner,
+                appsrc_captions,
                 encoder,
                 h264_parse,
                 audio_src,
@@ -302,8 +323,14 @@ class RtmpOutputBin:
                 if not video_convert.link(video_encoder_queue):
                     log.error("rtmp bin: video_convert -> video_encoder_queue link failed")
                     return False
-            if not video_encoder_queue.link(encoder):
-                log.error("rtmp bin: video_encoder_queue -> encoder link failed")
+            if not video_encoder_queue.link(cccombiner):
+                log.error("rtmp bin: video_encoder_queue -> cccombiner link failed")
+                return False
+            if not appsrc_captions.link_pads("src", cccombiner, "caption"):
+                log.error("rtmp bin: appsrc_captions -> cccombiner.caption link failed")
+                return False
+            if not cccombiner.link(encoder):
+                log.error("rtmp bin: cccombiner -> encoder link failed")
                 return False
             if not encoder.link(h264_parse):
                 log.error("rtmp bin: encoder -> h264parse link failed")
@@ -387,6 +414,10 @@ class RtmpOutputBin:
         with self._state_lock:
             if self._bin is None:
                 return
+
+            if hasattr(self, "_caption_injector") and self._caption_injector is not None:
+                self._caption_injector.stop()
+                self._caption_injector = None
 
             Gst = self._Gst
 

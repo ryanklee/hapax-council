@@ -167,6 +167,7 @@ class EnvironmentState:
     # Visual signals (fast tick)
     face_count: int = 0
     guest_count: int = 0
+    identified_guests: set[str] = field(default_factory=set)
     operator_present: bool = False
 
     # Presence (fast tick, from PresenceDetector or Bayesian engine)
@@ -244,6 +245,7 @@ class PerceptionEngine:
         self._b_operator_visible: Behavior[bool] = Behavior(False)
         self._b_face_detected: Behavior[bool] = Behavior(False)
         self._b_guest_count: Behavior[int] = Behavior(0)
+        self._b_identified_guests: Behavior[set[str]] = Behavior(set())
 
         # Phase 2 extension point: all behaviors by name
         self.behaviors: dict[str, Behavior] = {
@@ -258,6 +260,7 @@ class PerceptionEngine:
             "operator_visible": self._b_operator_visible,
             "face_detected": self._b_face_detected,
             "guest_count": self._b_guest_count,
+            "identified_guests": self._b_identified_guests,
         }
 
         # Impingement drain (R3) — accumulates impingements for daemon consumption
@@ -398,6 +401,7 @@ class PerceptionEngine:
         self._b_operator_visible.update(operator_visible, now)
         self._b_face_detected.update(face_detected, now)
         self._b_guest_count.update(getattr(self._presence, "guest_count", 0), now)
+        self._b_identified_guests.update(getattr(self._presence, "identified_guests", set()), now)
 
         # Poll registered backends — each gets a view scoped to its declared provides
         # (D5.2: prevents backends from writing to behaviors they don't own)
@@ -472,6 +476,7 @@ class PerceptionEngine:
             vad_confidence=self._b_vad_confidence.value,
             face_count=self._b_face_count.value,
             guest_count=guest_count,
+            identified_guests=self._b_identified_guests.value,
             operator_present=operator_present,
             presence_score=presence_score,
             presence_state=bayesian_state,

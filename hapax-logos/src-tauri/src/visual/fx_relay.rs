@@ -11,7 +11,7 @@ use tokio::sync::broadcast;
 
 /// Capacity of the broadcast channel (frames). If a slow consumer falls behind,
 /// it gets a Lagged error and skips to the latest frame.
-const CHANNEL_CAPACITY: usize = 4;
+const CHANNEL_CAPACITY: usize = 16;
 
 /// TCP port the Python compositor pushes JPEG frames to.
 const RELAY_PORT: u16 = 8054;

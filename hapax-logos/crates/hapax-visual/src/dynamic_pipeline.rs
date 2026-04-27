@@ -419,6 +419,10 @@ pub struct DynamicPipeline {
 }
 
 impl DynamicPipeline {
+    pub fn active_pass_count(&self) -> usize {
+        self.passes.len()
+    }
+
     pub fn new(device: &wgpu::Device, _queue: &wgpu::Queue, width: u32, height: u32, surface_format: wgpu::TextureFormat) -> Self {
         let uniform_buffer = UniformBuffer::new(device);
         let shm_output = ShmOutput::new(device, width, height);

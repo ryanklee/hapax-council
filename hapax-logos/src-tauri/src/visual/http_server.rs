@@ -15,6 +15,8 @@ use axum::{
 };
 use std::net::SocketAddr;
 use std::sync::Arc;
+use tokio_stream::wrappers::BroadcastStream;
+use tokio_stream::StreamExt;
 
 use super::fx_relay::FxFrameRelay;
 
@@ -97,6 +99,35 @@ async fn ws_fx_handler(mut socket: WebSocket, relay: Arc<FxFrameRelay>) {
     }
 }
 
+/// MJPEG stream handler for /fx.mjpg.
+async fn serve_fx_mjpeg(State(relay): State<Arc<FxFrameRelay>>) -> impl IntoResponse {
+    let rx = relay.subscribe();
+    let stream = BroadcastStream::new(rx).filter_map(|res| {
+        let opt = match res {
+            Ok(frame) => {
+                let bytes = frame.as_ref();
+                let header = format!("--frame\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\n\r\n", bytes.len());
+                let mut data = Vec::with_capacity(header.len() + bytes.len() + 2);
+                data.extend_from_slice(header.as_bytes());
+                data.extend_from_slice(bytes);
+                data.extend_from_slice(b"\r\n");
+                Some(Ok::<_, std::convert::Infallible>(data))
+            }
+            Err(_) => None, // ignore lag errors, just skip frames
+        };
+        opt
+    });
+
+    (
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, "multipart/x-mixed-replace; boundary=frame"),
+            (header::CACHE_CONTROL, "no-store"),
+        ],
+        axum::body::Body::from_stream(stream),
+    ).into_response()
+}
+
 /// Spawn the frame server as an async task. Call from setup().
 pub fn start_frame_server() {
     let port = std::env::var("HAPAX_VISUAL_HTTP_PORT")
@@ -113,6 +144,7 @@ pub fn start_frame_server() {
         let app = Router::new()
             .route("/frame", get(serve_frame))
             .route("/fx", get(serve_fx_frame))
+            .route("/fx.mjpg", get(serve_fx_mjpeg))
             .route("/stats", get(serve_stats))
             .route("/ws/fx", get(ws_fx_upgrade))
             .with_state(relay_ws);

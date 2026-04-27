@@ -7,6 +7,7 @@
 mod headless;
 mod ipc;
 mod window_state;
+mod homage_feedback;
 
 use std::sync::mpsc;
 use std::sync::Arc;
@@ -219,6 +220,13 @@ impl ImaginationApp {
                 opacities,
                 self.content_source_mgr.as_ref(),
             );
+            
+            // HOMAGE Phase 6 - emit shader energy
+            let pass_count = pipeline.active_pass_count() as f64;
+            // Simple heuristic: 1 pass = 0.1, 10 passes = 1.0
+            let energy = (pass_count / 10.0).clamp(0.0, 1.0);
+            let drift = 0.0; // placeholder drift
+            crate::homage_feedback::emit_shader_feedback(energy, drift, true);
         }
 
         output.present();

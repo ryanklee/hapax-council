@@ -188,9 +188,19 @@ function OutputNodeInner({ data, selected }: NodeProps) {
  *  Video fills the entire viewport; controls hidden (esc to exit). */
 function FullscreenOverlay({ onClose }: { onClose: () => void }) {
   const imgRef = useRef<HTMLImageElement>(null);
+  const [isStale, setIsStale] = useState(false);
+  const lastLoad = useRef(Date.now());
 
-  // Own independent poll at 30fps — matches fx-snapshot rate
-  useFxStream(imgRef);
+  // Stale detection for MJPEG stream based on onLoad events.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const nowStale = Date.now() - lastLoad.current > 3000;
+      if (nowStale !== isStale) {
+        setIsStale(nowStale);
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isStale]);
 
   // Enter true borderless fullscreen on mount, restore on unmount
   useEffect(() => {
@@ -254,10 +264,19 @@ function FullscreenOverlay({ onClose }: { onClose: () => void }) {
       >
         <img
           ref={imgRef}
+          src="http://127.0.0.1:8053/fx.mjpg"
           alt="fullscreen output"
           draggable={false}
+          onLoad={() => {
+            lastLoad.current = Date.now();
+          }}
           style={{ width: "100%", height: "100%", objectFit: "contain" }}
         />
+        {isStale && (
+          <div style={{ position: "absolute", top: 10, left: 10, color: "#fb4934", fontSize: 12, background: "rgba(0,0,0,0.5)", padding: "2px 6px", borderRadius: 4 }}>
+            stale
+          </div>
+        )}
       </div>
 
       {/* Top bar — minimal, just exit hint */}

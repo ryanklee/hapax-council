@@ -269,6 +269,13 @@ def _tick_consent(daemon: VoiceDaemon, state) -> None:
             now=state.timestamp,
         )
 
+        # Automatic consent loading for identified guests with active contracts
+        if getattr(state, "identified_guests", None) and hasattr(daemon, "consent_registry"):
+            for guest_id in state.identified_guests:
+                if daemon.consent_registry.contract_check(guest_id, "presence"):
+                    daemon.consent_tracker.grant_consent()
+                    break
+
         if (
             daemon.consent_tracker.needs_notification
             and not daemon.session.is_active

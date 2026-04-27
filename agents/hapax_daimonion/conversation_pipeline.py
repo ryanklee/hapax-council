@@ -651,6 +651,17 @@ class ConversationPipeline:
             return
         self._last_transcript = transcript
 
+        # ── Emit to caption stream ──
+        try:
+            ts_end = time.time()
+            duration_s = len(audio_bytes) / 32000.0  # 16kHz 16-bit mono
+            ts_start = ts_end - duration_s
+            from agents.hapax_daimonion.caption_emitter import emit_caption
+
+            emit_caption(transcript, "operator_voice", ts_start, ts_end)
+        except Exception:
+            log.debug("Failed to emit caption", exc_info=True)
+
         # ── Principal attribution: wrap transcript with speaker identity ──
         # Says[str] records WHO said this, not just what. The principal
         # is resolved from consent_context (set at daemon boundary) or
@@ -1338,6 +1349,15 @@ class ConversationPipeline:
             phrase, pcm = self._bridge_engine.select(ctx)
             if pcm and self._audio_output:
                 try:
+                    try:
+                        ts_start = time.time()
+                        duration_s = len(pcm) / 48000.0
+                        ts_end = ts_start + duration_s
+                        from agents.hapax_daimonion.caption_emitter import emit_caption
+
+                        emit_caption(phrase, "tts", ts_start, ts_end)
+                    except Exception:
+                        pass
                     if self._echo_canceller:
                         self._echo_canceller.feed_reference(pcm)
                     loop = asyncio.get_running_loop()
@@ -1480,6 +1500,15 @@ class ConversationPipeline:
         # the first TTS clause to get clipped.
         if pcm and self._audio_output:
             try:
+                try:
+                    ts_start = time.time()
+                    duration_s = len(pcm) / 48000.0
+                    ts_end = ts_start + duration_s
+                    from agents.hapax_daimonion.caption_emitter import emit_caption
+
+                    emit_caption(phrase, "tts", ts_start, ts_end)
+                except Exception:
+                    pass
                 if self._echo_canceller:
                     self._echo_canceller.feed_reference(pcm)
                 loop = asyncio.get_running_loop()
@@ -1834,6 +1863,18 @@ class ConversationPipeline:
                         "text_len": len(tts_text),
                     },
                 )
+
+                # Emit to caption stream
+                try:
+                    ts_start = time.time()
+                    duration_s = len(pcm) / 48000.0
+                    ts_end = ts_start + duration_s
+                    from agents.hapax_daimonion.caption_emitter import emit_caption
+
+                    emit_caption(text, "tts", ts_start, ts_end)
+                except Exception:
+                    pass
+
                 # Write audio in background — streaming loop continues
                 # immediately so next clause can start synthesizing.
                 # _audio_executor is single-threaded so writes are ordered.
