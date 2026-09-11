@@ -38,7 +38,7 @@ classifier_rc=2
 if command -v python3 >/dev/null 2>&1; then
   set +e
   PYTHONPATH="$REPO_ROOT:${PYTHONPATH:-}" \
-    python3 -m shared.mcp_connector_policy is-side-effecting "$tool_name" >/dev/null 2>&1
+    python3 -P -m shared.mcp_connector_policy is-side-effecting "$tool_name" >/dev/null 2>&1
   classifier_rc=$?
   set -e
 fi
@@ -106,7 +106,7 @@ if [[ -n "${HAPAX_PLATFORM_CAPABILITY_RECEIPT_DIR:-}" ]]; then
 fi
 
 set +e
-PYTHONPATH="$REPO_ROOT:${PYTHONPATH:-}" python3 "${args[@]}"
+PYTHONPATH="$REPO_ROOT:${PYTHONPATH:-}" python3 -P "${args[@]}"
 gate_rc=$?
 set -e
 if [[ "$gate_rc" -ne 0 ]]; then
